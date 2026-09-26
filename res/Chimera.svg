@@ -113,6 +113,7 @@
     <g
        id="component_anchors"
        style="display:none">
+      <circle id="UNSPLICE_BUTTON" cx="96" cy="103" r=".1" />
       <rect
          id="BRANDING_WAVE_LEFT_RASTER"
          x="42.216099"
@@ -424,6 +425,7 @@
     </g>
     <g
        id="g26">
+      <text x="96" y="108.5" id="unsplice_label">UNSPLICE</text>
       <text
          x="60"
          y="108.5"

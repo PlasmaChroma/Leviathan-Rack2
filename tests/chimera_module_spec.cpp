@@ -35,6 +35,7 @@ Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_module_cache"; }
 #define CHIMERA_MANUAL_CONTROL_TEST 1 // Deterministic state/ownership fixtures.
+#define CHIMERA_HEADLESS_TEST 1
 #include "../src/Chimera.cpp"
 
 static void need(bool ok, const char* what) {

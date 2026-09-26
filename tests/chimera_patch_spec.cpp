@@ -17,6 +17,7 @@ bool isDragonKingDebugEnabled() { return false; }
 static std::string checkpointRoot;
 std::string leviathanPluginUserRootPath() { return checkpointRoot; }
 #define CHIMERA_MANUAL_CONTROL_TEST 1 // Deterministic state/ownership fixtures.
+#define CHIMERA_HEADLESS_TEST 1
 #include "../src/Chimera.cpp"
 
 static void need(bool value, const char* message) {
@@ -280,18 +281,38 @@ int main() {
          "explicit pre-record recovery adopts the old audio off thread");
     const auto oldMarkerCount = clone.reel->markerCount();
     need(oldMarkerCount > 1, "marker save fixture has multiple splices");
-    chimera::edit::Request removeMarker;
-    removeMarker.kind = chimera::edit::RemoveMarker;
-    removeMarker.splice = 1;
-    need(clone.requestEdit(removeMarker, error) && clone.markerRequestId,
-         "queue metadata edit immediately before stopped-engine Save");
+    clone.publishedRegion.store(oldMarkerCount - 1);
+    need(clone.requestUnsplice(error) && !clone.markerRequestId,
+         "Unsplice on final splice is a no-op");
+    clone.publishedRegion.store(0);
+    clone.recordingOrArmed.store(true);
+    need(!clone.requestUnsplice(error) && !clone.markerRequestId,
+         "Unsplice is blocked while recording or armed");
+    clone.recordingOrArmed.store(false);
+    const auto framesBeforeUnsplice = clone.reel->validFrames();
+    std::vector<chimera::StereoFrame> audioBeforeUnsplice;
+    for (unsigned frame = 0; frame < framesBeforeUnsplice; ++frame)
+        audioBeforeUnsplice.push_back(clone.reel->readActive(frame));
+    need(clone.requestUnsplice(error) && clone.markerRequestId,
+         "Unsplice queues the following boundary before stopped-engine Save");
     engine.prepareSaveModule(&clone);
     auto markerSave = chimera::bundle::load(cloneStorage, clone.committedManifest, 2);
     need(!clone.markerRequestId && !clone.saveFailure.load() && bool(markerSave) &&
          markerSave.reel->markerCount() == oldMarkerCount - 1 &&
          clone.publishedMarkerCount.load() == oldMarkerCount - 1 &&
+         markerSave.reel->validFrames() == framesBeforeUnsplice &&
          markerSave.reel->readActive(0).l == 42.f,
          "Save drains metadata handoff without audio callbacks and persists updated markers");
+    for (unsigned frame = 0; frame < framesBeforeUnsplice; ++frame) {
+        const auto sample = markerSave.reel->readActive(frame);
+        need(sample.l == audioBeforeUnsplice[frame].l &&
+             sample.r == audioBeforeUnsplice[frame].r,
+             "Unsplice preserves every stereo audio frame");
+    }
+    need(clone.requestUndo(false, error), "Unsplice uses marker undo history");
+    engine.prepareSaveModule(&clone);
+    need(!clone.saveFailure.load() && clone.reel->markerCount() == oldMarkerCount,
+         "marker undo restores the removed boundary");
     json_decref(state);
     engine.removeModule(&clone);
     engine.removeModule(&source);

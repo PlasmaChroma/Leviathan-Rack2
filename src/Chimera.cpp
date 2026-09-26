@@ -745,6 +745,13 @@ struct Chimera : Module {
         ioBusy.store(true, std::memory_order_release);
         return true;
     }
+    bool requestUnsplice(std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        const unsigned next = publishedRegion.load(std::memory_order_acquire) + 1u;
+        if (next >= publishedMarkerCount.load(std::memory_order_acquire))
+            return true; // The final Splice has no following boundary to remove.
+        return requestMarkerEdit(next, 0, 1u, error);
+    }
     bool requestEdit(const chimera::edit::Request& request, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (request.kind == chimera::edit::MoveMarker || request.kind == chimera::edit::RemoveMarker)
@@ -1946,6 +1953,9 @@ struct Chimera : Module {
     }
 };
 
+#include "ChimeraDisplay.hpp"
+
+#ifndef CHIMERA_HEADLESS_TEST
 struct ChimeraRatioField : ui::TextField {
     Chimera* owner = nullptr;
     int slot = 0;
@@ -1969,7 +1979,23 @@ struct ChimeraRatioField : ui::TextField {
     }
 };
 
-#include "ChimeraDisplay.hpp"
+// A UI action, rather than a DSP parameter: reuse the control-thread marker
+// queue and its undo history without synthesizing simultaneous button presses.
+struct ChimeraUnspliceButton : SmallGoldButton {
+    Chimera* owner = nullptr;
+    ChimeraUnspliceButton() { momentary = false; }
+    void onButton(const event::Button& e) override {
+        if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS)
+            e.consume(this);
+    }
+    void onDragDrop(const event::DragDrop& e) override {
+        if (e.origin != this || !owner) return;
+        std::string error;
+        if (!owner->requestUnsplice(error))
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+        e.consume(this);
+    }
+};
 
 struct ChimeraWidget : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
@@ -2023,9 +2049,12 @@ struct ChimeraWidget : ModuleWidget {
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("GENE_ATT_PARAM", Vec(34, 67))), module, Chimera::GENE_ATT_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("VARISPEED_ATT_PARAM", Vec(81.12, 67))), module, Chimera::VARISPEED_ATT_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("SLIDE_ATT_PARAM", Vec(81.12, 93))), module, Chimera::SLIDE_ATT_PARAM));
-        addParam(createParamCentered<LEDButton>(mm2px(point("REC_PARAM", Vec(60, 103))), module, Chimera::REC_PARAM));
-        addParam(createParamCentered<LEDButton>(mm2px(point("SPLICE_PARAM", Vec(72, 103))), module, Chimera::SPLICE_PARAM));
-        addParam(createParamCentered<LEDButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM));
+        addParam(createParamCentered<SmallGoldButton>(mm2px(point("REC_PARAM", Vec(60, 103))), module, Chimera::REC_PARAM));
+        addParam(createParamCentered<SmallGoldButton>(mm2px(point("SPLICE_PARAM", Vec(72, 103))), module, Chimera::SPLICE_PARAM));
+        addParam(createParamCentered<SmallGoldButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM));
+        auto* unsplice = createWidgetCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))));
+        unsplice->owner = module;
+        addChild(unsplice);
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SOS_CV_INPUT", Vec(118.24, 67))), module, Chimera::SOS_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("GENE_SIZE_CV_INPUT", Vec(14, 67))), module, Chimera::GENE_SIZE_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("VARISPEED_CV_INPUT", Vec(61.12, 67))), module, Chimera::VARISPEED_CV_INPUT));
@@ -2416,3 +2445,6 @@ struct ChimeraWidget : ModuleWidget {
 };
 
 Model* modelChimera = createModel<Chimera, ChimeraWidget>("Chimera");
+#else
+Model* modelChimera = createModel<Chimera, ModuleWidget>("Chimera");
+#endif

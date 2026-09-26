@@ -16,6 +16,7 @@ Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
 static std::string checkpointRoot;
 std::string leviathanPluginUserRootPath() { return checkpointRoot; }
+#define CHIMERA_HEADLESS_TEST 1
 #include "../src/Chimera.cpp"
 
 static void need(bool value, const char* message) {

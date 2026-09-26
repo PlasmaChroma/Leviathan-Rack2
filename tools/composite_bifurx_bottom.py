@@ -587,15 +587,14 @@ def main() -> int:
         conduit_layers,
         args.supersample,
         fill_color=(18, 20, 25),
-        halo_color=(248, 248, 244),
-        # At Rack's 100% scale a thin dark glyph and bright inner rim collapse
-        # toward the rim color. Give the light-panel glyph a decisive core and
-        # retain the broader feather at lower strength.
+        halo_color=(255, 255, 255),
+        # Keep the original rim width, but make its tight pass fully white so
+        # the dark labels separate cleanly from the light panel at Rack scale.
         fill_expand_px=1.5,
         tight_radius_px=5.0,
         soft_radius_px=10.0,
         wide_radius_px=24.0,
-        tight_opacity=0.48,
+        tight_opacity=1.0,
         soft_opacity=0.28,
         wide_opacity=0.13,
         colors=args.colors,
