@@ -223,6 +223,7 @@ struct Chimera : Module {
     std::atomic<unsigned> selectionMenuCommands{0}; // 1 next Splice, 2 add marker.
     std::atomic<bool> bandlimitedPlayback{false};
     std::atomic<bool> inopSetting{false};
+    std::atomic<bool> primaryEosgSetting{true};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
     std::atomic<int> rsopSetting{0}, inputGainSetting{1};
@@ -1568,6 +1569,7 @@ struct Chimera : Module {
         json_object_set_new(root, "gnsm", json_integer(settings.gnsm));
         json_object_set_new(root, "cvop", json_integer(settings.cvop));
         json_object_set_new(root, "omod", json_integer(settings.omod));
+        json_object_set_new(root, "primaryEosg", json_boolean(primaryEosgSetting.load(std::memory_order_acquire)));
         json_object_set_new(root, "pmin", json_integer(settings.pmin));
         json_object_set_new(root, "pmod", json_integer(settings.pmod));
         json_object_set_new(root, "ckop", json_integer(settings.ckop));
@@ -1619,6 +1621,9 @@ struct Chimera : Module {
         json_t* cvop = json_object_get(root, "cvop");
         if (json_is_integer(cvop) && (json_integer_value(cvop) == 0 || json_integer_value(cvop) == 1))
             cvopSetting.store(json_integer_value(cvop) == 1, std::memory_order_release);
+        // Older patches retain their all-voice EOSG behavior.
+        primaryEosgSetting.store(json_is_true(json_object_get(root, "primaryEosg")),
+                                 std::memory_order_release);
         json_t* omod = json_object_get(root, "omod");
         if (json_is_integer(omod) && (json_integer_value(omod) == 0 || json_integer_value(omod) == 1))
             omodSetting.store(json_integer_value(omod) == 1, std::memory_order_release);
@@ -1941,6 +1946,7 @@ struct Chimera : Module {
         slice.setInop(inopSetting.load(std::memory_order_relaxed));
         slice.setSmoothGenes(gnsmSetting.load(std::memory_order_relaxed));
         slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
+        slice.setPrimaryEosg(primaryEosgSetting.load(std::memory_order_relaxed));
         slice.setImmediateTransitions(omodSetting.load(std::memory_order_relaxed));
         slice.setPmEnabled(pminSetting.load(std::memory_order_relaxed));
         slice.setRateMode(vsopSetting.load(std::memory_order_relaxed));
@@ -2535,6 +2541,9 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createCheckMenuItem("CV OUT: primary ramp", "",
             [m] { return m->cvopSetting.load(std::memory_order_acquire); },
             [m] { m->cvopSetting.store(!m->cvopSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createCheckMenuItem("EOSG: primary boundaries only", "",
+            [m] { return m->primaryEosgSetting.load(std::memory_order_acquire); },
+            [m] { m->primaryEosgSetting.store(!m->primaryEosgSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
         menu->addChild(createCheckMenuItem("Immediate transitions", "",
             [m] { return m->omodSetting.load(std::memory_order_acquire); },
             [m] { m->omodSetting.store(!m->omodSetting.load(std::memory_order_relaxed), std::memory_order_release); }));

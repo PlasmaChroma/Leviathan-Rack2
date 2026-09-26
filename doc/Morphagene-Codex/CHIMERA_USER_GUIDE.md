@@ -46,3 +46,20 @@ Reel jobs and recovery now continue when the host stops stepping the module
 widget. New edit checkpoints use exclusive session leases. Unlocked abandoned
 sessions older than 24 hours are cleaned in bounded background passes; live
 Undo files, unknown files and legacy checkpoint directories are retained.
+
+
+### EOSG feedback to SHIFT
+
+New modules enable **EOSG: primary boundaries only** in the module menu. EOSG
+then pulses at the primary Gene boundary (or primary whole-Splice traversal),
+so overlapping secondary voices cannot queue extra SHIFT advances. Disable it
+to restore pulses from all voices. The choice is saved in the Rack patch;
+older patches retain all-voice behavior until you enable the new option.
+
+For whole-Splice auto-advancement, use whole-Splice Gene Size (fully
+counterclockwise) and enable **Immediate transitions**. With immediate
+transitions disabled, the returning EOSG pulse arrives after its originating
+boundary and the requested selection waits for the next primary boundary.
+Finite Gene Size advances on Gene completions, not necessarily at the end of
+the Splice. CLOCK and Organize modulation can still affect selection timing.
+The EOSG option is Chimera-specific and is not part of Morphagene options-text.

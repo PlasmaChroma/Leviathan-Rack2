@@ -20,6 +20,46 @@ static bool near(float a, float b, float eps = 0.0002f) {
 }
 
 int main() {
+    // A Rack feedback cable delivers the preceding output sample to SHIFT.
+    // Exercise both Gene extremes, uneven Splices, and secondary-voice density.
+    for (float gene : {0.f, 1.f}) for (float morph : {0.f, 0.5f, 1.f})
+    for (bool immediate : {false, true}) {
+        chimera::Reel reel(128, 128);
+        for (unsigned f = 0; f < 28800; ++f) reel.write(f, {0.1f, 0.1f}, f);
+        reel.addMarker(4800); reel.addMarker(12000); reel.addMarker(21600);
+        chimera::Slice feedback(&reel);
+        feedback.setConditioning(false);
+        feedback.setPrimaryEosg(true);
+        feedback.setImmediateTransitions(immediate);
+        auto in = input(0, 0, 1);
+        in.controls.gene = gene; in.controls.morph = morph;
+        bool wire = false, previous = false;
+        unsigned commits = 0, pulses = 0;
+        for (unsigned f = 0; f < 120000; ++f) {
+            if (wire && !previous) feedback.requestShift();
+            previous = wire;
+            const auto before = feedback.currentRegion();
+            const auto out = feedback.step(in);
+            wire = out.eosg;
+            if (wire && !previous) {
+                ++pulses;
+                need(out.naturalBoundary, "primary EOSG rises only at a primary boundary");
+            }
+            if (feedback.currentRegion() != before) {
+                ++commits;
+                need(feedback.currentRegion() == (before + 1) % 4,
+                     "primary EOSG feedback advances sequentially at every Morph/Gene setting");
+            }
+        }
+        need(commits >= 8 && pulses >= commits,
+             "primary EOSG feedback continues advancing rather than wrapping pending selection");
+        feedback.setPrimaryEosg(false);
+        feedback.setPrimaryEosg(true);
+        feedback.setPlay(false);
+        feedback.step(in); // Preserve a completion due on the stop frame.
+        need(!feedback.step(in).eosg, "stopped primary EOSG clears after any due completion");
+    }
+
     {
         chimera::Slice decay;
         decay.step(input(1.f, -1.f));

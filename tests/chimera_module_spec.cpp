@@ -876,6 +876,22 @@ static void auxiliaryGateDiscontinuityRegression() {
 }
 
 int main() {
+    {
+        Chimera original, restored;
+        need(original.primaryEosgSetting.load(), "new modules default to primary EOSG");
+        json_t* state = original.dataToJson();
+        restored.dataFromJson(state);
+        need(restored.primaryEosgSetting.load(), "primary EOSG mode survives patch serialization");
+        json_object_set_new(state, "primaryEosg", json_false());
+        restored.dataFromJson(state);
+        need(!restored.primaryEosgSetting.load(), "all-voice EOSG mode survives patch serialization");
+        json_object_del(state, "primaryEosg");
+        restored.primaryEosgSetting.store(true);
+        restored.dataFromJson(state);
+        need(!restored.primaryEosgSetting.load(), "old patches preserve all-voice EOSG");
+        json_decref(state);
+    }
+
     recordingDuringSaveRegression();
     overlapTeardownRegression();
     stoppedPublicationRegression();

@@ -94,6 +94,13 @@ public:
     void requestShift() { shiftRequested_ = true; }
     void requestSplice() { spliceRequested_ = true; }
     void setRampCv(bool enabled) { rampCv_ = enabled; }
+    void setPrimaryEosg(bool enabled) {
+        if (primaryEosg_ == enabled) return;
+        primaryEosg_ = enabled;
+        eosgRemaining_ = 0;
+        hadBoundary_ = false;
+    }
+
     void setPmEnabled(bool enabled) { pmEnabled_ = enabled; }
     void setRateMode(int mode) { controls_.setRateMode(mode); }
     void setInputGain(int index) {
@@ -377,12 +384,13 @@ public:
         }
         // A natural completion starts a core-timed pulse. Keep it shorter than
         // half the expected interval so rapid traversals remain distinguishable.
-        if ((naturalCompletion || (naturalBoundary && canRead)) &&
-            (finiteGene || c.rate != 0.f || naturalCompletion)) {
+        const bool completion = primaryEosg_ ? naturalBoundary : naturalCompletion;
+        if ((completion || (naturalBoundary && canRead)) &&
+            (finiteGene || c.rate != 0.f || completion)) {
             double interval = finiteGene ?
                 profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene,
                     clockConnected_ && clockPeriod_ && !clockWaiting_) /
-                    profile1::morphDensity(c.morph) :
+                    (primaryEosg_ ? 1.0 : profile1::morphDensity(c.morph)) :
                 length / (c.rate != 0.f ? std::fabs(c.rate) : 1.0);
             if (hadBoundary_) {
                 const std::uint64_t spacing = frame_ - lastBoundaryFrame_;
@@ -393,8 +401,8 @@ public:
             lastBoundaryFrame_ = frame_;
             hadBoundary_ = true;
         }
-        if ((!canRead && !naturalCompletion) ||
-            (!finiteGene && c.rate == 0.f && !naturalCompletion)) eosgRemaining_ = 0;
+        if ((!canRead && !completion) ||
+            (!finiteGene && c.rate == 0.f && !completion)) eosgRemaining_ = 0;
         const bool eosg = eosgRemaining_ != 0;
         if (eosg) --eosgRemaining_;
         if (reel_) reel_->maintenanceTick();
@@ -520,6 +528,7 @@ private:
     std::uint8_t stopTailRemaining_;
     std::uint64_t frame_;
     std::uint64_t lastBoundaryFrame_;
+    bool primaryEosg_ = false; // Legacy core callers retain all-voice completions.
     std::uint16_t eosgRemaining_;
     bool hadBoundary_;
     float energyState_;
