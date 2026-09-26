@@ -25,7 +25,7 @@ class ChimeraPanelContractTest(unittest.TestCase):
             "DISPLAY_ORIGIN", "DISPLAY_END", "SOS_PARAM", "GENE_SIZE_PARAM",
             "VARISPEED_PARAM", "MORPH_PARAM", "SLIDE_PARAM", "ORGANIZE_PARAM",
             "GENE_ATT_PARAM", "VARISPEED_ATT_PARAM", "SLIDE_ATT_PARAM",
-            "REC_PARAM", "SPLICE_PARAM", "SHIFT_PARAM", "SOS_CV_INPUT",
+            "REC_PARAM", "SPLICE_PARAM", "SHIFT_PARAM", "UNSPLICE_BUTTON", "SOS_CV_INPUT",
             "GENE_SIZE_CV_INPUT", "VARISPEED_CV_INPUT", "MORPH_CV_INPUT",
             "SLIDE_CV_INPUT", "ORGANIZE_CV_INPUT", "CLOCK_INPUT",
             "PLAY_INPUT", "REC_INPUT", "SPLICE_INPUT", "SHIFT_INPUT",
@@ -44,19 +44,23 @@ class ChimeraPanelContractTest(unittest.TestCase):
         lights = float(anchors["REC_LIGHT"]["cy"])
         first_knobs = float(anchors["SOS_PARAM"]["cy"])
         second_knobs = float(anchors["MORPH_PARAM"]["cy"])
+        first_cv = float(anchors["SOS_CV_INPUT"]["cy"])
+        second_cv = float(anchors["MORPH_CV_INPUT"]["cy"])
         buttons = float(anchors["REC_PARAM"]["cy"])
-        cv_jacks = float(anchors["SOS_CV_INPUT"]["cy"])
-        gates = float(anchors["CLOCK_INPUT"]["cy"])
-        audio = float(anchors["AUDIO_L_INPUT"]["cy"])
-        self.assertTrue(display_end < lights < first_knobs < second_knobs <
-                        buttons < cv_jacks < gates < audio)
-        self.assertGreaterEqual(lights - display_end, 5)
-        self.assertGreaterEqual(cv_jacks - buttons, 12)
+        jacks = float(anchors["CLOCK_INPUT"]["cy"])
+        self.assertGreaterEqual(display_end - float(anchors["DISPLAY_ORIGIN"]["cy"]), 25)
+        self.assertTrue(display_end < lights < first_knobs < first_cv <
+                        second_knobs < second_cv < buttons < jacks)
+        self.assertGreaterEqual(lights - display_end, 3)
+        self.assertGreaterEqual(first_cv - first_knobs, 12)
+        self.assertGreaterEqual(second_knobs - first_cv, 10)
+        self.assertGreaterEqual(buttons - second_cv, 9)
+        self.assertGreaterEqual(jacks - buttons, 9)
+        self.assertEqual(float(anchors["UNSPLICE_BUTTON"]["cy"]), buttons)
 
     def test_generated_labels_have_no_stale_developer_warning(self):
         master_text = " ".join((element.text or "") for element in MASTER.iter()
                                if element.tag.endswith("text"))
-        self.assertIn("HOST-RATE ADAPTED", master_text)
         self.assertNotIn("AUDIO NOT SAVED", master_text)
         self.assertFalse(any(element.tag.endswith("text") for element in PANEL.iter()))
         self.assertTrue(any(element.tag.endswith("path") for element in LABELS.iter()))

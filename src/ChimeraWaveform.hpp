@@ -12,14 +12,17 @@ namespace chimera {
 // Immutable, worker-built display data. UI drawing never visits Reel pages.
 struct WaveformSummary {
     static constexpr std::size_t kBins = 128;
-    std::array<float, kBins> low{};
-    std::array<float, kBins> high{};
+    std::array<float, kBins> leftLow{};
+    std::array<float, kBins> leftHigh{};
+    std::array<float, kBins> rightLow{};
+    std::array<float, kBins> rightHigh{};
     std::array<std::uint32_t, kMaxSplices> markers{};
     std::uint32_t frames = 0;
     std::uint16_t markerCount = 0;
     std::uint64_t documentRevision = 0;
     std::uint64_t audioRevision = 0;
     float peak = 0.f;
+    bool stereo = false;
 
     static std::shared_ptr<const WaveformSummary> fromActive(const Reel& reel) {
         std::shared_ptr<WaveformSummary> result(new WaveformSummary);
@@ -54,8 +57,11 @@ private:
             const StereoFrame sample = read(i);
             const std::size_t bin = std::size_t((std::uint64_t(i) * kBins) / frames);
             if (!std::isfinite(sample.l) || !std::isfinite(sample.r)) continue;
-            low[bin] = std::min(low[bin], std::min(sample.l, sample.r));
-            high[bin] = std::max(high[bin], std::max(sample.l, sample.r));
+            leftLow[bin] = std::min(leftLow[bin], sample.l);
+            leftHigh[bin] = std::max(leftHigh[bin], sample.l);
+            rightLow[bin] = std::min(rightLow[bin], sample.r);
+            rightHigh[bin] = std::max(rightHigh[bin], sample.r);
+            stereo |= sample.l != sample.r;
             peak = std::max(peak, std::max(std::fabs(sample.l), std::fabs(sample.r)));
         }
     }

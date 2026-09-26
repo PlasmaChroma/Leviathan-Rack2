@@ -2042,7 +2042,7 @@ struct ChimeraWidget : ModuleWidget {
             return panel_svg::loadPointFromSvgMm(panelPath, id, &anchor) ? anchor : fallbackMm;
         };
         const Vec displayOrigin = mm2px(point("DISPLAY_ORIGIN", Vec(6, 14)));
-        const Vec displayEnd = mm2px(point("DISPLAY_END", Vec(136, 33)));
+        const Vec displayEnd = mm2px(point("DISPLAY_END", Vec(136, 40)));
         waveformCache = new widget::FramebufferWidget;
         waveformCache->box.pos = displayOrigin;
         waveformCache->box.size = displayEnd.minus(displayOrigin);
@@ -2056,14 +2056,14 @@ struct ChimeraWidget : ModuleWidget {
         displayOverlay->box.pos = displayOrigin;
         displayOverlay->box.size = waveformCache->box.size;
         addChild(displayOverlay);
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("SOS_PARAM", Vec(118.24, 51))), module, Chimera::SOS_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("GENE_SIZE_PARAM", Vec(24, 51))), module, Chimera::GENE_SIZE_PARAM));
-        addParam(createParamCentered<ChimeraBipolarHaloKnob>(mm2px(point("VARISPEED_PARAM", Vec(71.12, 51))), module, Chimera::VARISPEED_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("SOS_PARAM", Vec(118.24, 56))), module, Chimera::SOS_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("GENE_SIZE_PARAM", Vec(24, 56))), module, Chimera::GENE_SIZE_PARAM));
+        addParam(createParamCentered<ChimeraBipolarHaloKnob>(mm2px(point("VARISPEED_PARAM", Vec(71.12, 56))), module, Chimera::VARISPEED_PARAM));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MORPH_PARAM", Vec(24, 80))), module, Chimera::MORPH_PARAM));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("SLIDE_PARAM", Vec(71.12, 80))), module, Chimera::SLIDE_PARAM));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("ORGANIZE_PARAM", Vec(118.24, 80))), module, Chimera::ORGANIZE_PARAM));
-        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("GENE_ATT_PARAM", Vec(34, 67))), module, Chimera::GENE_ATT_PARAM));
-        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("VARISPEED_ATT_PARAM", Vec(81.12, 67))), module, Chimera::VARISPEED_ATT_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("GENE_ATT_PARAM", Vec(34, 69.5))), module, Chimera::GENE_ATT_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("VARISPEED_ATT_PARAM", Vec(81.12, 69.5))), module, Chimera::VARISPEED_ATT_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("SLIDE_ATT_PARAM", Vec(81.12, 93))), module, Chimera::SLIDE_ATT_PARAM));
         addParam(createParamCentered<SmallGoldButton>(mm2px(point("REC_PARAM", Vec(60, 103))), module, Chimera::REC_PARAM));
         addParam(createParamCentered<SmallGoldButton>(mm2px(point("SPLICE_PARAM", Vec(72, 103))), module, Chimera::SPLICE_PARAM));
@@ -2071,9 +2071,9 @@ struct ChimeraWidget : ModuleWidget {
         auto* unsplice = createWidgetCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))));
         unsplice->owner = module;
         addChild(unsplice);
-        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SOS_CV_INPUT", Vec(118.24, 67))), module, Chimera::SOS_CV_INPUT));
-        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("GENE_SIZE_CV_INPUT", Vec(14, 67))), module, Chimera::GENE_SIZE_CV_INPUT));
-        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("VARISPEED_CV_INPUT", Vec(61.12, 67))), module, Chimera::VARISPEED_CV_INPUT));
+        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SOS_CV_INPUT", Vec(118.24, 69.5))), module, Chimera::SOS_CV_INPUT));
+        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("GENE_SIZE_CV_INPUT", Vec(14, 69.5))), module, Chimera::GENE_SIZE_CV_INPUT));
+        addInput(createInputCentered<Magitek2InputJack>(mm2px(point("VARISPEED_CV_INPUT", Vec(61.12, 69.5))), module, Chimera::VARISPEED_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("MORPH_CV_INPUT", Vec(24, 93))), module, Chimera::MORPH_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SLIDE_CV_INPUT", Vec(61.12, 93))), module, Chimera::SLIDE_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("ORGANIZE_CV_INPUT", Vec(118.24, 93))), module, Chimera::ORGANIZE_CV_INPUT));
@@ -2088,15 +2088,15 @@ struct ChimeraWidget : ModuleWidget {
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_R_OUTPUT", Vec(108, 113))), module, Chimera::AUDIO_R_OUTPUT));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("CV_OUTPUT", Vec(120, 113))), module, Chimera::CV_OUTPUT));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("EOSG_OUTPUT", Vec(132, 113))), module, Chimera::EOSG_OUTPUT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("REC_LIGHT", Vec(10, 37))), module, Chimera::REC_LIGHT));
-        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("REC_ARMED_LIGHT", Vec(25, 37))), module, Chimera::REC_ARMED_LIGHT));
-        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(point("PLAY_LIGHT", Vec(40, 37))), module, Chimera::PLAY_LIGHT));
-        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("PENDING_LIGHT", Vec(56, 37))), module, Chimera::PENDING_LIGHT));
-        addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(point("CLOCK_LIGHT", Vec(72, 37))), module, Chimera::CLOCK_LIGHT));
-        addChild(createLightCentered<SmallAperture<VioletApertureLight>>(mm2px(point("PM_LIGHT", Vec(88, 37))), module, Chimera::PM_LIGHT));
-        addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(mm2px(point("IO_BUSY_LIGHT", Vec(103, 37))), module, Chimera::IO_BUSY_LIGHT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("CLIP_LIGHT", Vec(118, 37))), module, Chimera::CLIP_LIGHT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("ERROR_LIGHT", Vec(133, 37))), module, Chimera::ERROR_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("REC_LIGHT", Vec(10, 43.5))), module, Chimera::REC_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("REC_ARMED_LIGHT", Vec(25, 43.5))), module, Chimera::REC_ARMED_LIGHT));
+        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(point("PLAY_LIGHT", Vec(40, 43.5))), module, Chimera::PLAY_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("PENDING_LIGHT", Vec(56, 43.5))), module, Chimera::PENDING_LIGHT));
+        addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(point("CLOCK_LIGHT", Vec(72, 43.5))), module, Chimera::CLOCK_LIGHT));
+        addChild(createLightCentered<SmallAperture<VioletApertureLight>>(mm2px(point("PM_LIGHT", Vec(88, 43.5))), module, Chimera::PM_LIGHT));
+        addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(mm2px(point("IO_BUSY_LIGHT", Vec(103, 43.5))), module, Chimera::IO_BUSY_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("CLIP_LIGHT", Vec(118, 43.5))), module, Chimera::CLIP_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("ERROR_LIGHT", Vec(133, 43.5))), module, Chimera::ERROR_LIGHT));
     }
     void step() override {
         const bool measurePerf = isDragonKingDebugEnabled();

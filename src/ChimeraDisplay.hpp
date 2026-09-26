@@ -12,28 +12,47 @@ struct ChimeraWaveformLayer : Widget {
         nvgRoundedRect(vg, 0.f, 0.f, w, h, 4.f);
         nvgFillColor(vg, nvgRGB(8, 21, 30));
         nvgFill(vg);
-        const float traceTop = 4.f, traceBottom = h * 0.56f;
-        const float mid = (traceTop + traceBottom) * 0.5f;
-        nvgBeginPath(vg);
-        nvgMoveTo(vg, 5.f, mid);
-        nvgLineTo(vg, w - 5.f, mid);
-        nvgStrokeColor(vg, nvgRGBA(83, 125, 135, 95));
-        nvgStrokeWidth(vg, 1.f);
-        nvgStroke(vg);
-        if (!summary || !summary->frames) return;
+        const float traceTop = 4.f, traceBottom = h * 0.69f;
+        const bool stereo = summary && summary->stereo;
+        const float laneHeight = stereo ? (traceBottom - traceTop - 4.f) * 0.5f :
+            traceBottom - traceTop;
         const float left = 5.f, width = w - 10.f;
-        const float scale = (traceBottom - traceTop) * 0.46f /
-            std::max(summary->peak, 0.015f);
-        nvgBeginPath(vg);
-        for (std::size_t i = 0; i < chimera::WaveformSummary::kBins; ++i) {
-            const float x = left + width * (float(i) + 0.5f) /
-                float(chimera::WaveformSummary::kBins);
-            nvgMoveTo(vg, x, mid - summary->high[i] * scale);
-            nvgLineTo(vg, x, mid - summary->low[i] * scale);
+        const auto drawLane = [&](float top, const std::array<float, chimera::WaveformSummary::kBins>* low,
+                                  const std::array<float, chimera::WaveformSummary::kBins>* high,
+                                  NVGcolor color) {
+            const float mid = top + laneHeight * 0.5f;
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, left, mid);
+            nvgLineTo(vg, w - left, mid);
+            nvgStrokeColor(vg, nvgRGBA(83, 125, 135, 95));
+            nvgStrokeWidth(vg, 1.f);
+            nvgStroke(vg);
+            if (!summary || !summary->frames) return;
+            const float scale = laneHeight * 0.46f / std::max(summary->peak, 0.015f);
+            nvgBeginPath(vg);
+            for (std::size_t i = 0; i < chimera::WaveformSummary::kBins; ++i) {
+                const float x = left + width * (float(i) + 0.5f) /
+                    float(chimera::WaveformSummary::kBins);
+                nvgMoveTo(vg, x, mid - (*high)[i] * scale);
+                nvgLineTo(vg, x, mid - (*low)[i] * scale);
+            }
+            nvgStrokeColor(vg, color);
+            nvgStrokeWidth(vg, std::max(1.f, width / float(chimera::WaveformSummary::kBins) * 0.78f));
+            nvgStroke(vg);
+        };
+        drawLane(traceTop, summary ? &summary->leftLow : nullptr,
+            summary ? &summary->leftHigh : nullptr, nvgRGB(106, 221, 215));
+        if (stereo) {
+            const float divider = traceTop + laneHeight + 2.f;
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, left, divider);
+            nvgLineTo(vg, w - left, divider);
+            nvgStrokeColor(vg, nvgRGBA(83, 125, 135, 55));
+            nvgStrokeWidth(vg, 1.f);
+            nvgStroke(vg);
+            drawLane(divider + 2.f, &summary->rightLow, &summary->rightHigh,
+                nvgRGB(177, 157, 239));
         }
-        nvgStrokeColor(vg, nvgRGB(106, 221, 215));
-        nvgStrokeWidth(vg, std::max(1.f, width / float(chimera::WaveformSummary::kBins) * 0.78f));
-        nvgStroke(vg);
     }
 };
 
@@ -116,7 +135,7 @@ struct ChimeraDisplayOverlay : Widget {
         NVGcontext* vg = args.vg;
         const float w = box.size.x, h = box.size.y;
         const float left = 5.f, width = w - 10.f;
-        const float traceTop = 4.f, traceBottom = h * 0.56f;
+        const float traceTop = 4.f, traceBottom = h * 0.69f;
         // Marker metadata comes directly from the core, independently of the
         // slower waveform scan. The summary only supplies the waveform backdrop.
         const std::uint32_t displayFrames = owner ? std::max(markers.frames,
@@ -156,15 +175,24 @@ struct ChimeraDisplayOverlay : Widget {
             nvgStroke(vg);
         }
         nvgFontFaceId(vg, APP->window->uiFont->handle);
+        if (summary && summary->stereo) {
+            const float laneHeight = (traceBottom - traceTop - 4.f) * 0.5f;
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+            nvgFontSize(vg, 8.f);
+            nvgFillColor(vg, nvgRGB(106, 221, 215));
+            nvgText(vg, 8.f, traceTop + laneHeight * 0.5f - 7.f, "L", nullptr);
+            nvgFillColor(vg, nvgRGB(177, 157, 239));
+            nvgText(vg, 8.f, traceTop + laneHeight * 1.5f - 3.f, "R", nullptr);
+        }
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFontSize(vg, 9.f);
         nvgFillColor(vg, nvgRGB(246, 231, 193));
-        nvgText(vg, 6.f, h * 0.72f, stateText.c_str(), nullptr);
+        nvgText(vg, 6.f, h * 0.79f, stateText.c_str(), nullptr);
         nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgText(vg, w - 6.f, h * 0.72f, saveText.c_str(), nullptr);
+        nvgText(vg, w - 6.f, h * 0.79f, saveText.c_str(), nullptr);
         nvgFontSize(vg, 8.5f);
         nvgFillColor(vg, nvgRGB(166, 209, 212));
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-        nvgText(vg, 6.f, h * 0.91f, detailText.c_str(), nullptr);
+        nvgText(vg, 6.f, h * 0.94f, detailText.c_str(), nullptr);
     }
 };

@@ -80,16 +80,16 @@
        fill="url(#chimera-face)"
        id="rect2" />
     <g id="function_groups" fill="none" stroke="#698294" stroke-width="0.25" opacity="0.25">
-      <rect id="function_top_left" x="4.5" y="44" width="39" height="30.8" rx="2" />
-      <rect id="function_top_middle" x="51.62" y="44" width="39" height="30.8" rx="2" />
-      <rect id="function_top_right" x="98.74" y="44" width="39" height="30.8" rx="2" />
-      <rect id="function_bottom_left" x="4.5" y="76" width="39" height="24.5" rx="2" />
-      <rect id="function_bottom_middle" x="51.62" y="76" width="39" height="24.5" rx="2" />
-      <rect id="function_bottom_right" x="98.74" y="76" width="39" height="24.5" rx="2" />
+      <rect id="function_top_left" x="4.5" y="50.5" width="39" height="26" rx="2" />
+      <rect id="function_top_middle" x="51.62" y="50.5" width="39" height="26" rx="2" />
+      <rect id="function_top_right" x="98.74" y="50.5" width="39" height="26" rx="2" />
+      <rect id="function_bottom_left" x="4.5" y="77.5" width="39" height="23" rx="2" />
+      <rect id="function_bottom_middle" x="51.62" y="77.5" width="39" height="23" rx="2" />
+      <rect id="function_bottom_right" x="98.74" y="77.5" width="39" height="23" rx="2" />
     </g>
 
     <path
-       d="M5 43H137.24"
+       d="M5 49.5H137.24"
        stroke="#698294"
        stroke-width=".35"
        opacity=".7"
@@ -98,14 +98,14 @@
        x="5.4"
        y="13.5"
        width="131.44"
-       height="20"
+       height="27"
        rx="1.6"
        fill="#091721"
        stroke="#577982"
        stroke-width=".35"
        id="rect5" />
     <path
-       d="M7 15H135M7 32H135"
+       d="M7 15H135M7 39H135"
        stroke="#d2a56e"
        stroke-width=".18"
        opacity=".7"
@@ -140,22 +140,22 @@
       <circle
          id="DISPLAY_END"
          cx="136"
-         cy="33"
+         cy="40"
          r=".1" />
       <circle
          id="SOS_PARAM"
          cx="118.24"
-         cy="51"
+         cy="56"
          r=".1" />
       <circle
          id="GENE_SIZE_PARAM"
          cx="24"
-         cy="51"
+         cy="56"
          r=".1" />
       <circle
          id="VARISPEED_PARAM"
          cx="71.12"
-         cy="51"
+         cy="56"
          r=".1" />
       <circle
          id="MORPH_PARAM"
@@ -175,12 +175,12 @@
       <circle
          id="GENE_ATT_PARAM"
          cx="34"
-         cy="67"
+         cy="69.5"
          r=".1" />
       <circle
          id="VARISPEED_ATT_PARAM"
          cx="81.12"
-         cy="67"
+         cy="69.5"
          r=".1" />
       <circle
          id="SLIDE_ATT_PARAM"
@@ -205,17 +205,17 @@
       <circle
          id="SOS_CV_INPUT"
          cx="118.24"
-         cy="67"
+         cy="69.5"
          r=".1" />
       <circle
          id="GENE_SIZE_CV_INPUT"
          cx="14"
-         cy="67"
+         cy="69.5"
          r=".1" />
       <circle
          id="VARISPEED_CV_INPUT"
          cx="61.12"
-         cy="67"
+         cy="69.5"
          r=".1" />
       <circle
          id="MORPH_CV_INPUT"
@@ -290,47 +290,47 @@
       <circle
          id="REC_LIGHT"
          cx="10"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="REC_ARMED_LIGHT"
          cx="25"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="PLAY_LIGHT"
          cx="40"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="PENDING_LIGHT"
          cx="56"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="CLOCK_LIGHT"
          cx="72"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="PM_LIGHT"
          cx="88"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="IO_BUSY_LIGHT"
          cx="103"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="CLIP_LIGHT"
          cx="118"
-         cy="37"
+         cy="43.5"
          r=".1" />
       <circle
          id="ERROR_LIGHT"
          cx="133"
-         cy="37"
+         cy="43.5"
          r=".1" />
     </g>
   </g>
@@ -345,54 +345,54 @@
        id="g14">
       <text
          x="10"
-         y="41.5"
+         y="48"
          id="text6">REC</text>
       <text
          x="25"
-         y="41.5"
+         y="48"
          id="text7">ARM</text>
       <text
          x="40"
-         y="41.5"
+         y="48"
          id="text8">PLAY</text>
       <text
          x="56"
-         y="41.5"
+         y="48"
          id="text9">PEND</text>
       <text
          x="72"
-         y="41.5"
+         y="48"
          id="text10">CLK</text>
       <text
          x="88"
-         y="41.5"
+         y="48"
          id="text11">PM</text>
       <text
          x="103"
-         y="41.5"
+         y="48"
          id="text12">BUSY</text>
       <text
          x="118"
-         y="41.5"
+         y="48"
          id="text13">CLIP</text>
       <text
          x="133"
-         y="41.5"
+         y="48"
          id="text14">ERR</text>
     </g>
     <g
        id="g20">
       <text
          x="118.24"
-         y="61.5"
+         y="64.5"
          id="text15">S.O.S.</text>
       <text
          x="24"
-         y="61.5"
+         y="64.5"
          id="text16">GENE SIZE</text>
       <text
          x="71.12"
-         y="61.5"
+         y="64.5"
          id="text17">VARI-SPEED</text>
       <text
          x="24"
@@ -412,11 +412,11 @@
        id="g23">
       <text
          x="34"
-         y="73.5"
+         y="75.5"
          id="text21">GENE CV ±</text>
       <text
          x="81.12"
-         y="73.5"
+         y="75.5"
          id="text22">RATE CV ±</text>
       <text
          x="81.12"
@@ -443,15 +443,15 @@
        id="g43">
       <text
          x="118.24"
-         y="73.5"
+         y="75.5"
          id="text27">S.O.S.</text>
       <text
          x="14"
-         y="73.5"
+         y="75.5"
          id="text28">GENE</text>
       <text
          x="61.12"
-         y="73.5"
+         y="75.5"
          id="text29">RATE</text>
       <text
          x="24"

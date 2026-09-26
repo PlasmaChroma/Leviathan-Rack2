@@ -23,13 +23,23 @@ int main() {
     need(before->audioRevision + 1 == after->audioRevision &&
          before->peak == 0.75f && after->peak == 0.9f,
          "waveform summaries distinguish a protected cut from newer audio");
-    need(before->high[8] == 0.75f && after->low[8] == -0.9f,
+    need(!before->stereo && !after->stereo &&
+         before->leftHigh[8] == 0.75f && after->leftLow[8] == -0.9f &&
+         before->rightHigh[8] == 0.75f && after->rightLow[8] == -0.9f,
          "peak bins include the exact overwritten sample");
     chimera::Reel antiphase(1, 0);
     need(antiphase.write(0, {0.7f, -0.7f}, 0), "populate antiphase Reel");
     const auto stereo = chimera::WaveformSummary::fromActive(antiphase);
-    need(stereo->peak == 0.7f && stereo->high[0] == 0.7f &&
-         stereo->low[0] == -0.7f, "stereo opposition remains visible");
+    need(stereo->stereo && stereo->peak == 0.7f &&
+         stereo->leftHigh[0] == 0.7f && stereo->leftLow[0] == 0.f &&
+         stereo->rightLow[0] == -0.7f && stereo->rightHigh[0] == 0.f,
+         "stereo opposition stays in separate channels");
+    need(antiphase.beginSnapshot(1), "freeze stereo Reel");
+    while (!antiphase.readyForWorker()) antiphase.maintenanceTick();
+    const auto frozenStereo = chimera::WaveformSummary::fromSnapshot(antiphase);
+    need(frozenStereo->stereo && frozenStereo->leftHigh[0] == 0.7f &&
+         frozenStereo->rightLow[0] == -0.7f,
+         "frozen stereo summary preserves separate channels");
     chimera::Reel full(chimera::kMaxPages, 0);
     for (std::uint32_t i = 0; i < chimera::kMaxReelFrames; ++i)
         need(full.write(i, {(i % 4096) == 0 ? 0.8f : 0.f, 0.f}, i),
@@ -42,7 +52,9 @@ int main() {
     const double milliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - start).count();
     need(display->frames == chimera::kMaxReelFrames &&
-         display->markerCount == chimera::kMaxSplices && display->peak == 0.8f,
+         display->markerCount == chimera::kMaxSplices && display->peak == 0.8f &&
+         display->stereo && display->leftHigh[0] == 0.8f &&
+         display->rightHigh[0] == 0.f,
          "full-length waveform keeps a bounded 128-bin and 300-marker summary");
     std::printf("Full-capacity worker waveform build: %.2f ms\n", milliseconds);
     std::puts("PASS: Chimera worker waveform peaks, markers, and COW cut");
