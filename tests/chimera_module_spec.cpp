@@ -500,7 +500,50 @@ static void boundedSaveRegression() {
     }
 }
 
+static void heldGateRateChangeRegression() {
+    for (unsigned rate : {96000u, 192000u}) {
+        for (float heldVoltage : {10.f, 1.5f}) {
+            chimera::Reel reel(4, 4);
+            for (unsigned frame = 0; frame < 1000; ++frame)
+                need(reel.write(frame, {.25f, .25f}, frame), "prepare held-gate Reel");
+            Chimera m;
+            m.reel = &reel;
+            m.slice.setReel(&reel);
+            m.saveInProgress.store(true); // Keep automatic checkpoints out of this gate test.
+            m.inputs[Chimera::REC_INPUT].channels = 1;
+            m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+            Module::ProcessArgs direct{};
+            direct.sampleRate = 48000.f;
+            direct.sampleTime = 1.f / 48000.f;
+            m.process(direct);
+            need(m.slice.recordState() == chimera::Slice::Current,
+                 "initial REC rise starts Current recording");
+            m.inputs[Chimera::REC_INPUT].setVoltage(heldVoltage);
+            Module::ProcessArgs changed = direct;
+            changed.sampleRate = float(rate);
+            changed.sampleTime = 1.f / float(rate);
+            m.preparedBridge.store(new chimera::RateBridge(rate));
+            m.process(changed);
+            const auto stoppedAt = m.slice.writerFrame();
+            need(m.slice.recordState() == chimera::Slice::Idle,
+                 "rate change stops recording");
+            for (unsigned frame = 0; frame < rate / 50; ++frame) m.process(changed);
+            need(m.slice.recordState() == chimera::Slice::Idle &&
+                 m.slice.writerFrame() == stoppedAt && !m.activeBridge->failed(),
+                 "held REC gate never restarts after fresh bridge latency");
+            m.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+            for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
+            m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+            for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
+            need(m.slice.recordState() == chimera::Slice::Current &&
+                 m.slice.writerFrame() > stoppedAt,
+                 "new REC rise remains available after bridge seeding");
+        }
+    }
+}
+
 int main() {
+    heldGateRateChangeRegression();
     boundedSaveRegression();
     abandonedSnapshotRegression();
     snapshotTeardownRegression();

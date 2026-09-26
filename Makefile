@@ -537,7 +537,7 @@ test-chimera-checkpoints: | build/tests
 	$(call run_rack_test_bin,build/tests/chimera_checkpoint_session_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-recovery: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_recovery_spec.cpp src/ChimeraRecovery.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_recovery_spec.cpp src/ChimeraRecovery.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-waveform

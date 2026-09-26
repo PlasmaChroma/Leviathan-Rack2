@@ -1,13 +1,26 @@
 #include "ChimeraRecovery.hpp"
+#include "ChimeraCheckpointSession.hpp"
 #include <jansson.h>
 #include <system.hpp>
+#include <chrono>
 #include <cstdio>
 #include <dirent.h>
 #include <fstream>
+#include <thread>
 
 namespace chimera { namespace recovery {
 namespace {
 std::string join(const std::string& a, const std::string& b) { return a + "/" + b; }
+bool lockJournal(const std::string& root, CheckpointLease& lease) {
+    // Commits and loads are worker/control-side operations. A persistent lock
+    // file serializes independent Rack processes without unlink races.
+    const std::string path = join(root, "journal.lock");
+    for (unsigned attempt = 0; attempt < 1000; ++attempt) {
+        if (lease.open(path)) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
 bool safeId(const std::string& id) {
     if (id.empty() || id.size() > 64) return false;
     for (char c : id)
@@ -111,6 +124,10 @@ CommitResult commit(const std::string& root, const std::string& id,
     if (!rack::system::createDirectories(root) && !rack::system::isDirectory(root)) {
         result.error = "recovery_directory_unavailable"; return result;
     }
+    CheckpointLease lease;
+    if (!lockJournal(root, lease)) {
+        result.error = "recovery_journal_busy"; return result;
+    }
     const std::string directory = join(root, "chimera");
     if (!rack::system::createDirectories(directory) && !rack::system::isDirectory(directory)) {
         result.error = "recovery_directory_unavailable"; return result;
@@ -135,6 +152,15 @@ bundle::LoadResult load(const std::string& root, const Entry& entry,
                         std::uint32_t capacityPages) {
     if (!entry || !bundle::validManifestReference(entry.manifest)) {
         bundle::LoadResult failed; failed.error = "recovery_entry_missing"; return failed;
+    }
+    CheckpointLease lease;
+    if (!lockJournal(root, lease)) {
+        bundle::LoadResult failed; failed.error = "recovery_journal_busy"; return failed;
+    }
+    const Journal selected = inspect(root);
+    if (entry.manifest != selected.latest.manifest &&
+        entry.manifest != selected.preRecord.manifest) {
+        bundle::LoadResult failed; failed.error = "recovery_entry_superseded"; return failed;
     }
     bundle::LoadResult result = bundle::load(root, entry.manifest, capacityPages);
     if (result && (result.documentRevision != entry.documentRevision ||

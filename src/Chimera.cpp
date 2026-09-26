@@ -1672,6 +1672,10 @@ struct Chimera : Module {
                     return;
                 }
                 activeBridge = ready;
+                // Every newly prepared converter starts with empty gate history.
+                // Treat held inputs as its baseline, including ordinary host-rate
+                // changes and recovery from a failed converter.
+                bridgeResumePending = true;
                 bridgeInputLatencyHost.store(ready->inputLatencyHost(),
                     std::memory_order_release);
                 bridgeOutputLatencyHost.store(ready->outputLatencyHost(),
@@ -1701,8 +1705,8 @@ struct Chimera : Module {
             return;
         }
         if (bridgeResumePending) {
-            // Clear pre-bypass delayed commands/audio and seed held gates.
-            // Also covers a freshly prepared rate after a bypass-time change.
+            // A fresh converter has no earlier commands/audio, and held gates
+            // must not become new edges after its input latency has elapsed.
             // Construction and stale-bridge destruction stay off audio.
             const bool gates[5] = {
                 playGate.update(host.connected[PLAY_INPUT] ? host.volts[PLAY_INPUT] : 0.f),

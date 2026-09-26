@@ -78,7 +78,8 @@ public:
 
     // Seed a newly prepared bridge before its first frame. Existing high
     // Schmitt gates (including voltages in the hysteresis band) are baseline
-    // state, not new edges after bypass. This never resets a used resampler.
+    // state, not new edges after a transport discontinuity. This never resets
+    // a used resampler.
     void seedGatesForResume(const HostState& host, const bool (&gateHigh)[5]) {
         if (hostFrames_ || coreFrames_) return;
         for (unsigned j = 0; j < 13; ++j) lastConnected_[j] = host.connected[j];

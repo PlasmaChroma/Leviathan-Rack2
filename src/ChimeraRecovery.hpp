@@ -21,8 +21,9 @@ struct CommitResult {
     explicit operator bool() const { return bool(entry) && error.empty(); }
 };
 
-// root is a private per-patch/per-module cache directory. A journal rename is
-// the publication boundary; a crash leaves either the old or the new entry.
+// root is a per-patch/per-module cache directory shared by host instances.
+// Commit and load take the persistent OS journal lease; a journal rename is
+// the publication boundary, and a crash leaves the old or new selected entry.
 Journal inspect(const std::string& root);
 CommitResult commit(const std::string& root, const std::string& id,
                     const Reel& frozen, Role role, std::uint64_t wallTimeMs);
