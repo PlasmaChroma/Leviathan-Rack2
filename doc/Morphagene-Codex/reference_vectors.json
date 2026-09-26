@@ -415,22 +415,22 @@
     {
       "spliceFrames": 1,
       "normalizedControl": 0.25,
-      "frames": 1
+      "frames": 8
     },
     {
       "spliceFrames": 1,
       "normalizedControl": 0.5,
-      "frames": 1
+      "frames": 8
     },
     {
       "spliceFrames": 1,
       "normalizedControl": 0.75,
-      "frames": 1
+      "frames": 8
     },
     {
       "spliceFrames": 1,
       "normalizedControl": 1.0,
-      "frames": 1
+      "frames": 8
     },
     {
       "spliceFrames": 2,
@@ -440,22 +440,22 @@
     {
       "spliceFrames": 2,
       "normalizedControl": 0.25,
-      "frames": 2
+      "frames": 8
     },
     {
       "spliceFrames": 2,
       "normalizedControl": 0.5,
-      "frames": 2
+      "frames": 8
     },
     {
       "spliceFrames": 2,
       "normalizedControl": 0.75,
-      "frames": 2
+      "frames": 8
     },
     {
       "spliceFrames": 2,
       "normalizedControl": 1.0,
-      "frames": 2
+      "frames": 8
     },
     {
       "spliceFrames": 3,
@@ -465,22 +465,22 @@
     {
       "spliceFrames": 3,
       "normalizedControl": 0.25,
-      "frames": 3
+      "frames": 8
     },
     {
       "spliceFrames": 3,
       "normalizedControl": 0.5,
-      "frames": 3
+      "frames": 8
     },
     {
       "spliceFrames": 3,
       "normalizedControl": 0.75,
-      "frames": 3
+      "frames": 8
     },
     {
       "spliceFrames": 3,
       "normalizedControl": 1.0,
-      "frames": 3
+      "frames": 8
     },
     {
       "spliceFrames": 16,
@@ -490,22 +490,22 @@
     {
       "spliceFrames": 16,
       "normalizedControl": 0.25,
-      "frames": 16
+      "frames": 8
     },
     {
       "spliceFrames": 16,
       "normalizedControl": 0.5,
-      "frames": 16
+      "frames": 8
     },
     {
       "spliceFrames": 16,
       "normalizedControl": 0.75,
-      "frames": 16
+      "frames": 8
     },
     {
       "spliceFrames": 16,
       "normalizedControl": 1.0,
-      "frames": 16
+      "frames": 8
     },
     {
       "spliceFrames": 257,
@@ -515,97 +515,97 @@
     {
       "spliceFrames": 257,
       "normalizedControl": 0.25,
-      "frames": 128
+      "frames": 73
     },
     {
       "spliceFrames": 257,
       "normalizedControl": 0.5,
-      "frames": 64
+      "frames": 15
     },
     {
       "spliceFrames": 257,
       "normalizedControl": 0.75,
-      "frames": 32
+      "frames": 8
     },
     {
       "spliceFrames": 257,
       "normalizedControl": 1.0,
-      "frames": 16
+      "frames": 8
     },
     {
       "spliceFrames": 4800,
       "normalizedControl": 0.0002,
-      "frames": 4795
+      "frames": 4800
     },
     {
       "spliceFrames": 4800,
       "normalizedControl": 0.25,
-      "frames": 1153
+      "frames": 1367
     },
     {
       "spliceFrames": 4800,
       "normalizedControl": 0.5,
-      "frames": 277
+      "frames": 287
     },
     {
       "spliceFrames": 4800,
       "normalizedControl": 0.75,
-      "frames": 67
+      "frames": 61
     },
     {
       "spliceFrames": 4800,
       "normalizedControl": 1.0,
-      "frames": 16
+      "frames": 13
     },
     {
       "spliceFrames": 48000,
       "normalizedControl": 0.0002,
-      "frames": 47923
+      "frames": 48000
     },
     {
       "spliceFrames": 48000,
       "normalizedControl": 0.25,
-      "frames": 6486
+      "frames": 13667
     },
     {
       "spliceFrames": 48000,
       "normalizedControl": 0.5,
-      "frames": 876
+      "frames": 2869
     },
     {
       "spliceFrames": 48000,
       "normalizedControl": 0.75,
-      "frames": 118
+      "frames": 606
     },
     {
       "spliceFrames": 48000,
       "normalizedControl": 1.0,
-      "frames": 16
+      "frames": 127
     },
     {
       "spliceFrames": 8352000,
       "normalizedControl": 0.0002,
-      "frames": 8330037
+      "frames": 8352000
     },
     {
       "spliceFrames": 8352000,
       "normalizedControl": 0.25,
-      "frames": 310723
+      "frames": 148631
     },
     {
       "spliceFrames": 8352000,
       "normalizedControl": 0.5,
-      "frames": 11560
+      "frames": 31198
     },
     {
       "spliceFrames": 8352000,
       "normalizedControl": 0.75,
-      "frames": 430
+      "frames": 6589
     },
     {
       "spliceFrames": 8352000,
       "normalizedControl": 1.0,
-      "frames": 16
+      "frames": 1383
     }
   ],
   "morphDensity": [

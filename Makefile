@@ -485,8 +485,12 @@ test-chimera-phase3: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 
-.PHONY: test-chimera-phase4
-test-chimera-phase4: | build/tests
+.PHONY: test-chimera-phase4 test-chimera-gene-size
+test-chimera-gene-size: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -pthread -Isrc tests/chimera_gene_size_spec.cpp -o build/tests/chimera_gene_size_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_gene_size_spec$(if $(ARCH_WIN),.exe,)
+
+test-chimera-phase4: test-chimera-gene-size | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_grains_spec.cpp -o build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
 
@@ -507,7 +511,12 @@ test-chimera-wav: | build/tests
 
 .PHONY: test-chimera-edit
 .PHONY: test-chimera-playback-reader test-chimera-checkpoints test-chimera-repairs
-test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch
+test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch test-chimera-marker-display
+
+.PHONY: test-chimera-marker-display
+test-chimera-marker-display: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_marker_display_spec.cpp -o build/tests/chimera_marker_display_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_marker_display_spec$(if $(ARCH_WIN),.exe,)
 
 test-chimera-playback-reader: | build/tests
 	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -fno-fast-math -Isrc tests/chimera_playback_reader_spec.cpp -o build/tests/chimera_playback_reader_spec$(if $(ARCH_WIN),.exe,)

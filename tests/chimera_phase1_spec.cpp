@@ -88,11 +88,11 @@ int main() {
     check(fade.step() == 0.375 && fade.step() == 0.25 &&
           fade.step() == 0.125 && fade.step() == 0, "interrupted fade restarts from current value");
     GeneMode mode;
-    check(mode.observe(0.00015) && !mode.observe(0.0002) &&
-          !mode.observe(0.00015) && mode.observe(0.0001), "Gene hysteresis");
-    check(finiteGeneFrames(0, 0.5) == 0 && finiteGeneFrames(1, 0.5) == 1 &&
-          finiteGeneFrames(3, 1) == 3 && finiteGeneFrames(480, 0) == 480 &&
-          finiteGeneFrames(480, 1) == 16, "finite Gene bounds and tiny regions");
+    check(mode.observe(199.f/4095.f) && !mode.observe(200.f/4095.f) &&
+          mode.observe(199.f/4095.f), "MG204 whole-splice endpoint without hysteresis");
+    check(finiteGeneFrames(0, 0.5) == 0 && finiteGeneFrames(1, 0.5) == 8 &&
+          finiteGeneFrames(3, 1) == 8 && finiteGeneFrames(480, 0) == 480 &&
+          finiteGeneFrames(480, 1) == 8, "finite Gene output-sample floor and whole-splice span");
     check(window(1, 0, false) == 1 && window(2, 1, true) == 1 &&
           window(16, 0, false) == 0 && window(16, 15, true) == 0 &&
           window(480, 240, false) == 1 && windowEdge(4800, true) > windowEdge(4800, false),

@@ -9,7 +9,7 @@
 namespace chimera {
 
 // Fixed four-slot scheduler. Constructed off the audio thread with fixed window
-// and pan tables; step() never allocates. Gene log/exp mapping is cached until its
+// and pan tables; step() never allocates. Gene LUT mapping is cached until its
 // inputs change; grain-launch pan uses a precomputed table.
 class Grains {
 public:
@@ -39,6 +39,7 @@ public:
         full_(false), primaryTravel_(0), startAtCurrent_(false), modeStartPosition_(0),
         activeRegion_{0, 0}, transitionRemaining_(0), clockMode_(0), trajectoryOffset_(0),
         stretchAnchor_(0), stretchStep_(0), stretchVelocity_(0), lastDirection_(1) {
+        (void) geneSize::lut(); // Initialize the firmware LUT off the audio thread.
         for (std::uint32_t i = 0; i <= 2048; ++i)
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
         for (std::uint32_t i = 0; i <= 2048; ++i)
@@ -114,6 +115,8 @@ public:
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
         if (!length) { reset(); return result; }
+        geneClockValid_ = clock.mode != 0 && clock.period != 0 && !clock.waiting;
+        if (!fullMode) geneFrames(length, c.gene);
         const bool regionChanged = active_ &&
             (region.begin != activeRegion_.begin || region.end != activeRegion_.end);
         bool metadataRestart = active_ && regionChanged && metadataRefresh &&
@@ -260,6 +263,10 @@ public:
                 weightSum += w;
                 ++result.readers;
                 const double increment = profile1::clamp(c.rate * v.ratio, -512.0, 512.0);
+                // Finite v.length is output time. Advancing by increment for
+                // that many ages traverses abs(increment) * duration source
+                // samples (wrapped within the complete splice), with no second
+                // speed division. Whole-splice voices instead expire on travel.
                 v.position = profile1::wrapPosition(v.position + increment, v.region);
                 v.travel += std::fabs(increment);
                 if (v.full) {
@@ -329,10 +336,14 @@ public:
 
 private:
     std::uint32_t geneFrames(std::uint32_t length, double gene) {
-        if (cachedGeneRegion_ != length || cachedGene_ != gene) {
+        const int code = geneSize::adc(static_cast<float>(gene));
+        if (cachedGeneRegion_ != length || cachedGeneCode_ != code ||
+            cachedGeneClock_ != geneClockValid_) {
             cachedGeneRegion_ = length;
-            cachedGene_ = gene;
-            cachedGeneFrames_ = profile1::finiteGeneFrames(length, gene);
+            cachedGeneCode_ = code;
+            cachedGeneClock_ = geneClockValid_;
+            cachedGeneFrames_ = profile1::roundNonnegative(
+                geneSize::mapAdc(length, code, geneClockValid_).durationSamples);
         }
         return cachedGeneFrames_;
     }
@@ -476,7 +487,8 @@ private:
     float edge_[2049];
     double pan_[2049];
     std::uint32_t cachedGeneRegion_ = 0, cachedGeneFrames_ = 0;
-    double cachedGene_ = -1.0;
+    int cachedGeneCode_ = -1;
+    bool geneClockValid_ = false, cachedGeneClock_ = false;
     StereoFrame lastWet_, residual_;
     std::uint32_t residualAge_, residualLength_;
     float residualBlend_;

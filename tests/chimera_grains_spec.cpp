@@ -13,7 +13,7 @@ int main() {
     for (std::uint32_t i = 0; i < 4800; ++i)
         need(reel.write(i, chimera::StereoFrame{1.f, 1.f}, i), "constant source prepared");
     const chimera::Region region{0, 4800};
-    const double gene = std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0);
+    const double gene = 1564.0 / 4095.0;
     {
         chimera::Grains quality, original;
         quality.setBandlimited(true);
@@ -33,7 +33,7 @@ int main() {
                  "quality playback keeps grain/chord/reverse/PM scheduling unchanged");
         }
     }
-    need(chimera::profile1::finiteGeneFrames(4800, gene) == 480, "480-frame Gene fixture");
+    need(chimera::profile1::finiteGeneFrames(4800, gene) == 600, "600-frame Gene fixture");
     const float rates[] = {0.5f, 1.f, 2.f, -1.f};
     for (int r = 0; r < 4; ++r) {
         chimera::Grains grains;
@@ -43,12 +43,12 @@ int main() {
         c.rate = rates[r];
         std::uint32_t firstCompletion = 1000, firstBoundary = 1000;
         double traveledAddress = -1;
-        for (std::uint32_t frame = 0; frame < 960; ++frame) {
+        for (std::uint32_t frame = 0; frame < 1200; ++frame) {
             if (r == 2 && frame == 200) c.rate = -0.5f;
             const chimera::Grains::Result out = grains.step(reel, region, c);
             if (out.completions && firstCompletion == 1000) firstCompletion = frame;
             if (out.primaryBoundary && firstBoundary == 1000) firstBoundary = frame;
-            if (frame == 479) traveledAddress = out.primaryPosition;
+            if (frame == 599) traveledAddress = out.primaryPosition;
             need(out.readers <= 4, "bounded musical readers");
             need(std::isfinite(out.audio.l) && std::isfinite(out.audio.r), "finite stereo audio");
             if (frame >= 120 && frame < 900)
@@ -56,12 +56,12 @@ int main() {
                      std::fabs(out.audio.r - 1.f) < 1e-5f,
                      "constant source unity plateau without periodic holes");
         }
-        need(firstCompletion == 480 && firstBoundary == 480,
+        need(firstCompletion == 600 && firstBoundary == 600,
              "Gene completion and primary cycle ignore playback speed");
-        const double expectedAddress[] = {240.0, 480.0, 260.0, 4319.0};
+        const double expectedAddress[] = {300.0, 600.0, 200.0, 4199.0};
         need(std::fabs(traveledAddress - expectedAddress[r]) < 1e-5,
              "primary source excursion reflects speed despite fixed Gene duration");
-        need(grains.onsetCount() == 2, "one onset per 480-frame unity cycle");
+        need(grains.onsetCount() == 2, "one onset per 600-frame unity cycle");
     }
     chimera::Grains overlap;
     chimera::CoreOutput c{};
@@ -72,12 +72,12 @@ int main() {
     for (int frame = 0; frame < 4800; ++frame) {
         const chimera::Grains::Result out = overlap.step(reel, region, c);
         if (out.readers > peakReaders) peakReaders = out.readers;
-        if (frame >= 480)
+        if (frame >= 600)
             need(out.audio.l >= 0.f && out.audio.r >= 0.f &&
                  out.audio.l < 1.6f && out.audio.r < 1.6f,
                  "common stereo normalization prevents fourfold overlap gain");
     }
-    need(peakReaders == 4 && overlap.onsetCount() == 40,
+    need(peakReaders == 4 && overlap.onsetCount() == 32,
          "maximum density reaches four bounded slots at fractional-hop cadence");
     chimera::Reel stereo(20, 20);
     for (std::uint32_t i = 0; i < 4800; ++i)
@@ -85,7 +85,7 @@ int main() {
              "prepare independent stereo channels");
     chimera::Grains centered;
     c.morph = 1.f/6.f;
-    for (int frame = 0; frame < 960; ++frame) {
+    for (int frame = 0; frame < 1200; ++frame) {
         const chimera::Grains::Result out = centered.step(stereo, region, c);
         if (frame >= 120)
             need(std::fabs(out.audio.l - 1.f) < 1e-5f &&
@@ -114,9 +114,9 @@ int main() {
     chimera::Grains gap;
     c.morph = 0.f;
     bool foundGap = false;
-    for (int frame = 0; frame < 550; ++frame) {
+    for (int frame = 0; frame < 680; ++frame) {
         const chimera::Grains::Result out = gap.step(reel, region, c);
-        if (frame >= 480 && frame < 530 && out.readers == 0 && out.audio.l == 0.f)
+        if (frame >= 600 && frame < 650 && out.readers == 0 && out.audio.l == 0.f)
             foundGap = true;
     }
     need(foundGap, "density below unity leaves an actual no-voice gap");
@@ -124,40 +124,40 @@ int main() {
     smooth.setSmooth(true);
     c.morph = 1.f/6.f;
     float smoothBoundary = 1.f;
-    for (int frame = 0; frame <= 480; ++frame) {
+    for (int frame = 0; frame <= 600; ++frame) {
         const chimera::Grains::Result out = smooth.step(reel, region, c);
-        if (frame == 480) smoothBoundary = out.audio.l;
-        if (frame < 480)
-            need(std::fabs(out.audio.l - chimera::profile1::window(480, frame, true)) < 1e-5,
+        if (frame == 600) smoothBoundary = out.audio.l;
+        if (frame < 600)
+            need(std::fabs(out.audio.l - chimera::profile1::window(600, frame, true)) < 1e-5,
                  "off-audio cosine table matches reference window within profile tolerance");
     }
     need(smoothBoundary < 0.05f, "smooth window keeps audible unity-boundary dip");
     chimera::Reel discontinuous(20, 20);
     for (int i = 0; i < 4800; ++i)
-        need(discontinuous.write(i, chimera::StereoFrame{i % 480 < 240 ? -1.f : 1.f,
-                                                         i % 480 < 240 ? -1.f : 1.f}, i),
+        need(discontinuous.write(i, chimera::StereoFrame{i % 600 < 300 ? -1.f : 1.f,
+                                                         i % 600 < 300 ? -1.f : 1.f}, i),
              "prepare discontinuous source");
     chimera::Grains declick;
     float before = 0.f, at = 0.f, after = 0.f;
-    for (int frame = 0; frame <= 576; ++frame) {
+    for (int frame = 0; frame <= 696; ++frame) {
         const chimera::Grains::Result out = declick.step(discontinuous, region, c);
-        if (frame == 479) before = out.audio.l;
-        if (frame == 480) at = out.audio.l;
-        if (frame == 576) after = out.audio.l;
+        if (frame == 599) before = out.audio.l;
+        if (frame == 600) at = out.audio.l;
+        if (frame == 696) after = out.audio.l;
     }
     need(std::fabs(before - at) < 1e-5f && after < -0.99f,
          "causal unity residual begins at previous wet frame and reaches new source");
     chimera::Grains immediate;
     immediate.setImmediateTransitions(true);
     float immediateBoundary = 0.f;
-    for (int frame = 0; frame <= 480; ++frame) {
+    for (int frame = 0; frame <= 600; ++frame) {
         const chimera::Grains::Result out = immediate.step(discontinuous, region, c);
-        if (frame == 480) immediateBoundary = out.audio.l;
+        if (frame == 600) immediateBoundary = out.audio.l;
     }
     need(immediateBoundary < -0.99f,
          "immediate mode bypasses the unity-boundary residual");
     chimera::Grains toggled;
-    for (int frame = 0; frame <= 480; ++frame)
+    for (int frame = 0; frame <= 600; ++frame)
         toggled.step(discontinuous, region, c);
     toggled.setImmediateTransitions(true);
     need(toggled.step(discontinuous, region, c).audio.l < -0.99f,
@@ -166,14 +166,14 @@ int main() {
     chord.setChordRatios(2.0, -3.0, 4.0);
     c.morph = 1.f;
     c.rate = -1.f;
-    for (int frame = 0; frame <= 365; ++frame) chord.step(reel, region, c);
+    for (int frame = 0; frame <= 455; ++frame) chord.step(reel, region, c);
     need(chord.slotRatio(0) == 1.0 && chord.slotRatio(1) == 2.0 &&
          chord.slotRatio(2) == -3.0 && chord.slotRatio(3) == 4.0,
          "signed configured ratios latch in four musical slots");
     chord.setChordRatios(5.0, -6.0, 7.0);
     need(chord.slotRatio(1) == 2.0,
          "changing mcr does not retune an already sounding voice");
-    for (int frame = 366; frame <= 605; ++frame) chord.step(reel, region, c);
+    for (int frame = 456; frame <= 755; ++frame) chord.step(reel, region, c);
     need(chord.slotRatio(1) == 5.0,
          "new onset adopts the newly configured signed ratio");
     std::uint8_t stressPeak = 0;
@@ -252,7 +252,7 @@ int main() {
     stopControl.morph = 1.f/6.f;
     stopControl.rate = 0.f;
     std::uint32_t finiteStops = 0;
-    for (int frame = 0; frame <= 960; ++frame) {
+    for (int frame = 0; frame <= 1200; ++frame) {
         const chimera::Grains::Result out = stoppedFinite.step(reel, region, stopControl);
         finiteStops += out.primaryBoundary ? 1u : 0u;
         need(std::fabs(out.primaryPosition) < 1e-5,
@@ -324,9 +324,9 @@ int main() {
     chimera::Grains editedMetadata, unchangedMetadata;
     chimera::CoreOutput metadataControl{};
     metadataControl.gene = static_cast<float>(gene);
-    metadataControl.morph = 0.7f; // Fractional onset hop; no onset is due at frame 480.
+    metadataControl.morph = 0.7f; // Fractional onset hop; no onset is due at frame 600.
     metadataControl.rate = 1.f;
-    for (int frame = 0; frame < 480; ++frame) {
+    for (int frame = 0; frame < 600; ++frame) {
         editedMetadata.step(twoRegions, region, metadataControl);
         unchangedMetadata.step(twoRegions, region, metadataControl);
     }
@@ -342,7 +342,7 @@ int main() {
          std::fabs(metadataBoundary.audio.l - unchangedBoundary.audio.l) < 1e-5f,
          "marker metadata handoff preserves old voices without an extra Morph onset");
     bool newRegionOnset = false;
-    for (int frame = 481; frame < 600; ++frame) {
+    for (int frame = 601; frame < 750; ++frame) {
         const chimera::Grains::Result edited = editedMetadata.step(
             twoRegions, chimera::Region{4800, 7200}, metadataControl);
         const chimera::Grains::Result unchanged = unchangedMetadata.step(
@@ -378,10 +378,9 @@ int main() {
          "immediate Organize bypasses the extra selection transition cursor");
     chimera::Reel maximum(chimera::kMaxPages, chimera::kMaxPages);
     const chimera::Region maximumRegion{0, chimera::kMaxReelFrames};
-    const double maximumGene = std::log(480.0 / chimera::kMaxReelFrames) /
-        std::log(16.0 / chimera::kMaxReelFrames);
-    need(chimera::profile1::finiteGeneFrames(chimera::kMaxReelFrames, maximumGene) == 480,
-         "full-size Reel fixture maps to a 480-frame finite Gene");
+    const double maximumGene = 1.0;
+    need(chimera::profile1::finiteGeneFrames(chimera::kMaxReelFrames, maximumGene) == 1383,
+         "full-size Reel fixture maps to a 1383-frame finite Gene");
     chimera::Grains maximumFinite, maximumFull;
     chimera::CoreOutput mc{};
     mc.gene = static_cast<float>(maximumGene);
@@ -389,18 +388,18 @@ int main() {
     mc.rate = 2.f;
     int finiteAt = -1;
     double finiteBefore = 0, fullBefore = 0;
-    for (int frame = 0; frame <= 480; ++frame) {
+    for (int frame = 0; frame <= 1383; ++frame) {
         const chimera::Grains::Result finiteOut = maximumFinite.step(maximum, maximumRegion, mc);
         const chimera::Grains::Result fullOut = maximumFull.step(maximum, maximumRegion, mc, false, true);
         if (finiteOut.completions && finiteAt < 0) finiteAt = frame;
-        if (frame == 479) { finiteBefore = finiteOut.primaryPosition; fullBefore = fullOut.primaryPosition; }
+        if (frame == 1382) { finiteBefore = finiteOut.primaryPosition; fullBefore = fullOut.primaryPosition; }
         need(!fullOut.primaryBoundary && !fullOut.completions,
              "full-Splice traversal remains far from completion beside finite Gene");
     }
-    need(finiteAt == 480 && std::fabs(finiteBefore - 960.0) < 1e-5 &&
-         std::fabs(fullBefore - 960.0) < 1e-5 &&
+    need(finiteAt == 1383 && std::fabs(finiteBefore - 2766.0) < 1e-5 &&
+         std::fabs(fullBefore - 2766.0) < 1e-5 &&
          std::fabs(maximumFinite.primaryPosition() - 2.0) < 1e-5 &&
-         std::fabs(maximumFull.primaryPosition() - 962.0) < 1e-5,
+         std::fabs(maximumFull.primaryPosition() - 2768.0) < 1e-5,
          "full-size finite cycle resets while full-Splice source travel continues");
     const float anchors[] = {0.f, 1.f/6.f, 0.5f, 5.f/6.f, 1.f};
     const double densities[] = {0.9, 1.0, 2.0, 3.0, 4.0};
@@ -412,7 +411,7 @@ int main() {
         ac.rate = 1.f;
         for (int frame = 0; frame < 480000; ++frame)
             cadence.step(reel, region, ac);
-        const double expected = 1.0 + 479999.0 * densities[a] / 480.0;
+        const double expected = 1.0 + 479999.0 * densities[a] / 600.0;
         need(std::fabs(double(cadence.onsetCount()) - expected) <= 1.1,
              "ten-second Morph anchor cadence retains fractional hop phase");
     }
@@ -435,7 +434,7 @@ int main() {
     lc.rate = 1.f;
     for (int frame = 0; frame < 240; ++frame) latchedWindow.step(reel, region, lc);
     latchedWindow.setSmooth(true);
-    for (int frame = 240; frame < 480; ++frame)
+    for (int frame = 240; frame < 600; ++frame)
         need(std::fabs(latchedWindow.step(reel, region, lc).audio.l - 1.f) < 1e-5f,
              "existing Gene retains its unity/window policy after gnsm change");
     need(latchedWindow.step(reel, region, lc).audio.l < 0.05f,
@@ -531,7 +530,7 @@ int main() {
         reel, region, clockControl, false, false, false, 0.0,
         chimera::Grains::ClockDrive(1, true));
     need(beforeShift == 1 && shifted.onsetCount() == 2 &&
-         std::fabs(shiftEdge.markerPosition - 480.0) < 1e-6 &&
+         std::fabs(shiftEdge.markerPosition - 600.0) < 1e-6 &&
          !shiftEdge.primaryBoundary && !shiftEdge.completions,
          "Gene Shift forces one onset at the stepped origin without fabricated EOSG");
     const chimera::Grains::Result disconnected = shifted.step(
@@ -566,7 +565,7 @@ int main() {
     chimera::Grains coincidentShift;
     coincidentShift.step(reel, region, clockControl, false, false, false, 0.0,
                          chimera::Grains::ClockDrive(1));
-    for (int frame = 1; frame < 480; ++frame)
+    for (int frame = 1; frame < 600; ++frame)
         coincidentShift.step(reel, region, clockControl, false, false, false, 0.0,
                              chimera::Grains::ClockDrive(1));
     const std::uint64_t beforeCoincident = coincidentShift.onsetCount();
@@ -583,7 +582,7 @@ int main() {
     const chimera::Grains::Result reverseEdge = reverseShift.step(
         reel, region, clockControl, false, false, false, 0.0,
         chimera::Grains::ClockDrive(1, true));
-    need(std::fabs(reverseEdge.markerPosition - 4319.0) < 1e-6,
+    need(std::fabs(reverseEdge.markerPosition - 4199.0) < 1e-6,
          "Gene Shift follows reverse base-rate direction");
     chimera::Grains fullShift;
     clockControl.rate = 1.f;
@@ -608,23 +607,23 @@ int main() {
         stretched.step(reel, region, clockControl, false, false, false, 0.0,
                        chimera::Grains::ClockDrive(2, true, 2400));
         need(stretched.onsetCount() == beforePeriod &&
-             std::fabs(stretched.trajectoryOffset() - 480.2) < 1e-5,
+             std::fabs(stretched.trajectoryOffset() - 600.25) < 1e-5,
              "Stretch edge reanchors source without forcing a musical onset");
         for (int frame = 0; frame < 99; ++frame)
             stretched.step(reel, region, clockControl, false, false, false, 0.0,
                            chimera::Grains::ClockDrive(2, false, 2400));
-        need(std::fabs(stretched.trajectoryOffset() - 500.0) < 1e-4,
+        need(std::fabs(stretched.trajectoryOffset() - 625.0) < 1e-4,
              "Stretch source speed is Gene length divided by Clock period, independent of pitch");
         clockControl.rate = rateCase ? -2.f : -0.5f;
         for (int frame = 0; frame < 10; ++frame)
             stretched.step(reel, region, clockControl, false, false, false, 0.0,
                            chimera::Grains::ClockDrive(2, false, 2400));
-        need(std::fabs(stretched.trajectoryOffset() - 498.0) < 1e-4,
+        need(std::fabs(stretched.trajectoryOffset() - 622.5) < 1e-4,
              "Stretch reverses source trajectory when base pitch direction reverses");
         for (int frame = 0; frame < 48000; ++frame)
             stretched.step(reel, region, clockControl, false, false, false, 0.0,
                            chimera::Grains::ClockDrive(2, false, 2400, true));
-        need(std::fabs(stretched.trajectoryOffset() - 498.0) < 1e-4,
+        need(std::fabs(stretched.trajectoryOffset() - 622.5) < 1e-4,
              "stopped Stretch Clock freezes source trajectory");
     }
     std::puts("PASS: Chimera finite-Gene timing, unity plateau, and four-slot density");

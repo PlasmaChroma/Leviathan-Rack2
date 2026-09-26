@@ -873,15 +873,15 @@ int main() {
         eventModule.pmodSetting.store(2);
         eventModule.ckopSetting.store(1);
         eventModule.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
-            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+            1564.0 / 4095.0));
         eventModule.inputs[Chimera::PLAY_INPUT].channels = 1;
         eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
         eventModule.inputs[Chimera::CLOCK_INPUT].channels = 1;
         eventModule.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
         eventModule.inputs[Chimera::SHIFT_INPUT].channels = 1;
         eventModule.inputs[Chimera::SHIFT_INPUT].setVoltage(0.f);
-        for (int frame = 0; frame < 480; ++frame) {
-            if (frame == 479) eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 600; ++frame) {
+            if (frame == 599) eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
             eventModule.process(args);
         }
         need(eventModule.slice.primaryBoundaryDue(),
@@ -902,11 +902,11 @@ int main() {
         boundaryStop.reel = &eventReel;
         boundaryStop.slice.setReel(&eventReel);
         boundaryStop.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
-            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+            1564.0 / 4095.0));
         boundaryStop.inputs[Chimera::PLAY_INPUT].channels = 1;
         boundaryStop.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
-        for (int frame = 0; frame < 480; ++frame) {
-            if (frame == 479) boundaryStop.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 600; ++frame) {
+            if (frame == 599) boundaryStop.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
             boundaryStop.process(args);
         }
         need(boundaryStop.stopAtPrimaryBoundary && boundaryStop.slice.primaryBoundaryDue(),
@@ -923,7 +923,7 @@ int main() {
         queuedSelection.slice.setReel(&eventReel);
         queuedSelection.ckopSetting.store(1);
         queuedSelection.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
-            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+            1564.0 / 4095.0));
         queuedSelection.inputs[Chimera::CLOCK_INPUT].channels = 1;
         queuedSelection.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
         queuedSelection.inputs[Chimera::SHIFT_INPUT].channels = 1;
@@ -1036,6 +1036,11 @@ int main() {
              "SHIFT jack Schmitt band does not repeat an event");
         selectionModule.params[Chimera::SPLICE_PARAM].setValue(1.f);
         selectionModule.process(args);
+        ChimeraDisplayOverlay markerOverlay;
+        markerOverlay.owner = &selectionModule;
+        markerOverlay.step();
+        need(markerOverlay.markers.count == 2 && !markerOverlay.summary,
+             "marker overlay initializes without a waveform scan");
         need(regions.markerCount() == 2,
              "SPLICE button press waits for release");
         const std::uint32_t buttonAddress = static_cast<std::uint32_t>(
@@ -1044,6 +1049,10 @@ int main() {
         selectionModule.process(args);
         need(regions.markerCount() == 3 && regions.region(1).begin == buttonAddress,
              "SPLICE button release captures Rack-facing primary cursor");
+        markerOverlay.step();
+        need(markerOverlay.markers.count == 3 &&
+             markerOverlay.markers.markers[1] == buttonAddress,
+             "Splice appears on the next UI step without worker or snapshot progress");
         selectionModule.inputs[Chimera::SPLICE_INPUT].channels = 1;
         selectionModule.inputs[Chimera::SPLICE_INPUT].setVoltage(2.5f);
         const std::uint32_t jackAddress = static_cast<std::uint32_t>(
@@ -1051,6 +1060,10 @@ int main() {
         selectionModule.process(args);
         need(regions.markerCount() == 4 && regions.region(2).begin == jackAddress,
              "SPLICE jack rising edge captures next primary cursor");
+        markerOverlay.step();
+        need(markerOverlay.markers.count == 4 &&
+             markerOverlay.markers.markers[2] == jackAddress,
+             "CV Splice also reaches the next UI frame");
         selectionModule.inputs[Chimera::SPLICE_INPUT].setVoltage(1.8f);
         selectionModule.process(args);
         need(regions.markerCount() == 4,

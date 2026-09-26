@@ -484,20 +484,20 @@ int main() {
     finiteSlice.setPlay(false);
     chimera::CoreInput finiteInput = input(0.f, 0.f, 1.f);
     finiteInput.controls.gene = static_cast<float>(
-        std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0));
+        1564.0 / 4095.0);
     finiteSlice.step(finiteInput); // Initialize the control smoother while stopped.
     finiteSlice.setPlay(true);
     int firstFiniteBoundary = -1, firstFinitePulse = -1;
-    for (int frame = 0; frame <= 500; ++frame) {
+    for (int frame = 0; frame <= 620; ++frame) {
         const chimera::Slice::Output out = finiteSlice.step(finiteInput);
         if (out.naturalBoundary && firstFiniteBoundary < 0) firstFiniteBoundary = frame;
         if (out.eosg && firstFinitePulse < 0) firstFinitePulse = frame;
-        if (frame == 0 || frame == 480)
+        if (frame == 0 || frame == 600)
             need(out.cv < 0.05f, "primary ramp resets on finite onset/boundary");
-        if (frame > 100 && frame < 479)
+        if (frame > 100 && frame < 599)
             need(near(out.audio.l, 1.f, 1e-5f), "finite wet plateau reaches Rack slice");
     }
-    need(firstFiniteBoundary == 480 && firstFinitePulse == 480 &&
+    need(firstFiniteBoundary == 600 && firstFinitePulse == 600 &&
          finiteSlice.onsetCount() >= 2,
          "finite completion drives primary boundary and EOSG in integrated slice");
     chimera::Slice densePulse(&finiteReel);
@@ -507,12 +507,12 @@ int main() {
     denseInput.controls.morph = 1.f;
     densePulse.step(denseInput);
     densePulse.setPlay(true);
-    for (int frame = 0; frame < 480; ++frame)
+    for (int frame = 0; frame < 600; ++frame)
         need(!densePulse.step(denseInput).eosg,
              "dense finite voices cannot pulse EOSG before natural completion");
-    for (int frame = 0; frame < 54; ++frame)
+    for (int frame = 0; frame < 67; ++frame)
         need(densePulse.step(denseInput).eosg,
-             "maximum Morph shortens natural EOSG pulse to 54 core frames");
+             "maximum Morph shortens natural EOSG pulse to 67 core frames");
     need(!densePulse.step(denseInput).eosg,
          "dense EOSG pulse returns low before the next completion");
     chimera::Slice overlappingRamp(&finiteReel);
@@ -523,12 +523,12 @@ int main() {
     overlapInput.controls.morph = 1.f;
     overlappingRamp.step(overlapInput);
     overlappingRamp.setPlay(true);
-    for (int frame = 0; frame <= 480; ++frame) {
+    for (int frame = 0; frame <= 600; ++frame) {
         const chimera::Slice::Output out = overlappingRamp.step(overlapInput);
-        if (frame == 120 || frame == 240 || frame == 360)
-            need(near(out.cv, 8.f * frame / 480.f, 0.001f),
+        if (frame == 120 || frame == 300 || frame == 360)
+            need(near(out.cv, 8.f * frame / 600.f, 0.001f),
                  "secondary overlap leaves finite primary CV ramp untouched");
-        if (frame == 480)
+        if (frame == 600)
             need(near(out.cv, 0.f) && out.naturalBoundary,
                  "overlapping finite primary ramp resets only on primary boundary");
     }
@@ -540,9 +540,9 @@ int main() {
     reverseInput.controls.rate = 1.f/6.f;
     reverseRamp.step(reverseInput);
     reverseRamp.setPlay(true);
-    for (int frame = 0; frame <= 240; ++frame) {
+    for (int frame = 0; frame <= 300; ++frame) {
         const chimera::Slice::Output out = reverseRamp.step(reverseInput);
-        if (frame == 240)
+        if (frame == 300)
             need(near(out.cv, 4.f, 0.001f),
                  "reverse finite playback keeps a rising primary CV ramp");
     }
@@ -975,7 +975,7 @@ int main() {
     clocked.setConditioning(false);
     chimera::CoreInput clockInput = input(0.f, 0.f, 1.f);
     clockInput.controls.gene = static_cast<float>(
-        std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0));
+        1564.0 / 4095.0);
     for (int frame = 0; frame < 100; ++frame) {
         clocked.setClockPlayback(true, false, 0, false, 1);
         clocked.step(clockInput);
@@ -985,12 +985,12 @@ int main() {
     clocked.setClockPlayback(true, true, 0, false, 1);
     const chimera::Slice::Output clockSelection = clocked.step(clockInput);
     need(clocked.currentRegion() == 1 && clocked.onsetCount() == beforeClockShift + 1 &&
-         std::fabs(clocked.trajectoryOffset() - 480.0) < 1e-5 &&
+         std::fabs(clocked.trajectoryOffset() - 600.0) < 1e-5 &&
          !clockSelection.naturalBoundary && !clockSelection.eosg,
          "Clock Shift commits queued region before one forced onset without false EOSG");
     clocked.setPlay(false);
     const std::uint64_t stoppedClockOnsets = clocked.onsetCount();
-    clocked.setClockPlayback(true, true, 480, false, 1);
+    clocked.setClockPlayback(true, true, 600, false, 1);
     clocked.step(clockInput);
     need(clocked.onsetCount() == stoppedClockOnsets,
          "Clock cannot restart a PLAY-stopped transport");
@@ -998,11 +998,11 @@ int main() {
     collided.setConditioning(false);
     collided.setInop(true);
     collided.setPlay(false);
-    collided.setClockPlayback(true, false, 480, false, 1);
+    collided.setClockPlayback(true, false, 600, false, 1);
     collided.step(clockInput); // Settle the finite-Gene control before playback.
     collided.setPlay(true);
-    for (int frame = 0; frame < 480; ++frame) {
-        collided.setClockPlayback(true, false, 480, false, 1);
+    for (int frame = 0; frame < 600; ++frame) {
+        collided.setClockPlayback(true, false, 600, false, 1);
         collided.step(clockInput);
     }
     need(collided.primaryBoundaryDue(),
@@ -1010,7 +1010,7 @@ int main() {
     const std::uint64_t beforeCollisionOnsets = collided.onsetCount();
     collided.requestShift();
     collided.requestPlayRetrigger();
-    collided.setClockPlayback(true, true, 480, false, 1);
+    collided.setClockPlayback(true, true, 600, false, 1);
     collided.prepareFrameSelection(clockInput);
     need(collided.currentRegion() == 1 && collided.startCurrent(),
          "same-frame Shift selects writer destination before REC start");
@@ -1025,7 +1025,7 @@ int main() {
     stoppedAtDue.setPlay(false);
     stoppedAtDue.step(clockInput);
     stoppedAtDue.setPlay(true);
-    for (int frame = 0; frame < 480; ++frame) stoppedAtDue.step(clockInput);
+    for (int frame = 0; frame < 600; ++frame) stoppedAtDue.step(clockInput);
     need(stoppedAtDue.primaryBoundaryDue(), "prepare natural completion on PLAY stop");
     stoppedAtDue.setPlay(false);
     const chimera::Slice::Output stopDue = stoppedAtDue.step(clockInput);

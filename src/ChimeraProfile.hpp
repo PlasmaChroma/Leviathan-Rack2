@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChimeraTypes.hpp"
+#include "ChimeraGeneSize.hpp"
 #include "FastAudioMath.hpp"
 #include <cmath>
 #include <cstdint>
@@ -131,20 +132,16 @@ struct GeneMode {
     bool full;
     GeneMode() : full(true) {}
     bool observe(double normalized) {
-        if (full && normalized >= 0.0002) full = false;
-        else if (!full && normalized <= 0.0001) full = true;
+        full = geneSize::wholeSplice(geneSize::adc(static_cast<float>(normalized)));
         return full;
     }
 };
 
-inline std::uint32_t finiteGeneFrames(std::uint32_t regionLength, double normalized) {
+inline std::uint32_t finiteGeneFrames(std::uint32_t regionLength, double normalized,
+                                      bool validClock = false) {
     if (!regionLength) return 0;
-    const std::uint32_t minimum = regionLength < 16 ? regionLength : 16;
-    const double logLength = levi_math::log2Audio(double(regionLength));
-    const double logMinimum = minimum == 16 ? 4.0 : logLength;
-    const double x = levi_math::exp2Audio(logLength + clamp01(normalized)*(logMinimum-logLength));
-    const std::uint32_t n = roundNonnegative(x);
-    return n < 1 ? 1 : (n > regionLength ? regionLength : n);
+    return roundNonnegative(geneSize::map(regionLength,
+        static_cast<float>(normalized), validClock).durationSamples);
 }
 
 inline std::uint32_t windowEdge(std::uint32_t n, bool smooth) {

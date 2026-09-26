@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -48,9 +49,16 @@ def forward_base(knob: float) -> float:
 def finite_gene_frames(length: int, control: float) -> int:
     if length < 1:
         raise ValueError('A finite Gene requires a nonempty Splice')
-    minimum = min(16, length)
-    result = math.exp(math.log(length) + control * (math.log(minimum) - math.log(length)))
-    return min(length, max(1, positive_round(result)))
+    f32 = lambda x: struct.unpack('f', struct.pack('f', x))[0]
+    code = positive_round(f32(f32(clamp(control, 0.0, 1.0)) * 4095.0))
+    if code <= 199:
+        return length  # Whole-splice traversal bypasses duration folding.
+    base = f32(length)
+    while base > 576000.0:
+        base *= 0.5
+    lut_value = f32(2.0 ** f32(f32((1073 - (code >> 2)) / 341.0) - 3.0))
+    result = f32(f32(f32(base * lut_value) * lut_value) * lut_value)
+    return positive_round(max(8.0, result))
 
 
 def density(morph: float) -> float:
@@ -214,7 +222,7 @@ def build_vectors() -> dict[str, Any]:
     assert math.isclose(classic_rate(1/6), -1.0, abs_tol=1e-12)
     assert math.isclose(forward_base(0.75), 1.0, abs_tol=1e-12)
     assert 8_352_000 // 256 == 32_625
-    assert finite_gene_frames(4800, 1) == 16
+    assert finite_gene_frames(4800, 1) == 13
     assert math.isclose(density(0.5), 2.0)
     return vectors
 

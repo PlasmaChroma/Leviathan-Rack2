@@ -34,21 +34,12 @@ struct ChimeraWaveformLayer : Widget {
         nvgStrokeColor(vg, nvgRGB(106, 221, 215));
         nvgStrokeWidth(vg, std::max(1.f, width / float(chimera::WaveformSummary::kBins) * 0.78f));
         nvgStroke(vg);
-        nvgBeginPath(vg);
-        for (std::uint16_t i = 1; i < summary->markerCount; ++i) {
-            const float x = left + width * float(summary->markers[i]) /
-                float(summary->frames);
-            nvgMoveTo(vg, x, traceTop);
-            nvgLineTo(vg, x, traceBottom);
-        }
-        nvgStrokeColor(vg, nvgRGBA(235, 183, 104, 200));
-        nvgStrokeWidth(vg, 1.f);
-        nvgStroke(vg);
     }
 };
 
 struct ChimeraDisplayOverlay : Widget {
     Chimera* owner = nullptr;
+    chimera::MarkerDisplay markers;
     std::shared_ptr<const chimera::WaveformSummary> summary;
     std::string stateText = "REEL READY";
     std::string detailText = "NO REEL";
@@ -61,6 +52,8 @@ struct ChimeraDisplayOverlay : Widget {
     unsigned cachedRequested = UINT32_MAX;
 
     void step() override {
+        if (owner) owner->markerDisplay.consume(markers);
+        else markers = chimera::MarkerDisplay{};
         if (!owner) {
             stateText = "CHIMERA";
             detailText = "REEL ENGINE";
@@ -124,15 +117,28 @@ struct ChimeraDisplayOverlay : Widget {
         const float w = box.size.x, h = box.size.y;
         const float left = 5.f, width = w - 10.f;
         const float traceTop = 4.f, traceBottom = h * 0.56f;
-        if (owner && summary && summary->frames) {
+        // Marker metadata comes directly from the core, independently of the
+        // slower waveform scan. The summary only supplies the waveform backdrop.
+        const std::uint32_t displayFrames = owner ? std::max(markers.frames,
+            owner->publishedValidFrames.load(std::memory_order_acquire)) : 0;
+        if (owner && displayFrames) {
             const auto xFor = [&](std::uint32_t frame) {
-                return left + width * float(std::min(frame, summary->frames)) /
-                    float(summary->frames);
+                return left + width * float(std::min(frame, displayFrames)) /
+                    float(displayFrames);
             };
+            nvgBeginPath(vg);
+            for (unsigned i = 1; i < markers.count; ++i) {
+                const float x = xFor(markers.markers[i]);
+                nvgMoveTo(vg, x, traceTop);
+                nvgLineTo(vg, x, traceBottom);
+            }
+            nvgStrokeColor(vg, nvgRGBA(235, 183, 104, 200));
+            nvgStrokeWidth(vg, 1.f);
+            nvgStroke(vg);
             const int record = owner->publishedRecordState.load(std::memory_order_acquire);
             if (record == 4 || record == 5 ||
                 owner->publishedAudioRevision.load(std::memory_order_acquire) >
-                    summary->audioRevision) {
+                    (summary ? summary->audioRevision : 0)) {
                 const float x1 = xFor(owner->publishedRecordStartFrame.load(std::memory_order_acquire));
                 const float x2 = xFor(owner->publishedRecordFrame.load(std::memory_order_acquire));
                 nvgBeginPath(vg);

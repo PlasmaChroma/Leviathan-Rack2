@@ -293,8 +293,34 @@ int main() {
     std::vector<chimera::StereoFrame> audioBeforeUnsplice;
     for (unsigned frame = 0; frame < framesBeforeUnsplice; ++frame)
         audioBeforeUnsplice.push_back(clone.reel->readActive(frame));
-    need(clone.requestUnsplice(error) && clone.markerRequestId,
-         "Unsplice queues the following boundary before stopped-engine Save");
+    // Exercise the button's real handlers using Rack's release-target contract.
+    // EventState::handleButton needs a native window, unavailable in this harness.
+    {
+        ChimeraUnspliceAction<app::Switch> button;
+        button.owner = &clone;
+        widget::EventContext pressContext;
+        event::Button press;
+        press.context = &pressContext;
+        press.button = GLFW_MOUSE_BUTTON_LEFT;
+        press.action = GLFW_PRESS;
+        button.onButton(press);
+        need(press.getTarget() == &button, "Unsplice captures the mouse press");
+        need(!clone.markerRequestId, "Unsplice waits for mouse release");
+        widget::EventContext releaseContext;
+        event::Button release;
+        release.context = &releaseContext;
+        release.button = GLFW_MOUSE_BUTTON_LEFT;
+        release.action = GLFW_RELEASE;
+        button.onButton(release);
+        need(release.getTarget() == &button,
+             "Unsplice captures release so Rack can dispatch DragDrop");
+        event::DragDrop drop;
+        drop.button = GLFW_MOUSE_BUTTON_LEFT;
+        drop.origin = press.getTarget();
+        release.getTarget()->onDragDrop(drop);
+        need(clone.markerRequestId != 0,
+             "mouse release routes Unsplice into the marker-edit queue");
+    }
     engine.prepareSaveModule(&clone);
     auto markerSave = chimera::bundle::load(cloneStorage, clone.committedManifest, 2);
     need(!clone.markerRequestId && !clone.saveFailure.load() && bool(markerSave) &&
@@ -303,6 +329,11 @@ int main() {
          markerSave.reel->validFrames() == framesBeforeUnsplice &&
          markerSave.reel->readActive(0).l == 42.f,
          "Save drains metadata handoff without audio callbacks and persists updated markers");
+    ChimeraDisplayOverlay markerOverlay;
+    markerOverlay.owner = &clone;
+    markerOverlay.step();
+    need(markerOverlay.markers.count == oldMarkerCount - 1,
+         "stopped-engine Unsplice publishes the marker overlay immediately");
     for (unsigned frame = 0; frame < framesBeforeUnsplice; ++frame) {
         const auto sample = markerSave.reel->readActive(frame);
         need(sample.l == audioBeforeUnsplice[frame].l &&
@@ -313,6 +344,9 @@ int main() {
     engine.prepareSaveModule(&clone);
     need(!clone.saveFailure.load() && clone.reel->markerCount() == oldMarkerCount,
          "marker undo restores the removed boundary");
+    markerOverlay.step();
+    need(markerOverlay.markers.count == oldMarkerCount,
+         "marker undo refreshes the overlay without a waveform scan");
     json_decref(state);
     engine.removeModule(&clone);
     engine.removeModule(&source);

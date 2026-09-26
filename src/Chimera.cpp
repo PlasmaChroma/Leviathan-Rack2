@@ -10,6 +10,7 @@
 #include "ChimeraEdit.hpp"
 #include "ChimeraCheckpointSession.hpp"
 #include "ChimeraWaveform.hpp"
+#include "ChimeraMarkerDisplay.hpp"
 #include "DebugTerminalMetrics.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
@@ -299,6 +300,7 @@ struct Chimera : Module {
     };
     std::shared_ptr<RecoveryTicket> recoveryTicket;
     std::atomic<std::uint32_t> publishedValidFrames{0};
+    chimera::MarkerDisplayMailbox markerDisplay;
     std::atomic<std::uint16_t> publishedRegion{0};
     std::atomic<std::uint16_t> publishedRequestedRegion{0}, publishedMarkerCount{0};
     std::atomic<std::uint32_t> publishedPlayFrame{0}, publishedRecordFrame{0};
@@ -750,6 +752,7 @@ struct Chimera : Module {
         const unsigned next = publishedRegion.load(std::memory_order_acquire) + 1u;
         if (next >= publishedMarkerCount.load(std::memory_order_acquire))
             return true; // The final Splice has no following boundary to remove.
+        // Match Morphagene Shift+Splice: join the current Splice with the next.
         return requestMarkerEdit(next, 0, 1u, error);
     }
     bool requestEdit(const chimera::edit::Request& request, std::string& error) {
@@ -1064,6 +1067,7 @@ struct Chimera : Module {
                 reel->maintenanceTick();
         }
         coreSnapshotProgress();
+        markerDisplay.publish(reel, audioActiveHandle);
         ownership.releaseMaintenance(now);
     }
     void serviceStep(bool hostContext = true) {
@@ -1502,6 +1506,7 @@ struct Chimera : Module {
         coreCommands();
         processOwned(args);
         coreSnapshotProgress();
+        markerDisplay.publish(reel, audioActiveHandle);
         if (!audioHeartbeatNs || ++heartbeatDivider == 256) {
             audioHeartbeatNs = steadyNs();
             heartbeatDivider = 0;
@@ -1526,6 +1531,7 @@ struct Chimera : Module {
             selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
             if (reel) reel->maintenanceTick();
             coreSnapshotProgress();
+            markerDisplay.publish(reel, audioActiveHandle);
             ownership.releaseAudio(steadyNs());
         }
         bypassActive = true;
@@ -1955,6 +1961,26 @@ struct Chimera : Module {
 
 #include "ChimeraDisplay.hpp"
 
+// Keep mouse routing independent of the visual skin so headless tests exercise
+// the same press/release path as the gold panel button.
+template <typename ButtonBase>
+struct ChimeraUnspliceAction : ButtonBase {
+    Chimera* owner = nullptr;
+    ChimeraUnspliceAction() { this->momentary = false; }
+    void onButton(const event::Button& e) override {
+        // Rack dispatches DragDrop only to the consumer of the RELEASE event.
+        if (e.button == GLFW_MOUSE_BUTTON_LEFT)
+            e.consume(this);
+    }
+    void onDragDrop(const event::DragDrop& e) override {
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.origin != this || !owner) return;
+        std::string error;
+        if (!owner->requestUnsplice(error))
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+        e.consume(this);
+    }
+};
+
 #ifndef CHIMERA_HEADLESS_TEST
 struct ChimeraRatioField : ui::TextField {
     Chimera* owner = nullptr;
@@ -1981,21 +2007,7 @@ struct ChimeraRatioField : ui::TextField {
 
 // A UI action, rather than a DSP parameter: reuse the control-thread marker
 // queue and its undo history without synthesizing simultaneous button presses.
-struct ChimeraUnspliceButton : SmallGoldButton {
-    Chimera* owner = nullptr;
-    ChimeraUnspliceButton() { momentary = false; }
-    void onButton(const event::Button& e) override {
-        if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS)
-            e.consume(this);
-    }
-    void onDragDrop(const event::DragDrop& e) override {
-        if (e.origin != this || !owner) return;
-        std::string error;
-        if (!owner->requestUnsplice(error))
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
-        e.consume(this);
-    }
-};
+using ChimeraUnspliceButton = ChimeraUnspliceAction<SmallGoldButton>;
 
 struct ChimeraWidget : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;

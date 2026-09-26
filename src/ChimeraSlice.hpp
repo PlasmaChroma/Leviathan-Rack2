@@ -353,7 +353,8 @@ public:
         if ((naturalCompletion || (naturalBoundary && canRead)) &&
             (finiteGene || c.rate != 0.f || naturalCompletion)) {
             double interval = finiteGene ?
-                profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene) /
+                profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene,
+                    clockConnected_ && clockPeriod_ && !clockWaiting_) /
                     profile1::morphDensity(c.morph) :
                 length / (c.rate != 0.f ? std::fabs(c.rate) : 1.0);
             if (hadBoundary_) {
