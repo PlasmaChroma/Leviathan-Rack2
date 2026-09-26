@@ -1,11 +1,86 @@
 #include "ChimeraEdit.hpp"
+#include "ChimeraPlaybackReader.hpp"
+#include <cstring>
+#include <limits>
 #include <cstdio>
 #include <cstdlib>
 
 static void need(bool value, const char* message) {
     if (!value) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
 }
+static void bulkEditEquivalence() {
+    chimera::Reel source(8, 8);
+    for (unsigned i = 0; i < 1403; ++i) {
+        chimera::StereoFrame sample{float(int(i % 37) - 18) / 19.f,
+                                   float(int(i % 53) - 26) / 27.f};
+        if (i == 18) sample.l = std::numeric_limits<float>::quiet_NaN();
+        if (i == 700) sample.r = std::numeric_limits<float>::infinity();
+        need(source.write(i, sample, i), "seed nonfinite and partial-block edit source");
+    }
+    source.addMarker(17); source.addMarker(257); source.addMarker(1025);
+    source.restoreRevisions(8000, 7000);
+    need(source.beginSnapshot(0), "freeze bulk equivalence source");
+    while (!source.readyForWorker()) source.maintenanceTick();
+    for (auto kind : {chimera::edit::EraseSplice, chimera::edit::DeleteSplice,
+                      chimera::edit::MoveMarker, chimera::edit::RemoveMarker,
+                      chimera::edit::ClearReel}) {
+        for (unsigned splice : {0u, 1u, 2u, 3u}) {
+            if (!splice && (kind == chimera::edit::MoveMarker ||
+                            kind == chimera::edit::RemoveMarker)) continue;
+            chimera::edit::Request request;
+            request.kind = kind; request.splice = splice;
+            request.frame = source.region(splice).begin + 1;
+            auto edited = chimera::edit::build(source, request, 8, 8);
+            need(bool(edited), "build fresh bulk edit");
+            const auto range = source.region(splice);
+            const unsigned frames = kind == chimera::edit::ClearReel ? 0 :
+                source.validFrames() - (kind == chimera::edit::DeleteSplice ? range.end-range.begin : 0);
+            chimera::Reel reference(8, 8);
+            for (unsigned i = 0; i < frames; ++i) {
+                const unsigned from = kind == chimera::edit::DeleteSplice && i >= range.begin ?
+                    i + range.end - range.begin : i;
+                auto sample = source.readSnapshot(from);
+                if (kind == chimera::edit::EraseSplice && i >= range.begin && i < range.end)
+                    sample = {0.f, 0.f};
+                reference.write(i, sample, i);
+                const auto actual = edited.reel->readActive(i);
+                need(std::memcmp(&actual, &sample, sizeof(sample)) == 0,
+                     "bulk edit preserves exact samples including nonfinite values and splice edges");
+            }
+            const bool audioEdit = kind == chimera::edit::EraseSplice ||
+                kind == chimera::edit::DeleteSplice || kind == chimera::edit::ClearReel;
+            need(edited.reel->validFrames() == frames &&
+                 edited.reel->documentRevision() == 8001 &&
+                 edited.reel->audioRevision() == (audioEdit ? 7001u : 7000u),
+                 "bulk construction preserves edit revision semantics");
+            for (unsigned size : {16u, 64u, 256u}) {
+                for (unsigned i = 0; i < frames; i += size) {
+                    const auto& a = edited.reel->playbackMoments(i, size);
+                    const auto& b = reference.playbackMoments(i, size);
+                    need(a.invalid == b.invalid, "bulk edit retains invalid-sample moment counts");
+                    for (unsigned j = 0; j < 4; ++j)
+                        need(std::fabs(a.left[j]-b.left[j]) < 0.001f &&
+                             std::fabs(a.right[j]-b.right[j]) < 0.001f,
+                             "bulk edit moments match live construction at every level");
+                }
+            }
+            chimera::PlaybackReader reader;
+            for (unsigned region = 0; region < edited.reel->markerCount(); ++region) {
+                const auto span = edited.reel->region(region);
+                for (double speed : {-512., -37., 1.25, 32., 512.}) {
+                    bool invalidA = false, invalidB = false;
+                    const auto a = reader.read(*edited.reel, span, span.begin + .75, speed, invalidA);
+                    const auto b = reader.read(reference, span, span.begin + .75, speed, invalidB);
+                    need(invalidA == invalidB && std::fabs(a.l-b.l) < 1e-5f &&
+                         std::fabs(a.r-b.r) < 1e-5f,
+                         "accelerated edited playback agrees with live reference in both directions");
+                }
+            }
+        }
+    }
+}
 int main() {
+    bulkEditEquivalence();
     chimera::Reel reel(3, 3);
     for (std::uint32_t i = 0; i < 600; ++i)
         need(reel.write(i, {float(i), -float(i)}, i), "seed edit Reel");

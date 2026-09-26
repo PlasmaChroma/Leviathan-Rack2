@@ -65,6 +65,18 @@ int main() {
                  out.cv == 0.f && !out.eosg, "fresh resume has silent output audio/CV/EOSG");
         }
         need(coreFrames > 0 && !bridge.failed(), "resume starts a valid core/host timeline");
+        unsigned rises[5]{};
+        for (unsigned j = 8; j < 13; ++j) state.volts[j] = 0.f;
+        for (unsigned i = 0; i < 2 * settle; ++i) {
+            if (i == settle)
+                for (unsigned j = 8; j < 13; ++j) state.volts[j] = 10.f;
+            bridge.step(state, [&](const chimera::HostState& in) {
+                for (unsigned k = 0; k < 5; ++k) rises[k] += in.rises[k];
+                return chimera::HostOutput();
+            });
+        }
+        for (unsigned k = 0; k < 5; ++k)
+            need(rises[k] == 1, "each seeded gate still delivers a genuine subsequent rise exactly once");
     }
     for (unsigned rate : rates) {
         chimera::RateBridge bridge(rate);

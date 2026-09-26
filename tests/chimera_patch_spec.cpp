@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <vector>
 
 namespace rack { Context::~Context() {} }
 Plugin* pluginInstance = nullptr;
@@ -240,9 +241,16 @@ int main() {
     };
     settleRecovery();
     clone.params[Chimera::SOS_PARAM].setValue(0.f);
-    clone.menuCommand.store(1); clone.process(args); // Current, first frame overwritten.
+    std::vector<chimera::StereoFrame> beforeTake;
+    for (unsigned frame = 0; frame < clone.reel->validFrames(); ++frame)
+        beforeTake.push_back(clone.reel->readActive(frame));
+    const auto beforeTakeRevision = clone.reel->audioRevision();
+    clone.menuCommand.store(1); clone.process(args); // Current follows the playback cursor.
+    const auto firstWritten = clone.slice.recordSegmentStartFrame();
     need(clone.slice.recordState() == chimera::Slice::Current &&
-         clone.reel->readActive(0).l == 0.f,
+         firstWritten < beforeTake.size() &&
+         clone.reel->audioRevision() == beforeTakeRevision + 1 &&
+         clone.reel->readActive(firstWritten).l == 0.f,
          "record starts on its exact core frame while pre-cut is protected");
     settleRecovery();
     clone.lastRecoveryNs = Chimera::steadyNs() - UINT64_C(10000000000);
@@ -268,7 +276,9 @@ int main() {
                                              recoveryJournal.latest, 2);
     need(bool(preRecord) && bool(completed) &&
          preRecord.reel->readActive(0).l == 42.f &&
-         completed.reel->readActive(0).l == 0.f,
+         preRecord.reel->readActive(firstWritten).l == beforeTake[firstWritten].l &&
+         completed.reel->readActive(firstWritten).l == 0.f &&
+         clone.preRecordStatus() == Chimera::PreRecordSaved,
          "journaled pre-cut survives the first overwritten frame");
     need(clone.requestRecovery(true, error), "queue explicit pre-record restore");
     const auto recoverDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);

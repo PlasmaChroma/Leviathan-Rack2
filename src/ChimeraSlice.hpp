@@ -43,6 +43,7 @@ public:
         overloaded_ = false;
         reel_ = reel;
         state_ = Idle;
+        writer_ = appendStart_ = 0;
         recordSegmentStart_ = 0;
         recordSeekPending_ = false;
         currentRegion_ = 0;

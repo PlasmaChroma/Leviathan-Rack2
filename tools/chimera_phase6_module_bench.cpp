@@ -6,10 +6,13 @@
 #include <cstdlib>
 #include <thread>
 #include <vector>
+#include "ChimeraBenchmarkGene.hpp"
 
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_cache"; }
+#define CHIMERA_HEADLESS_TEST 1
+#define CHIMERA_MANUAL_CONTROL_TEST 1
 #include "../src/Chimera.cpp"
 
 // Rack-linked optimized callback benchmark. Includes the prepared host-rate
@@ -26,9 +29,7 @@ int main(int argc, char** argv) {
     module.slice.setReel(&reel);
     module.pminSetting.store(true);
     module.params[Chimera::SOS_PARAM].setValue(0.5f);
-    module.params[Chimera::GENE_SIZE_PARAM].setValue(float(
-        std::log(480.0 / double(chimera::kMaxReelFrames)) /
-        std::log(16.0 / double(chimera::kMaxReelFrames))));
+    module.params[Chimera::GENE_SIZE_PARAM].setValue(chimeraBenchmarkGene(reel.validFrames()));
     module.params[Chimera::VARISPEED_PARAM].setValue(5.f / 6.f);
     module.params[Chimera::MORPH_PARAM].setValue(1.f);
     module.inputs[Chimera::AUDIO_R_INPUT].channels = 1;

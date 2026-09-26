@@ -260,6 +260,37 @@ struct Chimera : Module {
     std::atomic<bool> recordingActive{false}, recoveryPostPending{false};
     std::atomic<std::uint64_t> displayHeartbeatNs{0}; // UI widget step; no Reel access.
     std::atomic<std::uint64_t> recordStartNs{0};
+    enum PreRecordStatus { PreRecordNone, PreRecordPending, PreRecordSaved,
+                           PreRecordUnavailable, PreRecordFailed };
+    // Generation and status share one atomic so completion of an older take
+    // cannot overwrite the protection status of a newer recording.
+    std::atomic<std::uint64_t> preRecordState{0};
+    std::atomic<std::uint64_t> snapshotPreRecordState{0};
+    int preRecordStatus() const {
+        return int(preRecordState.load(std::memory_order_acquire) & 7u);
+    }
+    std::uint64_t newPreRecordState(PreRecordStatus status) {
+        // Only the core owner starts a generation; control only changes its status.
+        const auto value = ((preRecordState.load(std::memory_order_relaxed) & ~UINT64_C(7)) + 8) |
+            std::uint64_t(status);
+        preRecordState.store(value, std::memory_order_release);
+        return value;
+    }
+    void finishPreRecord(std::uint64_t pending, bool saved) {
+        if (!pending) return;
+        const auto completed = (pending & ~UINT64_C(7)) |
+            std::uint64_t(saved ? PreRecordSaved : PreRecordFailed);
+        preRecordState.compare_exchange_strong(pending, completed, std::memory_order_acq_rel);
+    }
+    const char* preRecordMessage() const {
+        switch (preRecordStatus()) {
+        case PreRecordPending: return "Latest take: pre-record checkpoint saving";
+        case PreRecordSaved: return "Latest take: pre-record checkpoint saved";
+        case PreRecordUnavailable: return "Latest take: no pre-record checkpoint captured (Reel busy)";
+        case PreRecordFailed: return "Latest take: pre-record checkpoint failed";
+        default: return "";
+        }
+    }
     struct SaveTicket {
         std::atomic<bool> done{false};
         std::shared_ptr<chimera::Reel> teardownReel;
@@ -297,6 +328,7 @@ struct Chimera : Module {
         chimera::recovery::CommitResult result;
         std::shared_ptr<const chimera::WaveformSummary> waveform;
         bool displayOnly = false;
+        std::uint64_t preRecordState = 0;
     };
     std::shared_ptr<RecoveryTicket> recoveryTicket;
     std::atomic<std::uint32_t> publishedValidFrames{0};
@@ -882,6 +914,7 @@ struct Chimera : Module {
     void recoveryStep() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (recoveryTicket && recoveryTicket->done.load(std::memory_order_acquire)) {
+            finishPreRecord(recoveryTicket->preRecordState, bool(recoveryTicket->result));
             if (recoveryTicket->waveform)
                 std::atomic_store_explicit(&waveform, recoveryTicket->waveform,
                                            std::memory_order_release);
@@ -906,6 +939,8 @@ struct Chimera : Module {
             chimera::Reel* const frozen = snapshotReel;
             std::shared_ptr<RecoveryTicket> ticket(new RecoveryTicket);
             ticket->displayOnly = displayOnly;
+            if (recoveryPurpose == 1)
+                ticket->preRecordState = snapshotPreRecordState.load(std::memory_order_acquire);
             const chimera::IoService::Status queued = service->execute(generation,
                 nextRequestId++, [ticket, root, id, frozen, role, wallMs, displayOnly] {
                     try {
@@ -918,6 +953,7 @@ struct Chimera : Module {
                 });
             if (queued == chimera::IoService::Accepted) recoveryTicket = ticket;
             else {
+                finishPreRecord(ticket->preRecordState, false);
                 if (!displayOnly) setIoWarning("Recovery checkpoint queue is busy");
                 recoveryPurpose = 0;
                 finishSnapshotReader();
@@ -955,6 +991,41 @@ struct Chimera : Module {
             }
         }
     }
+    // Caller owns the core (audio or stopped-host maintenance). Keep public
+    // state current even when no successful processCore() callback follows.
+    void publishCoreState(bool positions = true) {
+        publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
+        publishedDocumentRevision.store(reel ? reel->documentRevision() : 0, std::memory_order_release);
+        publishedAudioRevision.store(reel ? reel->audioRevision() : 0, std::memory_order_release);
+        publishedValidFrames.store(reel ? reel->validFrames() : 0, std::memory_order_release);
+        publishedRegion.store(slice.currentRegion(), std::memory_order_release);
+        publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
+        publishedMarkerCount.store(reel ? reel->markerCount() : 0, std::memory_order_release);
+        const bool recording = slice.recordState() != chimera::Slice::Idle;
+        recordingActive.store(recording, std::memory_order_release);
+        recordingOrArmed.store(recording || recordArm != NoArm, std::memory_order_release);
+        const int state = recordArm == ArmCurrent ? 1 : recordArm == ArmAppend ? 2 :
+            recordArm == ArmStop ? 3 : slice.recordState() == chimera::Slice::Current ? 4 :
+            slice.recordState() == chimera::Slice::Append ? 5 : 0;
+        publishedRecordState.store(state, std::memory_order_release);
+        if (positions) {
+            const double position = slice.playbackPosition();
+            publishedPlayFrame.store(position > 0.0 ?
+                std::uint32_t(std::min(position, double(UINT32_MAX))) : 0u,
+                std::memory_order_release);
+            publishedRecordFrame.store(slice.writerFrame(), std::memory_order_release);
+        }
+    }
+    void cancelRecording() {
+        if (slice.recordState() != chimera::Slice::Idle ||
+            recordingActive.load(std::memory_order_acquire))
+            recoveryPostPending.store(true, std::memory_order_release);
+        slice.stopRecord();
+        recordArm = NoArm;
+        publishCoreState();
+        lights[REC_LIGHT].setBrightness(0.f);
+        lights[REC_ARMED_LIGHT].setBrightness(0.f);
+    }
     void coreCommands() {
         MarkerCommand marker{};
         if (markerCommands.tryPop(marker)) {
@@ -962,13 +1033,7 @@ struct Chimera : Module {
                 reel->documentRevision() == marker.revision &&
                 slice.editMarker(marker.index, marker.frame, marker.kind == 1,
                     marker.kind >= 2 ? marker.kind - 1 : 0);
-            publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
-            if (reel) {
-                publishedDocumentRevision.store(reel->documentRevision(), std::memory_order_release);
-                publishedMarkerCount.store(reel->markerCount(), std::memory_order_release);
-                publishedRegion.store(slice.currentRegion(), std::memory_order_release);
-                publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
-            }
+            publishCoreState();
             const chimera::AudioCompletion ack{generation->value.load(std::memory_order_acquire),
                 marker.id, 8, 0, accepted ? 1u : 0u};
             completions.tryPushCritical(ack);
@@ -1000,8 +1065,10 @@ struct Chimera : Module {
                 audioActiveHandle = command.handle;
                 reel = command.prepared;
                 slice.setReel(command.prepared);
-                publishedMarkerHistory.store(0, std::memory_order_release);
                 recordArm = NoArm;
+                newPreRecordState(PreRecordNone);
+                publishedRecordStartFrame.store(0, std::memory_order_release);
+                publishCoreState();
                 snapshotClaimed.store(false, std::memory_order_release);
                 const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
                                                       1, command.handle, oldHandle};
@@ -1067,6 +1134,7 @@ struct Chimera : Module {
                 reel->maintenanceTick();
         }
         coreSnapshotProgress();
+        publishCoreState();
         markerDisplay.publish(reel, audioActiveHandle);
         ownership.releaseMaintenance(now);
     }
@@ -1187,6 +1255,8 @@ struct Chimera : Module {
                 snapshotReady = snapshotReaders.begin();
                 if (snapshotReady && snapshotAbandoned) finishSnapshotReader();
                 else if (!snapshotReady) {
+                    if (snapshotRequestId == kAutomaticSnapshotId)
+                        finishPreRecord(snapshotPreRecordState.load(std::memory_order_acquire), false);
                     snapshotReleasePending = true;
                     recoveryPurpose = 0;
                     ioError.store(true, std::memory_order_release);
@@ -1521,12 +1591,7 @@ struct Chimera : Module {
         (void) args;
         if (ownership.tryAudio()) {
             coreCommands();
-            if (recordingActive.exchange(false, std::memory_order_acq_rel))
-                recoveryPostPending.store(true, std::memory_order_release);
-            slice.stopRecord();
-            recordArm = NoArm;
-            recordingOrArmed.store(false, std::memory_order_release);
-            publishedRecordState.store(0, std::memory_order_release);
+            cancelRecording();
             menuCommand.exchange(0, std::memory_order_acq_rel);
             selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
             if (reel) reel->maintenanceTick();
@@ -1593,11 +1658,7 @@ struct Chimera : Module {
         const unsigned rate = supported ? static_cast<unsigned>(args.sampleRate) : 0u;
         requestedHostRate.store(rate, std::memory_order_release);
         if (!rate) {
-            if (recordingActive.exchange(false, std::memory_order_acq_rel))
-                recoveryPostPending.store(true, std::memory_order_release);
-            slice.stopRecord();
-            recordArm = NoArm;
-            publishedRecordState.store(0, std::memory_order_release);
+            cancelRecording();
             // A resumed supported rate must adopt a freshly primed bridge.
             // Keep the old allocation for off-audio retirement below.
             activeHostRate.store(0, std::memory_order_release);
@@ -1624,11 +1685,7 @@ struct Chimera : Module {
             return;
         }
         if (rate != activeHostRate.load(std::memory_order_relaxed)) {
-            if (recordingActive.exchange(false, std::memory_order_acq_rel))
-                recoveryPostPending.store(true, std::memory_order_release);
-            slice.stopRecord();
-            recordArm = NoArm;
-            publishedRecordState.store(0, std::memory_order_release);
+            cancelRecording();
             playInitialized = false;
             stopAtPrimaryBoundary = false;
             menuCommand.exchange(0, std::memory_order_acq_rel);
@@ -1725,8 +1782,7 @@ struct Chimera : Module {
             [this](const chimera::HostState& delayed) { return processCore(delayed); });
         writeOutput(out);
         if (activeBridge->failed()) {
-            slice.stopRecord();
-            recordArm = NoArm;
+            cancelRecording();
             // The next callback retires this faulted converter; the service
             // prepares a replacement without work on the audio thread.
             activeHostRate.store(0, std::memory_order_release);
@@ -1897,33 +1953,10 @@ struct Chimera : Module {
             (recordDestinationChanged || !wasRecording))
             publishedRecordStartFrame.store(slice.recordSegmentStartFrame(),
                 std::memory_order_release);
-        recordingActive.store(out.recording, std::memory_order_release);
-        publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
         if (wasRecording && !out.recording)
             recoveryPostPending.store(true, std::memory_order_release);
-        if (reel) {
-            publishedDocumentRevision.store(reel->documentRevision(), std::memory_order_release);
-            publishedAudioRevision.store(reel->audioRevision(), std::memory_order_release);
-            publishedValidFrames.store(reel->validFrames(), std::memory_order_release);
-            publishedRegion.store(slice.currentRegion(), std::memory_order_release);
-            publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
-            publishedMarkerCount.store(reel->markerCount(), std::memory_order_release);
-        }
-        const int displayRecordState = recordArm == ArmCurrent ? 1 :
-            recordArm == ArmAppend ? 2 : recordArm == ArmStop ? 3 :
-            slice.recordState() == chimera::Slice::Current ? 4 :
-            slice.recordState() == chimera::Slice::Append ? 5 : 0;
-        publishedRecordState.store(displayRecordState, std::memory_order_release);
-        if ((slice.frame() & 255u) == 0 || wasRecording != out.recording ||
-            recordDestinationChanged) {
-            const double position = slice.playbackPosition();
-            publishedPlayFrame.store(position > 0.0 ?
-                std::uint32_t(std::min(position, double(UINT32_MAX))) : 0u,
-                std::memory_order_release);
-            publishedRecordFrame.store(slice.writerFrame(), std::memory_order_release);
-        }
-        recordingOrArmed.store(out.recording || recordArm != NoArm,
-                               std::memory_order_release);
+        publishCoreState((slice.frame() & 255u) == 0 || wasRecording != out.recording ||
+            recordDestinationChanged);
         outputs[AUDIO_L_OUTPUT].setVoltage(clamp(out.audio.l * 5.f, -12.f, 12.f));
         outputs[AUDIO_R_OUTPUT].setVoltage(clamp(out.audio.r * 5.f, -12.f, 12.f));
         outputs[CV_OUTPUT].setVoltage(out.cv);
@@ -1951,6 +1984,7 @@ struct Chimera : Module {
     void beginRecording(bool append) {
         const bool started = append ? slice.startAppend() : slice.startCurrent();
         if (started) {
+            const auto unavailable = newPreRecordState(PreRecordUnavailable);
             recordNotReady.store(false, std::memory_order_release);
             recordStartNs.store(steadyNs(), std::memory_order_release);
             publishedRecordStartFrame.store(slice.writerFrame(), std::memory_order_release);
@@ -1959,6 +1993,9 @@ struct Chimera : Module {
                 snapshotClaimed.compare_exchange_strong(unclaimed, true,
                     std::memory_order_acq_rel)) {
                 if (reel->beginSnapshot(slice.frame())) {
+                    const auto pending = (unavailable & ~UINT64_C(7)) | PreRecordPending;
+                    preRecordState.store(pending, std::memory_order_release);
+                    snapshotPreRecordState.store(pending, std::memory_order_release);
                     coreSnapshotRequestId = kAutomaticSnapshotId;
                     coreSnapshotReadySent = false;
                     automaticSnapshotAnnounced = false;
@@ -2187,6 +2224,8 @@ struct ChimeraWidget : ModuleWidget {
         if (m->saveFailure.load(std::memory_order_acquire))
             saveStatus = "Reel save/load failed; check embedded asset";
         menu->addChild(createMenuLabel(saveStatus));
+        if (*m->preRecordMessage())
+            menu->addChild(createMenuLabel(m->preRecordMessage()));
         {
             std::lock_guard<std::mutex> lock(m->ioMessageMutex);
             if (m->ioError.load(std::memory_order_acquire) &&

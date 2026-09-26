@@ -65,6 +65,7 @@ struct ChimeraDisplayOverlay : Widget {
     std::string saveText;
     int cachedState = -1;
     int cachedErrorKind = -1;
+    int cachedPreRecord = -1;
     bool cachedBusy = false, cachedDirty = false;
     std::uint32_t cachedFrames = UINT32_MAX;
     unsigned cachedCount = UINT32_MAX, cachedCurrent = UINT32_MAX;
@@ -80,6 +81,7 @@ struct ChimeraDisplayOverlay : Widget {
             return;
         }
         const int state = owner->publishedRecordState.load(std::memory_order_acquire);
+        const int preRecord = owner->preRecordStatus();
         const bool saveError = owner->saveFailure.load(std::memory_order_acquire);
         const bool error = saveError || owner->ioError.load(std::memory_order_acquire) ||
             owner->bridgeError.load(std::memory_order_acquire) ||
@@ -99,11 +101,13 @@ struct ChimeraDisplayOverlay : Widget {
             owner->publishedDocumentRevision.load(std::memory_order_acquire) !=
                 owner->savedDocumentRevision.load(std::memory_order_acquire) ||
             !owner->hasSavedReel.load(std::memory_order_acquire);
-        if (state == cachedState && errorKind == cachedErrorKind && busy == cachedBusy &&
+        if (state == cachedState && preRecord == cachedPreRecord &&
+            errorKind == cachedErrorKind && busy == cachedBusy &&
             dirty == cachedDirty && frames / 48000 == cachedFrames / 48000 &&
             count == cachedCount && current == cachedCurrent &&
             requested == cachedRequested) return;
         cachedState = state;
+        cachedPreRecord = preRecord;
         cachedErrorKind = errorKind;
         cachedBusy = busy;
         cachedDirty = dirty;
@@ -127,6 +131,11 @@ struct ChimeraDisplayOverlay : Widget {
             if (requested != current)
                 detailText += " >" + std::to_string(requested + 1);
         }
+        // Keep transport and patch-save status visible at the sides. A missed
+        // safeguard remains visible after stop, until the next take or Reel.
+        if (preRecord == Chimera::PreRecordUnavailable) detailText = "NO PRE-REC CUT";
+        else if (preRecord == Chimera::PreRecordFailed) detailText = "PRE-REC FAILED";
+        else if (preRecord == Chimera::PreRecordPending) detailText = "PRE-REC SAVING";
         Widget::step();
     }
 

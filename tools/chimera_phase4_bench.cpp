@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <cstdlib>
+#include "ChimeraBenchmarkGene.hpp"
 
 // Offline 48 kHz core benchmark, intentionally outside test-fast.
 // Build on Linux with:
@@ -15,9 +16,10 @@
 // Current recording, and one full-length snapshot capture/release per run.
 // Timing excludes preparation and omits Rack, host SRC, and GUI overhead.
 int main(int argc, char** argv) {
-    const double geneFrames = argc > 1 ? std::strtod(argv[1], nullptr) : 480.0;
+    const double geneFrames = argc > 1 ? std::strtod(argv[1], nullptr) : 0.0;
     const bool modulated = argc > 2;
-    if (geneFrames < 16 || geneFrames > chimera::kMaxReelFrames) return 5;
+    if (argc > 1 && (!std::isfinite(geneFrames) || geneFrames < 16 ||
+        geneFrames > chimera::kMaxReelFrames)) return 5;
     chimera::Reel reel(chimera::kMaxPages, chimera::kMaxPages);
     for (unsigned i = 0; i < chimera::kMaxReelFrames; ++i)
         if (!reel.write(i, chimera::StereoFrame{float(i % 37) / 37.f,
@@ -31,8 +33,7 @@ int main(int argc, char** argv) {
     in.pmRightVolts = 5.f;
     in.pmRightConnected = true;
     in.controls.sos = 0.5f;
-    in.controls.gene = float(std::log(geneFrames / double(chimera::kMaxReelFrames)) /
-                             std::log(16.0 / double(chimera::kMaxReelFrames)));
+    in.controls.gene = chimeraBenchmarkGene(reel.validFrames(), geneFrames);
     in.controls.rate = 5.f / 6.f;
     in.controls.morph = 1.f;
     if (modulated) { slice.setRateMode(1); in.controls.rateAtt = 1.f; }

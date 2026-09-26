@@ -53,9 +53,12 @@ Result build(const Reel& source, const Request& request,
         StereoFrame sample = source.readSnapshot(sourceFrame);
         if (request.kind == EraseSplice && frame >= begin && frame < end)
             sample = {0.f, 0.f};
-        if (!result.reel->write(frame, sample, frame))
+        if (!result.reel->appendImported(sample))
             return fail("edit_write_failed");
     }
+    // This destination is exclusively worker-owned and sequential. Build the
+    // playback moments once instead of maintaining all levels for every frame.
+    result.reel->finishImport();
     if (outputFrames && !result.reel->replaceMarkers(markers.data(),
         std::uint16_t(markers.size()))) return fail("edit_marker_replace_failed");
     result.reel->restoreRevisions(meta.documentRevision + 1,

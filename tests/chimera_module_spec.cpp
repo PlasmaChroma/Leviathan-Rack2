@@ -73,6 +73,9 @@ static void backgroundDispatchRegression() {
         std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
         need(bool(chimera::recovery::inspect(m.cachedRecoveryRoot).latest),
              "record-stop recovery completes with no widget/control pumping");
+        need(m.preRecordStatus() == Chimera::PreRecordSaved ||
+             m.preRecordStatus() == Chimera::PreRecordUnavailable,
+             "background snapshot contention reports either committed or missed pre-record protection");
     }
     chimera::edit::Request clear;
     clear.kind = chimera::edit::ClearReel;
@@ -500,50 +503,277 @@ static void boundedSaveRegression() {
     }
 }
 
-static void heldGateRateChangeRegression() {
-    for (unsigned rate : {96000u, 192000u}) {
-        for (float heldVoltage : {10.f, 1.5f}) {
-            chimera::Reel reel(4, 4);
-            for (unsigned frame = 0; frame < 1000; ++frame)
-                need(reel.write(frame, {.25f, .25f}, frame), "prepare held-gate Reel");
+static void stoppedPublicationRegression() {
+    for (unsigned kind : {1u, 4u, 5u}) {
+        for (unsigned frames : {0u, 300u, 1400u}) {
+            chimera::Reel original(8, 8), replacement(8, 8);
+            for (unsigned i = 0; i < 1000; ++i) original.write(i, {.25f, -.25f}, i);
+            original.addMarker(200); original.addMarker(600);
+            for (unsigned i = 0; i < frames; ++i) replacement.write(i, {.5f, -.5f}, i);
+            if (frames) replacement.addMarker(100);
+            replacement.restoreRevisions(5000, 4000);
             Chimera m;
-            m.reel = &reel;
-            m.slice.setReel(&reel);
-            m.saveInProgress.store(true); // Keep automatic checkpoints out of this gate test.
-            m.inputs[Chimera::REC_INPUT].channels = 1;
-            m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
-            Module::ProcessArgs direct{};
-            direct.sampleRate = 48000.f;
-            direct.sampleTime = 1.f / 48000.f;
-            m.process(direct);
-            need(m.slice.recordState() == chimera::Slice::Current,
-                 "initial REC rise starts Current recording");
-            m.inputs[Chimera::REC_INPUT].setVoltage(heldVoltage);
-            Module::ProcessArgs changed = direct;
-            changed.sampleRate = float(rate);
-            changed.sampleTime = 1.f / float(rate);
-            m.preparedBridge.store(new chimera::RateBridge(rate));
-            m.process(changed);
-            const auto stoppedAt = m.slice.writerFrame();
-            need(m.slice.recordState() == chimera::Slice::Idle,
-                 "rate change stops recording");
-            for (unsigned frame = 0; frame < rate / 50; ++frame) m.process(changed);
+            m.service.reset(new chimera::IoService(0));
+            m.reel = &original; m.slice.setReel(&original);
+            m.audioActiveHandle = m.controlActiveHandle = 1;
+            m.slice.selectRegion(2);
+            need(m.slice.startCurrent(), "seed old Reel recording cursor");
+            m.slice.stopRecord();
+            m.publishCoreState();
+            const chimera::AudioCommand adopt = {1, 10, original.documentRevision(),
+                kind, 2, &replacement, original.audioRevision()};
+            need(m.commands.tryPush(adopt), "queue stopped replacement");
+            m.maintenanceStep();
+            need(m.reel == &replacement && m.publishedValidFrames.load() == frames &&
+                 m.publishedDocumentRevision.load() == 5000 &&
+                 m.publishedAudioRevision.load() == 4000 &&
+                 m.publishedMarkerCount.load() == replacement.markerCount() &&
+                 m.publishedRegion.load() == 0 && m.publishedRequestedRegion.load() == 0 &&
+                 m.publishedMarkerHistory.load() == 0 &&
+                 !m.recordingActive.load() && !m.recordingOrArmed.load() &&
+                 m.publishedRecordState.load() == 0 && m.publishedRecordFrame.load() == 0,
+                 "stopped import/edit/recovery publishes replacement metadata before audio resumes");
+            if (frames) {
+                std::string error;
+                need(m.requestMarkerEdit(m.publishedRegion.load() + 1, 120, 0, error),
+                     "stopped menu edit uses replacement region and revision");
+                m.maintenanceStep();
+                need(replacement.region(1).begin == 120 &&
+                     m.publishedDocumentRevision.load() == replacement.documentRevision(),
+                     "subsequent stopped edit publishes its new revision");
+            }
+        }
+    }
+}
+
+static void cancelledRecordingAdmissionRegression() {
+    for (bool armed : {false, true}) {
+        for (float rate : {47999.5f, 96000.f}) {
+            chimera::Reel reel(4, 4);
+            for (unsigned i = 0; i < 1000; ++i) reel.write(i, {.25f, .25f}, i);
+            Chimera m;
+            m.service.reset(new chimera::IoService(0));
+            m.reel = &reel; m.slice.setReel(&reel);
+            m.audioActiveHandle = m.controlActiveHandle = 1;
+            // No automatic checkpoint: isolate admission from legitimate I/O busy state.
+            m.saveInProgress.store(true);
+            if (armed) m.recordArm = Chimera::ArmCurrent;
+            else m.beginRecording(false);
+            m.publishCoreState();
+            need(m.recordingOrArmed.load(), "cancellation fixture starts active or armed");
+            Module::ProcessArgs args{};
+            args.sampleRate = rate; args.sampleTime = 1.f / rate;
+            trapAllocations = true;
+            for (unsigned i = 0; i < 100; ++i) m.process(args);
+            trapAllocations = false;
             need(m.slice.recordState() == chimera::Slice::Idle &&
-                 m.slice.writerFrame() == stoppedAt && !m.activeBridge->failed(),
-                 "held REC gate never restarts after fresh bridge latency");
-            m.inputs[Chimera::REC_INPUT].setVoltage(0.f);
-            for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
-            m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
-            for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
-            need(m.slice.recordState() == chimera::Slice::Current &&
-                 m.slice.writerFrame() > stoppedAt,
-                 "new REC rise remains available after bridge seeding");
+                 m.recordArm == Chimera::NoArm && !m.recordingActive.load() &&
+                 !m.recordingOrArmed.load() && m.publishedRecordState.load() == 0 &&
+                 m.lights[Chimera::REC_LIGHT].getBrightness() == 0.f &&
+                 m.lights[Chimera::REC_ARMED_LIGHT].getBrightness() == 0.f,
+                 "unsupported rate and absent converter clear every recording flag immediately");
+            std::string error;
+            need(m.requestImportWav("missing-admission-probe.wav", false, error),
+                 "import admitted after cancellation while converter remains unavailable");
+            // The zero-worker service retains the admitted request without reading disk.
+        }
+    }
+}
+
+static void preRecordProtectionRegression() {
+    // Display, save, prior recovery, reclaiming, and claimed-but-not-captured cuts.
+    for (unsigned owner = 0; owner < 5; ++owner) {
+        chimera::Reel reel(4, 4);
+        for (unsigned i = 0; i < 1000; ++i) reel.write(i, {.25f, .25f}, i);
+        Chimera m;
+        m.reel = &reel; m.slice.setReel(&reel);
+        m.snapshotClaimed.store(true);
+        if (owner != 4) {
+            need(reel.beginSnapshot(0), "prepare competing snapshot");
+            while (!reel.readyForWorker()) reel.maintenanceTick();
+            m.coreSnapshotRequestId = owner == 2 ? Chimera::kAutomaticSnapshotId : 42;
+        }
+        if (owner == 0) m.recoveryPurpose = 3;
+        if (owner == 1) m.saveInProgress.store(true);
+        if (owner == 2) m.recoveryPurpose = 1;
+        if (owner == 3) need(reel.beginRelease(), "prepare snapshot reclaim");
+        const auto priorRequest = m.coreSnapshotRequestId;
+        trapAllocations = true;
+        m.beginRecording(false);
+        trapAllocations = false;
+        need(m.slice.recordState() == chimera::Slice::Current &&
+             m.preRecordStatus() == Chimera::PreRecordUnavailable &&
+             m.coreSnapshotRequestId == priorRequest,
+             "busy snapshot never delays REC or mislabels an earlier cut as this take's safeguard");
+        ChimeraDisplayOverlay overlay;
+        overlay.owner = &m; overlay.step();
+        need(overlay.detailText == "NO PRE-REC CUT",
+             "missed pre-record protection is visible on the panel");
+        m.slice.stopRecord(); overlay.step();
+        need(overlay.detailText == "NO PRE-REC CUT", "warning persists after recording stops");
+    }
+    {
+        chimera::Reel reel(4, 4);
+        reel.write(0, {.25f, .25f}, 0);
+        Chimera m;
+        m.reel = &reel; m.slice.setReel(&reel);
+        m.saveInProgress.store(true); // Save before it has claimed a snapshot.
+        m.beginRecording(false);
+        need(m.preRecordStatus() == Chimera::PreRecordUnavailable && !m.coreSnapshotRequestId,
+             "save-in-progress alone reports unavailable pre-record protection");
+        m.slice.stopRecord(); m.saveInProgress.store(false);
+        m.beginRecording(false);
+        const auto pending = m.preRecordState.load();
+        need(m.preRecordStatus() == Chimera::PreRecordPending &&
+             m.coreSnapshotRequestId == Chimera::kAutomaticSnapshotId,
+             "free snapshot captures this take and reports pending rather than saved");
+        m.finishPreRecord(pending, true);
+        need(m.preRecordStatus() == Chimera::PreRecordSaved, "successful commit marks matching take saved");
+        m.slice.stopRecord(); m.beginRecording(false);
+        m.finishPreRecord(pending, true);
+        need(m.preRecordStatus() == Chimera::PreRecordUnavailable,
+             "late completion cannot mark a newer unprotected take saved");
+    }
+    for (bool success : {false, true}) {
+        Chimera m;
+        m.service.reset(new chimera::IoService(0));
+        const auto pending = m.newPreRecordState(Chimera::PreRecordPending);
+        m.recoveryTicket.reset(new Chimera::RecoveryTicket);
+        m.recoveryTicket->preRecordState = pending;
+        if (success) m.recoveryTicket->result.entry.manifest = "chimera/reel-test.json";
+        else m.recoveryTicket->result.error = "test_failure";
+        m.recoveryTicket->done.store(true);
+        m.recoveryStep();
+        need(m.preRecordStatus() == (success ? Chimera::PreRecordSaved : Chimera::PreRecordFailed),
+             "worker completion publishes actual checkpoint result");
+    }
+    {
+        chimera::Reel reel(4, 4);
+        reel.write(0, {.25f, .25f}, 0);
+        Chimera m;
+        m.service.reset(new chimera::IoService(0));
+        m.service->shutdown(); // Deterministically reject submission.
+        m.reel = &reel; m.slice.setReel(&reel);
+        m.beginRecording(false);
+        while (!reel.readyForWorker()) reel.maintenanceTick();
+        m.snapshotReady = true; m.snapshotReel = &reel;
+        m.snapshotReaders.begin(); m.recoveryPurpose = 1;
+        m.recoveryStep();
+        need(m.preRecordStatus() == Chimera::PreRecordFailed && !m.recoveryTicket,
+             "rejected recovery submission cannot leave protection pending or saved");
+    }
+    need(audioAllocations == 0 && audioDeallocations == 0,
+         "checkpoint status and cancellation stay allocation-free on audio");
+}
+
+static void heldGateRateChangeRegression() {
+    for (unsigned initialRate : {48000u, 96000u}) {
+        for (unsigned rate : {96000u, 192000u}) {
+            for (float heldVoltage : {10.f, 1.5f}) {
+                chimera::Reel reel(4, 4);
+                for (unsigned frame = 0; frame < 1000; ++frame)
+                    need(reel.write(frame, {.25f, .25f}, frame), "prepare held-gate Reel");
+                Chimera m;
+                m.reel = &reel;
+                m.slice.setReel(&reel);
+                m.saveInProgress.store(true); // Keep automatic checkpoints out of this gate test.
+                m.inputs[Chimera::REC_INPUT].channels = 1;
+                Module::ProcessArgs direct{};
+                direct.sampleRate = float(initialRate);
+                direct.sampleTime = 1.f / float(initialRate);
+                if (initialRate != 48000)
+                    m.preparedBridge.store(new chimera::RateBridge(initialRate));
+                for (unsigned i = 0; i < 300; ++i) m.process(direct);
+                m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+                for (unsigned i = 0; i < 300; ++i) m.process(direct);
+                need(m.slice.recordState() == chimera::Slice::Current,
+                     "initial REC rise starts Current recording");
+                m.inputs[Chimera::REC_INPUT].setVoltage(heldVoltage);
+                Module::ProcessArgs changed = direct;
+                changed.sampleRate = float(rate);
+                changed.sampleTime = 1.f / float(rate);
+                if (initialRate == rate) {
+                    m.activeBridge->fillEventQueueForTest();
+                    m.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+                    m.process(direct);
+                    need(m.activeBridge->failed(), "fault held-REC converter");
+                }
+                m.process(changed);
+                delete m.retiredBridge.exchange(nullptr); // Off-audio retirement.
+                m.preparedBridge.store(new chimera::RateBridge(rate));
+                m.process(changed);
+                const auto stoppedAt = m.slice.writerFrame();
+                need(m.slice.recordState() == chimera::Slice::Idle,
+                     "rate change stops recording");
+                for (unsigned frame = 0; frame < rate / 50; ++frame) m.process(changed);
+                need(m.slice.recordState() == chimera::Slice::Idle &&
+                     m.slice.writerFrame() == stoppedAt && !m.activeBridge->failed(),
+                     "held REC gate never restarts after fresh bridge latency");
+                m.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+                for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
+                const auto beforeNewEdge = reel.audioRevision();
+                m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+                for (unsigned frame = 0; frame < rate / 100; ++frame) m.process(changed);
+                need(m.slice.recordState() == chimera::Slice::Current &&
+                     reel.audioRevision() > beforeNewEdge,
+                     "new REC rise remains available after bridge seeding");
+            }
+        }
+    }
+}
+
+static void auxiliaryGateDiscontinuityRegression() {
+    for (int jack : {Chimera::CLOCK_INPUT, Chimera::SPLICE_INPUT, Chimera::SHIFT_INPUT}) {
+        for (float held : {10.f, 1.5f}) {
+            for (unsigned transition = 0; transition < 3; ++transition) {
+                chimera::Reel reel(32, 32);
+                for (unsigned i = 0; i < 8000; ++i) reel.write(i, {.25f, .25f}, i);
+                reel.addMarker(2000); reel.addMarker(5000);
+                Chimera m;
+                m.reel = &reel; m.slice.setReel(&reel);
+                m.saveInProgress.store(true);
+                m.omodSetting.store(true);
+                Module::ProcessArgs args{};
+                args.sampleRate = transition ? 96000.f : 48000.f;
+                args.sampleTime = 1.f / args.sampleRate;
+                if (transition) m.preparedBridge.store(new chimera::RateBridge(96000));
+                for (unsigned i = 0; i < 300; ++i) m.process(args);
+                m.inputs[jack].channels = 1; m.inputs[jack].setVoltage(10.f);
+                for (unsigned i = 0; i < 500; ++i) m.process(args);
+                m.inputs[jack].setVoltage(held);
+                for (unsigned i = 0; i < 300; ++i) m.process(args);
+                const auto markers = reel.markerCount();
+                const auto requested = m.slice.requestedRegion();
+                const auto clockEdge = m.clockEstimator.lastEdgeFrame();
+                if (transition == 2) {
+                    m.activeBridge->fillEventQueueForTest();
+                    m.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+                    m.process(args);
+                    need(m.activeBridge->failed(), "induce same-rate converter fault");
+                }
+                else {
+                    args.sampleRate = transition ? 192000.f : 96000.f;
+                    args.sampleTime = 1.f / args.sampleRate;
+                }
+                m.process(args); // Retire any previous converter; no control worker in this fixture.
+                delete m.retiredBridge.exchange(nullptr);
+                m.preparedBridge.store(new chimera::RateBridge(unsigned(args.sampleRate)));
+                for (unsigned i = 0; i < 2000; ++i) m.process(args);
+                need(m.activeBridge && !m.activeBridge->failed() &&
+                     reel.markerCount() == markers && m.slice.requestedRegion() == requested &&
+                     m.clockEstimator.lastEdgeFrame() == clockEdge,
+                     "held CLOCK/SPLICE/SHIFT do not replay across 48->96, 96->192 or fault->96");
+            }
         }
     }
 }
 
 int main() {
+    stoppedPublicationRegression();
+    cancelledRecordingAdmissionRegression();
+    preRecordProtectionRegression();
     heldGateRateChangeRegression();
+    auxiliaryGateDiscontinuityRegression();
     boundedSaveRegression();
     abandonedSnapshotRegression();
     snapshotTeardownRegression();
@@ -720,6 +950,8 @@ int main() {
         faulted.process(rate96);
         need(faulted.slice.recordState() == chimera::Slice::Idle &&
              faulted.recordArm == Chimera::NoArm && faulted.bridgeError.load() &&
+             !faulted.recordingActive.load() && !faulted.recordingOrArmed.load() &&
+             faulted.publishedRecordState.load() == 0 &&
              faulted.slice.writerPosition() == beforeFault &&
              faulted.activeHostRate.load() == 0,
              "event queue overflow stops writes and latches visible error");
