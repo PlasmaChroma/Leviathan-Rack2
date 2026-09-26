@@ -344,6 +344,7 @@ def build_combined(
     halo_color: tuple[int, int, int],
     fill_expand_px: float,
     tight_radius_px: float,
+    tight_feather_px: float,
     soft_radius_px: float,
     wide_radius_px: float,
     tight_opacity: float,
@@ -356,7 +357,9 @@ def build_combined(
     tight_kernel_radius = max(1, round(tight_radius_px * supersample))
     tight_kernel_size = tight_kernel_radius * 2 + 1
     tight_mask = source_mask.filter(ImageFilter.MaxFilter(tight_kernel_size))
-    tight_mask = tight_mask.filter(ImageFilter.GaussianBlur(0.65 * supersample))
+    tight_mask = tight_mask.filter(
+        ImageFilter.GaussianBlur(tight_feather_px * supersample)
+    )
     soft_mask = source_mask.filter(
         ImageFilter.GaussianBlur(soft_radius_px * supersample)
     )
@@ -588,11 +591,11 @@ def main() -> int:
         args.supersample,
         fill_color=(18, 20, 25),
         halo_color=(255, 255, 255),
-        # Keep the original rim width, but make its tight pass fully white so
-        # the dark labels separate cleanly from the light panel at Rack scale.
+        # Extend the bright rim and let its outside edge fade into the broad halo.
         fill_expand_px=1.5,
-        tight_radius_px=5.0,
-        soft_radius_px=10.0,
+        tight_radius_px=6.5,
+        tight_feather_px=1.5,
+        soft_radius_px=12.0,
         wide_radius_px=24.0,
         tight_opacity=1.0,
         soft_opacity=0.28,
@@ -610,8 +613,9 @@ def main() -> int:
         fill_color=(238, 240, 244),
         halo_color=(2, 4, 8),
         fill_expand_px=1.5,
-        tight_radius_px=5.0,
-        soft_radius_px=10.0,
+        tight_radius_px=6.5,
+        tight_feather_px=1.5,
+        soft_radius_px=12.0,
         wide_radius_px=24.0,
         tight_opacity=0.48,
         soft_opacity=0.28,
