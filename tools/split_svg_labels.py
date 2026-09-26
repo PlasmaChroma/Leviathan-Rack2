@@ -14,7 +14,9 @@ converts text to paths so runtime panels do not depend on locally installed
 fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
 Use --background-only for legacy panels whose labels and artwork must stay
-together. This mode preserves all content except the extracted background.
+together. This mode extracts the background and explicitly marked theme text.
+Individual text elements or outlined glyphs can use data-theme-text="input"
+or data-theme-text="output" without rearranging their authored groups.
 
 Expected source convention:
   <g id="labels"> ... </g>
@@ -386,6 +388,8 @@ def outline_text_with_inkscape(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=inkscape_timeout_sec,
             )
         except subprocess.TimeoutExpired as exc:
@@ -448,8 +452,27 @@ def extract_background(root: ET.Element, panel_root: ET.Element, background_path
     background_parent.remove(panel_background)
 
 
-def split_background_only(source_path: Path, overwrite: bool = False, cleanup: bool = True):
-    """Preserve legacy panel artwork/labels/anchors; separate only its background."""
+def select_theme_text_layer(element, wanted, theme_ids, inherited=None):
+    # Retain every ancestor's transform/style. The nearest recognized group
+    # determines a shape's role, including nested semantic groups.
+    role = element.get("data-theme-text", theme_ids.get(element.get("id"), inherited))
+    children = list(element)
+    if not children:
+        return copy.deepcopy(element) if role == wanted else None
+    result = ET.Element(element.tag, dict(element.attrib))
+    result.text = element.text
+    result.tail = element.tail
+    for child in children:
+        selected = select_theme_text_layer(child, wanted, theme_ids, role)
+        if selected is not None:
+            result.append(selected)
+    return result if len(result) or role == wanted else None
+
+
+def split_background_only(source_path: Path, overwrite: bool = False, cleanup: bool = True,
+                          outline_label_text: bool = True, inkscape_path: str | None = None,
+                          inkscape_timeout_sec: float = 60.0):
+    """Preserve legacy artwork/anchors; extract background and marked text."""
     root = ET.parse(source_path).getroot()
     if find_parent_and_child_by_id(root, "theme_background")[1] is None:
         raise RuntimeError(f"{source_path}: missing theme_background group")
@@ -460,6 +483,27 @@ def split_background_only(source_path: Path, overwrite: bool = False, cleanup: b
         raise RuntimeError(f"{source_path}: generated files exist; pass --overwrite")
     panel_root = copy.deepcopy(root)
     extract_background(root, panel_root, background_path, cleanup)
+    # Legacy panels retain their static artwork and anchors. Explicit semantic
+    # labels are extracted with their complete transform/style ancestry.
+    for role in ("input", "output"):
+        selected = select_theme_text_layer(root, role, {})
+        if selected is None:
+            continue
+        text_path = Path(f"{stem}.theme-text-{role}.svg")
+        if text_path.exists() and not overwrite:
+            raise RuntimeError(f"{text_path} already exists; pass --overwrite")
+        text_root = copy_svg_shell(root)
+        copy_defs_and_styles(root, text_root)
+        text_root.extend(list(selected))
+        if cleanup:
+            remove_editor_junk(text_root)
+        ET.indent(text_root, space="  ")
+        if outline_label_text:
+            normalize_text_for_outline(text_root)
+        ET.ElementTree(text_root).write(text_path, encoding="utf-8", xml_declaration=True)
+        if outline_label_text:
+            outline_text_with_inkscape(text_path, inkscape_path, inkscape_timeout_sec)
+    panel_root = select_theme_text_layer(panel_root, None, {})
     if cleanup:
         remove_editor_junk(panel_root)
     ET.indent(panel_root, space="  ")
@@ -497,26 +541,12 @@ def split_svg(
     theme_paths = {
         role: Path(f"{stem}{theme_text_suffix}{'' if role == 'legacy' else '-' + role}.svg")
         for group_id, role in theme_ids.items()
-        if any(elem.get("id") == group_id for elem in label_group.iter())
+        if any(elem.get("id") == group_id or elem.get("data-theme-text") == role
+               for elem in label_group.iter())
     }
     background_path = Path(f"{stem}.background.svg")
     _, background_group = find_parent_and_child_by_id(root, "theme_background")
 
-    def select_layer(element, wanted, inherited=None):
-        # Retain every ancestor's transform/style. The nearest recognized group
-        # determines a shape's role, including nested semantic groups.
-        role = theme_ids.get(element.get("id"), inherited)
-        children = list(element)
-        if not children:
-            return copy.deepcopy(element) if role == wanted else None
-        result = ET.Element(element.tag, dict(element.attrib))
-        result.text = element.text
-        result.tail = element.tail
-        for child in children:
-            selected = select_layer(child, wanted, role)
-            if selected is not None:
-                result.append(selected)
-        return result if len(result) or role == wanted else None
 
     if not overwrite:
         outputs = [panel_path, labels_path]
@@ -533,7 +563,7 @@ def split_svg(
 
     copy_defs_and_styles(root, labels_root)
 
-    labels_layer = select_layer(label_group, None)
+    labels_layer = select_theme_text_layer(label_group, None, theme_ids)
     if labels_layer is not None:
         labels_root.append(labels_layer)
 
@@ -562,7 +592,7 @@ def split_svg(
 
         # Preserve transforms and inherited presentation attributes from the
         # labels group while excluding every static sibling.
-        theme_labels_layer = select_layer(label_group, role)
+        theme_labels_layer = select_theme_text_layer(label_group, role, theme_ids)
         if theme_labels_layer is not None:
             theme_text_root.append(theme_labels_layer)
 
@@ -691,7 +721,7 @@ def main() -> int:
     )
 
     parser.add_argument("--background-only", action="store_true",
-                        help="Separate only theme_background, preserving legacy labels and artwork")
+                        help="Extract background and marked theme text, preserving other legacy artwork")
 
     args = parser.parse_args()
 
@@ -714,7 +744,9 @@ def main() -> int:
 
         for svg_path in svg_files:
             if args.background_only:
-                panel, background = split_background_only(svg_path, args.overwrite, not args.no_cleanup)
+                panel, background = split_background_only(
+                    svg_path, args.overwrite, not args.no_cleanup, not args.keep_label_text,
+                    args.inkscape_path, args.inkscape_timeout)
                 print(f"{svg_path}\n  -> {panel}\n  -> {background}")
                 continue
             panel_path, labels_path, theme_text_paths = split_svg(

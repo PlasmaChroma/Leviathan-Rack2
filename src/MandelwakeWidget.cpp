@@ -1,3 +1,4 @@
+#include "theme/ThemedTextWidget.hpp"
 #include "Mandelwake.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -42,7 +43,7 @@ mandelwake::VisualSnapshot makeHeroSnapshot() {
 	return snapshot;
 }
 
-struct MandelwakePanelLabels final : TransparentWidget {
+struct MandelwakePanelLabels final : leviathan::theme::ThemedTextWidget<TransparentWidget> {
 	void label(const DrawArgs& args, const char* text, float xMm, float yMm,
 		float sizeMm, NVGcolor color) {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
@@ -56,9 +57,9 @@ struct MandelwakePanelLabels final : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		const NVGcolor control = nvgRGB(211, 211, 232);
-		const NVGcolor input = nvgRGB(139, 221, 255);
-		const NVGcolor output = nvgRGB(255, 221, 144);
+		const NVGcolor control = inputTextColor;
+		const NVGcolor input = inputTextColor;
+		const NVGcolor output = outputTextColor;
 		constexpr float labelSize = 2.82222f;
 		label(args, "MANDELWAKE", 45.72f, 5.3f, 3.35f, nvgRGB(244, 244, 255));
 		const char* row1[] = {"MAP", "CENTER X", "CENTER Y", "ZOOM", "ITER"};
@@ -321,6 +322,7 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 	labelFramebuffer->dirtyOnSubpixelChange = false;
 	MandelwakePanelLabels* labels = new MandelwakePanelLabels();
 	labels->box.size = box.size;
+	labels->textFramebuffer = labelFramebuffer;
 	labelFramebuffer->addChild(labels);
 	addChild(labelFramebuffer);
 

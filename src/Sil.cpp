@@ -3056,6 +3056,9 @@ struct SilWidget : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Sil", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
 		setPanel(visual_assets::createThemedPanel(asset::plugin(pluginInstance, "res/sil.panel.svg"), this));
+		addChild(visual_assets::createThemedPanelLabelsWidget(
+			nullptr, "res/sil.theme-text-input.svg",
+			"res/sil.theme-text-output.svg", box.size, this));
 		visual_assets::addPerfectWavePanelBranding(this, panelPath);
 		previewBuildTimer.markPanelDone();
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));

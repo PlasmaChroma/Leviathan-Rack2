@@ -2223,7 +2223,8 @@ struct NautiloidWidget final : ModuleWidget {
     setModule(module);
     visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
-    splitPanel.addLabels("res/nautiloid.labels.svg");
+    splitPanel.addThemedLabels("res/nautiloid.labels.svg",
+            "res/nautiloid.theme-text-input.svg", nullptr);
     splitPanel.addPerfectWaveBranding();
     splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(

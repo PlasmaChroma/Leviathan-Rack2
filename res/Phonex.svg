@@ -68,27 +68,27 @@
     <text x="3556" y="520" font-size="390" font-weight="700" letter-spacing="85">PHONEX</text>
     <text x="3556" y="780" font-size="130" fill="#52d6dc" letter-spacing="44">LPC VOICE INSTRUMENT</text>
     <text x="3556" y="1080" font-size="125" fill="#d6a455">PHRASE / STATUS</text>
-    <text x="3556" y="2200" font-size="125" fill="#52d6dc">UTTERANCE — ENTER TO SPEAK</text>
-    <text x="6350" y="4900" font-size="145">SPEAK</text>
-    <text x="900" y="4900" font-size="170">PITCH</text>
-    <text x="2750" y="4900" font-size="170">SPEED</text>
-    <text x="4600" y="4900" font-size="170">WARP</text>
-    <text x="880" y="6450" font-size="140">FORMANT</text>
-    <text x="2680" y="6450" font-size="145">EXCITE</text>
-    <text x="4480" y="6450" font-size="150">BEND</text>
-    <text x="6280" y="6450" font-size="145">GLITCH</text>
-    <text x="6300" y="6950" font-size="120" fill="#52d6dc">USER</text>
-    <text x="6300" y="8020" font-size="120" fill="#e5b35b">STOCK</text>
-    <text x="850" y="9450" font-size="125" fill="#5bd9df">V/OCT</text>
-    <text x="2700" y="9450" font-size="125" fill="#5bd9df">WORD CV</text>
-    <text x="4500" y="9450" font-size="125" fill="#5bd9df">TRIG/GATE</text>
-    <text x="6260" y="9450" font-size="125" fill="#5bd9df">SCRUB</text>
-    <text x="1200" y="10700" font-size="135" fill="#5bd9df">WARP CV</text>
-    <text x="3556" y="10700" font-size="135" fill="#5bd9df">BEND CV</text>
-    <text x="5910" y="10700" font-size="135" fill="#5bd9df">EXT EXCITE</text>
-    <text x="1200" y="12150" font-size="145" fill="#e5b35b">AUDIO</text>
-    <text x="3556" y="12150" font-size="135" fill="#e5b35b">FRAME CLK</text>
-    <text x="5910" y="12150" font-size="145" fill="#e5b35b">EOX</text>
+    <text x="3556" y="2200" font-size="125" fill="#52d6dc" data-theme-text="input">UTTERANCE — ENTER TO SPEAK</text>
+    <text x="6350" y="4900" font-size="145" data-theme-text="input">SPEAK</text>
+    <text x="900" y="4900" font-size="170" data-theme-text="input">PITCH</text>
+    <text x="2750" y="4900" font-size="170" data-theme-text="input">SPEED</text>
+    <text x="4600" y="4900" font-size="170" data-theme-text="input">WARP</text>
+    <text x="880" y="6450" font-size="140" data-theme-text="input">FORMANT</text>
+    <text x="2680" y="6450" font-size="145" data-theme-text="input">EXCITE</text>
+    <text x="4480" y="6450" font-size="150" data-theme-text="input">BEND</text>
+    <text x="6280" y="6450" font-size="145" data-theme-text="input">GLITCH</text>
+    <text x="6300" y="6950" font-size="120" fill="#52d6dc" data-theme-text="input">USER</text>
+    <text x="6300" y="8020" font-size="120" fill="#e5b35b" data-theme-text="input">STOCK</text>
+    <text x="850" y="9450" font-size="125" fill="#5bd9df" data-theme-text="input">V/OCT</text>
+    <text x="2700" y="9450" font-size="125" fill="#5bd9df" data-theme-text="input">WORD CV</text>
+    <text x="4500" y="9450" font-size="125" fill="#5bd9df" data-theme-text="input">TRIG/GATE</text>
+    <text x="6260" y="9450" font-size="125" fill="#5bd9df" data-theme-text="input">SCRUB</text>
+    <text x="1200" y="10700" font-size="135" fill="#5bd9df" data-theme-text="input">WARP CV</text>
+    <text x="3556" y="10700" font-size="135" fill="#5bd9df" data-theme-text="input">BEND CV</text>
+    <text x="5910" y="10700" font-size="135" fill="#5bd9df" data-theme-text="input">EXT EXCITE</text>
+    <text x="1200" y="12150" font-size="145" fill="#e5b35b" data-theme-text="output">AUDIO</text>
+    <text x="3556" y="12150" font-size="135" fill="#e5b35b" data-theme-text="output">FRAME CLK</text>
+    <text x="5910" y="12150" font-size="145" fill="#e5b35b" data-theme-text="output">EOX</text>
     <text x="3556" y="12610" font-size="125" fill="#82999c" letter-spacing="38">LEVIATHAN // TOY SPEECH ARRAY</text>
   </g>
 </svg>

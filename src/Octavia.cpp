@@ -3493,7 +3493,8 @@ struct OctaviaWidget : ModuleWidget {
         if (module) module->startServer();
         visual_assets::SplitPanelRenderer splitPanel(this, "res/Octavia.panel.svg");
         const std::string& panelPath = splitPanel.panelPath();
-        splitPanel.addLabels("res/Octavia.labels.svg");
+        splitPanel.addThemedLabels("res/Octavia.labels.svg",
+            "res/Octavia.theme-text-input.svg", "res/Octavia.theme-text-output.svg");
         visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
         // Preserve the standard logo's rendered height, with equal outer margins
         // inside the bottom screws and a smaller chip centered beside it.

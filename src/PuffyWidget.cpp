@@ -1373,7 +1373,8 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	visual_assets::SplitPanelRenderer splitPanel(
 		this, "res/Puffy.panel.svg");
 	const std::string& panelPath = splitPanel.panelPath();
-	splitPanel.addLabels("res/Puffy.labels.svg");
+	splitPanel.addThemedLabels("res/Puffy.labels.svg",
+            "res/Puffy.theme-text-input.svg", "res/Puffy.theme-text-output.svg");
 	visual_assets::addFractalGlassOverlay(
 		this, panelPath, splitPanel.panelSurfaceEffectWidget());
 	math::Rect leviathanLogoRectMm(

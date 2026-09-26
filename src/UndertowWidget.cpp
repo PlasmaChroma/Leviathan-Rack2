@@ -304,7 +304,8 @@ struct UndertowWidget final : ModuleWidget {
     PreviewBuildLogTimer previewBuildTimer("Undertow", module);
     visual_assets::SplitPanelRenderer splitPanel(this, "res/undertow.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
-    splitPanel.addLabels("res/undertow.labels.svg");
+    splitPanel.addThemedLabels("res/undertow.labels.svg",
+            "res/undertow.theme-text-input.svg", "res/undertow.theme-text-output.svg");
     splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());

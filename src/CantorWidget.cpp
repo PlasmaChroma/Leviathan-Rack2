@@ -70,7 +70,8 @@ struct CantorWidget final : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(
 			this, "res/Cantor.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/Cantor.labels.svg");
+		splitPanel.addThemedLabels("res/Cantor.labels.svg",
+            "res/Cantor.theme-text-input.svg", "res/Cantor.theme-text-output.svg");
 		previewTimer.markPanelDone();
 
 		auto point = [&](const char* id, const Vec& fallbackMm) {

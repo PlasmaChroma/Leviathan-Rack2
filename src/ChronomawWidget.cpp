@@ -1,3 +1,4 @@
+#include "theme/ThemedTextWidget.hpp"
 #include "Chronomaw.hpp"
 #include "ChronomawWaveforms.hpp"
 #include "PanelSvgUtils.hpp"
@@ -93,7 +94,7 @@ static void drawMenuGlyph(const Widget::DrawArgs& args, const Vec& center, float
 		drawLabel(args, x, y, align, size, color, text);
 	}
 
-struct ChronomawSurfaceWidget : Widget {
+struct ChronomawSurfaceWidget : leviathan::theme::ThemedTextWidget<Widget> {
 	struct IntervalSummary {
 		float avg = 0.f;
 		float min = 0.f;
@@ -859,7 +860,7 @@ struct ChronomawSurfaceWidget : Widget {
 				updateTimelineFuturePreview();
 				lastFuturePreviewUpdateSec = now;
 			}
-			Widget::step();
+			leviathan::theme::ThemedTextWidget<Widget>::step();
 		}
 
 	void drawSlider(const DrawArgs& args, const math::Rect& rect, float value, float minV, float maxV, const std::string& label, int controlId) {

@@ -306,7 +306,8 @@ struct PhonexWidget final : ModuleWidget {
 		PreviewBuildLogTimer previewTimer("Phonex", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/Phonex.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/Phonex.labels.svg");
+		splitPanel.addThemedLabels("res/Phonex.labels.svg",
+            "res/Phonex.theme-text-input.svg", "res/Phonex.theme-text-output.svg");
 		previewTimer.markPanelDone();
 
 		auto point = [&](const char* id, Vec fallbackMm) {

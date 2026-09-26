@@ -593,7 +593,7 @@
    y="11950.023"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_shape_output"><tspan
+   id="label_shape_output" data-theme-text="output"><tspan
      sodipodi:role="line"
      id="tspan21"
      x="3280"
@@ -602,17 +602,17 @@
    y="11950.023"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_sub_output">SUB</text><text
+   id="label_sub_output" data-theme-text="output">SUB</text><text
    x="781.42719"
    y="11950.023"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_sine_output">SINE</text><text
+   id="label_sine_output" data-theme-text="output">SINE</text><text
    x="919.9942"
    y="2860.0002"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_coarse_param"><tspan
+   id="label_coarse_param" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan35"
      x="919.9942"
@@ -621,17 +621,17 @@
    y="3639.7786"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_fine_param">FINE</text><text
+   id="label_fine_param" data-theme-text="input">FINE</text><text
    x="860"
    y="8310"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_lin_fm_param">LIN FM</text><text
+   id="label_lin_fm_param" data-theme-text="input">LIN FM</text><text
    x="3136.696"
    y="8310"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_shape_param"><tspan
+   id="label_shape_param" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan20"
      x="3136.696"
@@ -640,7 +640,7 @@
    y="8220"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_shape_param-1"><tspan
+   id="label_shape_param-1" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan4"
      x="2003.4113"
@@ -649,7 +649,7 @@
    y="6910.0137"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_expo_input"><tspan
+   id="label_expo_input" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan19"
      x="2008.3501"
@@ -658,22 +658,22 @@
    y="2588.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_v_oct_input">V/OCT</text><text
+   id="label_v_oct_input" data-theme-text="input">V/OCT</text><text
    x="860"
    y="4910.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_sync_input">SYNC</text><text
+   id="label_sync_input" data-theme-text="input">SYNC</text><text
    x="3136.6833"
    y="4910.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_s_gate_input">S GATE</text><text
+   id="label_s_gate_input" data-theme-text="input">S GATE</text><text
    x="2009.761"
    y="5385.1001"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_s_gate_input-9"><tspan
+   id="label_s_gate_input-9" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan3"
      x="2009.761"

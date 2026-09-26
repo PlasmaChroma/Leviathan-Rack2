@@ -449,24 +449,24 @@
     <text
    x="700"
    y="8510"
-   id="text1">DECAY</text>
+   id="text1" data-theme-text="input">DECAY</text>
     <text
    x="2035"
    y="8510"
-   id="text2">DIFF</text>
+   id="text2" data-theme-text="input">DIFF</text>
     <text
    x="3370"
    y="8510"
-   id="text3">MIX</text>
+   id="text3" data-theme-text="input">MIX</text>
     <text
    x="4705"
    y="8510"
-   id="text4">ABS</text>
+   id="text4" data-theme-text="input">ABS</text>
     
     <text
    x="7375"
    y="8510"
-   id="text6">MOTION</text>
+   id="text6" data-theme-text="input">MOTION</text>
   </g>
   <g
    id="jack_mockups"
@@ -528,43 +528,43 @@
     <text
    x="900"
    y="10685"
-   id="text7">LST X</text>
+   id="text7" data-theme-text="input">LST X</text>
     <text
    x="1940"
    y="10685"
-   id="text8">LST Y</text>
+   id="text8" data-theme-text="input">LST Y</text>
     <text
    x="2980"
    y="10685"
-   id="text9">LEFT</text>
+   id="text9" data-theme-text="input">LEFT</text>
     <text
    x="4020"
    y="10685"
-   id="text10">RIGHT</text>
+   id="text10" data-theme-text="input">RIGHT</text>
     <text
    x="5060"
    y="10685"
-   id="text11">FRONT</text>
+   id="text11" data-theme-text="input">FRONT</text>
     <text
    x="6100"
    y="10685"
-   id="text12">BACK</text>
+   id="text12" data-theme-text="input">BACK</text>
     <text
    x="900"
    y="11725"
-   id="text13">IN L</text>
+   id="text13" data-theme-text="input">IN L</text>
     <text
    x="1940"
    y="11725"
-   id="text14">IN R</text>
+   id="text14" data-theme-text="input">IN R</text>
     <text
    x="6100"
    y="11725"
-   id="text15">OUT L</text>
+   id="text15" data-theme-text="output">OUT L</text>
     <text
    x="7228"
    y="11725"
-   id="text16">OUT R</text>
+   id="text16" data-theme-text="output">OUT R</text>
   </g>
 </g>
 <g

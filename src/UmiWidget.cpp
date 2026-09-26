@@ -1,3 +1,4 @@
+#include "theme/ThemedTextWidget.hpp"
 #include "Umi.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
@@ -88,7 +89,7 @@ struct UmiPanelArtWidget final : TransparentWidget {
 	}
 };
 
-struct UmiLabelOverlayWidget final : TransparentWidget {
+struct UmiLabelOverlayWidget final : leviathan::theme::ThemedTextWidget<TransparentWidget> {
 	void drawLabel(const DrawArgs& args, const char* text, float xMm, float yMm,
 		float sizeMm, NVGcolor color, int align = NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE) {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
@@ -105,8 +106,8 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		constexpr float centerOffset = UMI_LEFT_RAIL_WIDTH_MM;
-		const NVGcolor labelColor = nvgRGB(224, 251, 255);
-		const NVGcolor cvColor = nvgRGB(119, 235, 255);
+		const NVGcolor labelColor = inputTextColor;
+		const NVGcolor cvColor = inputTextColor;
 		drawLabel(args, "RATE", 39.5f + centerOffset, 9.f, 1.25f, labelColor);
 		drawLabel(args, "DENS", 57.f + centerOffset, 9.f, 1.25f, labelColor);
 		drawLabel(args, "DRAG", 8.f + centerOffset, 21.3f, 1.25f, labelColor);
@@ -125,7 +126,7 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 		for (int i = 0; i < 7; ++i) {
 			const float centerY = 14.f + 17.f * float(i);
 			drawLabel(args, outputLabels[i], 129.54f, centerY - 6.1f, 1.02f,
-				i == 0 ? nvgRGB(255, 229, 154) : labelColor);
+				outputTextColor);
 		}
 	}
 };
@@ -420,6 +421,7 @@ UmiWidget::UmiWidget(Umi* module) {
 	auto* labelFramebuffer = new widget::FramebufferWidget();
 	labelFramebuffer->box.size = box.size;
 	labelFramebuffer->dirtyOnSubpixelChange = false;
+	labels->textFramebuffer = labelFramebuffer;
 	labelFramebuffer->addChild(labels);
 	addChild(labelFramebuffer);
 

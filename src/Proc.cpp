@@ -1815,7 +1815,8 @@ struct ProcWidget : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Proc", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
-		splitPanel.addLabels("res/proc.labels.svg");
+		splitPanel.addThemedLabels("res/proc.labels.svg",
+            "res/proc.theme-text-input.svg", "res/proc.theme-text-output.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());

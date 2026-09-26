@@ -3593,7 +3593,8 @@ struct TemporalDeckWidget : ModuleWidget {
     PreviewBuildLogTimer previewBuildTimer("TemporalDeck", module);
     visual_assets::SplitPanelRenderer splitPanel(this, "res/deck.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
-    splitPanel.addLabels("res/deck.labels.svg");
+    splitPanel.addThemedLabels("res/deck.labels.svg",
+            "res/deck.theme-text-input.svg", "res/deck.theme-text-output.svg");
     splitPanel.addPerfectWaveBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());

@@ -114,7 +114,8 @@ struct MoiraiWidget final : ModuleWidget {
 		setModule(module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/Moirai.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/Moirai.labels.svg");
+		splitPanel.addThemedLabels("res/Moirai.labels.svg",
+            "res/Moirai.theme-text-input.svg", "res/Moirai.theme-text-output.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		auto anchor = [&](const char* id) {

@@ -2195,14 +2195,9 @@ struct ChimeraWidget : ModuleWidget {
         setModule(module);
         const std::string panelPath = asset::plugin(pluginInstance, "res/Chimera.panel.svg");
         setPanel(visual_assets::createThemedPanel(panelPath, this));
-        auto* labelCache = new widget::FramebufferWidget;
-        labelCache->box.size = box.size;
-        labelCache->oversample = 2.f;
-        auto* labels = new widget::SvgWidget;
-        labels->setSvg(window::Svg::load(asset::plugin(pluginInstance, "res/Chimera.labels.svg")));
-        labels->box.size = box.size;
-        labelCache->addChild(labels);
-        addChild(labelCache);
+        addChild(visual_assets::createThemedPanelLabelsWidget(
+            "res/Chimera.labels.svg", "res/Chimera.theme-text-input.svg",
+            "res/Chimera.theme-text-output.svg", box.size, this));
         visual_assets::addPerfectWavePanelBranding(this, panelPath);
         visual_assets::addCompactLeviathanLogoBranding(this, panelPath);
         addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));

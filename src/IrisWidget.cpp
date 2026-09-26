@@ -1072,7 +1072,8 @@ struct IrisWidget final : ModuleWidget {
     setModule(module);
     visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
-    splitPanel.addLabels("res/iris.labels.svg");
+    splitPanel.addThemedLabels("res/iris.labels.svg",
+            "res/iris.theme-text-input.svg", "res/iris.theme-text-output.svg");
     splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());

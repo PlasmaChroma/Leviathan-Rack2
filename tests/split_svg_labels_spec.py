@@ -110,6 +110,31 @@ def main() -> int:
         except RuntimeError:
             checks["legacy mode protects existing outputs"] = True
 
+    with tempfile.TemporaryDirectory() as directory:
+        source = Path(directory) / "roles.svg"
+        source.write_text("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+          <g id="theme_background"><rect width="10" height="10"/></g>
+          <g id="labels" transform="translate(1 2)" opacity="0.7">
+            <text id="title">TITLE</text>
+            <text id="input" data-theme-text="input"><tspan>IN</tspan></text>
+            <path id="output" data-theme-text="output" d="M1 1L2 2"/>
+          </g><g id="components"><circle id="anchor" cx="5" cy="6" r="1"/></g>
+        </svg>""", encoding="utf-8")
+        _, labels, roles = splitter.split_svg(
+            source, "labels", ".panel", ".labels", "theme_text", ".theme-text",
+            True, True, True, False, None, 1.0)
+        ins = ET.parse(roles["input"]).getroot()
+        outs = ET.parse(roles["output"]).getroot()
+        checks["individual text role includes its tspans"] = by_id(ins, "input")[0].text == "IN"
+        checks["outlined labels support individual output roles"] = by_id(outs, "output").get("d") == "M1 1L2 2"
+        checks["individual roles retain ancestry"] = by_id(outs, "labels").get("transform") == "translate(1 2)"
+        checks["individual roles leave branding static"] = by_id(ET.parse(labels).getroot(), "title").text == "TITLE"
+        panel, _ = splitter.split_background_only(source, overwrite=True, outline_label_text=False)
+        legacy = ET.parse(panel).getroot()
+        checks["legacy role extraction removes duplicate labels"] = not any(e.get("id") in ("input", "output") for e in legacy.iter())
+        checks["legacy extraction preserves anchors and static title"] = by_id(legacy, "anchor").get("cx") == "5" and by_id(legacy, "title").text == "TITLE"
+        checks["legacy role extraction keeps inherited opacity"] = by_id(ET.parse(roles["input"]).getroot(), "labels").get("opacity") == "0.7"
+
     for name, passed in checks.items():
         print(f"[{'PASS' if passed else 'FAIL'}] {name}")
     failed = sum(not passed for passed in checks.values())

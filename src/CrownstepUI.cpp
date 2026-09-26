@@ -3833,7 +3833,8 @@ struct CrownstepWidget final : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/crownstep.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/crownstep.labels.svg");
+		splitPanel.addThemedLabels("res/crownstep.labels.svg",
+            "res/crownstep.theme-text-input.svg", "res/crownstep.theme-text-output.svg");
 		splitPanel.addPerfectWaveBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());

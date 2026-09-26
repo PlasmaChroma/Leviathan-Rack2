@@ -1,3 +1,4 @@
+#include "theme/ThemedTextWidget.hpp"
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
 #include "DebugTerminalTransport.hpp"
@@ -172,7 +173,7 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 	}
 };
 
-struct WyrmVoctModeLabelWidget final : Widget {
+struct WyrmVoctModeLabelWidget final : leviathan::theme::ThemedTextWidget<Widget> {
 	Wyrm* module = nullptr;
 
 	void draw(const DrawArgs& args) override {
@@ -182,7 +183,7 @@ struct WyrmVoctModeLabelWidget final : Widget {
 		const bool envelopeMode = module && module->envelopeMode.load(std::memory_order_relaxed);
 		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgFillColor(args.vg, inputTextColor);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y,
 			envelopeMode ? "TRIG" : "V/OCT", nullptr);
@@ -994,7 +995,8 @@ struct WyrmWidget : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/wyrm.labels.svg");
+		splitPanel.addThemedLabels("res/wyrm.labels.svg",
+            "res/wyrm.theme-text-input.svg", "res/wyrm.theme-text-output.svg");
 		splitPanel.addPerfectWaveBranding();
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(

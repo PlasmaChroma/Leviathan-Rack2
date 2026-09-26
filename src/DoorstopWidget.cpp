@@ -694,7 +694,8 @@ struct DoorstopWidget final : ModuleWidget {
 		const std::string& panelPath = splitPanel.panelPath();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
-		splitPanel.addLabels("res/doorstop.labels.svg");
+		splitPanel.addThemedLabels("res/doorstop.labels.svg",
+            "res/doorstop.theme-text-input.svg", "res/doorstop.theme-text-output.svg");
 		splitPanel.addPerfectWaveSoloBranding();
 		previewBuildTimer.markPanelDone();
 

@@ -1,3 +1,4 @@
+#include "theme/ThemedTextWidget.hpp"
 #include "ChromatideWidget.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
@@ -150,7 +151,7 @@ struct ChromatideActionButton final : widget::OpaqueWidget {
     }
 };
 
-struct ChromatideControlLabel final : widget::TransparentWidget {
+struct ChromatideControlLabel final : leviathan::theme::ThemedTextWidget<widget::TransparentWidget> {
     std::string text;
 
     explicit ChromatideControlLabel(const std::string& text) : text(text) {}
@@ -160,7 +161,7 @@ struct ChromatideControlLabel final : widget::TransparentWidget {
             nvgFontSize(args.vg, 8.5f);
             nvgFontFaceId(args.vg, APP->window->uiFont->handle);
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-            nvgFillColor(args.vg, nvgRGBA(180, 190, 205, 210));
+            nvgFillColor(args.vg, inputTextColor);
             nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, text.c_str(), nullptr);
         }
         TransparentWidget::draw(args);

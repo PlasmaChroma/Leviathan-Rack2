@@ -41,14 +41,14 @@
     <text x="2540" y="720" font-size="440" font-weight="700">CANTOR</text>
     <text x="2540" y="1060" font-size="165" letter-spacing="55"
           fill="#63e3df">CULTURE PROTOTYPE</text>
-    <text x="1400" y="5580" font-size="210" font-weight="600">INTENT</text>
-    <text x="3680" y="5580" font-size="210" font-weight="600">COHERENCE</text>
-    <text x="1400" y="7980" font-size="210" font-weight="600">INTERPRET</text>
-    <text x="3680" y="7980" font-size="210" font-weight="600">FIELD</text>
-    <text x="900" y="10810" font-size="190" font-weight="600">PITCH</text>
-    <text x="2540" y="10810" font-size="190" font-weight="600">GATE</text>
-    <text x="4180" y="10810" font-size="190" font-weight="600">PITCH</text>
-    <text x="4180" y="11040" font-size="130" fill="#5fe5df">OUT</text>
+    <text x="1400" y="5580" font-size="210" font-weight="600" data-theme-text="input">INTENT</text>
+    <text x="3680" y="5580" font-size="210" font-weight="600" data-theme-text="input">COHERENCE</text>
+    <text x="1400" y="7980" font-size="210" font-weight="600" data-theme-text="input">INTERPRET</text>
+    <text x="3680" y="7980" font-size="210" font-weight="600" data-theme-text="input">FIELD</text>
+    <text x="900" y="10810" font-size="190" font-weight="600" data-theme-text="input">PITCH</text>
+    <text x="2540" y="10810" font-size="190" font-weight="600" data-theme-text="input">GATE</text>
+    <text x="4180" y="10810" font-size="190" font-weight="600" data-theme-text="output">PITCH</text>
+    <text x="4180" y="11040" font-size="130" fill="#5fe5df" data-theme-text="output">OUT</text>
     <text x="2540" y="12620" font-size="135" letter-spacing="45"
           fill="#8976dc">LEVIATHAN</text>
   </g>

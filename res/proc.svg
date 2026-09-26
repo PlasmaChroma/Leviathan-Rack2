@@ -530,7 +530,7 @@
    x="722.86957"
    y="2164.5127"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve"><tspan
+   xml:space="preserve" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan5"
      x="722.86957"
@@ -540,24 +540,24 @@
    x="1987.7968"
    y="2162.9971"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">TRIG</text>
+   xml:space="preserve" data-theme-text="input">TRIG</text>
         <text
    id="reworked_lbl_surgeA"
    x="3242.3435"
    y="4422.8999"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">SURGE</text>
+   xml:space="preserve" data-theme-text="input">SURGE</text>
         <text
    id="reworked_lbl_sinkA"
    x="3257.512"
    y="6255.1035"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">SINK</text><text
+   xml:space="preserve" data-theme-text="input">SINK</text><text
    id="lbl_halt"
    x="725.45502"
    y="4671.0205"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
+   xml:space="preserve" data-theme-text="input"><tspan
      sodipodi:role="line"
      id="tspan6"
      x="725.45502"
@@ -567,25 +567,25 @@
    x="1993.2269"
    y="5071.6011"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">BOTH</text>
+   xml:space="preserve" data-theme-text="input">BOTH</text>
         <text
    id="reworked_text36"
    x="3233.4062"
    y="2509.6912"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">LOOP</text>
+   xml:space="preserve" data-theme-text="input">LOOP</text>
         <text
    id="reworked_text29-1"
    x="1199.9861"
    y="6692.2412"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">CURVE</text>
+   xml:space="preserve" data-theme-text="input">CURVE</text>
   <text
    id="reworked_text27"
    x="377.88834"
    y="5064.1782"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
-   xml:space="preserve">LIN</text>
+   xml:space="preserve" data-theme-text="input">LIN</text>
         
         
         
@@ -603,13 +603,13 @@
    x="954.01709"
    y="10341.131"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">EoR</text>
+   xml:space="preserve" data-theme-text="output">EoR</text>
         <text
    id="reworked_lbl_eoc"
    x="2660.136"
    y="10344"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">EoC</text>
+   xml:space="preserve" data-theme-text="output">EoC</text>
         
         
         
@@ -622,7 +622,7 @@
    x="963.19336"
    y="11741.934"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve"><tspan
+   xml:space="preserve" data-theme-text="output"><tspan
      sodipodi:role="line"
      id="tspan112"
      x="963.19336"
@@ -631,7 +631,7 @@
    x="2660.6975"
    y="11741.9"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
+   xml:space="preserve" data-theme-text="output"><tspan
      sodipodi:role="line"
      id="tspan113"
      x="2660.6975"

@@ -1825,7 +1825,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
-		splitPanel.addLabels("res/flux.labels.svg");
+		splitPanel.addThemedLabels("res/flux.labels.svg",
+            "res/flux.theme-text-input.svg", "res/flux.theme-text-output.svg");
 		splitPanel.addPerfectWaveBranding();
 		nautiloidGlass = visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
