@@ -166,6 +166,41 @@ std::uint64_t fileSize(const std::string& path) {
 }  // namespace
 
 int main() {
+    // A late acknowledgement must name the captured theme, not just its key.
+    {
+        const std::string dir = "/tmp/leviathan-deepcache-theme-" + std::to_string(processId());
+        removeDirectory(dir); makeDirectory(dir);
+        deepcache::DeepcacheArchiveWorker worker;
+        worker.start(dir, {{"preview", "old-theme", "Leviathan"}});
+        for (const char* identity : {"old-theme", "new-theme"}) {
+            deepcache::PreviewWrite write;
+            write.cacheKey = "preview"; write.fingerprint = identity;
+            write.width = 2; write.height = 2;
+            write.rgba = std::make_shared<const std::vector<std::uint8_t>>(pixels(2, 2, 1));
+            if (!worker.enqueue(std::move(write))) return 1;
+        }
+        std::vector<std::string> identities;
+        if (!waitUntil([&]() {
+            std::string key, identity;
+            while (worker.tryPopCommitted(key, &identity)) {
+                if (key != "preview") return false;
+                identities.push_back(identity);
+            }
+            return identities.size() == 2;
+        }) || identities != std::vector<std::string>{"old-theme", "new-theme"}) {
+            std::cerr << "[FAIL] theme commit acknowledgements lost their capture identity\n";
+            return 1;
+        }
+        worker.shutdown();
+        deepcache::DeepcacheArchiveWorker reopened;
+        reopened.start(dir, {{"preview", "new-theme", "Leviathan"}});
+        deepcache::DecodedPreview restored;
+        if (!waitUntil([&]() { return reopened.tryPopDecoded(restored); }) ||
+            restored.fingerprint != "new-theme" || restored.rgba.empty()) return 1;
+        reopened.shutdown(); removeDirectory(dir);
+        std::cout << "[PASS] same-key theme writes retain their identities and reload the latest theme\n";
+    }
+
 	const std::string directory = "/tmp/leviathan-deepcache-archive-" + std::to_string(processId());
 	removeDirectory(directory);
 	makeDirectory(directory);
@@ -263,9 +298,9 @@ int main() {
 			std::cerr << "[FAIL] read-only archive worker rejected a volatile QOI write\n";
 			return 1;
 		}
-		std::string volatileCommit;
-		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit); }) ||
-		    volatileCommit != "one" || contender.packBytes() != contenderPackBytes ||
+		std::string volatileCommit, volatileFingerprint;
+		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit, &volatileFingerprint); }) ||
+		    (volatileCommit != "one" || volatileFingerprint != "fp-one") || contender.packBytes() != contenderPackBytes ||
 		    contender.hotCompressedBytes() == 0) {
 			std::cerr << "[FAIL] read-only QOI write was not kept strictly in memory\n";
 			return 1;

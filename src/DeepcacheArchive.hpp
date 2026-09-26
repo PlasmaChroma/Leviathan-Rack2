@@ -136,7 +136,8 @@ public:
 	void discardPendingDecodes();
 	// Reports a successful append/index commit so the UI can release the source
 	// RGBA knowing that a recoverable compressed representation now exists.
-	bool tryPopCommitted(std::string& cacheKey);
+	// The optional identity lets consumers reject commits captured before a theme edit.
+	bool tryPopCommitted(std::string& cacheKey, std::string* fingerprint = nullptr);
 	void requestCompaction();
 	// Discards the persistent archive on the worker thread while it owns the
 	// write lease. The worker remains alive and accepts fresh preview writes
@@ -230,7 +231,7 @@ private:
 	std::unordered_set<std::string> promotedHydrationKeys_;
 	std::deque<DecodeRequest> decodeRequests_;
 	std::unordered_map<std::string, std::uint64_t> requestedDecodeGeneration_;
-	std::deque<std::string> committed_;
+	std::deque<std::pair<std::string, std::string>> committed_;
 	std::unordered_map<std::string, VolatileEntry> volatileEntries_;
 	bool compactRequested_ = false;
 	bool resetRequested_ = false;

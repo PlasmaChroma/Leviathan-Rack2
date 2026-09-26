@@ -481,11 +481,12 @@ void DeepcacheArchiveWorker::discardPendingDecodes() {
 	condition_.notify_all();
 }
 
-bool DeepcacheArchiveWorker::tryPopCommitted(std::string& cacheKey) {
+bool DeepcacheArchiveWorker::tryPopCommitted(std::string& cacheKey, std::string* fingerprint) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (committed_.empty())
 		return false;
-	cacheKey = std::move(committed_.front());
+	cacheKey = std::move(committed_.front().first);
+	if (fingerprint) *fingerprint = std::move(committed_.front().second);
 	committed_.pop_front();
 	return true;
 }
@@ -1040,7 +1041,7 @@ bool DeepcacheArchiveWorker::storeVolatilePreview(PreviewWrite write) {
 	volatileBytes_.store(totalBytes, std::memory_order_relaxed);
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
-		committed_.push_back(write.cacheKey);
+		committed_.emplace_back(write.cacheKey, volatileEntries_.at(write.cacheKey).fingerprint);
 	}
 	return true;
 }
@@ -1407,7 +1408,7 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 	markReady(write.cacheKey);
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
-		committed_.push_back(write.cacheKey);
+		committed_.emplace_back(write.cacheKey, entries_.at(write.cacheKey).fingerprint);
 	}
 	return true;
 }

@@ -153,6 +153,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
 	build/tests/deepcache_archive_spec \
+	build/tests/deepcache_theme_identity_spec \
 	build/tests/deepcache_theme_classifier_spec \
 	build/tests/chromatide_spec \
 	build/tests/phonex_engine_spec \
@@ -715,6 +716,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
 	$(call run_test_bin,build/tests/deepcache_theme_classifier_spec)
+	$(call run_test_bin,build/tests/deepcache_theme_identity_spec)
 	$(call run_rack_test_bin,build/tests/chromatide_spec)
 	$(call run_rack_test_bin,build/tests/temporaldeck_longplay_spec)
 	$(call run_test_bin,build/tests/phonex_engine_spec)
@@ -1249,3 +1251,7 @@ test-chimera-morph: | build/tests
 test-chimera-sos: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -fno-fast-math -Isrc tests/chimera_sos_spec.cpp -o build/tests/chimera_sos_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_sos_spec$(if $(ARCH_WIN),.exe,)
+
+
+build/tests/deepcache_theme_identity_spec: tests/deepcache_theme_identity_spec.cpp src/DeepcacheThemeIdentity.hpp src/theme/ThemeTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_identity_spec.cpp -o $@

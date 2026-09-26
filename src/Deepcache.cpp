@@ -3,6 +3,8 @@
 #include "DeepcacheBrowserLogic.hpp"
 #include "DeepcacheArchive.hpp"
 #include "DeepcacheThemeClassifier.hpp"
+#include "DeepcacheThemeIdentity.hpp"
+#include "theme/ThemeService.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "third_party/qoi.h"
@@ -235,6 +237,18 @@ void saveDeepcachePluginSettings(int previewResolutionPercent) {
 	}
 }
 
+// UI-thread helper: lock/read the service only when its publication changes.
+std::uint64_t currentLeviathanThemeIdentity() {
+    static std::uint64_t observed = 0, identity = 0;
+    const auto generation = leviathan::theme::generation();
+    if (observed != generation) {
+        const auto state = leviathan::theme::read();
+        identity = deepcache::themeVisualIdentity(state.snapshot);
+        observed = state.generation;
+    }
+    return identity;
+}
+
 std::string pluginArtifactFingerprintForTheme(const plugin::Plugin* plugin,
 	                                           int previewResolutionPercent,
 	                                           bool darkTheme,
@@ -254,6 +268,11 @@ std::string pluginArtifactFingerprintForTheme(const plugin::Plugin* plugin,
 	mix(std::to_string(normalizedPreviewCacheResolutionPercent(previewResolutionPercent)));
 	mix(plugin->slug);
 	mix(plugin->version);
+    if (deepcache::usesLeviathanTheme(plugin->slug)) {
+        mix("leviathan-theme-v1");
+        mix(std::to_string(currentLeviathanThemeIdentity()));
+    }
+
 	mix(plugin->path);
 	mix(string::f("%.9f", plugin->modifiedTimestamp));
 	if (includeTheme)
@@ -450,6 +469,7 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	DeepcacheRasterWidget* rasterWidget = nullptr;
 	bool preservingRasterDuringRefresh = false;
 	bool captureDarkTheme = false;
+	std::uint64_t captureLeviathanTheme = 0;
 	double captureThemeReadyFrameTime = NAN;
 	std::uint64_t rasterChecksum = 0;
 	int rasterChecksumWidth = 0;
@@ -962,6 +982,69 @@ public:
 			start();
 	}
 
+	bool modelUsesLeviathanTheme(std::size_t index) const {
+        const auto* box = browser_ ? browser_->getModelBox(index) : nullptr;
+        return box && box->model && box->model->plugin &&
+            deepcache::usesLeviathanTheme(box->model->plugin->slug);
+    }
+
+    bool acceptsLeviathanCapture(std::uint64_t identity) const {
+        return !leviathanThemeRefresh_.pending() &&
+            identity == leviathanThemeRefresh_.applied() &&
+            identity == currentLeviathanThemeIdentity();
+    }
+
+    void onLeviathanThemeChanged() {
+        const bool restart = startRequested_ || activeGeneration_ != 0 ||
+            state_ == deepcache::CacheState::PLANNING || state_ == deepcache::CacheState::WARMING ||
+            state_ == deepcache::CacheState::PAUSED || state_ == deepcache::CacheState::READY;
+        // Replan construction, but preserve other plugins' rasters and uploads.
+        if (restart) cancel();
+        deferredThemeRefreshRequests_.clear();
+        for (std::size_t index = 0; index < browser_->modelBoxes.size(); ++index) {
+            if (!modelUsesLeviathanTheme(index)) continue;
+            auto* box = browser_->getModelBox(index);
+            const auto* plugin = box->model->plugin;
+            fingerprintByModelIndex_[index] = pluginArtifactFingerprint(plugin, previewCacheResolutionPercent());
+            baseFingerprintByModelIndex_[index] = pluginArtifactBaseFingerprint(plugin, previewCacheResolutionPercent());
+            alternateFingerprintByModelIndex_[index] = pluginArtifactFingerprintForTheme(
+                plugin, previewCacheResolutionPercent(), !settings::preferDarkPanels);
+            if (index < browser_->modelDescriptors.size())
+                browser_->modelDescriptors[index].artifactFingerprint = fingerprintByModelIndex_[index];
+            const auto key = cacheKeyByModelIndex_.find(index);
+            if (key != cacheKeyByModelIndex_.end()) {
+                indexedArchiveKeys_.erase(key->second);
+                indexedArchiveKeys_.erase(themedArchiveCacheKey(key->second, false));
+                indexedArchiveKeys_.erase(themedArchiveCacheKey(key->second, true));
+                backend_.invalidate(key->second);
+            }
+            finishPersistentUpload(index, box);
+            rehydrationPendingIndices_.erase(index);
+            restoreDecodeRequestedIndices_.erase(index);
+            compressedModelIndices_.erase(index);
+            persistentModelIndices_.erase(index);
+            warmQueuedIndices_.erase(index);
+            warmTrackedGeneration_.erase(index);
+            onDemandQueuedIndices_.erase(index);
+            box->clearPreview();
+            // Rack light/dark classification is independent of a palette edit.
+            themeRefreshPendingIndices_.insert(index);
+        }
+        auto affected = [this](std::size_t index) { return modelUsesLeviathanTheme(index); };
+        framebufferWarmQueue_.erase(std::remove_if(framebufferWarmQueue_.begin(), framebufferWarmQueue_.end(),
+            [&](const std::pair<std::size_t, int>& item) { return affected(item.first); }), framebufferWarmQueue_.end());
+        persistentUploadQueue_.erase(std::remove_if(persistentUploadQueue_.begin(), persistentUploadQueue_.end(),
+            [&](const std::pair<std::size_t, int>& item) { return affected(item.first); }), persistentUploadQueue_.end());
+        onDemandBuildQueue_.erase(std::remove_if(onDemandBuildQueue_.begin(), onDemandBuildQueue_.end(), affected), onDemandBuildQueue_.end());
+        archiveWriteRetryQueue_.erase(std::remove_if(archiveWriteRetryQueue_.begin(), archiveWriteRetryQueue_.end(),
+            [&](const deepcache::PreviewWrite& write) {
+                const auto found = archiveBindingByKey_.find(write.cacheKey);
+                return found != archiveBindingByKey_.end() && affected(found->second.modelIndex);
+            }), archiveWriteRetryQueue_.end());
+        resetFramebufferPluginProgress();
+        if (restart) start();
+    }
+
 	void onPanelThemeChanged() {
 		if (!browser_)
 			return;
@@ -1155,6 +1238,9 @@ public:
 	void step() {
 		if (stopped_ || !browser_)
 			return;
+        const double themeNow = system::getTime();
+        leviathanThemeRefresh_.observe(currentLeviathanThemeIdentity(), themeNow);
+        if (leviathanThemeRefresh_.applyIfSettled(themeNow)) onLeviathanThemeChanged();
 		reconcileDisplayEligibility();
 		if (settings::preferDarkPanels != lastPreferDarkPanels_) {
 			lastPreferDarkPanels_ = settings::preferDarkPanels;
@@ -1485,6 +1571,20 @@ private:
 		return themed == fingerprintByModelIndex_.end() ? std::string() : themed->second;
 	}
 
+    bool archiveResultMatches(const std::string& key, const std::string& fingerprint) const {
+        const auto found = archiveBindingByKey_.find(key);
+        if (found == archiveBindingByKey_.end()) return false;
+        const auto index = found->second.modelIndex;
+        if (!modelUsesLeviathanTheme(index)) return true;
+        const auto* expected = &baseFingerprintByModelIndex_;
+        if (found->second.variant != ArchiveThemeVariant::SHARED) {
+            const bool dark = found->second.variant == ArchiveThemeVariant::DARK;
+            expected = dark == settings::preferDarkPanels ? &fingerprintByModelIndex_ : &alternateFingerprintByModelIndex_;
+        }
+        const auto value = expected->find(index);
+        return value != expected->end() && value->second == fingerprint;
+    }
+
 	bool archiveKeyIsActive(const std::string& key, std::size_t modelIndex) const {
 		return !key.empty() && key == activeArchiveKey(modelIndex);
 	}
@@ -1629,7 +1729,15 @@ private:
 				                  active && isDisplayEligible(descriptor.modelIndex),
 				                  std::string(), active});
 			};
-			if (classification == deepcache::ThemeClassification::INVARIANT) {
+            if (deepcache::usesLeviathanTheme(descriptor.pluginSlug)) {
+                const bool invariant = classification == deepcache::ThemeClassification::INVARIANT;
+                addWanted(key, baseFingerprint, ArchiveThemeVariant::SHARED, invariant);
+                addWanted(themedArchiveCacheKey(key, false), lightFingerprint, ArchiveThemeVariant::LIGHT,
+                          !invariant && !settings::preferDarkPanels);
+                addWanted(themedArchiveCacheKey(key, true), darkFingerprint, ArchiveThemeVariant::DARK,
+                          !invariant && settings::preferDarkPanels);
+            }
+            else if (classification == deepcache::ThemeClassification::INVARIANT) {
 				addWanted(key, baseFingerprint, ArchiveThemeVariant::SHARED, true);
 			}
 			else {
@@ -1649,9 +1757,10 @@ private:
 	}
 
 	void drainArchiveCommits() {
-		std::string cacheKey;
+		std::string cacheKey, committedFingerprint;
 		int drained = 0;
-		while (drained < 64 && archive_.tryPopCommitted(cacheKey)) {
+		while (drained < 64 && archive_.tryPopCommitted(cacheKey, &committedFingerprint)) {
+            if (!archiveResultMatches(cacheKey, committedFingerprint)) { ++drained; continue; }
 			indexedArchiveKeys_.insert(cacheKey);
 			const auto found = archiveBindingByKey_.find(cacheKey);
 			if (found != archiveBindingByKey_.end() &&
@@ -1686,6 +1795,7 @@ private:
 		deepcache::IndexedCandidate candidate;
 		int drained = 0;
 		while (drained < 256 && archive_.tryPopIndexedCandidate(candidate)) {
+            if (!archiveResultMatches(candidate.cacheKey, candidate.fingerprint)) { ++drained; continue; }
 			indexedArchiveKeys_.insert(candidate.cacheKey);
 			const auto found = archiveBindingByKey_.find(candidate.cacheKey);
 			if (found != archiveBindingByKey_.end() &&
@@ -1788,7 +1898,8 @@ private:
 		deepcache::DecodedPreview preview;
 		while (drained < 16 && restoreUploadQueuedIndices_.size() < 16 &&
 		       pendingUploadBytes_ < 64u * 1024u * 1024u && archive_.tryPopDecoded(preview)) {
-			if (!ignoreArchiveResults_ && preview.decodeGeneration == graphicsGeneration_) {
+			if (!ignoreArchiveResults_ && preview.decodeGeneration == graphicsGeneration_ &&
+                archiveResultMatches(preview.cacheKey, preview.fingerprint)) {
 				const auto found = archiveBindingByKey_.find(preview.cacheKey);
 				if (found != archiveBindingByKey_.end() &&
 				    archiveKeyIsActive(preview.cacheKey, found->second.modelIndex)) {
@@ -2006,6 +2117,7 @@ private:
 	bool graphicsContextLost_ = false;
 	bool graphicsRestoreScheduled_ = false;
 	std::uint64_t graphicsGeneration_ = 0;
+	deepcache::ThemeRefreshDebounce leviathanThemeRefresh_{currentLeviathanThemeIdentity()};
 	bool lastPreferDarkPanels_ = false;
 	int lastPreviewCacheResolutionPercent_ = 100;
 	double lastEligibilityCheckAt_ = -INFINITY;
@@ -2375,6 +2487,7 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 		return false;
 	state = deepcache::PreviewEntryState::CONSTRUCTING;
 	captureDarkTheme = settings::preferDarkPanels;
+	captureLeviathanTheme = currentLeviathanThemeIdentity();
 	captureThemeReadyFrameTime = NAN;
 
 	try {
@@ -2506,7 +2619,9 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 	// The cache fingerprint and the pixels must describe the same global Rack
 	// panel theme. If the preference changed between construction and draw, let
 	// the manager cancel/restart this generation instead of mislabeling a frame.
-	if (settings::preferDarkPanels != captureDarkTheme) {
+    if ((model && model->plugin && deepcache::usesLeviathanTheme(model->plugin->slug) &&
+         (!cacheManager || !cacheManager->acceptsLeviathanCapture(captureLeviathanTheme))) ||
+        settings::preferDarkPanels != captureDarkTheme) {
 		captureThemeReadyFrameTime = NAN;
 		return FramebufferWarmResult::PENDING_ASSET;
 	}
@@ -2549,7 +2664,9 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		framebuffer->render(math::Vec(renderScale, renderScale));
 		if (!hasValidFramebufferImage())
 			return FramebufferWarmResult::RETRY;
-		if (settings::preferDarkPanels != captureDarkTheme) {
+	    if ((model && model->plugin && deepcache::usesLeviathanTheme(model->plugin->slug) &&
+         (!cacheManager || !cacheManager->acceptsLeviathanCapture(captureLeviathanTheme))) ||
+        settings::preferDarkPanels != captureDarkTheme) {
 			framebuffer->deleteFramebuffer();
 			captureThemeReadyFrameTime = NAN;
 			return FramebufferWarmResult::PENDING_ASSET;

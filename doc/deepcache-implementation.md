@@ -189,3 +189,37 @@ Windows/MSYS2 environment:
 - third-party null, exception, and slow preview behavior;
 - audio continuity at each UI budget;
 - resident-preview reuse and measured cold/warm browser latency.
+
+
+## Leviathan theme invalidation
+
+Deepcache observes the rendered Leviathan theme (input/output colors, input/output
+text colors, background enable/color, and texture amount). After 350 ms without a
+visual change, it invalidates only entries whose plugin slug is exactly
+`Leviathan` and replans them through the existing bounded warming queues.
+`Leviathan-Pro` and all other plugins retain their previews. Rack's separate
+light/dark refresh behavior remains unchanged. Preset name changes and edits to
+a disabled background color do not cause unnecessary refreshes.
+
+The archive fingerprint includes a stable hash of those rendered values, not a
+process-local generation. A restart therefore rejects obsolete Leviathan pixels.
+All three Rack-theme archive slots are available for Leviathan even when its
+previous light/dark classification was invariant. A palette edit invalidates
+those slots independently of that classification; new previews replace the same
+archive keys rather than accumulating a separate entry for every palette.
+
+Construction records the current theme identity. Both sides of framebuffer
+rendering check it against the applied theme and reject captures during unsettled
+edits. Archive index, decode, and commit handoffs are checked against the current
+fingerprint before admission. Commit acknowledgements include their original
+fingerprint for both disk-backed and read-only/volatile workers, so a late old
+write cannot mark a replacement preview as current. Other plugins' queued
+uploads, stored rasters, and archive entries are retained during this refresh.
+
+Validation: `deepcache_theme_identity_spec`, `deepcache_archive_spec`,
+`deepcache_theme_classifier_spec`, and `deepcache_planner_spec` passed natively,
+and the Windows `plugin.dll` linked. The identity test covers exact plugin scope,
+all visible settings, stable identities and edit coalescing. Archive tests cover
+same-key old/new theme acknowledgements, latest-theme reload, and volatile commit
+identities. Live Rack rendering while dragging Theme controls remains a manual
+integration check.
