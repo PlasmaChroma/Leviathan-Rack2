@@ -490,7 +490,7 @@ test-chimera-gene-size: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -pthread -Isrc tests/chimera_gene_size_spec.cpp -o build/tests/chimera_gene_size_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_gene_size_spec$(if $(ARCH_WIN),.exe,)
 
-test-chimera-phase4: test-chimera-gene-size | build/tests
+test-chimera-phase4: test-chimera-morph test-chimera-gene-size | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_grains_spec.cpp -o build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
 
@@ -1233,3 +1233,8 @@ test-chimera-fast-math: | build/tests
 test-chimera-rate-preparation: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -DCHIMERA_RATE_SERVICE_TEST_HOOKS -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rate_preparation_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -pthread -o build/tests/chimera_rate_preparation_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_rate_preparation_spec)
+
+.PHONY: test-chimera-morph
+test-chimera-morph: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -fno-fast-math -Isrc tests/chimera_morph_spec.cpp -o build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)

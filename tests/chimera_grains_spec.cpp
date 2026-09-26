@@ -39,7 +39,7 @@ int main() {
         chimera::Grains grains;
         chimera::CoreOutput c{};
         c.gene = static_cast<float>(gene);
-        c.morph = 1.f/6.f;
+        c.morph = 400.f/4096.f;
         c.rate = rates[r];
         std::uint32_t firstCompletion = 1000, firstBoundary = 1000;
         double traveledAddress = -1;
@@ -84,7 +84,7 @@ int main() {
         need(stereo.write(i, chimera::StereoFrame{1.f, -0.25f}, i),
              "prepare independent stereo channels");
     chimera::Grains centered;
-    c.morph = 1.f/6.f;
+    c.morph = 400.f/4096.f;
     for (int frame = 0; frame < 1200; ++frame) {
         const chimera::Grains::Result out = centered.step(stereo, region, c);
         if (frame >= 120)
@@ -102,7 +102,7 @@ int main() {
          std::fabs(hardRight - std::sqrt(2.0)) < 1e-12,
          "hard-right balance preserves right source and mutes left");
     chimera::Grains centeredOverlap;
-    c.morph = 5.f/6.f; // Three centered voices, with no random pan.
+    c.morph = 1850.f/4096.f; // Three centered voices, with no random pan.
     bool sawMultipleReaders = false;
     for (int frame = 0; frame < 4800; ++frame) {
         const chimera::Grains::Result out = centeredOverlap.step(reel, region, c);
@@ -122,7 +122,7 @@ int main() {
     need(foundGap, "density below unity leaves an actual no-voice gap");
     chimera::Grains smooth;
     smooth.setSmooth(true);
-    c.morph = 1.f/6.f;
+    c.morph = 400.f/4096.f;
     float smoothBoundary = 1.f;
     for (int frame = 0; frame <= 600; ++frame) {
         const chimera::Grains::Result out = smooth.step(reel, region, c);
@@ -166,14 +166,14 @@ int main() {
     chord.setChordRatios(2.0, -3.0, 4.0);
     c.morph = 1.f;
     c.rate = -1.f;
-    for (int frame = 0; frame <= 455; ++frame) chord.step(reel, region, c);
+    for (int frame = 0; frame <= 1055; ++frame) chord.step(reel, region, c);
     need(chord.slotRatio(0) == 1.0 && chord.slotRatio(1) == 2.0 &&
          chord.slotRatio(2) == -3.0 && chord.slotRatio(3) == 4.0,
          "signed configured ratios latch in four musical slots");
     chord.setChordRatios(5.0, -6.0, 7.0);
     need(chord.slotRatio(1) == 2.0,
          "changing mcr does not retune an already sounding voice");
-    for (int frame = 456; frame <= 755; ++frame) chord.step(reel, region, c);
+    for (int frame = 1056; frame <= 1355; ++frame) chord.step(reel, region, c);
     need(chord.slotRatio(1) == 5.0,
          "new onset adopts the newly configured signed ratio");
     std::uint8_t stressPeak = 0;
@@ -200,7 +200,7 @@ int main() {
     for (int r = 0; r < 4; ++r) {
         chimera::Grains full;
         chimera::CoreOutput fc{};
-        fc.morph = 1.f/6.f;
+        fc.morph = 400.f/4096.f;
         fc.rate = fullRates[r];
         int firstBoundary = -1, firstCompletion = -1;
         for (int frame = 0; frame <= fullCycles[r]; ++frame) {
@@ -230,7 +230,7 @@ int main() {
     need(std::fabs(fullChord.primaryPosition() - 799.0) < 1e-5,
          "secondary chord motion never changes independent primary marker address");
     chimera::Grains stoppedFull;
-    fc.morph = 1.f/6.f;
+    fc.morph = 400.f/4096.f;
     fc.rate = 1.f;
     for (int frame = 0; frame < 137; ++frame) stoppedFull.step(reel, region, fc, false, true);
     const double heldAddress = stoppedFull.primaryPosition();
@@ -249,7 +249,7 @@ int main() {
     chimera::Grains stoppedFinite;
     chimera::CoreOutput stopControl{};
     stopControl.gene = static_cast<float>(gene);
-    stopControl.morph = 1.f/6.f;
+    stopControl.morph = 400.f/4096.f;
     stopControl.rate = 0.f;
     std::uint32_t finiteStops = 0;
     for (int frame = 0; frame <= 1200; ++frame) {
@@ -278,7 +278,7 @@ int main() {
     }
     chimera::Grains modeSwitch;
     fc.rate = 1.f;
-    fc.morph = 1.f/6.f;
+    fc.morph = 400.f/4096.f;
     for (int frame = 0; frame < 100; ++frame)
         modeSwitch.step(reel, region, fc, false, true);
     need(std::fabs(modeSwitch.primaryPosition() - 100.0) < 1e-5,
@@ -293,7 +293,7 @@ int main() {
     chimera::Grains retriggered;
     chimera::CoreOutput transitionControl{};
     transitionControl.gene = static_cast<float>(gene);
-    transitionControl.morph = 1.f/6.f;
+    transitionControl.morph = 400.f/4096.f;
     transitionControl.rate = 1.f;
     for (int frame = 0; frame < 100; ++frame)
         retriggered.step(reel, region, transitionControl);
@@ -324,7 +324,7 @@ int main() {
     chimera::Grains editedMetadata, unchangedMetadata;
     chimera::CoreOutput metadataControl{};
     metadataControl.gene = static_cast<float>(gene);
-    metadataControl.morph = 0.7f; // Fractional onset hop; no onset is due at frame 600.
+    metadataControl.morph = 850.f/4096.f; // Fractional onset hop; no onset is due at frame 600.
     metadataControl.rate = 1.f;
     for (int frame = 0; frame < 600; ++frame) {
         editedMetadata.step(twoRegions, region, metadataControl);
@@ -384,7 +384,7 @@ int main() {
     chimera::Grains maximumFinite, maximumFull;
     chimera::CoreOutput mc{};
     mc.gene = static_cast<float>(maximumGene);
-    mc.morph = 1.f/6.f;
+    mc.morph = 400.f/4096.f;
     mc.rate = 2.f;
     int finiteAt = -1;
     double finiteBefore = 0, fullBefore = 0;
@@ -401,8 +401,8 @@ int main() {
          std::fabs(maximumFinite.primaryPosition() - 2.0) < 1e-5 &&
          std::fabs(maximumFull.primaryPosition() - 2768.0) < 1e-5,
          "full-size finite cycle resets while full-Splice source travel continues");
-    const float anchors[] = {0.f, 1.f/6.f, 0.5f, 5.f/6.f, 1.f};
-    const double densities[] = {0.9, 1.0, 2.0, 3.0, 4.0};
+    const float anchors[] = {0.f, 400.f/4096.f, 1100.f/4096.f, 1850.f/4096.f, 1.f};
+    const double densities[] = {0.5, 1.0, 2.0, 3.0, 4.0};
     for (int a = 0; a < 5; ++a) {
         chimera::Grains cadence;
         chimera::CoreOutput ac{};
@@ -430,7 +430,7 @@ int main() {
     chimera::Grains latchedWindow;
     chimera::CoreOutput lc{};
     lc.gene = static_cast<float>(gene);
-    lc.morph = 1.f/6.f;
+    lc.morph = 400.f/4096.f;
     lc.rate = 1.f;
     for (int frame = 0; frame < 240; ++frame) latchedWindow.step(reel, region, lc);
     latchedWindow.setSmooth(true);
@@ -475,7 +475,7 @@ int main() {
              "prepare exact PM displacement fixture");
     chimera::Grains displaced;
     chimera::CoreOutput stopped{};
-    stopped.morph = 1.f/6.f;
+    stopped.morph = 400.f/4096.f;
     stopped.rate = 0.f;
     const chimera::Region gradientRegion{0, 1000};
     const chimera::Grains::Result positive = displaced.step(
@@ -520,7 +520,7 @@ int main() {
     // Clock advances the source origin without changing finite Gene lifetime.
     chimera::CoreOutput clockControl{};
     clockControl.gene = static_cast<float>(gene);
-    clockControl.morph = 1.f/6.f;
+    clockControl.morph = 400.f/4096.f;
     clockControl.rate = 1.f;
     chimera::Grains shifted;
     shifted.step(reel, region, clockControl, false, false, false, 0.0,

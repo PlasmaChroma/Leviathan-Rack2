@@ -15,7 +15,7 @@ namespace optionsText {
 struct Values {
     int ckop = 0, vsop = 0, inop = 0, pmin = 0, omod = 0;
     int gnsm = 0, rsop = 0, pmod = 0, cvop = 0;
-    float mcr[3] = {2.f, 3.f, 4.f};
+    float mcr[3] = {2.f, 1.5f, 4.f/3.f};
 };
 
 struct Result {

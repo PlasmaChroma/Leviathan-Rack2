@@ -97,8 +97,8 @@ int main() {
           window(16, 0, false) == 0 && window(16, 15, true) == 0 &&
           window(480, 240, false) == 1 && windowEdge(4800, true) > windowEdge(4800, false),
           "window tiny cases, symmetry and smooth edge");
-    check(near(morphDensity(0), 0.9) && near(morphDensity(1.0/6), 1) &&
-          near(morphDensity(0.5), 2) && near(morphDensity(5.0/6), 3) &&
+    check(near(morphDensity(0), 0.5) && near(morphDensity(400.0/4096), 1) &&
+          near(morphDensity(1100.0/4096), 2) && near(morphDensity(1850.0/4096), 3) &&
           near(morphDensity(1), 4) && effectiveWindow(0, 1, false) == 1 &&
           effectiveWindow(0, 1, true) == 0, "Morph and unity envelope anchors");
 

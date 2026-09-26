@@ -33,7 +33,7 @@ public:
         metadataRegionPending_(false), frozenRegion_{0, 0},
         pmEnabled_(false), pmActive_(false), pmBlend_(0.f), leftEnergy_(0.f),
         quietFrames_(0), loudFrames_(0),
-        primaryPhase_(0.f), ratioA_(2), ratioB_(3), ratioC_(4),
+        primaryPhase_(0.f), ratioA_(2), ratioB_(1.5), ratioC_(4.0/3.0),
         clockConnected_(false), clockEdge_(false), clockWaiting_(false),
         clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 
@@ -398,9 +398,8 @@ private:
         return controls_.step(gained);
     }
     bool resolveSelection(const CoreOutput& c) {
-        const double density = profile1::morphDensity(c.morph);
-        if (density > 2.02) hybridStretch_ = true;
-        else if (density < 1.98) hybridStretch_ = false;
+        // Recovered launch-factor boundary; existing clock policy remains in charge.
+        hybridStretch_ = morph::stretchCandidate(c.morph);
         const bool clockShift = clockEdge_ && clockShiftMode();
         bool naturalBoundary = false;
         if (reel_) {

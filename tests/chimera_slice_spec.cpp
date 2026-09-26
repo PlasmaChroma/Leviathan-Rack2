@@ -12,7 +12,7 @@ static chimera::CoreInput input(float left, float right, float sos = 0.f, float 
     in.live = chimera::StereoFrame{left, right};
     in.controls.sos = sos;
     in.controls.rate = rate;
-    in.controls.morph = 1.f/6.f;
+    in.controls.morph = 400.f/4096.f;
     return in;
 }
 static bool near(float a, float b, float eps = 0.0002f) {
@@ -617,10 +617,11 @@ int main() {
     selectedInput.controls.morph = 1.f;
     chimera::Slice queued(&selectedReel);
     queued.setConditioning(false);
-    for (int frame = 0; frame < 100; ++frame) queued.step(selectedInput);
+    // Settle the recovered continuous Morph ramp before testing selection.
+    for (int frame = 0; frame < 1060; ++frame) queued.step(selectedInput);
     selectedInput.controls.organize = 1.f;
     bool secondaryBeforePrimary = false;
-    for (int frame = 100; frame < 480; ++frame) {
+    for (int frame = 1060; frame < 1440; ++frame) {
         const chimera::Slice::Output out = queued.step(selectedInput);
         if (out.eosg && !out.naturalBoundary) secondaryBeforePrimary = true;
         need(queued.currentRegion() == 0 && queued.requestedRegion() == 1,
@@ -673,7 +674,7 @@ int main() {
     immediate.setConditioning(false);
     immediate.setImmediateTransitions(true);
     selectedInput.controls.organize = 0.f;
-    selectedInput.controls.morph = 1.f/6.f;
+    selectedInput.controls.morph = 400.f/4096.f;
     for (int frame = 0; frame < 100; ++frame) immediate.step(selectedInput);
     selectedInput.controls.organize = 1.f;
     const chimera::Slice::Output immediateOutput = immediate.step(selectedInput);
@@ -1035,20 +1036,20 @@ int main() {
     chimera::Slice hybrid(&transitionReel);
     hybrid.setConditioning(false);
     chimera::CoreInput hybridInput = input(0.f, 0.f, 1.f);
-    hybridInput.controls.morph = 0.55f;
+    hybridInput.controls.morph = 1200.f/4096.f;
     for (int frame = 0; frame < 1000; ++frame) {
         hybrid.setClockPlayback(true, false, 480, false, 0);
         hybrid.step(hybridInput);
     }
     need(hybrid.hybridStretch() && !hybrid.clockShiftMode(),
          "high Morph chooses Stretch in hybrid Clock mode");
-    hybridInput.controls.morph = 0.5f;
+    hybridInput.controls.morph = 1100.f/4096.f;
     for (int frame = 0; frame < 1000; ++frame) {
         hybrid.setClockPlayback(true, false, 480, false, 0);
         hybrid.step(hybridInput);
     }
-    need(hybrid.hybridStretch(), "hybrid density hysteresis holds at the threshold");
-    hybridInput.controls.morph = 0.45f;
+    need(hybrid.hybridStretch(), "hybrid uses Stretch at the recovered one-half launch factor");
+    hybridInput.controls.morph = 1000.f/4096.f;
     for (int frame = 0; frame < 1000; ++frame) {
         hybrid.setClockPlayback(true, false, 480, false, 0);
         hybrid.step(hybridInput);

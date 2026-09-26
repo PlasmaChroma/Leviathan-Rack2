@@ -24,7 +24,7 @@ public:
         rateCoordinate_.setTau(0.001);
         pitchVolts_.setTau(0.00025);
         morph_.setTau(0.002);
-        ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
+        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = 4.0/3.0;
     }
 
     void setRateMode(int mode) { rateMode_ = mode >= 0 && mode <= 2 ? mode : 0; }
@@ -91,9 +91,10 @@ public:
             ++rateEvaluations_;
         }
         fullGene_ = geneMode_.observe(gene);
+        continuousMorph_.step(static_cast<float>(morph));
 
         if (input.events & kOnsetEvent) {
-            lastOnset_ = profile1::chooseOnset(random_, nextSlot_, morph, ratios_);
+            lastOnset_ = profile1::chooseOnset(random_, nextSlot_, continuousMorph_.value, ratios_);
             nextSlot_ = static_cast<std::uint8_t>((nextSlot_ + 1) % kMusicalVoices);
             ++onsets_;
         }
@@ -128,6 +129,7 @@ private:
     profile1::FiniteHold holds_[15];
     profile1::OnePole sos_, gene_, rateCoordinate_, pitchVolts_, morph_;
     profile1::GeneMode geneMode_;
+    morph::Continuous continuousMorph_;
     profile1::Xorshift32 random_;
     std::uint8_t nextSlot_;
     double sourcePosition_;

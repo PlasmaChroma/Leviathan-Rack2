@@ -1,4 +1,5 @@
 #pragma once
+#include "ChimeraMorph.hpp"
 
 #include "ChimeraTypes.hpp"
 #include "ChimeraGeneSize.hpp"
@@ -162,11 +163,9 @@ inline double window(std::uint32_t n, std::uint32_t age, bool smooth) {
 }
 
 inline double morphDensity(double morph) {
-    const double m = clamp01(morph);
-    if (m <= 1.0 / 6.0) return 0.9 + 0.6 * m;
-    if (m <= 0.5) return 1.0 + 3.0 * (m - 1.0 / 6.0);
-    if (m <= 5.0 / 6.0) return 2.0 + 3.0 * (m - 0.5);
-    return 3.0 + 6.0 * (m - 5.0 / 6.0);
+    // Legacy profile API: this is launch rate, not occupied-voice density.
+    // Below unity it must remain < 1 so gaps retain their tapered envelopes.
+    return morph::launchRate(static_cast<float>(morph));
 }
 inline double unityBlend(double density, bool smooth) {
     return smooth ? 0.0 : clamp01(1.0 - std::fabs(density - 1.0) / 0.025);
@@ -223,11 +222,12 @@ struct Xorshift32 {
 struct OnsetChoice { bool chord; double pan; std::uint8_t slot; double ratio; };
 inline OnsetChoice chooseOnset(Xorshift32& random, std::uint8_t slot,
                                double morph, const double ratios[3]) {
-    const double high = clamp01((clamp01(morph) - 5.0/6.0) * 6.0);
+    // Provisional seeded activation and uniform pan distribution.
+    const double high = morph::pitchDepth(morph);
     const double activation = random.uniform();
     const double panDraw = random.uniform();
     const bool chord = slot != 0 && activation < high;
-    return OnsetChoice{chord, (2.0 * panDraw - 1.0) * high,
+    return OnsetChoice{chord, (2.0 * panDraw - 1.0) * morph::panDepth(morph),
                        static_cast<std::uint8_t>(slot % kMusicalVoices),
                        chord ? ratios[(slot - 1) % 3] : 1.0};
 }

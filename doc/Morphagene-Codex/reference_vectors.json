@@ -611,43 +611,43 @@
   "morphDensity": [
     {
       "morph": 0,
-      "density": 0.9,
-      "hopFor480FrameGene": 533.3333333333334
+      "density": 0.5,
+      "hopFor480FrameGene": 960.0
     },
     {
       "morph": 0.08333333333333333,
-      "density": 0.95,
-      "hopFor480FrameGene": 505.2631578947369
+      "density": 0.75,
+      "hopFor480FrameGene": 640.0
     },
     {
       "morph": 0.16666666666666666,
-      "density": 1.0,
-      "hopFor480FrameGene": 480.0
+      "density": 1.3333333333333333,
+      "hopFor480FrameGene": 360.0
     },
     {
       "morph": 0.3333333333333333,
-      "density": 1.5,
-      "hopFor480FrameGene": 320.0
+      "density": 2.3333333333333335,
+      "hopFor480FrameGene": 205.7142857142857
     },
     {
       "morph": 0.5,
-      "density": 2.0,
-      "hopFor480FrameGene": 240.0
+      "density": 3.25,
+      "hopFor480FrameGene": 147.69230769230768
     },
     {
       "morph": 0.6666666666666666,
-      "density": 2.5,
-      "hopFor480FrameGene": 192.0
+      "density": 4.0,
+      "hopFor480FrameGene": 120.0
     },
     {
       "morph": 0.8333333333333334,
-      "density": 3.0,
-      "hopFor480FrameGene": 160.0
+      "density": 4.0,
+      "hopFor480FrameGene": 120.0
     },
     {
       "morph": 0.9166666666666666,
-      "density": 3.4999999999999996,
-      "hopFor480FrameGene": 137.14285714285717
+      "density": 4.0,
+      "hopFor480FrameGene": 120.0
     },
     {
       "morph": 1,

@@ -51,7 +51,7 @@ int main() {
     for (unsigned i = 0; i < 10000; ++i) need(reel.write(i, {1, 1}, i), "source fixture");
     CoreOutput c{};
     c.gene = 1564.f/4095.f; // Exactly one eighth before output-frame rounding.
-    c.morph = 1.f/6.f;
+    c.morph = 400.f/4096.f;
     for (float rate : {0.5f, 1.f, 2.f, -0.5f, -1.f, -2.f}) {
         Grains grains;
         c.rate = rate;

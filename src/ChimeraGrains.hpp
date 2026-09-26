@@ -44,7 +44,7 @@ public:
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
         for (std::uint32_t i = 0; i <= 2048; ++i)
             pan_[i] = std::sqrt(2.0) * std::cos(profile1::kPi * i / 4096.0);
-        ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
+        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = 4.0/3.0;
         reset();
     }
 
@@ -66,6 +66,8 @@ public:
     }
     void setSeed(std::uint32_t seed) { random_ = profile1::Xorshift32(seed); }
     void reset(double coordinate = 0.0) {
+        continuousMorph_.value = 0.f;
+        scheduler_.reset();
         havePmOffset_ = false;
         active_ = false; phase_ = 0; primaryAge_ = 0; primaryLength_ = 1;
         primaryTravel_ = 0;
@@ -98,6 +100,9 @@ public:
         return active_ && (full_ ? primaryTravel_ >= activeRegion_.end - activeRegion_.begin :
                                   primaryAge_ >= primaryLength_);
     }
+    std::uint32_t slotAge(std::uint8_t slot) const { return slot < 4 ? slots_[slot].age : 0; }
+    double slotPosition(std::uint8_t slot) const { return slot < 4 ? slots_[slot].position : 0; }
+    double slotPanGain(std::uint8_t slot) const { return slot < 4 ? slots_[slot].left : 0; }
     double slotRatio(std::uint8_t slot) const { return slot < 4 ? slots_[slot].ratio : 0.0; }
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
     double trajectoryOffset() const { return trajectoryOffset_; }
@@ -108,6 +113,7 @@ public:
     Result step(const Reel& reel, Region region, const CoreOutput& c,
                 bool retrigger = false, bool fullMode = false, bool metadataRefresh = false,
                 double pmOffset = 0.0, ClockDrive clock = ClockDrive()) {
+        continuousMorph_.step(c.morph);
         const double pmDelta = havePmOffset_ ? pmOffset - lastPmOffset_ : 0.0;
         lastPmOffset_ = pmOffset; havePmOffset_ = true;
         qualityBlend_ += profile1::clamp((bandlimited_ ? 1.0 : 0.0) - qualityBlend_, -1.0/240, 1.0/240);
@@ -130,6 +136,7 @@ public:
         }
         full_ = fullMode;
         const double density = profile1::morphDensity(c.morph);
+        if (!full_) scheduler_.configure(cachedGeneFrames_, morph::stage(c.morph));
         const double targetSlide = c.slide * (length - 1.0);
         const double delta = profile1::clamp(targetSlide - slide_, -64.0, 64.0);
         slide_ += delta;
@@ -207,6 +214,7 @@ public:
             primaryTravel_ = 0;
             primaryPosition_ = origin(region, c.rate);
             phase_ = 0;
+            scheduler_.reset();
             nextSlot_ = 0;
             active_ = true;
             activeRegion_ = region;
@@ -227,13 +235,17 @@ public:
                     primaryPosition_ = origin(region, c.rate);
                 }
             }
-            // A fixed phase accumulator keeps fractional hops from drifting.
+            // Recovered rational timing for finite, unclocked Genes. Keep the
+            // existing clock override and whole-splice traversal bypass below.
             if (!full_ && !estimateCountdown_) {
                 estimateLength_ = geneFrames(length, c.gene);
                 estimateCountdown_ = 32;
             }
             if (!full_) --estimateCountdown_;
-            if (full_ && boundaryThisFrame && std::fabs(density - 1.0) < 1e-6 && c.rate != 0.f) {
+            if (!full_ && clockMode_ == 0) {
+                if (scheduler_.step()) launch(region, c, density, true);
+            }
+            else if (full_ && boundaryThisFrame && std::fabs(density - 1.0) < 1e-6 && c.rate != 0.f) {
                 phase_ = 0;
                 launch(region, c, density, true);
             }
@@ -432,7 +444,7 @@ private:
             tailAge_[slot] = 0;
         }
         else if (immediate_) { tails_[slot].active = false; scalarAge_[slot] = 48; }
-        const profile1::OnsetChoice choice = profile1::chooseOnset(random_, slot, c.morph, ratios_);
+        const profile1::OnsetChoice choice = profile1::chooseOnset(random_, slot, continuousMorph_.value, ratios_);
         v = Voice();
         v.active = true;
         v.full = full_;
@@ -476,6 +488,8 @@ private:
     std::uint8_t scalarAge_[4];
     bool active_;
     double phase_;
+    morph::Scheduler scheduler_;
+    morph::Continuous continuousMorph_;
     std::uint32_t primaryAge_, primaryLength_;
     double primaryPosition_, slide_;
     std::uint8_t nextSlot_;

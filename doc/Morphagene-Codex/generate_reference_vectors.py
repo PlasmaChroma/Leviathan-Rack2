@@ -62,12 +62,14 @@ def finite_gene_frames(length: int, control: float) -> int:
 
 
 def density(morph: float) -> float:
-    anchors = [(0.0, 0.9), (1 / 6, 1.0), (0.5, 2.0), (5 / 6, 3.0), (1.0, 4.0)]
-    morph = clamp(morph, 0.0, 1.0)
-    for (a, da), (b, db) in zip(anchors, anchors[1:]):
-        if morph <= b:
-            return da + (db - da) * (morph - a) / (b - a)
-    return 4.0
+    f32 = lambda x: struct.unpack("f", struct.pack("f", x))[0]
+    adc = min(4095, int(f32(clamp(morph, 0.0, 1.0)) * 4096))
+    stage = min(21, int(f32(f32(adc / 4096) * f32(33.99))))
+    factors = [(2,1),(3,2),(4,3),(1,1),(4,5),(3,4),(2,3),(3,5),
+               (4,7),(1,2),(4,9),(3,7),(2,5),(3,8),(4,11),(1,3),
+               (4,13),(3,10),(2,7),(3,11),(4,15),(1,4)]
+    n, d = factors[stage]
+    return d / n
 
 
 def cubic(a: float, b: float, c: float, d: float, t: float) -> float:
@@ -223,7 +225,7 @@ def build_vectors() -> dict[str, Any]:
     assert math.isclose(forward_base(0.75), 1.0, abs_tol=1e-12)
     assert 8_352_000 // 256 == 32_625
     assert finite_gene_frames(4800, 1) == 13
-    assert math.isclose(density(0.5), 2.0)
+    assert math.isclose(density(1100/4096), 2.0)
     return vectors
 
 

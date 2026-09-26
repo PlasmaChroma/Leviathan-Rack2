@@ -226,7 +226,7 @@ struct Chimera : Module {
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
     std::atomic<int> rsopSetting{0}, inputGainSetting{1};
-    std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
+    std::atomic<float> mcrSetting[3]{{2.f}, {1.5f}, {4.f/3.f}};
     // 0 idle, 2 control-side writing, 1 ready, 3 audio-side adopting.
     std::atomic<int> optionsTextStageState{0};
     chimera::optionsText::Values stagedOptionsText;

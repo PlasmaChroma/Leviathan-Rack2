@@ -990,6 +990,7 @@ int main() {
         immediateOption.slice.setReel(&immediateReel);
         immediateOption.slice.setConditioning(false);
         immediateOption.params[Chimera::SOS_PARAM].setValue(1.f);
+        immediateOption.params[Chimera::MORPH_PARAM].setValue(400.f/4096.f); // Contiguous stage.
         for (int frame = 0; frame < 100; ++frame) immediateOption.process(args);
         immediateOption.params[Chimera::ORGANIZE_PARAM].setValue(1.f);
         immediateOption.process(args);
@@ -1161,6 +1162,7 @@ int main() {
                 frame < 500 ? 1.f : -1.f, frame < 500 ? 1.f : -1.f}, frame),
                 "prepare Rack-facing PM fixture");
         Chimera pmModule;
+        pmModule.params[Chimera::MORPH_PARAM].setValue(400.f/4096.f); // Contiguous stage.
         pmModule.reel = &pmRegion;
         pmModule.slice.setReel(&pmRegion);
         pmModule.slice.setConditioning(false);
@@ -1630,7 +1632,7 @@ int main() {
     need(module.pmodSetting.load() == 2 && module.ckopSetting.load() == 1 &&
          module.vsopSetting.load() == 2,
          "invalid PLAY, CLOCK, and Vari-Speed modes are ignored");
-    need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 3.f,
+    need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 1.5f,
          "signed chord ratio loads while invalid zero retains default");
     json_decref(data);
     module.params[Chimera::GENE_SIZE_PARAM].setValue(1.f);
