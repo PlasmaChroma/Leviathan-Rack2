@@ -74,11 +74,11 @@
   </defs>
   <g
      id="panel_art">
-    <rect
+    <g id="theme_background"><rect
        width="142.24"
        height="128.5"
-       fill="url(#chimera-face)"
-       id="rect2" />
+       fill="#000000"
+       id="rect2" /></g>
     <g id="function_groups" fill="none" stroke="#698294" stroke-width="0.25" opacity="0.25">
       <rect id="function_top_left" x="4.5" y="50.5" width="39" height="26" rx="2" />
       <rect id="function_top_middle" x="51.62" y="50.5" width="39" height="26" rx="2" />

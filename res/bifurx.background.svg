@@ -50,7 +50,7 @@
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g id="theme_background">
-        <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
+        <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="#000000" id="black_background" style="display:inline;fill:#000000;stroke-width:23.6122" sodipodi:insensitive="true" />
       </g>
     </g>
   </g>

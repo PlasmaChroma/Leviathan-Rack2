@@ -2,7 +2,7 @@
 <svg width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1"
  xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
  <g id="panel">
-  <rect width="6096" height="12850" fill="#111722"/>
+  <g id="theme_background"><rect width="6096" height="12850" fill="#000000"/></g>
   <rect x="180" y="180" width="5736" height="12490" rx="150" fill="#172334" stroke="#61dbe3" stroke-width="20" opacity="0.94"/>
   <rect x="240" y="8100" width="5616" height="1800" rx="130" fill="#070d16" opacity="0.72"/>
   <rect x="240" y="10400" width="5616" height="2000" rx="130" fill="#070d16" opacity="0.72"/>

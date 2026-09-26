@@ -7,7 +7,6 @@
       <stop offset="1" stop-color="#04060d" />
     </linearGradient>
   </defs>
-  <rect width="9144" height="12850" fill="url(#sourcePanel)" />
   <g fill="none" stroke="#6e5bb5" stroke-opacity=".16" stroke-width="18">
     <path d="M-900 4700 C1250 3900 2100 5100 4100 4500 S7200 3800 10000 4700" />
     <path d="M-900 5350 C1450 4600 2500 5650 4400 5200 S7500 4500 10000 5400" />

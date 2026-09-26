@@ -273,9 +273,9 @@
    height="12887.627"
    rx="0"
    ry="0"
-   fill="url(#bgGrad)"
+   fill="#000000"
    id="black_background"
-   style="display:inline;fill:url(#bgGrad);stroke-width:23.6122"
+   style="display:inline;fill:#000000;stroke-width:23.6122"
    sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"

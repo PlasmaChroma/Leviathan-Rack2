@@ -110,15 +110,15 @@
          id="stop23" />
     </linearGradient>
   </defs>
-  <rect
+  <g id="theme_background"><rect
      width="6096"
      height="12850"
-     fill="url(#panel)"
+     fill="#000000"
      id="rect8"
      style="display:inline;fill:#000000;fill-opacity:1"
      x="0"
      y="0"
-     sodipodi:insensitive="true" />
+     sodipodi:insensitive="true" /></g>
   <rect
      x="63.777615"
      y="911.76904"

@@ -101,6 +101,10 @@ Widget* createThemedPanelLabelsWidget(
 	Vec panelSizePx,
 	const Widget* themePollOwner = nullptr);
 
+// panelPath is absolute; its sibling .background.svg supplies the black base.
+// Use this for modules that assemble their own foreground layers.
+app::SvgPanel* createThemedPanel(const std::string& panelPath, const Widget* owner);
+
 // Installs the standard static layers for modules with split panel and label SVGs.
 class SplitPanelRenderer final {
 	ModuleWidget* parent_ = nullptr;

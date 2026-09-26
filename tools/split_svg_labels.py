@@ -13,6 +13,9 @@ By default, the panel/art SVG strips SVG text elements and the labels-only SVG
 converts text to paths so runtime panels do not depend on locally installed
 fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
+Use --background-only for legacy panels whose labels and artwork must stay
+together. This mode preserves all content except the extracted background.
+
 Expected source convention:
   <g id="labels"> ... </g>
   <g id="labels">
@@ -309,6 +312,7 @@ def find_inkscape(override: str | None) -> str:
         shutil.which("inkscape"),
         shutil.which("inkscape.exe"),
         "/mnt/c/Program Files/Inkscape/bin/inkscape.com",
+        "C:/Program Files/Inkscape/bin/inkscape.exe",
         "/mnt/c/Program Files/Inkscape/bin/inkscape.exe",
         "/mnt/c/Program Files/Inkscape/inkscape.com",
         "/mnt/c/Program Files/Inkscape/inkscape.exe",
@@ -411,6 +415,56 @@ def outline_text_with_inkscape(
         # of reopening a file Windows Inkscape has just read from a WSL mount.
         # Reopening can fail with EINVAL even after the Inkscape process exits.
         os.replace(tmp_output, svg_path)
+
+
+def extract_background(root: ET.Element, panel_root: ET.Element, background_path: Path, cleanup: bool):
+    """Extract the base layer with its complete transform/style ancestry."""
+    background_root = copy_svg_shell(root)
+    background_root.attrib["id"] = f"{background_path.stem.removesuffix('.background')}-background"
+    copy_defs_and_styles(root, background_root)
+
+    def background_branch(element):
+        if element.get("id") == "theme_background":
+            return copy.deepcopy(element)
+        branch = ET.Element(element.tag, dict(element.attrib))
+        for child in element:
+            selected = background_branch(child)
+            if selected is not None:
+                branch.append(selected)
+        return branch if len(branch) else None
+
+    for child in root:
+        branch = background_branch(child)
+        if branch is not None:
+            background_root.append(branch)
+    if cleanup:
+        remove_editor_junk(background_root)
+    background_tree = ET.ElementTree(background_root)
+    ET.indent(background_tree, space="  ")
+    background_tree.write(background_path, encoding="utf-8", xml_declaration=True)
+    background_parent, panel_background = find_parent_and_child_by_id(panel_root, "theme_background")
+    if background_parent is None or panel_background is None:
+        raise RuntimeError("theme_background must be in the panel artwork, outside labels")
+    background_parent.remove(panel_background)
+
+
+def split_background_only(source_path: Path, overwrite: bool = False, cleanup: bool = True):
+    """Preserve legacy panel artwork/labels/anchors; separate only its background."""
+    root = ET.parse(source_path).getroot()
+    if find_parent_and_child_by_id(root, "theme_background")[1] is None:
+        raise RuntimeError(f"{source_path}: missing theme_background group")
+    stem = source_path.with_suffix("")
+    panel_path = Path(f"{stem}.panel.svg")
+    background_path = Path(f"{stem}.background.svg")
+    if not overwrite and (panel_path.exists() or background_path.exists()):
+        raise RuntimeError(f"{source_path}: generated files exist; pass --overwrite")
+    panel_root = copy.deepcopy(root)
+    extract_background(root, panel_root, background_path, cleanup)
+    if cleanup:
+        remove_editor_junk(panel_root)
+    ET.indent(panel_root, space="  ")
+    ET.ElementTree(panel_root).write(panel_path, encoding="utf-8", xml_declaration=True)
+    return panel_path, background_path
 
 
 def split_svg(
@@ -535,34 +589,8 @@ def split_svg(
     panel_parent.remove(panel_label_group)
 
     if background_group is not None:
-        background_root = copy_svg_shell(root)
-        background_root.attrib["id"] = f"{source_path.stem}-background"
-        copy_defs_and_styles(root, background_root)
-
-        def background_branch(element):
-            if element.get("id") == "theme_background":
-                return copy.deepcopy(element)
-            branch = ET.Element(element.tag, dict(element.attrib))
-            for child in element:
-                selected = background_branch(child)
-                if selected is not None:
-                    branch.append(selected)
-            return branch if len(branch) else None
-
-        for child in root:
-            branch = background_branch(child)
-            if branch is not None:
-                background_root.append(branch)
-        if cleanup:
-            remove_editor_junk(background_root)
-        background_tree = ET.ElementTree(background_root)
-        ET.indent(background_tree, space="  ")
-        background_tree.write(background_path, encoding="utf-8", xml_declaration=True)
+        extract_background(root, panel_root, background_path, cleanup)
         theme_paths["background"] = background_path
-        background_parent, panel_background = find_parent_and_child_by_id(panel_root, "theme_background")
-        if background_parent is None or panel_background is None:
-            raise RuntimeError("theme_background must be in the panel artwork, outside labels")
-        background_parent.remove(panel_background)
 
     neutralize_semantic_panel_pigment(panel_root)
     hide_runtime_anchor_groups(panel_root)
@@ -662,6 +690,9 @@ def main() -> int:
         help="Seconds to wait for Inkscape text outlining before failing.",
     )
 
+    parser.add_argument("--background-only", action="store_true",
+                        help="Separate only theme_background, preserving legacy labels and artwork")
+
     args = parser.parse_args()
 
     try:
@@ -682,6 +713,10 @@ def main() -> int:
             return 0
 
         for svg_path in svg_files:
+            if args.background_only:
+                panel, background = split_background_only(svg_path, args.overwrite, not args.no_cleanup)
+                print(f"{svg_path}\n  -> {panel}\n  -> {background}")
+                continue
             panel_path, labels_path, theme_text_paths = split_svg(
                 source_path=svg_path,
                 label_id=args.label_id,

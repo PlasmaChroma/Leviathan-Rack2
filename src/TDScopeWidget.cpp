@@ -162,8 +162,8 @@ struct TDScopeWidget : ModuleWidget {
   TDScopeWidget(TDScope *module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("TDScope", module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
-    setPanel(createPanel(panelPath));
+    const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.panel.svg");
+    setPanel(visual_assets::createThemedPanel(panelPath, this));
     previewBuildTimer.markPanelDone();
     Widget *logoParent = this;
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {

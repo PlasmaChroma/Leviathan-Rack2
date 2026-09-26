@@ -7,7 +7,6 @@
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
     </linearGradient>
   </defs>
-  <rect width="50.8" height="128.5" fill="#080808" id="rect1" />
   <g id="glass_input" data-theme-runtime-substrate="neutral">
     <rect id="MASTER_INPUT_GLASS" x="0.40000001" y="105" width="24.799999" height="14.4" rx="1.1907305" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" style="stroke-width:0.969224" />
     <rect id="MONITOR_INPUT_GLASS" x="33.599998" y="58.200001" width="16.799999" height="46.200001" rx="1.223843" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" style="stroke-width:0.982608" />

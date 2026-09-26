@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="81.279999mm" height="128.5mm" viewBox="0 0 8128 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="bulkhead-background" sodipodi:docname="bulkhead.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)" inkscape:label="Wave Art">
+  <defs id="defs1">
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+    <linearGradient id="linearGradient20" inkscape:collect="always">
+      <stop style="stop-color:#795cff;stop-opacity:1;" offset="0" id="stop20" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
+    </linearGradient>
+    <linearGradient id="linearGradient16" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop15" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop16" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient14" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop13" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop14" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient12" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop11" style="stop-color:#6140bf;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop12" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="1108.8855" y1="886.8808" x2="1108.8855" y2="12348.43" gradientTransform="matrix(0.71147613,0,0,1.1244228,197.23642,0)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0b0d10" id="stop1" />
+      <stop offset="50%" stop-color="#10141a" id="stop2" />
+      <stop offset="100%" stop-color="#07080a" id="stop3" />
+    </linearGradient>
+    <linearGradient id="panelSheen" x1="1258.4897" y1="999.76398" x2="1258.4897" y2="12199.481" gradientTransform="scale(0.88692179,1.1274951)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.1" id="stop4" />
+      <stop offset="15%" stop-color="#ffffff" stop-opacity="0.02" id="stop5" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.0" id="stop6" />
+      <stop offset="85%" stop-color="#ffffff" stop-opacity="0.02" id="stop7" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.1" id="stop8" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1ccad8" stop-opacity="0.65" id="stop9" />
+      <stop offset="100%" stop-color="#7a5cff" stop-opacity="0.65" id="stop10" />
+    </linearGradient>
+    <linearGradient id="oceanWaveGrad" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#55dbff" id="stop_wave_1" />
+      <stop offset="55%" stop-color="#1496df" id="stop_wave_2" />
+      <stop offset="100%" stop-color="#182682" id="stop_wave_3" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="4506.2949" y1="1594.9027" x2="7746.5298" y2="1598.8362" gradientTransform="matrix(0.99690805,0,0,0.99690805,-2034.8783,-888.26714)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-4682.4965,-5277.5491)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
+  </defs>
+  <g id="panel_art" style="display:inline">
+    <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <g id="theme_background">
+        <rect x="986.18201" y="997.229" width="8154.6191" height="12887.627" rx="0" ry="0" fill="#000000" id="black_background" style="display:inline;fill:#000000;stroke-width:25.2425" sodipodi:insensitive="true" />
+      </g>
+    </g>
+  </g>
+</svg>

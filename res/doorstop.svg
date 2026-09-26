@@ -149,13 +149,13 @@
   <g
      id="panel_art"
      inkscape:label="Panel artwork">
-    <rect
+    <g id="theme_background"><rect
        width="1524"
        height="12850"
-       fill="url(#bg)"
+       fill="#000000"
        id="rect13"
        x="0"
-       y="0" />
+       y="0" /></g>
     <g
        id="glass"
        inkscape:label="glass">

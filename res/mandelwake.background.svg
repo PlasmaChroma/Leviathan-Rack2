@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="91.44mm" height="128.5mm" viewBox="0 0 9144 12850" id="mandelwake-background">
+  <defs>
+    <linearGradient id="sourcePanel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141325" />
+      <stop offset=".5" stop-color="#090b16" />
+      <stop offset="1" stop-color="#04060d" />
+    </linearGradient>
+  </defs>
+  <g id="theme_background">
+    <rect width="9144" height="12850" fill="#000000" />
+  </g>
+</svg>

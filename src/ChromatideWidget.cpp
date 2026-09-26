@@ -379,8 +379,8 @@ void ChromatideEditorSurface::onDragEnd(const DragEndEvent& e) {
 ChromatideWidget::ChromatideWidget(Chromatide* module) {
     setModule(module);
 
-    std::string panelPath = asset::plugin(pluginInstance, "res/nautiloid.panel.svg");
-    visual_assets::SplitPanelRenderer splitPanel(this, panelPath.c_str());
+    visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
+    const std::string& panelPath = splitPanel.panelPath();
 
     // Panel Screws
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.0f)));

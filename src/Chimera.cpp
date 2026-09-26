@@ -2188,7 +2188,7 @@ struct ChimeraWidget : ModuleWidget {
     ChimeraWidget(Chimera* module) {
         setModule(module);
         const std::string panelPath = asset::plugin(pluginInstance, "res/Chimera.panel.svg");
-        setPanel(createPanel(panelPath));
+        setPanel(visual_assets::createThemedPanel(panelPath, this));
         auto* labelCache = new widget::FramebufferWidget;
         labelCache->box.size = box.size;
         labelCache->oversample = 2.f;

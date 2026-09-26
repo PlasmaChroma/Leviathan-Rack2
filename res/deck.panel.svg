@@ -18,7 +18,6 @@
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient72" id="linearGradient74" gradientUnits="userSpaceOnUse" gradientTransform="translate(-1.6233675,0.65228949)" x1="41.355317" y1="125.28868" x2="63.491417" y2="125.28868" />
   </defs>
   <g id="panel_art" style="display:inline" inkscape:label="panel_art">
-    <rect x="0" y="3.5527137e-15" width="101.93" height="128.49995" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:0.000996894" sodipodi:insensitive="true" />
     <rect fill="#0e1016" height="128.5" rx="0" ry="0" stroke="#23283a" stroke-width="0.8" width="101.6" x="0" y="0" id="rect1529" style="display:none;fill:#101319;fill-opacity:1" />
     <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
       <path d="m 8.5369379,17.056614 9.5361381,8.366285" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector-8" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-linecap:butt;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />

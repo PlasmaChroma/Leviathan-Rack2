@@ -58,11 +58,11 @@
      inkscape:current-layer="svg1"
      showgrid="false" />
   <!-- BACKGROUND -->
-  <rect
+  <g id="theme_background"><rect
      width="50.8"
      height="128.5"
-     fill="#080808"
-     id="rect1" />
+     fill="#000000"
+     id="rect1" /></g>
   <g
      id="glass_input">
     <rect

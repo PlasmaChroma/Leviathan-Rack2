@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="15.24mm" height="128.5mm" viewBox="0 0 1524 12850" preserveAspectRatio="xMidYMid" id="doorstop-background" version="1.1" sodipodi:docname="doorstop.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs13">
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12151b" id="stop1" />
+      <stop offset="0.52" stop-color="#090b10" id="stop2" />
+      <stop offset="1" stop-color="#050609" id="stop3" />
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7457d8" stop-opacity="0.75" id="stop4" />
+      <stop offset="0.5" stop-color="#34d9e7" stop-opacity="0.95" id="stop5" />
+      <stop offset="1" stop-color="#7457d8" stop-opacity="0.75" id="stop6" />
+    </linearGradient>
+    <radialGradient id="plate" cx="653.4" cy="6919" r="651.59998" fx="653.4" fy="6919" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e5edf1" id="stop7" />
+      <stop offset="0.32" stop-color="#8b959d" id="stop8" />
+      <stop offset="0.72" stop-color="#343b43" id="stop9" />
+      <stop offset="1" stop-color="#11151a" id="stop10" />
+    </radialGradient>
+    <linearGradient id="chamberEdge" x1="219.8595" y1="404.7312" x2="219.8595" y2="3384.052" gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)" gradientUnits="userSpaceOnUse" xlink:href="#linearGradient22">
+      <stop offset="0" stop-color="#7a5cff" stop-opacity="0.82" id="stop11" style="stop-color:#7a5cff;stop-opacity:1;" />
+      <stop offset="1" stop-color="#1cccd9" stop-opacity="0.70" id="stop13" style="stop-color:#1cccd9;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient67" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.99690805,0,0,0.99690805,-5344.8155,-883.02065)" x1="5793.2271" y1="1480.5731" x2="6451.4136" y2="1483.1567" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art" inkscape:label="Panel artwork">
+    <g id="theme_background">
+      <rect width="1524" height="12850" fill="#000000" id="rect13" x="0" y="0" />
+    </g>
+  </g>
+</svg>

@@ -1556,8 +1556,8 @@ struct ChronomawSurfaceWidget : Widget {
 ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	setModule(module);
 	PreviewBuildLogTimer previewBuildTimer("Chronomaw", module);
-	const std::string panelPath = asset::plugin(pluginInstance, "res/chronomaw.svg");
-	setPanel(createPanel(panelPath));
+	const std::string panelPath = asset::plugin(pluginInstance, "res/chronomaw.panel.svg");
+	setPanel(visual_assets::createThemedPanel(panelPath, this));
 	visual_assets::addPerfectWavePanelBranding(this, panelPath);
 	previewBuildTimer.markPanelDone();
 

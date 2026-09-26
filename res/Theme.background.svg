@@ -17,7 +17,7 @@
     </linearGradient>
   </defs>
   <g id="theme_background">
-    <rect width="180" height="380" fill="url(#panel)" id="rect5" />
-    <rect width="180" height="380" fill="url(#aura)" id="rect6" />
+    <rect width="180" height="380" fill="#000000" id="rect5" />
+    <rect width="180" height="380" fill="#000000" id="rect6" />
   </g>
 </svg>

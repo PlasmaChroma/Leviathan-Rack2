@@ -21,7 +21,6 @@
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
     </linearGradient>
   </defs>
-  <rect width="6096" height="12850" fill="url(#panel)" id="rect8" style="display:inline;fill:#000000;fill-opacity:1" x="0" y="0" sodipodi:insensitive="true" />
   <rect x="63.777615" y="911.76904" width="5968.4448" height="5409.4658" rx="0" fill="#000000" stroke="#1ccad8" stroke-opacity="1" stroke-width="24.338" id="puffy_border" style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:24.338;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
   <rect x="75.509567" y="6380.4795" width="5967.4419" height="1573.8412" rx="0" fill="#000000" stroke="#1ccad8" stroke-opacity="1" stroke-width="24.338" id="transfer_preview_border" style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:25.3589;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
   <g id="puffy_section_fields" style="display:inline">

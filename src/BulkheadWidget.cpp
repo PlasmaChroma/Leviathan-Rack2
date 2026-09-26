@@ -451,8 +451,8 @@ bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm,
 BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	setModule(module);
 	PreviewBuildLogTimer previewBuildTimer("Bulkhead", module);
-	const std::string panelPath = asset::plugin(pluginInstance, "res/bulkhead.svg");
-	setPanel(createPanel(panelPath));
+	const std::string panelPath = asset::plugin(pluginInstance, "res/bulkhead.panel.svg");
+	setPanel(visual_assets::createThemedPanel(panelPath, this));
 	visual_assets::addPerfectWavePanelBranding(this, panelPath);
 	previewBuildTimer.markPanelDone();
 	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));

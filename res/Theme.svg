@@ -95,12 +95,12 @@
   <rect
      width="180"
      height="380"
-     fill="url(#panel)"
+     fill="#000000"
      id="rect5" />
   <rect
      width="180"
      height="380"
-     fill="url(#aura)"
+     fill="#000000"
      id="rect6" />
   </g>
   <g id="glass_input"><rect x="8" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect7" /></g>

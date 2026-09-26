@@ -115,8 +115,8 @@ struct OctaviaConsoleWidget : ModuleWidget {
 
 	OctaviaConsoleWidget(OctaviaConsole* module) {
 		setModule(module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/OctaviaConsole.svg");
-		setPanel(createPanel(panelPath));
+		const std::string panelPath = asset::plugin(pluginInstance, "res/OctaviaConsole.panel.svg");
+		setPanel(visual_assets::createThemedPanel(panelPath, this));
 		addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));

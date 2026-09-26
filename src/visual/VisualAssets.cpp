@@ -1412,10 +1412,10 @@ struct ThemeBackgroundPanel final : app::SvgPanel {
 	leviathan::theme::ThemeUiPoller poller;
 	uint64_t observedColorGeneration = 0u;
 
-	ThemeBackgroundPanel(const std::string& panelPath, const char* originalPath, const Widget* owner) {
+	ThemeBackgroundPanel(const std::string& panelPath, const std::string& originalPath, const Widget* owner) {
 		setBackground(window::Svg::load(panelPath));
 		background = new ThemeBackgroundWidget;
-		background->setSvg(loadPluginSvgCached(originalPath));
+		background->setSvg(window::Svg::load(originalPath));
 		background->box.size = box.size;
 		const auto state = leviathan::theme::read();
 		background->colors = state.snapshot.colors;
@@ -1440,6 +1440,15 @@ struct ThemeBackgroundPanel final : app::SvgPanel {
 	}
 };
 
+app::SvgPanel* createThemedPanel(const std::string& panelPath, const Widget* owner) {
+	const std::string suffix = ".panel.svg";
+	if (panelPath.size() < suffix.size()
+		|| panelPath.compare(panelPath.size() - suffix.size(), suffix.size(), suffix) != 0)
+		throw Exception("Themed panel requires a .panel.svg asset: %s", panelPath.c_str());
+	const std::string backgroundPath = panelPath.substr(0, panelPath.size() - suffix.size()) + ".background.svg";
+	return new ThemeBackgroundPanel(panelPath, backgroundPath, owner);
+}
+
 SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath,
 	const char* originalBackgroundAssetPath)
 	: parent_(parent) {
@@ -1448,8 +1457,8 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
 	parent_->setPanel(originalBackgroundAssetPath && originalBackgroundAssetPath[0]
-		? new ThemeBackgroundPanel(panelPath_, originalBackgroundAssetPath, parent_)
-		: createPanel(panelPath_));
+		? new ThemeBackgroundPanel(panelPath_, asset::plugin(pluginInstance, originalBackgroundAssetPath), parent_)
+		: createThemedPanel(panelPath_, parent_));
 	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
 		panelPath_, parent_->box.size, parent_);
 	parent_->addChild(panelSurfaceEffect_);

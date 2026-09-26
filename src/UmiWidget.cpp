@@ -383,8 +383,8 @@ struct UmiPlayfieldWidget final : Widget {
 UmiWidget::UmiWidget(Umi* module) {
 	setModule(module);
 	PreviewBuildLogTimer previewBuildTimer("Umi", module);
-	const std::string panelPath = asset::plugin(pluginInstance, "res/Umi.svg");
-	setPanel(createPanel(panelPath));
+	const std::string panelPath = asset::plugin(pluginInstance, "res/Umi.panel.svg");
+	setPanel(visual_assets::createThemedPanel(panelPath, this));
 	previewBuildTimer.markPanelDone();
 	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 

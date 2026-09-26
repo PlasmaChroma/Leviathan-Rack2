@@ -26,7 +26,6 @@
     </radialGradient>
   </defs>
   <g id="panel_art" inkscape:label="Panel artwork">
-    <rect x="0" y="0" width="7112" height="12850" fill="url(#sibyl-bg)" id="rect11" />
     <rect x="45" y="45" width="7022" height="12760" rx="90" fill="none" stroke="url(#sibyl-edge)" stroke-width="34" opacity="0.8" id="rect12" />
     <g id="glass_input" data-theme-runtime-substrate="neutral">
       <rect x="191.00006" y="6380" width="3340" height="5310" rx="122.94476" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" id="rect15" style="stroke-width:0.914862" />

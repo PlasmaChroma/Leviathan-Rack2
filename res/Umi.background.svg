@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="137.16mm" height="128.5mm" viewBox="0 0 13716 12850" id="Umi-background">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#06142f" />
+      <stop offset="0.5" stop-color="#03091d" />
+      <stop offset="1" stop-color="#01040e" />
+    </linearGradient>
+    <linearGradient id="inputRail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0a1234" />
+      <stop offset="1" stop-color="#322372" />
+    </linearGradient>
+    <linearGradient id="outputRail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#07506b" />
+      <stop offset="1" stop-color="#061a3c" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2ad" />
+      <stop offset="0.45" stop-color="#dcae45" />
+      <stop offset="1" stop-color="#7c3e17" />
+    </linearGradient>
+  </defs>
+  <g id="theme_background">
+    <rect width="13716" height="12850" fill="#000000" />
+  </g>
+</svg>

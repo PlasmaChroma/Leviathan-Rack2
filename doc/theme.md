@@ -7,16 +7,31 @@ and user-preset palettes. V1/V2 documents and factory defaults keep the authored
 background. Editing BACKGROUND enables its custom color; the ORIGINAL toggle
 restores the authored background while retaining the selected custom color.
 
-The pilot panels are THEME and Bifurx's legacy SVG mode. A master SVG's explicit
-`theme_background` group is extracted into `.background.svg` with its ancestor
-transforms/styles and removed from `.panel.svg`. Highlights and other artwork
-remain above the background. `SplitPanelRenderer` opts in with an explicit
-background asset path; unmigrated panels retain their existing rendering.
-Original artwork or the solid custom color is drawn inside the existing panel
-framebuffer and refreshed only when the background changes. Bifurx's PNG mode
-hides the entire legacy panel and its theme glass/text layers. Its PNG artwork
-does not participate in background theming. Bifurx sync includes its background
-SVG and the shared code; sync and rebuild Pro to consume schema 3.
+All 27 base SVGs (including the blank template) now use pure black (`#000000`)
+for their authored panel background. ORIGINAL restores that black base. The
+existing custom background color and schema 3 persistence are unchanged.
+
+Each master SVG's explicit `theme_background` group is extracted into
+`.background.svg` with its ancestor transforms/styles and removed from
+`.panel.svg`. Section fields, displays, highlights, labels, and other artwork
+remain above the background. `SplitPanelRenderer` automatically loads the
+matching background asset. Modules that assemble their own foreground layers
+use `visual_assets::createThemedPanel()` with an absolute `.panel.svg` path.
+Both paths use the same cached panel framebuffer and staggered theme polling.
+
+Regenerate split panels with `python3 tools/split_svg_labels.py res/<name>.svg --overwrite`.
+The older unsplit panels (`bulkhead`, `chronomaw`, `OctaviaConsole`, `sil`,
+`tdscope`, `Umi`, and the `blank` template) use the additional `--background-only`
+flag, preserving their existing labels, artwork, and anchor visibility. Run
+`make generate-panel-anchor-atlas` after generation. Do not edit generated
+assets directly. `tests/panel_background_contract_spec.py` checks all base
+assets and their generated layers; `tests/split_svg_labels_spec.py` checks
+both extraction modes.
+
+Bifurx's PNG mode hides the entire legacy SVG panel and its theme glass/text
+layers. PNG artwork and custom display canvases do not participate in SVG
+background theming. Bifurx sync includes its background SVG and shared code;
+sync and rebuild Pro to consume shared renderer updates.
 
 ## Implemented revision: separate input/output text (schema 2)
 

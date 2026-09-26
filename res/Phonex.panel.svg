@@ -16,7 +16,6 @@
     </pattern>
   </defs>
   <g id="panel_art" inkscape:label="Panel artwork">
-    <rect width="7112" height="12850" fill="url(#phonex-bg)" />
     <rect x="52" y="50" width="7008" height="12750" rx="100" fill="none" stroke="url(#phonex-edge)" stroke-width="34" opacity="0.9" />
     <rect x="160" y="860" width="6792" height="2550" rx="150" fill="#060b0e" stroke="#3ccbd5" stroke-width="20" opacity="0.92" />
     <rect x="260" y="1130" width="6592" height="850" rx="90" fill="#071a1e" stroke="#d29b47" stroke-width="14" />

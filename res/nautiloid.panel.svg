@@ -8,7 +8,6 @@
     </linearGradient>
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient74" gradientUnits="userSpaceOnUse" gradientTransform="matrix(100,0,0,100,-162.33504,65.228557)" x1="41.355316" y1="125.28868" x2="63.491417" y2="125.28868" />
   </defs>
-  <rect width="10160" height="12850" fill="#07090d" id="panel_black" />
   <g id="glass">
     <g id="glass_input" data-theme-runtime-substrate="neutral">
       <rect x="272.957" y="8243.4932" width="9614.0859" height="2555.0833" rx="128.87534" ry="128.18788" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="47.514" id="inputs" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1" />

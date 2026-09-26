@@ -129,13 +129,13 @@
   <g
      id="panel_art"
      inkscape:label="Panel artwork">
-    <rect
+    <g id="theme_background"><rect
        x="0"
        y="0"
        width="7112"
        height="12850"
-       fill="url(#sibyl-bg)"
-       id="rect11" />
+       fill="#000000"
+       id="rect11" /></g>
     <rect
        x="45"
        y="45"

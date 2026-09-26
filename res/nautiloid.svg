@@ -67,11 +67,11 @@
      inkscape:window-maximized="1"
      inkscape:current-layer="svg8"
      showgrid="false" />
-  <rect
+  <g id="theme_background"><rect
      width="10160"
      height="12850"
-     fill="#07090d"
-     id="panel_black" />
+     fill="#000000"
+     id="panel_black" /></g>
   <g
      id="glass">
     <g

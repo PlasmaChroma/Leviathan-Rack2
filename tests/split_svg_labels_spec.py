@@ -95,6 +95,21 @@ def main() -> int:
             "theme text output excludes static title": all(elem.attrib.get("id") != "static-title" for elem in theme_text_root.iter()),
         }
 
+        legacy_panel, legacy_background = splitter.split_background_only(source, overwrite=True)
+        legacy_root = ET.parse(legacy_panel).getroot()
+        legacy_bg = ET.parse(legacy_background).getroot()
+        checks.update({
+            "legacy mode keeps font text and directional labels": by_id(legacy_root, "static-title").text == "TITLE" and by_id(legacy_root, "out-label").text == "OUT",
+            "legacy mode preserves authored foreground pigment": "fill:#5740bf" in by_id(legacy_root, "input").get("style"),
+            "legacy mode extracts only background": all(e.get("id") != "base-fill" for e in legacy_root.iter()) and by_id(legacy_root, "background-highlight") is not None,
+            "legacy background retains transform": by_id(legacy_bg, "background-transform").get("transform") == "translate(2 3)",
+        })
+        try:
+            splitter.split_background_only(source)
+            checks["legacy mode protects existing outputs"] = False
+        except RuntimeError:
+            checks["legacy mode protects existing outputs"] = True
+
     for name, passed in checks.items():
         print(f"[{'PASS' if passed else 'FAIL'}] {name}")
     failed = sum(not passed for passed in checks.values())

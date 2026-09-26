@@ -266,17 +266,17 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect
+      <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
    width="10193.274"
    height="12887.627"
    rx="0"
    ry="0"
-   fill="url(#bgGrad)"
+   fill="#000000"
    id="black_background"
-   style="display:inline;fill:url(#bgGrad)"
-   sodipodi:insensitive="true" />
+   style="display:inline;fill:#000000"
+   sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"
    style="display:inline;opacity:0.5"

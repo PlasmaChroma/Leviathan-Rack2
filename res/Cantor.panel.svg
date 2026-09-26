@@ -13,7 +13,6 @@
     </linearGradient>
   </defs>
   <g id="panel_art" inkscape:label="Panel artwork">
-    <rect x="0" y="0" width="5080" height="12850" fill="url(#cantor-bg)" />
     <rect x="45" y="45" width="4990" height="12760" rx="90" fill="none" stroke="url(#cantor-edge)" stroke-width="34" opacity="0.78" />
     <rect x="220" y="1240" width="4640" height="3740" rx="180" fill="#09101c" stroke="#36d2dc" stroke-width="18" opacity="0.78" />
     <rect x="180" y="10420" width="4720" height="1980" rx="170" fill="#5740bf" opacity="0.20" />

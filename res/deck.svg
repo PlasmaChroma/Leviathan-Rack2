@@ -105,17 +105,17 @@
      id="panel_art"
      style="display:inline"
      inkscape:label="panel_art">
-    <rect
+    <g id="theme_background"><rect
        x="0"
        y="3.5527137e-15"
        width="101.93"
        height="128.49995"
        rx="0"
        ry="0"
-       fill="url(#bgGrad)"
+       fill="#000000"
        id="black_background"
-       style="display:inline;fill:url(#bgGrad);stroke-width:0.000996894"
-       sodipodi:insensitive="true" />
+       style="display:inline;fill:#000000;stroke-width:0.000996894"
+       sodipodi:insensitive="true" /></g>
     <rect
        fill="#0e1016"
        height="128.5"
