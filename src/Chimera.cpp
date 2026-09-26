@@ -331,6 +331,19 @@ struct Chimera : Module {
         std::uint64_t preRecordState = 0;
     };
     std::shared_ptr<RecoveryTicket> recoveryTicket;
+    struct OverlapCore {
+        std::uint64_t token = 0;
+        bool announced = false, readySent = false, releasing = false;
+    } overlapCore[2]; // Core owner only; Reel slots 1 and 2.
+    struct OverlapControl {
+        std::uint64_t token = 0;
+        chimera::Reel* source = nullptr;
+        bool ready = false, releasePending = false;
+        std::shared_ptr<RecoveryTicket> ticket;
+    } overlapControl[2]; // Control owner only.
+    std::atomic<bool> overlapActive{false};
+    std::atomic<bool> primaryPreRecordActive{false}; // Includes the unannounced core-side cut.
+
     std::atomic<std::uint32_t> publishedValidFrames{0};
     chimera::MarkerDisplayMailbox markerDisplay;
     std::atomic<std::uint16_t> publishedRegion{0};
@@ -424,7 +437,7 @@ struct Chimera : Module {
         // tickets captured by workers instead of waiting for disk I/O here.
         // Workers never access teardownReel itself; their ticket lifetime keeps
         // the raw snapshot pointer valid even after this module is gone.
-        if ((loadTicket && loadTicket->usesSnapshot) || recoveryTicket || pendingSave) {
+        if ((loadTicket && loadTicket->usesSnapshot) || recoveryTicket || pendingSave || overlapActive.load()) {
             stores.transition(controlActiveHandle, chimera::StoreBudget::Retired);
             std::shared_ptr<chimera::Reel> retained(stores.detachRetired(controlActiveHandle));
             if (loadTicket && loadTicket->usesSnapshot) {
@@ -432,6 +445,8 @@ struct Chimera : Module {
             }
             if (recoveryTicket) recoveryTicket->teardownReel = retained;
             if (pendingSave) pendingSave->teardownReel = retained;
+            for (auto& cut : overlapControl)
+                if (cut.ticket) cut.ticket->teardownReel = retained;
         }
         if (rateServiceRegistered) chimera::unregisterRateBridge(&preparedBridge);
         if (service) service->cancel(generation); // No worker carries this Module pointer.
@@ -911,6 +926,55 @@ struct Chimera : Module {
             return "time unavailable";
         return text;
     }
+    void overlapRecoveryStep() {
+        for (unsigned i = 0; i < 2; ++i) {
+            auto& cut = overlapControl[i];
+            if (cut.ticket && cut.ticket->done.load(std::memory_order_acquire)) {
+                finishPreRecord(cut.token, bool(cut.ticket->result));
+                if (!cut.ticket->result) setIoWarning("Pre-record checkpoint failed: " + cut.ticket->result.error);
+                cut.ticket.reset(); cut.ready = false; cut.releasePending = true;
+            }
+            if (cut.releasePending) {
+                const chimera::AudioCommand command{generation->value.load(std::memory_order_acquire),
+                    cut.token, 0, 9, controlActiveHandle, nullptr, i};
+                if (commands.tryPushCritical(command)) cut.releasePending = false;
+            }
+        }
+        if (!service || primaryPreRecordActive.load(std::memory_order_acquire) || recoveryPurpose == 1 ||
+            (recoveryTicket && recoveryTicket->preRecordState)) return;
+        // Only one overlapping pre-record worker at a time. Otherwise an older
+        // encode finishing late could replace the latest take's journal entry.
+        int selected = -1;
+        for (unsigned i = 0; i < 2; ++i) {
+            const auto& cut = overlapControl[i];
+            if (cut.ticket) return;
+            if (cut.token &&
+                (selected < 0 || cut.token < overlapControl[selected].token)) selected = int(i);
+        }
+        if (selected < 0) return;
+        auto& cut = overlapControl[selected];
+        // A newer cut can finish capture first when slots share the scan budget.
+        // Wait for the oldest pending generation, including its release ack.
+        if (!cut.ready || !cut.source) return;
+        auto ticket = std::make_shared<RecoveryTicket>();
+        ticket->preRecordState = cut.token;
+        const auto root = cachedRecoveryRoot;
+        const auto id = std::to_string(steadyNs()) + "-" + std::to_string(nextRequestId);
+        const auto wallMs = std::uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        auto* source = cut.source;
+        const unsigned slot = unsigned(selected) + 1;
+        const auto queued = service->execute(generation, nextRequestId++, [ticket, source, slot, root, id, wallMs] {
+            try { ticket->result = chimera::recovery::commit(root, id, *source,
+                chimera::recovery::PreRecord, wallMs, slot); }
+            catch (...) { ticket->result.error = "recovery_worker_exception"; }
+            ticket->done.store(true, std::memory_order_release);
+        });
+        if (queued == chimera::IoService::Accepted) cut.ticket = ticket;
+        else if (queued != chimera::IoService::Busy) {
+            finishPreRecord(cut.token, false); cut.ready = false; cut.releasePending = true;
+        } // A busy queue retains the exact cut and retries, never recaptures later.
+    }
     void recoveryStep() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (recoveryTicket && recoveryTicket->done.load(std::memory_order_acquire)) {
@@ -1053,7 +1117,7 @@ struct Chimera : Module {
                      (command.kind == 5 && reel &&
                       (reel->documentRevision() != command.expectedDocumentRevision ||
                        reel->audioRevision() != command.expectedAudioRevision)))) ||
-                    (reel && reel->state() != chimera::Reel::Idle) ||
+                    (reel && reel->hasSnapshots()) ||
                     !snapshotClaimed.compare_exchange_strong(unclaimed, true,
                         std::memory_order_acq_rel)) {
                     const chimera::AudioCompletion rejected = {command.moduleGeneration,
@@ -1073,6 +1137,13 @@ struct Chimera : Module {
                 const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
                                                       1, command.handle, oldHandle};
                 completions.tryPushCritical(ack);
+            }
+            else if (command.kind == 9 && command.expectedAudioRevision < 2) {
+                const unsigned index = unsigned(command.expectedAudioRevision);
+                auto& cut = overlapCore[index];
+                if (reel && command.handle == audioActiveHandle &&
+                    command.requestId == cut.token && !cut.releasing &&
+                    reel->beginRelease(index + 1)) cut.releasing = true;
             }
             else if (command.kind == 2) {
                 const bool accepted = reel && command.handle == audioActiveHandle &&
@@ -1098,6 +1169,25 @@ struct Chimera : Module {
     void coreSnapshotProgress() {
         if (!reel) return;
         const std::uint64_t generationValue = generation->value.load(std::memory_order_acquire);
+        bool overlap = false;
+        for (unsigned i = 0; i < 2; ++i) {
+            auto& cut = overlapCore[i];
+            if (!cut.token) continue;
+            if (!cut.announced) {
+                const chimera::AudioCompletion ack{generationValue, cut.token, 9, audioActiveHandle, i};
+                cut.announced = completions.tryPushCritical(ack);
+            }
+            if (cut.announced && !cut.readySent && reel->readyForWorker(i + 1)) {
+                const chimera::AudioCompletion ack{generationValue, cut.token, 10, audioActiveHandle, i};
+                cut.readySent = completions.tryPushCritical(ack);
+            }
+            if (cut.releasing && reel->state(i + 1) == chimera::Reel::Idle) {
+                const chimera::AudioCompletion ack{generationValue, cut.token, 11, audioActiveHandle, i};
+                if (completions.tryPushCritical(ack)) cut = OverlapCore{};
+            }
+            overlap |= cut.token != 0;
+        }
+        overlapActive.store(overlap, std::memory_order_release);
         if (coreSnapshotRequestId == kAutomaticSnapshotId && !automaticSnapshotAnnounced) {
             const chimera::AudioCompletion started = {generationValue,
                 kAutomaticSnapshotId, 7, audioActiveHandle, 1};
@@ -1117,20 +1207,21 @@ struct Chimera : Module {
                 coreSnapshotRequestId = 0;
                 coreSnapshotReadySent = false;
                 automaticSnapshotAnnounced = false;
+                primaryPreRecordActive.store(false, std::memory_order_release);
             }
         }
     }
     void maintenanceStep() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        if (!commands.size() && !markerCommands.size() && !snapshotRequestId) return;
+        if (!commands.size() && !markerCommands.size() && !snapshotRequestId &&
+            !overlapActive.load(std::memory_order_acquire)) return;
         const std::uint64_t now = steadyNs();
         if (!ownership.tryMaintenance(now)) return;
         coreCommands();
         // Metadata-only progress while Rack's audio callbacks are stopped.
         // The owner token excludes a concurrent audio callback throughout.
         if (reel) {
-            while (reel->state() == chimera::Reel::Capturing ||
-                   reel->state() == chimera::Reel::Reclaiming)
+            while (reel->snapshotWorkPending())
                 reel->maintenanceTick();
         }
         coreSnapshotProgress();
@@ -1156,7 +1247,8 @@ struct Chimera : Module {
             finishSnapshotReader();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
             !snapshotRequestId && !snapshotReaders.count() &&
-            !snapshotClaimed.load(std::memory_order_acquire)) {
+            !snapshotClaimed.load(std::memory_order_acquire) &&
+            !overlapActive.load(std::memory_order_acquire)) {
             const unsigned adoptionKind = loadTicket->adoptionKind;
             const std::uint64_t expectedDocument = loadTicket->expectedDocumentRevision;
             const std::uint64_t expectedAudio = loadTicket->expectedAudioRevision;
@@ -1219,6 +1311,18 @@ struct Chimera : Module {
         while (completions.tryPop(ack)) {
             if (ack.moduleGeneration != generation->value.load(std::memory_order_acquire))
                 continue;
+            if (ack.kind >= 9 && ack.kind <= 11 && ack.status < 2) {
+                auto& cut = overlapControl[ack.status];
+                if (ack.kind == 9) {
+                    cut.token = ack.requestId;
+                    cut.source = stores.lookup(ack.handle);
+                }
+                else if (ack.requestId == cut.token) {
+                    if (ack.kind == 10) cut.ready = true;
+                    else cut = OverlapControl{};
+                }
+                continue;
+            }
             if (ack.kind == 8 && ack.requestId == markerRequestId) {
                 markerRequestId = 0;
                 ioBusy.store(false, std::memory_order_release);
@@ -1317,6 +1421,7 @@ struct Chimera : Module {
             ioBusy.store(retiringHandle != 0, std::memory_order_release);
         }
         recoveryStep();
+        overlapRecoveryStep();
         if (!service) return;
         if (retiringHandle && retiringPayload && !retirementRequestId) {
             const std::uint64_t requestId = nextRequestId++;
@@ -1982,6 +2087,10 @@ struct Chimera : Module {
                 outputs[AUDIO_R_OUTPUT].getVoltage(), out.cv, out.eosg};
     }
     void beginRecording(bool append) {
+        if (reel && !reel->prepareRecording()) {
+            ioError.store(true, std::memory_order_release);
+            return;
+        }
         const bool started = append ? slice.startAppend() : slice.startCurrent();
         if (started) {
             const auto unavailable = newPreRecordState(PreRecordUnavailable);
@@ -1990,17 +2099,29 @@ struct Chimera : Module {
             publishedRecordStartFrame.store(slice.writerFrame(), std::memory_order_release);
             bool unclaimed = false;
             if (reel && !saveInProgress.load(std::memory_order_acquire) &&
+                !overlapActive.load(std::memory_order_acquire) &&
                 snapshotClaimed.compare_exchange_strong(unclaimed, true,
                     std::memory_order_acq_rel)) {
                 if (reel->beginSnapshot(slice.frame())) {
                     const auto pending = (unavailable & ~UINT64_C(7)) | PreRecordPending;
                     preRecordState.store(pending, std::memory_order_release);
                     snapshotPreRecordState.store(pending, std::memory_order_release);
+                    primaryPreRecordActive.store(true, std::memory_order_release);
                     coreSnapshotRequestId = kAutomaticSnapshotId;
                     coreSnapshotReadySent = false;
                     automaticSnapshotAnnounced = false;
                 }
                 else snapshotClaimed.store(false, std::memory_order_release);
+            }
+            if (preRecordStatus() == PreRecordUnavailable && reel && reel->supportsRecordingSnapshots()) {
+                for (unsigned i = 0; i < 2; ++i) {
+                    if (overlapCore[i].token || !reel->beginSnapshot(slice.frame(), i + 1)) continue;
+                    const auto pending = (unavailable & ~UINT64_C(7)) | PreRecordPending;
+                    preRecordState.store(pending, std::memory_order_release);
+                    overlapCore[i].token = pending;
+                    overlapActive.store(true, std::memory_order_release);
+                    break;
+                }
             }
         }
         else if (!reel) recordNotReady.store(true, std::memory_order_release);

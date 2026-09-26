@@ -118,7 +118,7 @@ Journal inspect(const std::string& root) {
 }
 
 CommitResult commit(const std::string& root, const std::string& id,
-                    const Reel& frozen, Role role, std::uint64_t wallTimeMs) {
+                    const Reel& frozen, Role role, std::uint64_t wallTimeMs, unsigned snapshot) {
     CommitResult result;
     if (!safeId(id) || !wallTimeMs) { result.error = "invalid_recovery_id"; return result; }
     if (!rack::system::createDirectories(root) && !rack::system::isDirectory(root)) {
@@ -132,7 +132,7 @@ CommitResult commit(const std::string& root, const std::string& id,
     if (!rack::system::createDirectories(directory) && !rack::system::isDirectory(directory)) {
         result.error = "recovery_directory_unavailable"; return result;
     }
-    const bundle::CommitResult stored = bundle::commit(root, id, frozen);
+    const bundle::CommitResult stored = bundle::commit(root, id, frozen, false, snapshot);
     if (!stored) { result.error = stored.error; return result; }
     Entry entry;
     entry.manifest = stored.manifest;

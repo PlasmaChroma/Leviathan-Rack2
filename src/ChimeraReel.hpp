@@ -2,6 +2,7 @@
 
 #include "ChimeraTypes.hpp"
 #include "ChimeraBlockMoments.hpp"
+#include "ChimeraScratchPages.hpp"
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -30,26 +31,80 @@ public:
     enum SnapshotState { Idle, Capturing, Ready, Reclaiming };
     static const std::uint32_t kInvalidPage = 0xffffffffu;
     static const std::uint32_t kScanPerTick = 8;
+    static const unsigned kSnapshotSlots = 3;
+private:
+    struct Snapshot {
+        std::unique_ptr<std::uint32_t[]> frozen;
+        std::unique_ptr<std::uint8_t[]> captured;
+        SnapshotMetadata metadata{};
+        SnapshotState state = Idle;
+        std::atomic<bool> ready{false};
+        unsigned scan = 0, reclaim = 0;
+        void prepare(unsigned pages) {
+            frozen.reset(new std::uint32_t[pages]);
+            captured.reset(new std::uint8_t[pages]{});
+            for (unsigned i = 0; i < pages; ++i) frozen[i] = kInvalidPage;
+        }
+    };
+    typedef ReelPage Page;
+public:
 
     Reel(std::uint32_t pages, std::uint32_t reservePages)
         : pages_(checkedPages(pages, reservePages)), reservePages_(reservePages),
           capacityFrames_(pages_ * kPageFrames), moments_(capacityFrames_),
           pool_(new Page[pages_ + reservePages_]), active_(new std::uint32_t[pages_]),
-          frozen_(new std::uint32_t[pages_]), captured_(new std::uint8_t[pages_]),
-          free_(new std::uint32_t[reservePages ? reservePages : 1]),
+          free_(new std::uint32_t[pages_ + reservePages_]),
+          references_(new std::uint8_t[pages_ + reservePages_]{}),
           freeCount_(reservePages), validFrames_(0), markerCount_(0), nextMarkerId_(1),
           documentRevision_(0), audioRevision_(0), capturedThroughFrame_(0),
-          state_(Idle), publishedReady_(false), scan_(0), reclaim_(0),
           cowCopies_(0), overflow_(false), recordingStopped_(false) {
-        for (std::uint32_t i = 0; i < pages_; ++i) {
-            active_[i] = i;
-            frozen_[i] = kInvalidPage;
-            captured_[i] = 0;
+        snapshots_[0].prepare(pages_);
+        for (unsigned i = 0; i < pages_; ++i) { active_[i] = i; references_[i] = 1; }
+        for (unsigned i = 0; i < reservePages_; ++i) free_[i] = pages_ + i;
+        std::memset(pool_.get(), 0, (pages_ + reservePages_) * sizeof(Page));
+    }
+    // Off-audio, before registry admission or publication. Reserve the maximum
+    // budget, but allocate only a small initial scratch chunk. Standalone Reels
+    // retain the original single-snapshot behavior unless explicitly enabled.
+    void prepareRecordingSnapshots(bool background = true) {
+        if (scratch_) return;
+        const unsigned maximum = std::min(2 * pages_, unsigned(ScratchPages::kMaxPages));
+        const unsigned physical = pages_ + reservePages_ + maximum;
+        std::unique_ptr<std::uint32_t[]> free(new std::uint32_t[physical]);
+        std::unique_ptr<std::uint8_t[]> refs(new std::uint8_t[physical]{});
+        std::copy(free_.get(), free_.get() + freeCount_, free.get());
+        std::copy(references_.get(), references_.get() + pages_ + reservePages_, refs.get());
+        for (unsigned i = 1; i < kSnapshotSlots; ++i) snapshots_[i].prepare(pages_);
+        auto scratch = std::make_shared<ScratchPages>(maximum);
+        if (background) ScratchPageService::instance().add(scratch);
+        free_ = std::move(free); references_ = std::move(refs); scratch_ = std::move(scratch);
+        adoptScratch(scratch_->readyPages());
+    }
+    unsigned scratchPages() const { return scratch_ ? scratch_->readyPages() : 0; }
+    void replenishScratchForTest() { if (scratch_) scratch_->replenish(); }
+    bool supportsRecordingSnapshots() const { return bool(scratch_); }
+    bool prepareRecording() {
+        // Exhaustion never resumes a stopped take automatically. Once readers
+        // have drained, a fresh REC may safely begin with recycled storage.
+        if (recordingStopped_ && !hasSnapshots() && freeCount_) {
+            recordingStopped_ = false;
+            overflow_ = false;
         }
-        for (std::uint32_t i = 0; i < reservePages_; ++i) free_[i] = pages_ + i;
-        for (std::uint32_t i = 0; i < pages_ + reservePages_; ++i)
-            std::memset(&pool_[i], 0, sizeof(Page)); // Prefault off audio.
-        std::memset(&snapshot_, 0, sizeof(snapshot_));
+        return !recordingStopped_;
+    }
+    bool hasSnapshots() const {
+        return activeSnapshotMask_ != 0;
+    }
+    bool snapshotWorkPending() const {
+        return snapshotWorkMask_ != 0;
+    }
+    std::uint64_t budgetBytes() const {
+        // Charge the growth cap, snapshot tables, refcounts, and freelist up front.
+        const unsigned extra = scratch_ ? scratch_->maximumPages() : 0;
+        const unsigned slots = scratch_ ? kSnapshotSlots : 1;
+        return rawAudioBytes() + moments_.bytes() + std::uint64_t(extra) * sizeof(Page) +
+            std::uint64_t(pages_ + reservePages_ + extra) * 5 +
+            std::uint64_t(pages_) * (4 + slots * 5);
     }
     Reel(const Reel&) = delete;
     Reel& operator=(const Reel&) = delete;
@@ -78,14 +133,16 @@ public:
                       index + 1 < markerCount_ ? markers_[index + 1].frame : validFrames_};
     }
     std::uint32_t freePages() const { return freeCount_; }
-    std::uint32_t scannedPages() const { return scan_; }
-    std::uint32_t reclaimCursor() const { return reclaim_; }
+    std::uint32_t scannedPages() const { return snapshots_[0].scan; }
+    std::uint32_t reclaimCursor() const { return snapshots_[0].reclaim; }
     std::uint64_t cowCopies() const { return cowCopies_; }
     bool overflowed() const { return overflow_; }
     bool recordingStopped() const { return recordingStopped_; }
-    SnapshotState state() const { return state_; } // Core owner only.
-    bool readyForWorker() const { return publishedReady_.load(std::memory_order_acquire); }
-    const SnapshotMetadata& snapshotMetadata() const { return snapshot_; } // After ready.
+    SnapshotState state(unsigned slot = 0) const { return snapshots_[slot].state; } // Core owner only.
+    bool readyForWorker(unsigned slot = 0) const {
+        return slot < kSnapshotSlots && snapshots_[slot].ready.load(std::memory_order_acquire);
+    }
+    const SnapshotMetadata& snapshotMetadata(unsigned slot = 0) const { return snapshots_[slot].metadata; } // After ready.
     std::uint64_t rawAudioBytes() const {
         return static_cast<std::uint64_t>(pages_ + reservePages_) * sizeof(Page);
     }
@@ -102,7 +159,7 @@ public:
     // Off-audio only, on a fresh, exclusively owned Reel. Append sequentially,
     // then finishImport() before publishing it or using playback moments.
     bool appendImported(StereoFrame value) {
-        if (state_ != Idle) return false;
+        if (hasSnapshots()) return false;
         return writeImpl<false>(validFrames_, value, validFrames_);
     }
     void finishImport() {
@@ -114,25 +171,32 @@ private:
     bool writeImpl(std::uint32_t frame, StereoFrame value, std::uint64_t coreFrame) {
         if (recordingStopped_ || frame >= capacityFrames_) return false;
         const std::uint32_t logical = frame / kPageFrames;
-        if (state_ == Capturing || state_ == Ready) {
-            if (logical < snapshot_.pageCount && !captured_[logical]) capturePage(logical);
-            if (logical < snapshot_.pageCount && active_[logical] == frozen_[logical]) {
-                if (!freeCount_) {
-                    overflow_ = true;
-                    recordingStopped_ = true;
-                    return false;
-                }
-                const std::uint32_t replacement = free_[--freeCount_];
-                std::memcpy(&pool_[replacement], &pool_[active_[logical]], sizeof(Page));
-                active_[logical] = replacement;
-                ++cowCopies_;
+        if (activeSnapshotMask_) {
+            for (auto& cut : snapshots_) {
+                if (cut.state == Capturing && logical < cut.metadata.pageCount)
+                    capturePage(cut, logical);
             }
         }
-        StereoFrame& destination = pool_[active_[logical]].frames[frame % kPageFrames];
+        if (activeSnapshotMask_ && references_[active_[logical]] > 1) {
+            if (!freeCount_) {
+                // Never overwrite a worker's immutable pages. Existing cuts
+                // remain loadable even if allocation fails or the cap is reached.
+                overflow_ = recordingStopped_ = true;
+                return false;
+            }
+            const unsigned oldPage = active_[logical];
+            const unsigned replacement = free_[--freeCount_];
+            std::memcpy(&page(replacement), &page(oldPage), sizeof(Page));
+            --references_[oldPage];
+            references_[replacement] = 1;
+            active_[logical] = replacement;
+            ++cowCopies_;
+        }
+        StereoFrame& destination = page(active_[logical]).frames[frame % kPageFrames];
         const StereoFrame old = destination;
         destination = value;
         if (UpdateMoments) moments_.update(frame, old, value, [this](unsigned i) {
-            return pool_[active_[i/kPageFrames]].frames[i%kPageFrames];
+            return page(active_[i/kPageFrames]).frames[i%kPageFrames];
         });
         if (!validFrames_) {
             markers_[0] = Marker{0, nextMarkerId_++};
@@ -148,7 +212,7 @@ private:
 public:
     StereoFrame readActive(std::uint32_t frame) const {
         if (frame >= validFrames_) return StereoFrame{0.f, 0.f};
-        return pool_[active_[frame / kPageFrames]].frames[frame % kPageFrames];
+        return page(active_[frame / kPageFrames]).frames[frame % kPageFrames];
     }
 
     bool addMarker(std::uint32_t frame) {
@@ -214,99 +278,130 @@ public:
         return true;
     }
 
-    bool beginSnapshot(std::uint64_t capturedThroughFrame) {
-        if (state_ != Idle || overflow_) return false;
-        snapshot_.validFrames = validFrames_;
-        snapshot_.pageCount = (validFrames_ + kPageFrames - 1) / kPageFrames;
-        snapshot_.markerCount = markerCount_;
-        for (std::uint16_t i = 0; i < markerCount_; ++i) snapshot_.markers[i] = markers_[i];
-        snapshot_.documentRevision = documentRevision_;
-        snapshot_.audioRevision = audioRevision_;
-        snapshot_.capturedThroughFrame = capturedThroughFrame;
-        scan_ = reclaim_ = 0;
-        publishedReady_.store(false, std::memory_order_release);
-        state_ = Capturing;
-        if (!snapshot_.pageCount) publishReady();
+    bool beginSnapshot(std::uint64_t capturedThroughFrame, unsigned slot = 0) {
+        if (slot >= kSnapshotSlots || !snapshots_[slot].frozen) return false;
+        auto& cut = snapshots_[slot];
+        if (cut.state != Idle || overflow_) return false;
+        auto& meta = cut.metadata;
+        meta.validFrames = validFrames_;
+        meta.pageCount = (validFrames_ + kPageFrames - 1) / kPageFrames;
+        meta.markerCount = markerCount_;
+        for (unsigned i = 0; i < markerCount_; ++i) meta.markers[i] = markers_[i];
+        meta.documentRevision = documentRevision_;
+        meta.audioRevision = audioRevision_;
+        meta.capturedThroughFrame = capturedThroughFrame;
+        cut.scan = cut.reclaim = 0;
+        cut.ready.store(false, std::memory_order_release);
+        cut.state = Capturing;
+        activeSnapshotMask_ |= 1u << slot;
+        snapshotWorkMask_ |= 1u << slot;
+        if (!meta.pageCount) publishReady(cut, slot);
         return true;
     }
 
-    // One call per core frame, or under Maintenance ownership while stopped.
+    // One globally bounded page-work budget, round-robin across snapshot slots.
     std::uint32_t maintenanceTick() {
-        std::uint32_t processed = 0;
-        if (state_ == Capturing) {
-            while (processed < kScanPerTick && scan_ < snapshot_.pageCount) {
-                capturePage(scan_++);
-                ++processed;
-            }
-            if (scan_ == snapshot_.pageCount) publishReady();
-        }
-        else if (state_ == Reclaiming) {
-            while (processed < kScanPerTick && reclaim_ < snapshot_.pageCount) {
-                const std::uint32_t i = reclaim_++;
-                if (captured_[i]) {
-                    if (active_[i] != frozen_[i]) free_[freeCount_++] = frozen_[i];
-                    frozen_[i] = kInvalidPage;
-                    captured_[i] = 0;
+        if (!activeSnapshotMask_) return 0;
+        adoptScratch(kScanPerTick);
+        unsigned processed = 0;
+        for (unsigned visit = 0; snapshotWorkMask_ && visit < kSnapshotSlots && processed < kScanPerTick; ++visit) {
+            const unsigned slot = nextScanSlot_++ % kSnapshotSlots;
+            auto& cut = snapshots_[slot];
+            if (cut.state == Capturing) {
+                while (processed < kScanPerTick && cut.scan < cut.metadata.pageCount) {
+                    capturePage(cut, cut.scan++); ++processed;
                 }
-                ++processed;
+                if (cut.scan == cut.metadata.pageCount) publishReady(cut, slot);
             }
-            if (reclaim_ == snapshot_.pageCount) state_ = Idle;
+            else if (cut.state == Reclaiming) {
+                while (processed < kScanPerTick && cut.reclaim < cut.metadata.pageCount) {
+                    const unsigned i = cut.reclaim++;
+                    if (cut.captured[i]) {
+                        const unsigned physical = cut.frozen[i];
+                        if (--references_[physical] == 0) free_[freeCount_++] = physical;
+                        cut.frozen[i] = kInvalidPage; cut.captured[i] = 0;
+                    }
+                    ++processed;
+                }
+                if (cut.reclaim == cut.metadata.pageCount) {
+                    cut.state = Idle;
+                    activeSnapshotMask_ &= ~(1u << slot);
+                    snapshotWorkMask_ &= ~(1u << slot);
+                }
+            }
         }
+        if (scratch_ && scratch_->readyPages() < scratch_->maximumPages() &&
+            freeCount_ < ScratchPages::kChunkPages &&
+            adoptedScratch_ == scratch_->readyPages()) scratch_->requestMore();
         return processed;
     }
 
-    // Service sends release only after its final reader has finished. The core
-    // owner calls this from its command path, never from a worker thread.
-    bool beginRelease() {
-        if (state_ != Ready) return false;
-        publishedReady_.store(false, std::memory_order_release);
-        state_ = Reclaiming;
-        reclaim_ = 0;
-        if (!snapshot_.pageCount) state_ = Idle;
+    // Caller releases a slot only after its last worker has finished reading.
+    bool beginRelease(unsigned slot = 0) {
+        if (slot >= kSnapshotSlots) return false;
+        auto& cut = snapshots_[slot];
+        if (cut.state != Ready) return false;
+        cut.ready.store(false, std::memory_order_release);
+        cut.state = Reclaiming; cut.reclaim = 0;
+        snapshotWorkMask_ |= 1u << slot;
+        if (!cut.metadata.pageCount) {
+            cut.state = Idle;
+            activeSnapshotMask_ &= ~(1u << slot);
+            snapshotWorkMask_ &= ~(1u << slot);
+        }
         return true;
     }
-
-    // Called only while the service owns a ready lease. Snapshot IDs and
-    // samples stay immutable until all consumers release it.
-    StereoFrame readSnapshot(std::uint32_t frame) const {
-        if (!readyForWorker() || frame >= snapshot_.validFrames) return StereoFrame{0.f, 0.f};
-        const std::uint32_t logical = frame / kPageFrames;
-        return pool_[frozen_[logical]].frames[frame % kPageFrames];
+    StereoFrame readSnapshot(std::uint32_t frame, unsigned slot = 0) const {
+        if (slot >= kSnapshotSlots) return StereoFrame{0.f, 0.f};
+        const auto& cut = snapshots_[slot];
+        if (!readyForWorker(slot) || frame >= cut.metadata.validFrames) return StereoFrame{0.f, 0.f};
+        return page(cut.frozen[frame / kPageFrames]).frames[frame % kPageFrames];
     }
 
 private:
-    struct Page { StereoFrame frames[kPageFrames]; };
+    Page& page(unsigned physical) const {
+        const unsigned base = pages_ + reservePages_;
+        return physical < base ? pool_[physical] : scratch_->page(physical - base);
+    }
+    void adoptScratch(unsigned limit) {
+        if (!scratch_) return;
+        const unsigned ready = scratch_->readyPages();
+        while (adoptedScratch_ < ready && limit--) {
+            free_[freeCount_++] = pages_ + reservePages_ + adoptedScratch_++;
+        }
+    }
     static std::uint32_t checkedPages(std::uint32_t pages, std::uint32_t reservePages) {
         if (!pages || pages > kMaxPages || reservePages > pages)
             throw std::invalid_argument("Chimera Reel capacity/reserve outside profile-1 bounds");
         return pages;
     }
-    void capturePage(std::uint32_t logical) {
-        if (!captured_[logical]) {
-            frozen_[logical] = active_[logical];
-            captured_[logical] = 1;
+    void capturePage(Snapshot& cut, unsigned logical) {
+        if (!cut.captured[logical]) {
+            cut.frozen[logical] = active_[logical];
+            ++references_[active_[logical]];
+            cut.captured[logical] = 1;
         }
     }
-    void publishReady() {
-        state_ = Ready;
-        publishedReady_.store(true, std::memory_order_release);
+    void publishReady(Snapshot& cut, unsigned slot) {
+        cut.state = Ready;
+        snapshotWorkMask_ &= ~(1u << slot);
+        cut.ready.store(true, std::memory_order_release);
     }
 
     const std::uint32_t pages_, reservePages_, capacityFrames_;
     BlockMoments moments_;
     std::unique_ptr<Page[]> pool_;
-    std::unique_ptr<std::uint32_t[]> active_, frozen_;
-    std::unique_ptr<std::uint8_t[]> captured_;
-    std::unique_ptr<std::uint32_t[]> free_;
+    std::unique_ptr<std::uint32_t[]> active_, free_;
+    std::unique_ptr<std::uint8_t[]> references_;
+    Snapshot snapshots_[kSnapshotSlots];
+    std::shared_ptr<ScratchPages> scratch_;
+    unsigned adoptedScratch_ = 0, nextScanSlot_ = 0;
+    unsigned activeSnapshotMask_ = 0, snapshotWorkMask_ = 0;
     std::uint32_t freeCount_, validFrames_;
     Marker markers_[kMaxSplices];
     std::uint16_t markerCount_;
     std::uint32_t nextMarkerId_;
     std::uint64_t documentRevision_, audioRevision_, capturedThroughFrame_;
-    SnapshotMetadata snapshot_;
-    SnapshotState state_;
-    std::atomic<bool> publishedReady_;
-    std::uint32_t scan_, reclaim_;
     std::uint64_t cowCopies_;
     bool overflow_, recordingStopped_;
 };

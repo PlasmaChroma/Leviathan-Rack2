@@ -60,9 +60,9 @@ ImportResult failure(const char* message) {
 
 } // namespace
 
-bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error) {
-    if (!reel.readyForWorker()) { error = "snapshot_not_ready"; return false; }
-    const SnapshotMetadata& meta = reel.snapshotMetadata();
+bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, unsigned snapshot) {
+    if (!reel.readyForWorker(snapshot)) { error = "snapshot_not_ready"; return false; }
+    const SnapshotMetadata& meta = reel.snapshotMetadata(snapshot);
     if (meta.validFrames > kMaxReelFrames || meta.markerCount > kMaxSplices) {
         error = "snapshot_bounds"; return false;
     }
@@ -100,7 +100,7 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error) {
     for (std::uint32_t begin = 0; begin < meta.validFrames;) {
         const unsigned count = std::min(chunkFrames, meta.validFrames-begin);
         for (unsigned i = 0; i < count; ++i) {
-            const StereoFrame sample = reel.readSnapshot(begin+i);
+            const StereoFrame sample = reel.readSnapshot(begin+i, snapshot);
             const std::uint32_t bits[2] = {floatBits(sample.l), floatBits(sample.r)};
             for (unsigned channel = 0; channel < 2; ++channel)
                 for (unsigned byte = 0; byte < 4; ++byte)

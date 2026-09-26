@@ -573,7 +573,7 @@ test-chimera-phase3-sanitize: | build/tests
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-fast-math -pthread -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
 
-test-chimera-phase2: | build/tests
+test-chimera-phase2: test-chimera-overlap | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -pthread -Isrc tests/chimera_reel_spec.cpp -o build/tests/chimera_reel_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_reel_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_reel_concurrency_spec.cpp -o build/tests/chimera_reel_concurrency_spec$(if $(ARCH_WIN),.exe,)
@@ -582,6 +582,11 @@ test-chimera-phase2: | build/tests
 	build/tests/chimera_jobs_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,))
+
+.PHONY: test-chimera-overlap
+test-chimera-overlap: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_overlap_spec.cpp -o build/tests/chimera_overlap_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_overlap_spec$(if $(ARCH_WIN),.exe,)
 
 test-chimera-phase2-sanitize: | build/tests
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc tests/chimera_reel_spec.cpp -o build/tests/chimera_reel_sanitize_spec$(if $(ARCH_WIN),.exe,)

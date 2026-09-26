@@ -121,8 +121,9 @@ typedef SpscRing<AudioCompletion, 128, 16> AudioToService;
 class StoreBudget {
 public:
     enum Role { Empty, Active, Prepared, Retired };
-    // Two full active/reserve stores plus their core-owned playback moments.
-    static const std::uint64_t kPayloadLimit = 304ull * 1024ull * 1024ull;
+    // Two full stores/moments, snapshot tables and bounded scratch growth.
+    // Scratch caps are charged before admission, not when the worker grows.
+    static const std::uint64_t kPayloadLimit = 352ull * 1024ull * 1024ull;
     StoreBudget() : used_(0) { for (int i = 0; i < 3; ++i) entries_[i] = Entry{0, 0, Empty}; }
     bool admit(std::uint32_t handle, std::uint64_t bytes, Role role) {
         if (!handle || role == Empty || bytes > kPayloadLimit - used_) return false;
@@ -177,7 +178,10 @@ public:
         }
     }
     bool accept(std::uint32_t handle, std::unique_ptr<Reel>& payload, StoreBudget::Role role) {
-        if (!payload || !budget_.admit(handle, payload->payloadBytes(), role)) return false;
+        if (!payload) return false;
+        try { payload->prepareRecordingSnapshots(); }
+        catch (...) { return false; }
+        if (!budget_.admit(handle, payload->budgetBytes(), role)) return false;
         for (int i = 0; i < 3; ++i) if (!entries_[i].handle) {
             entries_[i].handle = handle;
             entries_[i].role = role;

@@ -107,10 +107,10 @@ bool pruneObsolete(const std::string& moduleRoot, const std::string& keepManifes
 }
 
 static CommitResult commitImpl(const std::string& moduleRoot, const std::string& bundleId,
-                    const Reel& frozen, bool injectManifestFailure, bool flat) {
+                    const Reel& frozen, bool injectManifestFailure, bool flat, unsigned snapshot) {
     if (!safeId(bundleId)) return failed("invalid_bundle_id");
-    if (!frozen.readyForWorker()) return failed("snapshot_not_ready");
-    const SnapshotMetadata& metadata = frozen.snapshotMetadata();
+    if (!frozen.readyForWorker(snapshot)) return failed("snapshot_not_ready");
+    const SnapshotMetadata& metadata = frozen.snapshotMetadata(snapshot);
     const std::string directory = flat ? moduleRoot : join(moduleRoot, "chimera");
     if (!flat && !inside(moduleRoot, directory)) return failed("storage_directory_escape");
     const std::string audioName = "reel-" + bundleId + ".wav";
@@ -142,7 +142,7 @@ static CommitResult commitImpl(const std::string& moduleRoot, const std::string&
         std::ofstream file(audioTemp.c_str(), std::ios::binary | std::ios::trunc);
         if (!file) return failed("audio_open_failed");
         std::string wavError;
-        const bool written = wav::writeCanonical(file, frozen, wavError);
+        const bool written = wav::writeCanonical(file, frozen, wavError, snapshot);
         file.flush();
         const bool flushed = bool(file);
         file.close();
@@ -200,11 +200,11 @@ static CommitResult commitImpl(const std::string& moduleRoot, const std::string&
 }
 
 CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
-                    const Reel& frozen, bool injectManifestFailure) {
-    return commitImpl(moduleRoot, bundleId, frozen, injectManifestFailure, false);
+                    const Reel& frozen, bool injectManifestFailure, unsigned snapshot) {
+    return commitImpl(moduleRoot, bundleId, frozen, injectManifestFailure, false, snapshot);
 }
-CommitResult stage(const std::string& directory, const std::string& bundleId, const Reel& frozen) {
-    return commitImpl(directory, bundleId, frozen, false, true);
+CommitResult stage(const std::string& directory, const std::string& bundleId, const Reel& frozen, unsigned snapshot) {
+    return commitImpl(directory, bundleId, frozen, false, true, snapshot);
 }
 CommitResult publishStaged(const std::string& directory, const std::string& moduleRoot,
                           const CommitResult& staged) {

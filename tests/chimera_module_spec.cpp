@@ -68,7 +68,7 @@ static void backgroundDispatchRegression() {
     waitFor([&] { return m.publishedValidFrames.load() > 200; }, true);
     m.menuCommand.store(3);
     waitFor([&] { return !m.recordingActive.load() && !m.recoveryTicket &&
-        !m.recoveryPurpose && !m.snapshotRequestId && !m.recoveryPostPending.load(); }, true);
+        !m.overlapActive.load() && !m.recoveryPurpose && !m.snapshotRequestId && !m.recoveryPostPending.load(); }, true);
     {
         std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
         need(bool(chimera::recovery::inspect(m.cachedRecoveryRoot).latest),
@@ -503,6 +503,113 @@ static void boundedSaveRegression() {
     }
 }
 
+static void recordingDuringSaveRegression() {
+    {
+        Chimera queued;
+        queued.service = std::make_shared<chimera::IoService>(0);
+        chimera::Reel source(4, 4);
+        queued.overlapControl[0].token = 25;
+        queued.overlapControl[0].ready = true;
+        queued.overlapControl[0].source = &source;
+        queued.overlapControl[1].token = 17; // Older cut has not finished scanning.
+        queued.overlapControl[1].source = &source;
+        queued.overlapRecoveryStep();
+        need(!queued.overlapControl[0].ticket && !queued.service->outstanding(),
+             "newer ready cut waits for an older unready generation");
+        queued.overlapControl[1].ready = true;
+        queued.primaryPreRecordActive.store(true);
+        queued.overlapRecoveryStep();
+        need(!queued.overlapControl[1].ticket && !queued.service->outstanding(),
+             "unannounced primary pre-record cut also fences newer publication");
+    }
+    Chimera m;
+    m.id = std::int64_t(Chimera::steadyNs() & INT64_MAX);
+    m.service = std::make_shared<chimera::IoService>(2);
+    std::unique_ptr<chimera::Reel> source(new chimera::Reel(4, 4));
+    source->write(0, {.75f, -.5f}, 0);
+    need(m.stores.accept(1, source, chimera::StoreBudget::Active), "overlapping save fixture");
+    m.audioActiveHandle = m.controlActiveHandle = 1;
+    m.reel = m.stores.lookup(1); m.slice.setReel(m.reel);
+    m.controlWaitNs = UINT64_C(300000000);
+    std::atomic<bool> entered{false}, resume{false}, recorded{false};
+    std::atomic<float> secondCut{0.f};
+    std::atomic<unsigned> allocations{0};
+    m.saveEncodingHookForTest = [&] {
+        entered.store(true, std::memory_order_release);
+        while (!resume.load(std::memory_order_acquire)) std::this_thread::yield();
+    };
+    std::thread audio([&] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!entered.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        need(entered.load(), "real Rack save has entered encoder before REC");
+        Module::ProcessArgs args{}; args.sampleRate = 48000; args.sampleTime = 1.f/48000;
+        trapAllocations = true;
+        for (unsigned take = 0; take < 2; ++take) {
+            if (take) secondCut.store(m.reel->readActive(0).l);
+            m.menuCommand.store(1);
+            for (unsigned i = 0; i < 300; ++i) m.process(args);
+            need(m.slice.recordState() == chimera::Slice::Current &&
+                 m.preRecordStatus() != Chimera::PreRecordUnavailable,
+                 "REC starts immediately and captures a separate cut during blocked save");
+            m.menuCommand.store(3); m.process(args);
+        }
+        trapAllocations = false;
+        allocations.store(unsigned(audioAllocations + audioDeallocations));
+        recorded.store(true, std::memory_order_release);
+    });
+    m.onSave({}); // Real encoder remains blocked; control pumping continues.
+    audio.join();
+    need(recorded.load() && allocations.load() == 0 && m.pendingSave &&
+         m.reel->readSnapshot(0).l == .75f,
+         "overlapping takes allocate nothing on audio and preserve the save's original version");
+    auto save = m.pendingSave;
+    resume.store(true, std::memory_order_release);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    do {
+        m.serviceStep();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while ((m.overlapActive.load() || m.pendingSave || m.snapshotRequestId ||
+              m.recoveryPurpose || m.recoveryTicket || m.recoveryPostPending.load()) &&
+             std::chrono::steady_clock::now() < deadline);
+    need(!m.overlapActive.load() && !m.snapshotRequestId && save->done.load() && save->result,
+         "save and all independent cuts drain while the audio engine is stopped");
+    const auto journal = chimera::recovery::inspect(m.recoveryRoot());
+    const auto cut = chimera::recovery::load(m.recoveryRoot(), journal.preRecord, 4);
+    need(cut && cut.reel->readActive(0).l == secondCut.load() &&
+         m.preRecordStatus() == Chimera::PreRecordSaved,
+         "last take's exact pre-record cut wins journal publication over older workers");
+}
+
+static void overlapTeardownRegression() {
+    auto service = std::make_shared<chimera::IoService>(1);
+    Chimera* m = new Chimera;
+    m->service = service;
+    std::unique_ptr<chimera::Reel> source(new chimera::Reel(4, 4));
+    source->write(0, {.25f, -.25f}, 0);
+    need(m->stores.accept(1, source, chimera::StoreBudget::Active), "overlap teardown source");
+    m->audioActiveHandle = m->controlActiveHandle = 1;
+    m->reel = m->stores.lookup(1); m->slice.setReel(m->reel);
+    need(m->reel->beginSnapshot(0, 1), "extra teardown cut");
+    while (!m->reel->readyForWorker(1)) m->reel->maintenanceTick();
+    auto ticket = std::make_shared<Chimera::RecoveryTicket>();
+    m->overlapControl[0].ticket = ticket;
+    m->overlapActive.store(true);
+    auto* frozen = m->reel;
+    std::atomic<bool> entered{false}, resume{false}, read{false};
+    need(service->execute(m->generation, 1, [&, ticket, frozen] {
+        entered.store(true);
+        while (!resume.load()) std::this_thread::yield();
+        read.store(frozen->readSnapshot(0, 1).l == .25f);
+        ticket->done.store(true);
+    }) == chimera::IoService::Accepted, "queue extra reader");
+    while (!entered.load()) std::this_thread::yield();
+    delete m;
+    need(bool(ticket->teardownReel), "extra worker retains Reel after module deletion");
+    resume.store(true); service->shutdown();
+    need(read.load(), "extra snapshot remains readable after teardown");
+}
+
 static void stoppedPublicationRegression() {
     for (unsigned kind : {1u, 4u, 5u}) {
         for (unsigned frames : {0u, 300u, 1400u}) {
@@ -769,6 +876,8 @@ static void auxiliaryGateDiscontinuityRegression() {
 }
 
 int main() {
+    recordingDuringSaveRegression();
+    overlapTeardownRegression();
     stoppedPublicationRegression();
     cancelledRecordingAdmissionRegression();
     preRecordProtectionRegression();
@@ -1665,7 +1774,7 @@ int main() {
          "audio adopts full worker-prepared Reel without replaying early REC");
     module.serviceStep();
     need(module.readyForPrepare && module.awaitingHandle == 0 &&
-         module.stores.chargedBytes() == 158296500ull,
+         module.stores.chargedBytes() == 176060801ull,
          "audio accepted registry-owned handle through bounded command queue");
     need(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() > 4.9f &&
          std::fabs(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() -
@@ -1852,13 +1961,13 @@ int main() {
     {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while ((module.snapshotRequestId || module.recoveryPurpose || module.recoveryTicket ||
-                module.recoveryPostPending.load()) &&
+                module.recoveryPostPending.load() || module.overlapActive.load()) &&
                std::chrono::steady_clock::now() < deadline) {
             module.process(args); module.serviceStep();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         need(!module.snapshotRequestId && !module.recoveryPurpose &&
-             !module.recoveryTicket && !module.recoveryPostPending.load(),
+             !module.recoveryTicket && !module.recoveryPostPending.load() && !module.overlapActive.load(),
              "automatic recovery snapshots settle before explicit snapshot fixture");
     }
     chimera::StereoFrame frozenFrames[4];
@@ -1973,13 +2082,13 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 158296500ull + 4852ull,
+    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 176060801ull + 8987ull,
          "worker result charged and queued without touching audio");
     trapAllocations = true;
     module.process(args);
     trapAllocations = false;
     need(audioAllocations == 0, "store adoption callback allocates no heap");
-    need(module.stores.chargedBytes() == 158296500ull + 4852ull,
+    need(module.stores.chargedBytes() == 176060801ull + 8987ull,
          "retired store stays charged before off-audio acknowledgment handling");
     module.serviceStep();
     need(module.awaitingHandle == 0 && module.reel->capacityFrames() == 256,
@@ -1989,7 +2098,7 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 4852ull,
+    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 8987ull,
          "worker retirement releases old payload credit off audio");
     chimera::Reel optionReel(1, 1);
     for (std::uint32_t i = 0; i < 4; ++i)

@@ -137,6 +137,7 @@ std::shared_ptr<IoService> chimeraIoService() {
 
 void shutdownChimeraIoService() {
     ratePreparationService.shutdown();
+    ScratchPageService::instance().shutdown();
     std::shared_ptr<IoService> local;
     {
         std::lock_guard<std::mutex> lock(serviceMutex);

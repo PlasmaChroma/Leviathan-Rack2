@@ -28,6 +28,7 @@ int main() {
         if (!reel.write(i, chimera::StereoFrame{float(i % 37) / 37.f,
                                                 float(i % 53) / 53.f}, i)) return 1;
     Chimera module;
+    reel.prepareRecordingSnapshots(); // Match production registry preparation.
     module.reel = &reel;
     module.slice.setReel(&reel);
     module.slice.setConditioning(false);

@@ -21,7 +21,7 @@ struct ImportResult {
 
 // The caller owns file selection, overwrite policy and atomic rename. A ready
 // snapshot lease must outlive this call; only the frozen pages are read.
-bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error);
+bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, unsigned snapshot = 0);
 
 // Strict import accepts only canonical 48 kHz stereo float32. The caller
 // chooses prepared capacity; production import uses the full kMaxPages.

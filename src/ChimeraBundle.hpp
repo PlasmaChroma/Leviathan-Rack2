@@ -30,10 +30,10 @@ bool validManifestReference(const std::string& relativeManifest);
 // IDs are unique within the module directory; a failed commit never changes a
 // prior manifest. Fault injection is for the native transaction test only.
 CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
-                    const Reel& frozen, bool injectManifestFailure = false);
+                    const Reel& frozen, bool injectManifestFailure = false, unsigned snapshot = 0);
 // Stage outside Rack's archive, then publish only a completed attempt on the
 // saving thread. A timed-out worker never writes into patch storage.
-CommitResult stage(const std::string& directory, const std::string& bundleId, const Reel& frozen);
+CommitResult stage(const std::string& directory, const std::string& bundleId, const Reel& frozen, unsigned snapshot = 0);
 CommitResult publishStaged(const std::string& directory, const std::string& moduleRoot,
                           const CommitResult& staged);
 LoadResult load(const std::string& moduleRoot, const std::string& relativeManifest,

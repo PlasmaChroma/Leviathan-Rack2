@@ -158,13 +158,13 @@ int main() {
         const auto recoveryDeadline = std::chrono::steady_clock::now() +
             std::chrono::seconds(10);
         while ((clone.snapshotRequestId || clone.recoveryPurpose || clone.recoveryTicket ||
-                clone.recoveryPostPending.load()) &&
+                clone.recoveryPostPending.load() || clone.overlapActive.load()) &&
                std::chrono::steady_clock::now() < recoveryDeadline) {
             clone.serviceStep(); clone.process(args); clone.serviceStep();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         need(!clone.snapshotRequestId && !clone.recoveryPurpose &&
-             !clone.recoveryTicket && !clone.recoveryPostPending.load(),
+             !clone.recoveryTicket && !clone.recoveryPostPending.load() && !clone.overlapActive.load(),
              "import recovery checkpoint settles before destructive edit");
     }
     need(clone.reel->write(0, {19.f, 19.f}, 303) &&
@@ -233,10 +233,10 @@ int main() {
             clone.serviceStep(); clone.process(args); clone.serviceStep();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         } while ((clone.snapshotRequestId || clone.recoveryPurpose || clone.recoveryTicket ||
-                  clone.recoveryPostPending.load()) &&
+                  clone.recoveryPostPending.load() || clone.overlapActive.load()) &&
                  std::chrono::steady_clock::now() < deadline);
         need(!clone.snapshotRequestId && !clone.recoveryPurpose &&
-             !clone.recoveryTicket && !clone.recoveryPostPending.load(),
+             !clone.recoveryTicket && !clone.recoveryPostPending.load() && !clone.overlapActive.load(),
              "recovery snapshot reaches durable idle state");
     };
     settleRecovery();

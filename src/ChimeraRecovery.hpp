@@ -26,7 +26,7 @@ struct CommitResult {
 // the publication boundary, and a crash leaves the old or new selected entry.
 Journal inspect(const std::string& root);
 CommitResult commit(const std::string& root, const std::string& id,
-                    const Reel& frozen, Role role, std::uint64_t wallTimeMs);
+                    const Reel& frozen, Role role, std::uint64_t wallTimeMs, unsigned snapshot = 0);
 bundle::LoadResult load(const std::string& root, const Entry& entry,
                         std::uint32_t capacityPages = kMaxPages);
 

@@ -59,7 +59,7 @@ int main() {
         waitFor([&] { return m.publishedValidFrames.load() >= 300; }, true);
         m.menuCommand.store(3);
         waitFor([&] { return !m.recordingActive.load() && !m.recoveryPostPending.load() &&
-            !m.recoveryTicket && !m.recoveryPurpose && !m.snapshotRequestId; }, true);
+            !m.recoveryTicket && !m.overlapActive.load() && !m.recoveryPurpose && !m.snapshotRequestId; }, true);
         need(bool(chimera::recovery::inspect(m.recoveryRoot()).latest), "cached host path recovery");
         engine.prepareSaveModule(&m);
         need(!m.saveFailure.load(), "stopped host Save cooperates with dispatcher");
