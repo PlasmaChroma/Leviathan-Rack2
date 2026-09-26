@@ -19,7 +19,9 @@ public:
         holds_[4] = profile1::FiniteHold(0.f);        // Slide
         holds_[5] = profile1::FiniteHold(0.f);        // Organize
         for (int i = 6; i < 15; ++i) holds_[i] = profile1::FiniteHold(0.f);
-        sos_.setTau(0.001);
+        // Recovered per-frame coefficient: this core always runs at 48 kHz,
+        // including when Rack's host rate differs. Preserve startup seeding.
+        sos_.alpha = 0.001;
         gene_.setTau(0.002);
         rateCoordinate_.setTau(0.001);
         pitchVolts_.setTau(0.00025);
@@ -66,7 +68,8 @@ public:
         const double vSlide = voltage(13, c.slideCv);
         const double vOrganize = voltage(14, c.organizeCv);
 
-        const double sos = sos_.step(profile1::sos(kSos, c.sosPatched, vSos));
+        const double sos = sos_.step(soundOnSound::target(static_cast<float>(
+            profile1::sos(kSos, c.sosPatched, vSos))));
         const double gene = gene_.step(profile1::additive8(kGene, aGene, vGene));
         const double morph = morph_.step(profile1::additive5(kMorph, vMorph));
         const double slide = profile1::additive8(kSlide, aSlide, vSlide);

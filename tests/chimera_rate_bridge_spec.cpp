@@ -1,4 +1,5 @@
 #include "ChimeraRateBridge.hpp"
+#include "ChimeraCore.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +11,32 @@ static void need(bool condition, const char* message) {
 
 int main() {
     const unsigned rates[] = {8000, 44100, 88200, 96000, 176400, 192000, 768000};
+    for (unsigned rate : rates) {
+        chimera::RateBridge bridge(rate);
+        chimera::Core control;
+        chimera::CoreInput input{};
+        control.step(input); // Existing startup seeding; test a subsequent step.
+        chimera::HostState host{};
+        unsigned firstTargetHost = 0;
+        bool sawTarget = false;
+        float coefficient = 0;
+        for (unsigned h = 0; h <= rate/10; ++h) {
+            host.params[0] = h >= rate/20 ? 1.f : 0.f;
+            bridge.step(host, [&](const chimera::HostState& state) {
+                input.controls.sos = state.params[0];
+                if (state.params[0] > 0 && !sawTarget) {
+                    sawTarget = true;
+                    firstTargetHost = h;
+                }
+                coefficient = control.step(input).sos;
+                return chimera::HostOutput();
+            });
+        }
+        const double elapsed = double(rate/10-firstTargetHost)/rate;
+        const double expected = 1-std::pow(.999, elapsed*48000);
+        need(sawTarget && !bridge.failed() && std::fabs(coefficient-expected)<.001,
+             "SOS elapsed-time response survives host SRC latency and rate changes");
+    }
     for (unsigned rate : rates) {
         chimera::RateBridge bridge(rate);
         chimera::HostState state{};

@@ -481,7 +481,7 @@ test-chimera-module: | build/tests
 	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -Wno-mismatched-new-delete -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_module_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/DebugTerminalTransport.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,))
 
-test-chimera-phase3: | build/tests
+test-chimera-phase3: test-chimera-sos | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 
@@ -1238,3 +1238,8 @@ test-chimera-rate-preparation: | build/tests
 test-chimera-morph: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -fno-fast-math -Isrc tests/chimera_morph_spec.cpp -o build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)
+
+.PHONY: test-chimera-sos
+test-chimera-sos: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -fno-fast-math -Isrc tests/chimera_sos_spec.cpp -o build/tests/chimera_sos_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_sos_spec$(if $(ARCH_WIN),.exe,)

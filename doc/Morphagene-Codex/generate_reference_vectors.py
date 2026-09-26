@@ -160,7 +160,7 @@ def build_vectors() -> dict[str, Any]:
     vectors['pitchRate'] = pitch_rows
     vectors['sos'] = [
         {'knob': k, 'patched': patched, 'cvVolts': v,
-         'mix': clamp(k * (v/8 if patched else 1), 0, 1)}
+         'mix': clamp(k, 0, 1) * (clamp(v/8, 0, 1) if patched else 1)}
         for k, patched, v in [(0.75, False, 0), (0.75, True, 0), (0.75, True, 4),
                               (0.75, True, 8), (0.75, True, 16), (0.75, True, -4),
                               (0, False, 8), (1, True, 8)]

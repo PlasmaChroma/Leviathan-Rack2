@@ -214,28 +214,28 @@ int main() {
         need(old.write(i, chimera::StereoFrame{0.25f, -0.25f}, i), "old buffer fill");
     chimera::Slice tla(&old);
     tla.setConditioning(false);
-    for (int i = 0; i < 800; ++i) tla.step(input(5.f, -5.f, 0.5f));
+    for (int i = 0; i < 800; ++i) tla.step(input(5.f, -5.f, 2083.f/4096.f));
     need(tla.startCurrent(), "TLA Current starts");
-    const chimera::Slice::Output first = tla.step(input(5.f, -5.f, 0.5f));
+    const chimera::Slice::Output first = tla.step(input(5.f, -5.f, 2083.f/4096.f));
     need(near(first.audio.l, 0.625f, 0.002f) && near(old.readActive(0).l, 0.625f, 0.002f),
          "TLA read-before-write replacement (no extra old sample)");
     tla.setInop(true);
-    tla.step(input(5.f, -5.f, 0.5f));
+    tla.step(input(5.f, -5.f, 2083.f/4096.f));
     need(near(old.readActive(1).l, 0.625f * 47.f/48.f + 1.f/48.f, 0.003f),
          "inop transition begins with one 48-frame crossfade step");
-    for (int i = 0; i < 47; ++i) tla.step(input(5.f, -5.f, 0.5f));
+    for (int i = 0; i < 47; ++i) tla.step(input(5.f, -5.f, 2083.f/4096.f));
     need(near(old.readActive(0).l, 1.f), "inop transition reaches live input on frame 48");
     chimera::Reel oneFrame(1, 1);
     need(oneFrame.write(0, chimera::StereoFrame{0.25f, 0.25f}, 0),
          "prepare one-frame feedback fixture");
     chimera::Slice oneFrameTla(&oneFrame);
     oneFrameTla.setConditioning(false);
-    for (int i = 0; i < 800; ++i) oneFrameTla.step(input(5.f, 5.f, 0.5f));
+    for (int i = 0; i < 800; ++i) oneFrameTla.step(input(5.f, 5.f, 2083.f/4096.f));
     need(oneFrameTla.startCurrent(), "record one-frame region");
-    need(near(oneFrameTla.step(input(5.f, 5.f, 0.5f)).audio.l, 0.625f, 0.002f) &&
+    need(near(oneFrameTla.step(input(5.f, 5.f, 2083.f/4096.f)).audio.l, 0.625f, 0.002f) &&
          near(oneFrame.readActive(0).l, 0.625f, 0.002f),
          "one-frame TLA reads old sample before its write");
-    need(near(oneFrameTla.step(input(5.f, 5.f, 0.5f)).audio.l, 0.8125f, 0.002f),
+    need(near(oneFrameTla.step(input(5.f, 5.f, 2083.f/4096.f)).audio.l, 0.8125f, 0.002f),
          "next one-frame recurrence reads prior write, not same-frame write");
 
     chimera::Slice conditioned;
@@ -647,8 +647,8 @@ int main() {
     for (int frame = 4; frame < 480; ++frame) {
         const chimera::Slice::Output out = appendedSlice.step(appendInput);
         need(appendedSlice.currentRegion() == 0 &&
-             (frame < 200 || out.audio.l > 0.9f),
-             "running old Splice remains audible until its primary boundary");
+             near(out.audio.l, float(1.0 - 2.0 * std::pow(0.999, frame - 3)), 0.0002f),
+             "Append keeps old Splice playback while SOS smoothly changes the shared mix");
     }
     appendedSlice.step(appendInput);
     need(appendedSlice.currentRegion() == 1,
@@ -853,7 +853,7 @@ int main() {
     pmInput.controls.sos = 0.f;
     need(pmSlice.startCurrent(), "Current recording starts while PM is active");
     std::uint32_t pmWrittenAddress = 0;
-    for (int frame = 0; frame < 400; ++frame) {
+    for (int frame = 0; frame < 12000; ++frame) {
         pmWrittenAddress = pmSlice.writerPosition();
         pmSlice.step(pmInput);
     }
@@ -862,7 +862,7 @@ int main() {
          "active PM removes right CV from the live Current recording source");
     pmSlice.stopRecord();
     pmInput.controls.sos = 1.f;
-    for (int frame = 0; frame < 400; ++frame) pmSlice.step(pmInput);
+    for (int frame = 0; frame < 12000; ++frame) pmSlice.step(pmInput);
     pmInput.live.l = 5.f;
     for (int frame = 0; frame < 16; ++frame) pmSlice.step(pmInput);
     need(!pmSlice.pmActive(), "left signal exits PM after 16 detected frames");

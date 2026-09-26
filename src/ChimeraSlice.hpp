@@ -320,10 +320,13 @@ public:
             --stopTailRemaining_;
         }
         lastWet_ = wet;
-        const float s = c.sos;
-        StereoFrame bus{(1.f-s)*live.l + s*wet.l, (1.f-s)*live.r + s*wet.r};
+        // One recovered complementary crossfade, shared by monitor and inop=0 writer.
+        // Output conditioning follows this bus; input gain/conditioning precedes it.
+        const StereoFrame bus = soundOnSound::mix(live, wet, c.sos);
         bool full = false;
         if (reel_ && state_ != Idle) {
+            // Recovered inop=1 selects conditioned live only after forming the
+            // monitor bus. Preserve the existing 48-frame option-change fade.
             const float target = inop_ ? 1.f : 0.f;
             sourceBlend_ += profile1::clamp(target - sourceBlend_, -1.f/48.f, 1.f/48.f);
             StereoFrame source{(1.f-sourceBlend_)*bus.l + sourceBlend_*live.l,

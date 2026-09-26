@@ -1,5 +1,6 @@
 #pragma once
 #include "ChimeraMorph.hpp"
+#include "ChimeraSos.hpp"
 
 #include "ChimeraTypes.hpp"
 #include "ChimeraGeneSize.hpp"
@@ -53,7 +54,7 @@ struct FiniteHold {
 };
 
 inline double sos(double knob, bool patched, double cv) {
-    return clamp01(clamp01(knob) * (patched ? clamp(cv, -24.0, 24.0) / 8.0 : 1.0));
+    return clamp01(knob) * (patched ? clamp01(cv / 8.0) : 1.0);
 }
 inline double additive8(double knob, double att, double cv) {
     return clamp01(knob + clamp(att, -1.0, 1.0) * clamp(cv, -24.0, 24.0) / 8.0);

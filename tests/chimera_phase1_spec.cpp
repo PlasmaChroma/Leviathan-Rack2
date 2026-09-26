@@ -55,7 +55,7 @@ int main() {
           hold.take(0.75f) == 0.75f && hold.take(inf) == 0.75f,
           "non-finite control holds last finite/default");
     check(near(sos(0.75, false, 0), 0.75) && near(sos(0.75, true, 4), 0.375) &&
-          sos(0.75, true, -4) == 0 && sos(0.75, true, 16) == 1,
+          sos(0.75, true, -4) == 0 && sos(0.75, true, 16) == 0.75,
           "S.O.S. patched normalization");
     check(additive8(0.25, 1, 4) == 0.75 && additive8(0.25, -1, 4) == 0 &&
           additive5(0.25, 2.5) == 0.75, "additive CV transfer laws");
