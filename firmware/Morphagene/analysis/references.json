@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "local_primary",
+    "path": "mg204_firmware.zip",
+    "sha256": "a653d8c67f8061fe6b2ffaf6a978584c02a8219eda2a0b690ca0f1272d380a36"
+  },
+  {
+    "kind": "primary_instruction_reference",
+    "url": "https://documentation-service.arm.com/static/6245c734b059dc5ff9a8bdab",
+    "section": "C4.12",
+    "use": "VFMA/VFMS/VFNMA/VFNMS operation semantics only"
+  },
+  {
+    "kind": "quality_reference",
+    "path": "../Mimeophon/REPORT.md",
+    "use": "Evidence packaging and reproducibility comparison, not MG204 behavior"
+  }
+]

@@ -1,0 +1,180 @@
+[
+  {
+    "name": "gene_size_exp",
+    "entries": 1024,
+    "formula_binary32_mismatches": 0,
+    "differences": []
+  },
+  {
+    "name": "clock_reciprocal",
+    "entries": 6000,
+    "formula_binary32_mismatches": 33,
+    "differences": [
+      {
+        "index": 684,
+        "stored_bits": "0x383f5893",
+        "formula_bits": "0x383f5892"
+      },
+      {
+        "index": 1369,
+        "stored_bits": "0x37bf5893",
+        "formula_bits": "0x37bf5892"
+      },
+      {
+        "index": 2288,
+        "stored_bits": "0x37650bf7",
+        "formula_bits": "0x37650bf8"
+      },
+      {
+        "index": 2380,
+        "stored_bits": "0x375c3252",
+        "formula_bits": "0x375c3251"
+      },
+      {
+        "index": 2404,
+        "stored_bits": "0x3759ffc9",
+        "formula_bits": "0x3759ffca"
+      },
+      {
+        "index": 2739,
+        "stored_bits": "0x373f5893",
+        "formula_bits": "0x373f5892"
+      },
+      {
+        "index": 2837,
+        "stored_bits": "0x3738bd12",
+        "formula_bits": "0x3738bd11"
+      },
+      {
+        "index": 2942,
+        "stored_bits": "0x373225c0",
+        "formula_bits": "0x373225c1"
+      },
+      {
+        "index": 3366,
+        "stored_bits": "0x371bb6b4",
+        "formula_bits": "0x371bb6b5"
+      },
+      {
+        "index": 3590,
+        "stored_bits": "0x37120024",
+        "formula_bits": "0x37120025"
+      },
+      {
+        "index": 3794,
+        "stored_bits": "0x370a26fd",
+        "formula_bits": "0x370a26fe"
+      },
+      {
+        "index": 3796,
+        "stored_bits": "0x370a145c",
+        "formula_bits": "0x370a145d"
+      },
+      {
+        "index": 3814,
+        "stored_bits": "0x37096d94",
+        "formula_bits": "0x37096d95"
+      },
+      {
+        "index": 3884,
+        "stored_bits": "0x3706f3ad",
+        "formula_bits": "0x3706f3ae"
+      },
+      {
+        "index": 4032,
+        "stored_bits": "0x3701ffdf",
+        "formula_bits": "0x3701ffe0"
+      },
+      {
+        "index": 4094,
+        "stored_bits": "0x37000800",
+        "formula_bits": "0x37000801"
+      },
+      {
+        "index": 4141,
+        "stored_bits": "0x36fd282c",
+        "formula_bits": "0x36fd282d"
+      },
+      {
+        "index": 4217,
+        "stored_bits": "0x36f89875",
+        "formula_bits": "0x36f89876"
+      },
+      {
+        "index": 4445,
+        "stored_bits": "0x36ebd8d8",
+        "formula_bits": "0x36ebd8d9"
+      },
+      {
+        "index": 4460,
+        "stored_bits": "0x36eb0dd4",
+        "formula_bits": "0x36eb0dd5"
+      },
+      {
+        "index": 4590,
+        "stored_bits": "0x36e465ef",
+        "formula_bits": "0x36e465ee"
+      },
+      {
+        "index": 4661,
+        "stored_bits": "0x36e0eb76",
+        "formula_bits": "0x36e0eb77"
+      },
+      {
+        "index": 4672,
+        "stored_bits": "0x36e063ed",
+        "formula_bits": "0x36e063ec"
+      },
+      {
+        "index": 4892,
+        "stored_bits": "0x36d64d1e",
+        "formula_bits": "0x36d64d1f"
+      },
+      {
+        "index": 5109,
+        "stored_bits": "0x36cd3366",
+        "formula_bits": "0x36cd3367"
+      },
+      {
+        "index": 5129,
+        "stored_bits": "0x36cc6699",
+        "formula_bits": "0x36cc669a"
+      },
+      {
+        "index": 5182,
+        "stored_bits": "0x36ca4f85",
+        "formula_bits": "0x36ca4f86"
+      },
+      {
+        "index": 5330,
+        "stored_bits": "0x36c4b1ae",
+        "formula_bits": "0x36c4b1ad"
+      },
+      {
+        "index": 5401,
+        "stored_bits": "0x36c21bdd",
+        "formula_bits": "0x36c21bde"
+      },
+      {
+        "index": 5475,
+        "stored_bits": "0x36bf7c5a",
+        "formula_bits": "0x36bf7c5b"
+      },
+      {
+        "index": 5569,
+        "stored_bits": "0x36bc4115",
+        "formula_bits": "0x36bc4114"
+      },
+      {
+        "index": 5630,
+        "stored_bits": "0x36ba3702",
+        "formula_bits": "0x36ba3703"
+      },
+      {
+        "index": 5885,
+        "stored_bits": "0x36b225c0",
+        "formula_bits": "0x36b225c1"
+      }
+    ]
+  }
+]

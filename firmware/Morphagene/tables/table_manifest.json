@@ -1,0 +1,173 @@
+{
+  "flash_sha256": "44037eb2cf24b5fc411135e487a6fa226498a8478db981659bb53341cb967609",
+  "tables": [
+    {
+      "name": "clock_reciprocal",
+      "address": "0x803ef50",
+      "image_offset": 126800,
+      "count": 6000,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": 6000,
+      "sha256": "fda717bb9b66c2c08fca2790d71b2d306f59a8448c45a7ea4ff18d19c85a27e5",
+      "interpretation": "Approximately 1/(32*(i+1)); clock-period lookup at 0x080275fa..0x08027614",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "gene_size_exp",
+      "address": "0x8044d10",
+      "image_offset": 150800,
+      "count": 1024,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": 1024,
+      "sha256": "4f1cc929952d4b248e4b8835c085fbab5db30796fa4a20dddbb40f33c4a21efa",
+      "interpretation": "Bit-exact float32(2**(i/341-3)); cubed at 0x08027944..0x08027952",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "ratio_block_unassigned",
+      "address": "0x8045d10",
+      "image_offset": 154896,
+      "count": 64,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": null,
+      "sha256": "3d0e790bd95fa8bd5ae98c326e900239cb864166313983614e1591d9c31f2467",
+      "interpretation": "64-word bounded block, final zero; semantic role unproven, no reference in current traversal",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "varispeed_positive",
+      "address": "0x8045e10",
+      "image_offset": 155152,
+      "count": 296,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": 296,
+      "sha256": "d20d0893a1043eab02401386d08616830d22e94db7125c1dd08f622faa646e94",
+      "interpretation": "vsop > 1 indexes 0..295 at 0x080287e0..0x08028816",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "varispeed_magnitude",
+      "address": "0x80462b0",
+      "image_offset": 156336,
+      "count": 200,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": 199,
+      "sha256": "90b348d73390d0a024dc7bbfa46972275155d32855f46314628f9320a202859a",
+      "interpretation": "vsop 0/1 magnitude table; maximum accessed index 198 in audited mapping",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "signed_rate_block_unassigned",
+      "address": "0x80465d0",
+      "image_offset": 157136,
+      "count": 128,
+      "type": "f32le",
+      "ram_address": null,
+      "audited_prefix_count": null,
+      "sha256": "c217694a27cba3c5888b9b69d0a0d133cb368236405df5b6bc215daa5e3ee3ee",
+      "interpretation": "Adjacent signed rate-shaped block; extent inferred from content, consumer unproven",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "control_shape_a",
+      "address": "0x8047264",
+      "image_offset": 160356,
+      "count": 64,
+      "type": "f32le",
+      "ram_address": "0x20000014",
+      "audited_prefix_count": null,
+      "sha256": "43a076f9cd949e4f48dedc46205d973b7442316e6b9ac1ff2168c939b86ce185",
+      "interpretation": "Referenced at 0x08024b20; full semantics not traced",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "control_shape_b",
+      "address": "0x8047364",
+      "image_offset": 160612,
+      "count": 64,
+      "type": "f32le",
+      "ram_address": "0x20000114",
+      "audited_prefix_count": null,
+      "sha256": "2240c1c92b344b4afb8587a0458e122759d26687d1e537943c90ca9ae36bc753",
+      "interpretation": "Referenced at 0x08024bc0; full semantics not traced",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "control_shape_c",
+      "address": "0x8047464",
+      "image_offset": 160868,
+      "count": 64,
+      "type": "f32le",
+      "ram_address": "0x20000214",
+      "audited_prefix_count": null,
+      "sha256": "350c8a1e6477b5dcf4bb6464d29737753965cd60d84579bf409b193958a037ae",
+      "interpretation": "Referenced at 0x08024b1e; full semantics not traced",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "clock_fraction_block",
+      "address": "0x8047568",
+      "image_offset": 161128,
+      "count": 16,
+      "type": "f32le",
+      "ram_address": "0x20000318",
+      "audited_prefix_count": null,
+      "sha256": "dcfecaca151bfbb71ae3767690afca83d0753b5207bb8daf612c6b9fe9fa22d5",
+      "interpretation": "1,1/2,1/3,...1/256; consumer not established; not the Gene clock quantizer",
+      "confidence": "bytes exact; role unproven"
+    },
+    {
+      "name": "morph_density",
+      "address": "0x80475a8",
+      "image_offset": 161192,
+      "count": 34,
+      "type": "f32le",
+      "ram_address": "0x20000358",
+      "audited_prefix_count": 22,
+      "sha256": "97a222b5e69f70de15d370cebf7b65df6a5948351a66070768de29d9d9d33665",
+      "interpretation": "Nominal overlap density, selected at 0x08027a58; decimal approximations",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "morph_launch",
+      "address": "0x8047630",
+      "image_offset": 161328,
+      "count": 34,
+      "type": "f32le",
+      "ram_address": "0x200003e0",
+      "audited_prefix_count": 22,
+      "sha256": "f576259566b7bba0f93029f58a5c38590ba5abd8661deb4171991f4182669eb7",
+      "interpretation": "Launch factor selected at 0x08027a50; decimal approximations",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "morph_gain",
+      "address": "0x80476b8",
+      "image_offset": 161464,
+      "count": 34,
+      "type": "f32le",
+      "ram_address": "0x20000468",
+      "audited_prefix_count": 34,
+      "sha256": "0f2ee1d909ba762ba79486007358347f2f5a9e3bf69f051999b48cb0e9fae52a",
+      "interpretation": "Envelope-sum-dependent gain target at 0x08027ade..0x08027b16; smoothed before playback scaling",
+      "confidence": "bytes exact; cited consumer traced"
+    },
+    {
+      "name": "morph_cycle",
+      "address": "0x8047740",
+      "image_offset": 161600,
+      "count": 34,
+      "type": "u32le",
+      "ram_address": "0x200004f0",
+      "audited_prefix_count": 22,
+      "sha256": "5ad4fdf04cb65ca4e6e361594acfaa8816e8c8cb100b3418f4c462a850955be5",
+      "interpretation": "Integer scheduler cycle denominator selected at 0x08027a54",
+      "confidence": "bytes exact; cited consumer traced"
+    }
+  ]
+}

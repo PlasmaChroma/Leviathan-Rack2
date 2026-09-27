@@ -1,0 +1,52 @@
+name,address,kind,note
+vector_table,0x08020000,data,114 entries including initial SP
+runtime_start,0x080201c8,function,Startup memory initialization and call to main
+Reset_Handler_trampoline,0x08020298,function,"Vector reset target, Thumb bit removed"
+tick_increment_candidate,0x08020420,function,Support routine
+tick_read_candidate,0x08020430,function,Support routine
+millisecond_delay_candidate,0x0802043c,function,Support routine
+dsp_initialize,0x080232d0,function,"Audio buffers, DSP state, tables, DMA startup"
+clear_main_delay_buffers,0x08023988,function,Clears two 2^21-float rings
+process_stereo_block,0x080239b4,function,"Main floating-point DSP, analyst label"
+audio_callback_rx_first_half,0x0802697c,function,4 stereo frames; outputs to other TX half
+audio_callback_rx_second_half,0x08026ab4,function,4 stereo frames; outputs to other TX half
+codec_setup_candidate,0x08026bf0,function,Hardware setup; codec identity not established
+zone_led_color_candidate,0x08026eb0,function,Table-branch-controlled display values
+clock_initialize_candidate,0x08027548,function,RCC/PLL configuration
+main,0x08027648,function,System/hardware main routine
+default_interrupt_handler,0x08027c94,function,Shared unused interrupt target
+delay_heads,0x20001a14,data,"Four 44-byte structures, two per main buffer"
+audio_rx_words,0x20001adc,data,16 signed 32-bit transfer words
+main_delay_mask,0x20001b20,data,0x1fffff
+halo_aux_ring_mask,0x20001b4c,data,32767
+halo_allpass_969,0x20001b6c,data,969 float ring
+halo_aux_ring_pointer,0x20002a9c,data,0xd0000000
+modulation_lcg_state,0x20002acc,data,32-bit LCG state
+active_polynomial_coefficients,0x20002ad4,data,Four zone-selected coefficients
+audio_tx_words,0x20002ae8,data,16 signed 32-bit transfer words
+halo_allpass_803,0x20002b64,data,803 float ring
+main_delay_length,0x200037f8,data,2097152 samples
+tempo_delay_ratios,0x20003804,data,13 initialized floats
+audio_float_output,0x200038a4,data,8 floats = 4 stereo frames
+halo_allpass_1236,0x200038e8,data,1236 float ring
+color_filter_state,0x20004c74,data,Two observed 44-byte filter state groups
+halo_matrix_gain_state,0x20004d24,data,Smoothed coefficient multiplying Hadamard outputs
+audio_float_input,0x20004d7c,data,8 floats = 4 stereo frames
+adc_control_words,0x20004f98,data,Seven observed 32-bit ADC/control slots
+firmware_revision_integer,0x200050fc,data,Main stores integer 86
+halo_allpass_1511,0x20000278,data,1511 float ring
+exp2_fraction,0x08028dc4,data,"2^(i/2048), verified numerical fit; used by rate/exponential conversion"
+halo_matrix_gain,0x0802adc4,data,Scalar multiplying the unnormalized 8x8 Hadamard feedback matrix
+repeats_gain,0x0802afc4,data,Repeats control gain target; not a measurement of complete closed-loop gain
+color_coefficient_a,0x0802b1c4,data,Color-related coefficient table; unusual byte-index access also exists
+color_allpass_coefficient,0x0802b5c4,data,Four cascaded allpass-average filter stages; coefficient interpolated in time
+color_control_shape,0x0802b9c4,data,Color-related shape/gain/control law; full transfer function not reconstructed
+zone_minimum_samples,0x0802be10,data,Nominal zone minimum delay in samples
+zone_transition_scale,0x0802be30,data,"Per-zone scale, likely transition/read-head window length; semantics partly inferred"
+zone_polynomial_c0,0x0802be50,data,First coefficient in amplitude-dependent polynomial gain
+zone_polynomial_c1,0x0802be60,data,Second coefficient in amplitude-dependent polynomial gain
+zone_polynomial_c2,0x0802be70,data,Third coefficient in amplitude-dependent polynomial gain
+zone_polynomial_c3,0x0802be80,data,Fourth coefficient in amplitude-dependent polynomial gain
+zone_slew_coefficient,0x0802be90,data,Per-zone coefficient selected into live state
+rate_aux_coefficients,0x0802beb0,data,Rate/time auxiliary coefficients; exact role not fully traced
+zone_near_unity_coefficient,0x0802beec,data,Per-zone near-unity filter coefficient; precise filter role not fully traced

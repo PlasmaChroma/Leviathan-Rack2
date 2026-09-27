@@ -1,0 +1,126 @@
+{
+  "baseline_source": "Git-tracked original files with no working-tree diff; initial outer-ZIP comparison also passed during analysis",
+  "original_archive_sha256": null,
+  "files": [
+    {
+      "path": "Morphagene_MG204_RE_bundle/MANIFEST.sha256",
+      "sha256": "e4a5b204575f24415e0a6a92afbc68b67af45eaa577edf3e9df1a067b3ade10a",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/MG204_REVERSE_ENGINEERING.md",
+      "sha256": "e0771dbe65d87bec68df8738c5967b706b004267e733dace38df22bb18f8f986",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/MORPH_PARAMETER_NOTES.md",
+      "sha256": "58bcc1659d258f6c31b4767817c4fd3cfc016c5dce4c1d8adec7ad5877b05a4d",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/README.md",
+      "sha256": "1004d249786142f28882a31ebf03671b9648f26c341875874a39dbbb34912400",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decode_mg204.py",
+      "sha256": "74c1e94ef8ecb693298a0256863cb71a0ee6825fbd604c1114410ce38b577d9e",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_080263e5.c",
+      "sha256": "c02116f04790936c356489e75e0dd9b6f63af87dfd9c7a03e8232d1133887ab6",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_08026619.c",
+      "sha256": "04221bbb40d8e5735c94d14102bb5a1ab3e10e60256d6c23d5911b453c68f8c1",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_08026c81.c",
+      "sha256": "dac1be91f49babe6717f0b1b623b42dbc1212f5a025b73491d91dcb592f01404",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_08026f41.c",
+      "sha256": "7d496ba11bb2b41a2979f8776b67976570bf600b83ff2303fb7e5af6b7c8324f",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_08027041.c",
+      "sha256": "8e2e8021a191501f5366e0cff49fe48f00a6ffcdda7e77b3561d3045a223acc5",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_0802734d.c",
+      "sha256": "c58be0eeb2dca767cfabae44ffddac1acdfef21db892b3823dc68b83de39970f",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_080274c1.c",
+      "sha256": "acb32c8dd0b765ce91e9abe5063083cfbe67468597dfe4bf943f5cc5cdeb7ded",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_08027633.c",
+      "sha256": "243b8172f5131f32e8b16ac4e893c183f0ebaf5c8c5e3d33fe6a06a03891cee2",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_0802799b.c",
+      "sha256": "202191039c5ed055c61866265e8ab5899789c6f169280dc42863138e5e9f04a5",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/decompile_main_dsp.c",
+      "sha256": "d36403d5314fca063f43970853e21473586fa0f835c2e9085776a42ece2d3929",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/extract_gene_size.py",
+      "sha256": "6d9beb5bb1f36496acbcc325c38b256c55e1d581f415d66e13de046cf26c1969",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/gene_size_curve_10s.csv",
+      "sha256": "df8dfe3b23853539572843d420586556a6f0de3ce9fc08096151d706b6cb7614",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_MG204_RE_bundle/mg204_flash_08020000.bin",
+      "sha256": "44037eb2cf24b5fc411135e487a6fa226498a8478db981659bb53341cb967609",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_Morph_Refinement_Codex_Handoff.md",
+      "sha256": "e29fb71f9e90acf4af03de966c192d54e70965d5c12f34833e34c63bac898ccd",
+      "unchanged": true
+    },
+    {
+      "path": "Morphagene_SOS_Refinement_Codex_Handoff.md",
+      "sha256": "c9e8be3b2e8104bcdbcc3fde914fe4a98c807b69714a5bc253e4045956a5f61d",
+      "unchanged": true
+    },
+    {
+      "path": "decode_morphagene_mg204.py",
+      "sha256": "24c3047f9d1f48095a51a7d38b2cbae2960d06a249b5d7d7a8d6b83f8dbe9843",
+      "unchanged": true
+    },
+    {
+      "path": "mg204_firmware.zip",
+      "sha256": "a653d8c67f8061fe6b2ffaf6a978584c02a8219eda2a0b690ca0f1272d380a36",
+      "unchanged": true
+    },
+    {
+      "path": "mg204_firmware_image.bin",
+      "sha256": "43e843abeb36b9af21e40f56e99733a166e4a399684547ab4708d8ce94beac41",
+      "unchanged": true
+    },
+    {
+      "path": "mg204_qpsk_decoded.bin",
+      "sha256": "4f8ffe5238b9e17b9351483e1e60fd1a22e37ffe71a09622c3d7453391a5bac4",
+      "unchanged": true
+    }
+  ]
+}

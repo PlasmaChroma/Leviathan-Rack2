@@ -1,0 +1,604 @@
+[
+  {
+    "address": 134367350,
+    "offset": 18550,
+    "size": 4,
+    "bytes": "dfe811f0",
+    "op": "tbh",
+    "args": "[pc, r1, lsl #1]",
+    "preceding_instructions": [
+      {
+        "address": 134367324,
+        "offset": 18524,
+        "size": 4,
+        "bytes": "4ff00a0a",
+        "op": "mov.w",
+        "args": "r10, #10"
+      },
+      {
+        "address": 134367328,
+        "offset": 18528,
+        "size": 4,
+        "bytes": "c0f80090",
+        "op": "str.w",
+        "args": "r9, [r0]"
+      },
+      {
+        "address": 134367332,
+        "offset": 18532,
+        "size": 4,
+        "bytes": "c1f800a0",
+        "op": "str.w",
+        "args": "r10, [r1]"
+      },
+      {
+        "address": 134367336,
+        "offset": 18536,
+        "size": 2,
+        "bytes": "5046",
+        "op": "mov",
+        "args": "r0, r10"
+      },
+      {
+        "address": 134367338,
+        "offset": 18538,
+        "size": 4,
+        "bytes": "dff82092",
+        "op": "ldr.w",
+        "args": "r9, [pc, #544]",
+        "literal_address": 134367884,
+        "literal_u32": 536875040,
+        "literal_f32": 1.0847357039806011e-19
+      },
+      {
+        "address": 134367342,
+        "offset": 18542,
+        "size": 4,
+        "bytes": "d9f80010",
+        "op": "ldr.w",
+        "args": "r1, [r9]"
+      },
+      {
+        "address": 134367346,
+        "offset": 18546,
+        "size": 2,
+        "bytes": "1329",
+        "op": "cmp",
+        "args": "r1, #19"
+      },
+      {
+        "address": 134367348,
+        "offset": 18548,
+        "size": 2,
+        "bytes": "42d8",
+        "op": "bhi",
+        "args": "#132",
+        "target": 134367484
+      }
+    ],
+    "audited_entry_count": 20,
+    "targets": [
+      134369620,
+      134369828,
+      134369784,
+      134369338,
+      134369468,
+      134369422,
+      134369446,
+      134369362,
+      134369556,
+      134369488,
+      134369422,
+      134369598,
+      134367412,
+      134369712,
+      134369734,
+      134369422,
+      134369856,
+      134369894,
+      134369292,
+      134369422
+    ]
+  },
+  {
+    "address": 134359146,
+    "offset": 10346,
+    "size": 4,
+    "bytes": "dfe800f0",
+    "op": "tbb",
+    "args": "[pc, r0]",
+    "preceding_instructions": [
+      {
+        "address": 134359136,
+        "offset": 10336,
+        "size": 2,
+        "bytes": "724b",
+        "op": "ldr",
+        "args": "r3, [pc, #456]",
+        "literal_address": 134359596,
+        "literal_u32": 536875064,
+        "literal_f32": 1.0847388059078982e-19
+      },
+      {
+        "address": 134359138,
+        "offset": 10338,
+        "size": 2,
+        "bytes": "1868",
+        "op": "ldr",
+        "args": "r0, [r3]"
+      },
+      {
+        "address": 134359140,
+        "offset": 10340,
+        "size": 2,
+        "bytes": "30b4",
+        "op": "push",
+        "args": "{r4, r5}"
+      },
+      {
+        "address": 134359142,
+        "offset": 10342,
+        "size": 2,
+        "bytes": "0928",
+        "op": "cmp",
+        "args": "r0, #9"
+      },
+      {
+        "address": 134359144,
+        "offset": 10344,
+        "size": 2,
+        "bytes": "0fd8",
+        "op": "bhi",
+        "args": "#30",
+        "target": 134359178
+      }
+    ],
+    "audited_entry_count": 10,
+    "targets": [
+      134359232,
+      134359254,
+      134359278,
+      134359300,
+      134359322,
+      134359342,
+      134359368,
+      134359160,
+      134359386,
+      134359410
+    ]
+  },
+  {
+    "address": 134359186,
+    "offset": 10386,
+    "size": 4,
+    "bytes": "dfe811f0",
+    "op": "tbh",
+    "args": "[pc, r1, lsl #1]",
+    "preceding_instructions": [
+      {
+        "address": 134359168,
+        "offset": 10368,
+        "size": 2,
+        "bytes": "0c60",
+        "op": "str",
+        "args": "r4, [r1]"
+      },
+      {
+        "address": 134359170,
+        "offset": 10370,
+        "size": 4,
+        "bytes": "4ff07e51",
+        "op": "mov.w",
+        "args": "r1, #1065353216"
+      },
+      {
+        "address": 134359174,
+        "offset": 10374,
+        "size": 2,
+        "bytes": "1c60",
+        "op": "str",
+        "args": "r4, [r3]"
+      },
+      {
+        "address": 134359176,
+        "offset": 10376,
+        "size": 2,
+        "bytes": "2960",
+        "op": "str",
+        "args": "r1, [r5]"
+      },
+      {
+        "address": 134359178,
+        "offset": 10378,
+        "size": 2,
+        "bytes": "6d4d",
+        "op": "ldr",
+        "args": "r5, [pc, #436]",
+        "literal_address": 134359616,
+        "literal_u32": 536875068,
+        "literal_f32": 1.084739322895781e-19
+      },
+      {
+        "address": 134359180,
+        "offset": 10380,
+        "size": 2,
+        "bytes": "2968",
+        "op": "ldr",
+        "args": "r1, [r5]"
+      },
+      {
+        "address": 134359182,
+        "offset": 10382,
+        "size": 2,
+        "bytes": "0929",
+        "op": "cmp",
+        "args": "r1, #9"
+      },
+      {
+        "address": 134359184,
+        "offset": 10384,
+        "size": 2,
+        "bytes": "14d8",
+        "op": "bhi",
+        "args": "#40",
+        "target": 134359228
+      }
+    ],
+    "audited_entry_count": 10,
+    "targets": [
+      134359416,
+      134359438,
+      134359462,
+      134359484,
+      134359506,
+      134359526,
+      134359552,
+      134359570,
+      134359576,
+      134359210
+    ]
+  },
+  {
+    "address": 134370958,
+    "offset": 22158,
+    "size": 2,
+    "bytes": "1047",
+    "op": "bx",
+    "args": "r2",
+    "resolved_target": "0x8025654"
+  },
+  {
+    "address": 134412648,
+    "offset": 63848,
+    "size": 2,
+    "bytes": "1847",
+    "op": "bx",
+    "args": "r3",
+    "resolved_target": null
+  },
+  {
+    "address": 134412612,
+    "offset": 63812,
+    "size": 2,
+    "bytes": "1847",
+    "op": "bx",
+    "args": "r3",
+    "resolved_target": null
+  },
+  {
+    "address": 134412568,
+    "offset": 63768,
+    "size": 2,
+    "bytes": "1847",
+    "op": "bx",
+    "args": "r3",
+    "resolved_target": null
+  },
+  {
+    "address": 134412504,
+    "offset": 63704,
+    "size": 2,
+    "bytes": "0847",
+    "op": "bx",
+    "args": "r1",
+    "resolved_target": null
+  },
+  {
+    "address": 134412530,
+    "offset": 63730,
+    "size": 2,
+    "bytes": "1047",
+    "op": "bx",
+    "args": "r2",
+    "resolved_target": null
+  },
+  {
+    "address": 134432980,
+    "offset": 84180,
+    "size": 4,
+    "bytes": "dfe81af0",
+    "op": "tbh",
+    "args": "[pc, r10, lsl #1]",
+    "preceding_instructions": [
+      {
+        "address": 134432956,
+        "offset": 84156,
+        "size": 2,
+        "bytes": "192b",
+        "op": "cmp",
+        "args": "r3, #25"
+      },
+      {
+        "address": 134432958,
+        "offset": 84158,
+        "size": 2,
+        "bytes": "9abf",
+        "op": "itte",
+        "args": "ls"
+      },
+      {
+        "address": 134432960,
+        "offset": 84160,
+        "size": 4,
+        "bytes": "a1f12002",
+        "op": "subls.w",
+        "args": "r2, r1, #32"
+      },
+      {
+        "address": 134432964,
+        "offset": 84164,
+        "size": 2,
+        "bytes": "d2b2",
+        "op": "uxtbls",
+        "args": "r2, r2"
+      },
+      {
+        "address": 134432966,
+        "offset": 84166,
+        "size": 2,
+        "bytes": "0a46",
+        "op": "movhi",
+        "args": "r2, r1"
+      },
+      {
+        "address": 134432968,
+        "offset": 84168,
+        "size": 4,
+        "bytes": "a2f1420a",
+        "op": "sub.w",
+        "args": "r10, r2, #66"
+      },
+      {
+        "address": 134432972,
+        "offset": 84172,
+        "size": 4,
+        "bytes": "baf1160f",
+        "op": "cmp.w",
+        "args": "r10, #22"
+      },
+      {
+        "address": 134432976,
+        "offset": 84176,
+        "size": 4,
+        "bytes": "00f23b82",
+        "op": "bhi.w",
+        "args": "#1142",
+        "target": 134434122
+      }
+    ],
+    "audited_entry_count": 23,
+    "targets": [
+      134434090,
+      134433820,
+      134433030,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434122,
+      134434034,
+      134434122,
+      134434122,
+      134434122,
+      134433868,
+      134434122,
+      134433030,
+      134434122,
+      134434122,
+      134433836
+    ]
+  },
+  {
+    "address": 134447274,
+    "offset": 98474,
+    "size": 4,
+    "bytes": "dfe804f0",
+    "op": "tbb",
+    "args": "[pc, r4]",
+    "preceding_instructions": [
+      {
+        "address": 134447250,
+        "offset": 98450,
+        "size": 4,
+        "bytes": "e9f7b9fd",
+        "op": "bl",
+        "args": "#-91278",
+        "target": 134355976
+      },
+      {
+        "address": 134447254,
+        "offset": 98454,
+        "size": 4,
+        "bytes": "cdf87480",
+        "op": "str.w",
+        "args": "r8, [sp, #116]"
+      },
+      {
+        "address": 134447258,
+        "offset": 98458,
+        "size": 2,
+        "bytes": "8346",
+        "op": "mov",
+        "args": "r11, r0"
+      },
+      {
+        "address": 134447260,
+        "offset": 98460,
+        "size": 2,
+        "bytes": "4346",
+        "op": "mov",
+        "args": "r3, r8"
+      },
+      {
+        "address": 134447262,
+        "offset": 98462,
+        "size": 2,
+        "bytes": "9a46",
+        "op": "mov",
+        "args": "r10, r3"
+      },
+      {
+        "address": 134447264,
+        "offset": 98464,
+        "size": 4,
+        "bytes": "13f8014b",
+        "op": "ldrb",
+        "args": "r4, [r3], #1"
+      },
+      {
+        "address": 134447268,
+        "offset": 98468,
+        "size": 2,
+        "bytes": "2d2c",
+        "op": "cmp",
+        "args": "r4, #45"
+      },
+      {
+        "address": 134447270,
+        "offset": 98470,
+        "size": 4,
+        "bytes": "00f2b280",
+        "op": "bhi.w",
+        "args": "#356",
+        "target": 134447630
+      }
+    ],
+    "audited_entry_count": 46,
+    "targets": [
+      134447338,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447626,
+      134447626,
+      134447626,
+      134447626,
+      134447626,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447626,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447630,
+      134447620,
+      134447630,
+      134447366
+    ]
+  },
+  {
+    "address": 134352866,
+    "offset": 4066,
+    "size": 4,
+    "bytes": "5df808fb",
+    "op": "ldr",
+    "args": "pc, [sp], #8",
+    "note": "stack-return pattern"
+  },
+  {
+    "address": 134352806,
+    "offset": 4006,
+    "size": 4,
+    "bytes": "5df808fb",
+    "op": "ldr",
+    "args": "pc, [sp], #8",
+    "note": "stack-return pattern"
+  },
+  {
+    "address": 134352826,
+    "offset": 4026,
+    "size": 4,
+    "bytes": "5df808fb",
+    "op": "ldr",
+    "args": "pc, [sp], #8",
+    "note": "stack-return pattern"
+  },
+  {
+    "address": 134352786,
+    "offset": 3986,
+    "size": 4,
+    "bytes": "5df808fb",
+    "op": "ldr",
+    "args": "pc, [sp], #8",
+    "note": "stack-return pattern"
+  },
+  {
+    "address": 134447870,
+    "offset": 99070,
+    "size": 4,
+    "bytes": "53f824f0",
+    "op": "ldr.w",
+    "args": "pc, [r3, r4, lsl #2]",
+    "note": "unresolved PC load"
+  },
+  {
+    "address": 134450324,
+    "offset": 101524,
+    "size": 4,
+    "bytes": "53f825f0",
+    "op": "ldr.w",
+    "args": "pc, [r3, r5, lsl #2]",
+    "note": "unresolved PC load"
+  },
+  {
+    "address": 134359730,
+    "offset": 10930,
+    "size": 4,
+    "bytes": "5df804fb",
+    "op": "ldr",
+    "args": "pc, [sp], #4",
+    "note": "stack-return pattern"
+  }
+]

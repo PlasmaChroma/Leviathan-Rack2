@@ -1,0 +1,31 @@
+0x0803e340  // firmware version 155b
+0x0803e35c  // firmware version %o
+0x0803e374  // 0 option is default
+0x0803e38c  vsop %d ///Varispeed option: 0 bidirectional classic, 1 bidirectional 1 v/oct, 2 positive only - 1 v/oct.
+0x0803e3f8  inop %d //Input option: 0 record SOS mix, 1 record input only
+0x0803e438  pmin %d //Phase/position modulation: 0 no phase modulation, 1 phase playback modulation on right signal input when no signal on left input
+0x0803e4c4  omod %d //Organize option: 0 organize at end of gene, 1 organize immediately
+0x0803e514  gnsm %d //Gene smooth: 0 classic, 1 smooth gene window
+0x0803e54c  rsop %d //Record option: 0 record + splice = record new splice, record = record current splice; 1 record + splice = record current splice, record = record new splice
+0x0803e5f4  pmod %d //Play option: 0 classic, 1 momentary, 2 trigger loop
+0x0803e634  ckop %d //Clock control option: 0 hybrid gene shift time stretch, 1 gene shift only, 2 time stretch only
+0x0803e6a0  cvop %d //CV out: 0 envelope follow, 1 ramp gene
+0x0803e6d4  mcr1 %s //Morph Chord Ratio: 0.06250 to 16.00000, negative is reverse
+0x0803e71c  mcr2 %s //Morph Chord Ratio: 0.06250 to 16.00000, negative is reverse
+0x0803e764  mcr3 %s //Morph Chord Ratio: 0.06250 to 16.00000, negative is reverse
+0x0803e7ac  //Default Chord: 2.0, 1.5, 1.33333
+0x0803e7d0  //Ratio Table - Equal Temperament
+0x0803e7f4  //1.00000: Unison
+0x0803e808  //1.05946: minor 2nd
+0x0803e820  //1.12246: Major 2nd
+0x0803e838  //1.18920: minor 3rd
+0x0803e850  //1.25992: Major 3rd
+0x0803e868  //1.33484: Perfect 4th
+0x0803e880  //1.41421: Tritone
+0x0803e894  //1.49830: Perfect 5th
+0x0803e8ac  //1.58740: minor 6th
+0x0803e8c4  //1.68179: Major 6th
+0x0803e8dc  //1.78179: minor 7th
+0x0803e8f4  //1.88774: Major 7th
+0x0803e90c  //2.00000: Octave
+0x0803e920  //Multiply these numbers by 2, 4 or 8 for higher octaves, divide for lower octaves.

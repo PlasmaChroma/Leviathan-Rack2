@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S1",
+    "title": "Public QPSK encoder",
+    "url": "https://raw.githubusercontent.com/pichenettes/stm-audio-bootloader/master/qpsk/encoder.py",
+    "purpose": "Protocol family comparison",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S2",
+    "title": "Make Noise Mimeophon",
+    "url": "https://www.makenoisemusic.com/modules/mimeophon/",
+    "purpose": "Official MP86 release description; official ZIP was NOT downloaded or byte-compared",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S3",
+    "title": "ST F746 device definitions",
+    "url": "https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-f7/master/Include/stm32f746xx.h",
+    "purpose": "Family-level register and IRQ interpretation",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S4",
+    "title": "Official Mimeophon manual",
+    "url": "https://www.makenoise-manuals.com/mimeophon/mimeophon-manual.pdf",
+    "purpose": "User-facing zone and control corroboration",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S5",
+    "title": "TI TLV320AIC23B data manual",
+    "url": "https://www.ti.com/lit/ds/symlink/tlv320aic23b.pdf",
+    "purpose": "Compatible codec register map; not unique part identification",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S6",
+    "title": "Linux WM8731 codec driver",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/master/sound/soc/codecs/wm8731.c",
+    "purpose": "Compatible interface configuration",
+    "accessed": "2026-09-27"
+  },
+  {
+    "id": "S7",
+    "title": "ST SAI HAL definitions",
+    "url": "https://raw.githubusercontent.com/STMicroelectronics/stm32f7xx-hal-driver/master/Inc/stm32f7xx_hal_sai.h",
+    "purpose": "Nominal audio rate initialization structure",
+    "accessed": "2026-09-27"
+  }
+]

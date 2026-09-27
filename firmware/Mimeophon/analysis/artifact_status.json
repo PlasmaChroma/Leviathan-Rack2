@@ -1,0 +1,12 @@
+{
+  "firmware_bin": "Exact recovered packet concatenation; 192 CRC passes",
+  "hex": "Lossless address-bearing conversion of recovered BIN",
+  "elf": "SYNTHETIC analysis wrapper; not original build ELF; analyst labels; not a flashing image",
+  "tables": "Exact byte extraction except explicitly reconstructed tempo table",
+  "reachable_disassembly": "Static recursive traversal with pointer-candidate roots; incomplete indirect control flow",
+  "linear_disassembly": "Includes intentional overdecode of literal pools; never treat as code-only",
+  "cpp_components": "Selected algebra, locally compiled sanity tests; not a full emulator or verified audio clone",
+  "ghidra_script": "Syntax reviewed only; Ghidra runtime unavailable",
+  "hardware_execution": "Not performed",
+  "official_zip_byte_comparison": "Not performed; official download identified but archive could not be fetched"
+}

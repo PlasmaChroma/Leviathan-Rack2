@@ -1,0 +1,72 @@
+[
+  {
+    "file": "decompile_080263e5.c",
+    "claimed_code_address": "0x80263e4",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_08026619.c",
+    "claimed_code_address": "0x8026618",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_08026c81.c",
+    "claimed_code_address": "0x8026c80",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_08026f41.c",
+    "claimed_code_address": "0x8026f40",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_08027041.c",
+    "claimed_code_address": "0x8027040",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_0802734d.c",
+    "claimed_code_address": "0x802734c",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_080274c1.c",
+    "claimed_code_address": "0x80274c0",
+    "classification": "not established as function entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_08027633.c",
+    "claimed_code_address": "0x8027632",
+    "classification": "not established as function entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_0802799b.c",
+    "claimed_code_address": "0x802799a",
+    "classification": "not established as function entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  },
+  {
+    "file": "decompile_main_dsp.c",
+    "claimed_code_address": "0x8027518",
+    "classification": "verified entry",
+    "instruction_start": null,
+    "note": "Generated C types/expressions are not validated original source"
+  }
+]

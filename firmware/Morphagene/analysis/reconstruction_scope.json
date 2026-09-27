@@ -1,0 +1,25 @@
+{
+  "components": [
+    "Gene Size ordinary curve",
+    "clock quantizer",
+    "Morph stage map",
+    "S.O.S. target/mix",
+    "calibrated Vari-Speed target",
+    "LCG and one launch choice",
+    "sparse read kernel",
+    "dense linear kernel",
+    "stereo crossmix",
+    "gain target/smoother",
+    "conditional record filter"
+  ],
+  "excluded": [
+    "whole DSP scheduling",
+    "peripheral execution",
+    "full envelope state machine",
+    "calibration-to-voltage transfer",
+    "SD card and splice transactions",
+    "all RNG call timing",
+    "hardware output golden recordings"
+  ],
+  "reference": "Finite-input arithmetic fixtures; no instruction-accurate emulator or hardware oracle"
+}

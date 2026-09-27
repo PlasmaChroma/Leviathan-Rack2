@@ -1,0 +1,24 @@
+{
+  "scope": "Offline extraction/artifact validation, not full DSP equivalence",
+  "checks": {
+    "decode_exact_payload_sha256": true,
+    "crc_valid_packets": 192,
+    "dft_vs_time_domain_symbol_mismatches": 0,
+    "demodulated_stream_matches_export": true,
+    "packet_csv_rows": 192,
+    "deliberate_payload_corruption_rejected_by_crc": true,
+    "intel_hex_exact_full_coverage_and_checksums": true,
+    "synthetic_elf_flash_and_initializer_exact": true,
+    "flash_tables_raw_and_csv_bit_exact": 15,
+    "hadamard_H_times_transpose_equals_8I": true,
+    "clean_directory_decode_and_export_byte_identical": true,
+    "selected_cpp_components_compiled_and_sanity_test_passed": true
+  },
+  "not_tested": [
+    "full ARM execution",
+    "complete DSP equivalence",
+    "physical module audio",
+    "Ghidra script runtime",
+    "official archive byte comparison"
+  ]
+}
