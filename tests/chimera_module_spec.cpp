@@ -1445,6 +1445,11 @@ int main() {
         ChimeraDisplayOverlay markerOverlay;
         markerOverlay.owner = &selectionModule;
         markerOverlay.step();
+        need(ChimeraDisplayOverlay::markerPointRadius(380.f, 2) >= 3.f &&
+             ChimeraDisplayOverlay::markerPointRadius(380.f, chimera::kMaxSplices) <= 1.f &&
+             ChimeraDisplayOverlay::markerStemWidth(2) >
+                 ChimeraDisplayOverlay::markerStemWidth(chimera::kMaxSplices),
+             "waveform anchor size remains legible without obscuring dense Reels");
         need(markerOverlay.markers.count == 2 && !markerOverlay.summary,
              "marker overlay initializes without a waveform scan");
         need(regions.markerCount() == 2,

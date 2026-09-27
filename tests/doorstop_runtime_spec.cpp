@@ -177,6 +177,13 @@ Result referenceV4RoundTripsRevisionAndFallback() {
 	source.v4BendRate.store(1.15f);
 	source.v4Transfer.store(1.35f);
 	source.v4Radiation.store(-0.4f);
+	source.v4Pairing.store(0.7f);
+	source.v4Reaction.store(1.1f);
+	source.v4Lobes.store(1.2f);
+	source.v4Attack.store(0.8f);
+	source.v4FlickTime.store(0.6f);
+	source.v4MidBody.store(1.4f);
+	source.v4V3Pitch.store(0.85f);
 	json_t* saved = source.dataToJson();
 	Doorstop loaded;
 	loaded.dataFromJson(saved);
@@ -205,7 +212,14 @@ Result referenceV4RoundTripsRevisionAndFallback() {
 		&& loaded.v4BendDecay.load() == 1.8f
 		&& loaded.v4BendRate.load() == 1.15f
 		&& loaded.v4Transfer.load() == 1.35f
-		&& loaded.v4Radiation.load() == -0.4f;
+		&& loaded.v4Radiation.load() == -0.4f
+		&& loaded.v4Pairing.load() == 0.7f
+		&& loaded.v4Reaction.load() == 1.1f
+		&& loaded.v4Lobes.load() == 1.2f
+		&& loaded.v4Attack.load() == 0.8f
+		&& loaded.v4FlickTime.load() == 0.6f
+		&& loaded.v4MidBody.load() == 1.4f
+		&& loaded.v4V3Pitch.load() == 0.85f;
 	return {"Reference V4 selection and requested dataset revision survive reload",
 		pass, "restored=" + std::to_string(pass)};
 }

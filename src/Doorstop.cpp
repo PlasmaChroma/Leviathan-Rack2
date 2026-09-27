@@ -212,6 +212,14 @@ void Doorstop::process(const ProcessArgs& args) {
 		v4BendRate.load(std::memory_order_relaxed),
 		v4Transfer.load(std::memory_order_relaxed),
 		v4Radiation.load(std::memory_order_relaxed));
+	engine.getReferenceV4Engine().setV3BodyTuning(
+		v4Pairing.load(std::memory_order_relaxed),
+		v4Reaction.load(std::memory_order_relaxed),
+		v4Lobes.load(std::memory_order_relaxed),
+		v4Attack.load(std::memory_order_relaxed),
+		v4FlickTime.load(std::memory_order_relaxed),
+		v4MidBody.load(std::memory_order_relaxed),
+		v4V3Pitch.load(std::memory_order_relaxed));
 	const bool externalStrike = trigTrigger.process(inputs[TRIG_INPUT].getVoltage(0), 0.1f, 1.f);
 	const bool manualStrike = manualTrigger.process(params[MANUAL_PARAM].getValue(), 0.f, 1.f);
 	bool appliedStrike = false;
@@ -301,6 +309,13 @@ void Doorstop::onReset(const ResetEvent& e) {
 	v4BendRate.store(doorstop::contact_helix_defaults::BEND_RATE, std::memory_order_relaxed);
 	v4Transfer.store(doorstop::contact_helix_defaults::TRANSFER, std::memory_order_relaxed);
 	v4Radiation.store(doorstop::contact_helix_defaults::RADIATION, std::memory_order_relaxed);
+	v4Pairing.store(doorstop::contact_helix_defaults::PAIRING, std::memory_order_relaxed);
+	v4Reaction.store(doorstop::contact_helix_defaults::REACTION, std::memory_order_relaxed);
+	v4Lobes.store(doorstop::contact_helix_defaults::LOBES, std::memory_order_relaxed);
+	v4Attack.store(doorstop::contact_helix_defaults::ATTACK, std::memory_order_relaxed);
+	v4FlickTime.store(doorstop::contact_helix_defaults::FLICK_TIME, std::memory_order_relaxed);
+	v4MidBody.store(doorstop::contact_helix_defaults::MID_BODY, std::memory_order_relaxed);
+	v4V3Pitch.store(doorstop::contact_helix_defaults::V3_PITCH, std::memory_order_relaxed);
 	specimenStatePending.store(false, std::memory_order_relaxed);
 	newSpecimenRequested.store(false, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(specimenSeed.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -366,6 +381,13 @@ json_t* Doorstop::dataToJson() {
 	json_object_set_new(v4TuningJ, "bendRate", json_real(v4BendRate.load(std::memory_order_relaxed)));
 	json_object_set_new(v4TuningJ, "transfer", json_real(v4Transfer.load(std::memory_order_relaxed)));
 	json_object_set_new(v4TuningJ, "radiation", json_real(v4Radiation.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "pairing", json_real(v4Pairing.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "reaction", json_real(v4Reaction.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "lobes", json_real(v4Lobes.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "attack", json_real(v4Attack.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "flickTime", json_real(v4FlickTime.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "midBody", json_real(v4MidBody.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "v3Pitch", json_real(v4V3Pitch.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "referenceV4Tuning", v4TuningJ);
 	json_object_set_new(rootJ, "specimenSeed",
 		json_integer(specimenSeed.load(std::memory_order_relaxed)));
@@ -405,6 +427,13 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	float loadedV4BendRate = doorstop::contact_helix_defaults::BEND_RATE;
 	float loadedV4Transfer = doorstop::contact_helix_defaults::TRANSFER;
 	float loadedV4Radiation = doorstop::contact_helix_defaults::RADIATION;
+	float loadedV4Pairing = doorstop::contact_helix_defaults::PAIRING;
+	float loadedV4Reaction = doorstop::contact_helix_defaults::REACTION;
+	float loadedV4Lobes = doorstop::contact_helix_defaults::LOBES;
+	float loadedV4Attack = doorstop::contact_helix_defaults::ATTACK;
+	float loadedV4FlickTime = doorstop::contact_helix_defaults::FLICK_TIME;
+	float loadedV4MidBody = doorstop::contact_helix_defaults::MID_BODY;
+	float loadedV4V3Pitch = doorstop::contact_helix_defaults::V3_PITCH;
 	float loadedBreakIn = 0.f;
 	bool loadedLocked = false;
 	std::uint32_t loadedSeed = specimenSeed.load(std::memory_order_relaxed);
@@ -463,6 +492,13 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 		loadV4Scale("bendRate", &loadedV4BendRate, 0.5f, 1.5f);
 		loadV4Scale("transfer", &loadedV4Transfer, 0.f, 2.f);
 		loadV4Scale("radiation", &loadedV4Radiation, -1.f, 1.f);
+		loadV4Scale("pairing", &loadedV4Pairing, 0.f, 1.f);
+		loadV4Scale("reaction", &loadedV4Reaction, 0.f, 2.f);
+		loadV4Scale("lobes", &loadedV4Lobes, 0.f, 2.f);
+		loadV4Scale("attack", &loadedV4Attack, 0.f, 2.f);
+		loadV4Scale("flickTime", &loadedV4FlickTime, 0.3f, 2.f);
+		loadV4Scale("midBody", &loadedV4MidBody, 0.f, 2.f);
+		loadV4Scale("v3Pitch", &loadedV4V3Pitch, 0.5f, 1.5f);
 		json_t* seedJ = json_object_get(rootJ, "specimenSeed");
 		if (json_is_integer(seedJ)) {
 			const json_int_t value = json_integer_value(seedJ);
@@ -508,6 +544,13 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	v4BendRate.store(loadedV4BendRate, std::memory_order_relaxed);
 	v4Transfer.store(loadedV4Transfer, std::memory_order_relaxed);
 	v4Radiation.store(loadedV4Radiation, std::memory_order_relaxed);
+	v4Pairing.store(loadedV4Pairing, std::memory_order_relaxed);
+	v4Reaction.store(loadedV4Reaction, std::memory_order_relaxed);
+	v4Lobes.store(loadedV4Lobes, std::memory_order_relaxed);
+	v4Attack.store(loadedV4Attack, std::memory_order_relaxed);
+	v4FlickTime.store(loadedV4FlickTime, std::memory_order_relaxed);
+	v4MidBody.store(loadedV4MidBody, std::memory_order_relaxed);
+	v4V3Pitch.store(loadedV4V3Pitch, std::memory_order_relaxed);
 	specimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	specimenStatePending.store(true, std::memory_order_release);

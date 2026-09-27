@@ -92,9 +92,24 @@ void ContactHelixEngine::setMotionTuning(float bendRate, float transfer,
 	radiationControl = safeScale(radiation, -1.f, 1.f, 0.f);
 }
 
+void ContactHelixEngine::setV3BodyTuning(float pairing, float reaction,
+	float lobes, float attack, float flickTime, float midBody, float v3Pitch) {
+	auto safeScale = [](float value, float minimum, float maximum, float fallback) {
+		return std::isfinite(value) ? std::max(minimum, std::min(value, maximum)) : fallback;
+	};
+	pairingScale = safeScale(pairing, 0.f, 1.f, contact_helix_defaults::PAIRING);
+	reactionScale = safeScale(reaction, 0.f, 2.f, contact_helix_defaults::REACTION);
+	lobeScale = safeScale(lobes, 0.f, 2.f, contact_helix_defaults::LOBES);
+	attackScale = safeScale(attack, 0.f, 2.f, contact_helix_defaults::ATTACK);
+	flickTimeScale = safeScale(flickTime, 0.3f, 2.f, contact_helix_defaults::FLICK_TIME);
+	midBodyScale = safeScale(midBody, 0.f, 2.f, contact_helix_defaults::MID_BODY);
+	v3PitchScale = safeScale(v3Pitch, 0.5f, 1.5f, contact_helix_defaults::V3_PITCH);
+}
+
 void ContactHelixEngine::resetMotion() {
 	q.fill(0.f); v.fill(0.f); pulses.fill(Pulse {});
 	capPosition = capVelocity = mountPosition = mountVelocity = 0.f;
+	reactionPosition = reactionVelocity = 0.f;
 	dcInput = dcOutput = strikeLight = quietTime = 0.f;
 	sleeping = true;
 	const bool mismatch = diagnostics.modelRevisionMismatch;
@@ -111,7 +126,8 @@ void ContactHelixEngine::strike(float velocity) {
 	for (auto& pulse : pulses) if (pulse.remaining == 0) { slot = &pulse; break; }
 	if (!slot) { ++diagnostics.rejectedStrikes; return; }
 	const float bounded = std::max(-1.f, std::min(velocity, 1.f));
-	slot->total = std::max(8, int(0.0045f * sampleRate * SUBSTEPS));
+	slot->total = std::max(8,
+		int(0.0045f * flickTimeScale * sampleRate * SUBSTEPS));
 	slot->remaining = slot->total;
 	// A real hard flick stores disproportionately more bend energy than a
 	// moderate release. Keep the ordinary strike near its previous impulse but
@@ -156,6 +172,18 @@ float ContactHelixEngine::effectiveOmegaSquared(int coordinate) const {
 		const float dispersion = std::max(0.55f,
 			1.f + (dispersionScale - 1.f) * 0.022f * rank);
 		effectiveOmega *= pitchScale * dispersion;
+		const int pairStart = 2 + 2 * ((coordinate - 2) / 2);
+		const int pairOther = pairStart + 1;
+		if (pairOther < COORDINATE_COUNT) {
+			// The imported V3-like body has its own pitch reference. Calibrating it
+			// to the established V4 baseline preserves the current 1.00x sound,
+			// while live V4 PITCH can now move the unpaired helix independently.
+			const float pairedCenter = 0.5f * (omega[pairStart] + omega[pairOther])
+				* contact_helix_defaults::PITCH * dispersion * v3PitchScale;
+			const float pairedFrequency = pairedCenter
+				* (1.f + ((coordinate & 1) ? 0.006f : -0.006f));
+			effectiveOmega += pairingScale * (pairedFrequency - effectiveOmega);
+		}
 	}
 	return effectiveOmega * effectiveOmega;
 }
@@ -203,6 +231,17 @@ float ContactHelixEngine::processSubstep(float h) {
 	force[0] += transferAlpha * transferStiffness * transferExtension;
 	force[1] -= 0.55f * transferAlpha * transferStiffness * transferExtension;
 
+	// Explicit low reaction/body coordinate, conservatively attached to the
+	// projected bend. This fills the missing ~60 Hz rung without launching an
+	// independently triggered oscillator.
+	const float reactionOmega = 2.f * PI * 62.f * v3PitchScale;
+	const float reactionCoupling = reactionOmega * reactionOmega * 0.10f * reactionScale;
+	const float reactionExtension = reactionPosition - 0.16f * projectedBend;
+	const float reactionAcceleration = -reactionOmega * reactionOmega * reactionPosition
+		- 2.f * 2.8f * reactionVelocity - reactionCoupling * reactionExtension;
+	force[0] += 0.16f * reactionCoupling * reactionExtension;
+	force[1] -= 0.55f * 0.16f * reactionCoupling * reactionExtension;
+
 	diagnostics.activeContacts = 0;
 	diagnostics.minimumGap = 1.f;
 	diagnostics.maximumContactForce = 0.f;
@@ -244,17 +283,26 @@ float ContactHelixEngine::processSubstep(float h) {
 		- 1.8f * mountVelocity) / 0.06f;
 	mountPosition += h * mountVelocity;
 
+	const float projectedBendVelocity = v[0] - 0.55f * v[1];
+	const float turningActivity = std::min(1.f, std::fabs(projectedBend) * 22.f);
+	const float crossingActivity = std::min(1.f, std::fabs(projectedBendVelocity) * 0.035f);
 	float observation = 0.f;
 	for (int i = 0; i < COORDINATE_COUNT; ++i) {
 		v[i] += h * force[i];
 		q[i] += h * v[i];
 		const float observerScale = (i == 2 || i == 3)
 			? fundamentalScale : (i >= 4 ? metalScale : 1.f);
-		observation += observe[i] * observerScale * v[i];
+		const float midScale = i >= 4 && i <= 13 ? midBodyScale : 1.f;
+		const float bandPhase = ((i / 2) & 1) ? turningActivity : crossingActivity;
+		const float lobeGain = 1.f + lobeScale * (0.35f + 1.30f * bandPhase - 1.f);
+		const float accelerationObservation = force[i] / (2.f * PI * 140.f);
+		observation += observe[i] * observerScale * midScale * lobeGain
+			* (v[i] + attackScale * accelerationObservation);
 	}
-	const float projectedBendVelocity = v[0] - 0.55f * v[1];
-	const float turningActivity = std::min(1.f, std::fabs(projectedBend) * 22.f);
-	const float crossingActivity = std::min(1.f, std::fabs(projectedBendVelocity) * 0.035f);
+	reactionVelocity += h * reactionAcceleration;
+	reactionPosition += h * reactionVelocity;
+	observation += reactionScale * (0.24f * reactionVelocity
+		+ attackScale * 0.24f * reactionAcceleration / (2.f * PI * 140.f));
 	const float radiationActivity = radiationControl >= 0.f
 		? crossingActivity : turningActivity;
 	const float radiationDepth = std::fabs(radiationControl);
@@ -280,11 +328,18 @@ float ContactHelixEngine::calculateEnergy() const {
 	const double transferStiffness = double(effectiveOmegaSquared(2)) * 0.12 * transferScale;
 	const double transferExtension = double(q[2]) - transferAlpha * projectedBend;
 	e += 0.5 * transferStiffness * transferExtension * transferExtension;
+	const double reactionOmega = 2.0 * double(PI) * 62.0 * double(v3PitchScale);
+	const double reactionExtension = double(reactionPosition) - 0.16 * projectedBend;
+	const double reactionCoupling = reactionOmega * reactionOmega * 0.10 * reactionScale;
+	e += 0.5 * double(reactionVelocity) * reactionVelocity
+		+ 0.5 * reactionOmega * reactionOmega * reactionPosition * reactionPosition
+		+ 0.5 * reactionCoupling * reactionExtension * reactionExtension;
 	return float(e) + diagnostics.contactEnergy;
 }
 
 bool ContactHelixEngine::finiteState() const {
-	if (!std::isfinite(capPosition) || !std::isfinite(capVelocity)) return false;
+	if (!std::isfinite(capPosition) || !std::isfinite(capVelocity)
+		|| !std::isfinite(reactionPosition) || !std::isfinite(reactionVelocity)) return false;
 	for (int i = 0; i < COORDINATE_COUNT; ++i) if (!std::isfinite(q[i]) || !std::isfinite(v[i]) || std::fabs(q[i]) > 100.f) return false;
 	return true;
 }

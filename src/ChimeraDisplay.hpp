@@ -71,6 +71,17 @@ struct ChimeraDisplayOverlay : Widget {
     unsigned cachedCount = UINT32_MAX, cachedCurrent = UINT32_MAX;
     unsigned cachedRequested = UINT32_MAX;
 
+    static float markerPointRadius(float width, unsigned count) {
+        // A Reel may contain hundreds of Splices. Keep sparse anchors easy to
+        // read without turning a dense marker table into a solid row of dots.
+        const float spacingRadius = width / (2.8f * float(std::max(2u, count)));
+        return std::max(0.9f, std::min(3.25f, spacingRadius));
+    }
+
+    static float markerStemWidth(unsigned count) {
+        return count > 120u ? 0.8f : (count > 48u ? 1.f : 1.35f);
+    }
+
     void step() override {
         if (owner) owner->markerDisplay.consume(markers);
         else markers = chimera::MarkerDisplay{};
@@ -154,15 +165,36 @@ struct ChimeraDisplayOverlay : Widget {
                 return left + width * float(std::min(frame, displayFrames)) /
                     float(displayFrames);
             };
+            const unsigned current = owner->publishedRegion.load(std::memory_order_acquire);
+            const unsigned requested = owner->publishedRequestedRegion.load(std::memory_order_acquire);
+            const float pointRadius = markerPointRadius(width, markers.count);
+            const NVGcolor ordinaryColor = nvgRGBA(238, 177, 83, 225);
+            const NVGcolor currentColor = nvgRGBA(91, 229, 222, 255);
+            const NVGcolor requestedColor = nvgRGBA(196, 161, 246, 255);
+
+            // Stems retain precise timing at any density. Marker zero is now
+            // included, so the first Splice has a visible anchor at the left.
             nvgBeginPath(vg);
-            for (unsigned i = 1; i < markers.count; ++i) {
+            for (unsigned i = 0; i < markers.count; ++i) {
+                if (i == current || (i == requested && requested != current)) continue;
                 const float x = xFor(markers.markers[i]);
                 nvgMoveTo(vg, x, traceTop);
                 nvgLineTo(vg, x, traceBottom);
             }
-            nvgStrokeColor(vg, nvgRGBA(235, 183, 104, 200));
-            nvgStrokeWidth(vg, 1.f);
+            nvgStrokeColor(vg, ordinaryColor);
+            nvgStrokeWidth(vg, markerStemWidth(markers.count));
             nvgStroke(vg);
+
+            // Batch ordinary point heads into one path. The slight inset keeps
+            // the full circle legible against the display's rounded boundary.
+            nvgBeginPath(vg);
+            for (unsigned i = 0; i < markers.count; ++i) {
+                if (i == current || (i == requested && requested != current)) continue;
+                nvgCircle(vg, xFor(markers.markers[i]), traceTop + pointRadius + 1.f,
+                    pointRadius);
+            }
+            nvgFillColor(vg, ordinaryColor);
+            nvgFill(vg);
             const int record = owner->publishedRecordState.load(std::memory_order_acquire);
             if (record == 4 || record == 5 ||
                 owner->publishedAudioRevision.load(std::memory_order_acquire) >
@@ -182,6 +214,30 @@ struct ChimeraDisplayOverlay : Widget {
             nvgStrokeColor(vg, nvgRGB(246, 234, 168));
             nvgStrokeWidth(vg, 1.5f);
             nvgStroke(vg);
+
+            // Selected and queued anchors remain prominent even when hundreds
+            // of ordinary points have collapsed to sub-two-pixel indicators.
+            const auto drawEmphasizedAnchor = [&](unsigned index, NVGcolor color,
+                                                   float radius, float stemWidth) {
+                if (index >= markers.count) return;
+                const float x = xFor(markers.markers[index]);
+                nvgBeginPath(vg);
+                nvgMoveTo(vg, x, traceTop);
+                nvgLineTo(vg, x, traceBottom);
+                nvgStrokeColor(vg, color);
+                nvgStrokeWidth(vg, stemWidth);
+                nvgStroke(vg);
+                nvgBeginPath(vg);
+                nvgCircle(vg, x, traceTop + radius + 1.f, radius);
+                nvgFillColor(vg, color);
+                nvgFill(vg);
+                nvgStrokeColor(vg, nvgRGBA(7, 18, 27, 230));
+                nvgStrokeWidth(vg, 1.f);
+                nvgStroke(vg);
+            };
+            if (requested != current)
+                drawEmphasizedAnchor(requested, requestedColor, 3.75f, 2.f);
+            drawEmphasizedAnchor(current, currentColor, 4.25f, 2.35f);
         }
         nvgFontFaceId(vg, APP->window->uiFont->handle);
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);

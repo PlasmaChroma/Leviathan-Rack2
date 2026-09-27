@@ -26,6 +26,13 @@ constexpr float OUTPUT = 1.f;
 constexpr float BEND_RATE = 1.16f;
 constexpr float TRANSFER = 0.51f;
 constexpr float RADIATION = 0.80f;
+constexpr float PAIRING = 0.45f;
+constexpr float REACTION = 0.60f;
+constexpr float LOBES = 0.55f;
+constexpr float ATTACK = 0.50f;
+constexpr float FLICK_TIME = 0.70f;
+constexpr float MID_BODY = 1.20f;
+constexpr float V3_PITCH = 1.f;
 }
 
 struct ContactHelixDiagnostics {
@@ -68,6 +75,8 @@ public:
 		float metal, float contactLoss, float gap, float capMass,
 		float mountCompliance, float bendDecay);
 	void setMotionTuning(float bendRate, float transfer, float radiation);
+	void setV3BodyTuning(float pairing, float reaction, float lobes,
+		float attack, float flickTime, float midBody, float v3Pitch);
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
 
@@ -120,6 +129,15 @@ private:
 	float bendRateScale = contact_helix_defaults::BEND_RATE;
 	float transferScale = contact_helix_defaults::TRANSFER;
 	float radiationControl = contact_helix_defaults::RADIATION;
+	float pairingScale = contact_helix_defaults::PAIRING;
+	float reactionScale = contact_helix_defaults::REACTION;
+	float lobeScale = contact_helix_defaults::LOBES;
+	float attackScale = contact_helix_defaults::ATTACK;
+	float flickTimeScale = contact_helix_defaults::FLICK_TIME;
+	float midBodyScale = contact_helix_defaults::MID_BODY;
+	float v3PitchScale = contact_helix_defaults::V3_PITCH;
+	float reactionPosition = 0.f;
+	float reactionVelocity = 0.f;
 	bool sleeping = true;
 	ContactHelixDiagnostics diagnostics {};
 

@@ -58,6 +58,13 @@ struct Doorstop final : Module {
 	std::atomic<float> v4BendRate {doorstop::contact_helix_defaults::BEND_RATE};
 	std::atomic<float> v4Transfer {doorstop::contact_helix_defaults::TRANSFER};
 	std::atomic<float> v4Radiation {doorstop::contact_helix_defaults::RADIATION};
+	std::atomic<float> v4Pairing {doorstop::contact_helix_defaults::PAIRING};
+	std::atomic<float> v4Reaction {doorstop::contact_helix_defaults::REACTION};
+	std::atomic<float> v4Lobes {doorstop::contact_helix_defaults::LOBES};
+	std::atomic<float> v4Attack {doorstop::contact_helix_defaults::ATTACK};
+	std::atomic<float> v4FlickTime {doorstop::contact_helix_defaults::FLICK_TIME};
+	std::atomic<float> v4MidBody {doorstop::contact_helix_defaults::MID_BODY};
+	std::atomic<float> v4V3Pitch {doorstop::contact_helix_defaults::V3_PITCH};
 	std::atomic<std::uint32_t> specimenSeed {1u};
 	std::atomic<std::uint32_t> pendingSpecimenSeed {1u};
 	std::atomic<bool> specimenStatePending {false};

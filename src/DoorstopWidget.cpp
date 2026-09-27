@@ -647,7 +647,7 @@ struct DoorstopV4TuningOverlay final : widget::OpaqueWidget {
 	std::function<void()> closeAction;
 
 	DoorstopV4TuningOverlay() {
-		box.size = Vec(620.f, 350.f);
+		box.size = Vec(720.f, 438.f);
 	}
 
 	~DoorstopV4TuningOverlay() override {
@@ -690,6 +690,13 @@ struct DoorstopV4TuningOverlay final : widget::OpaqueWidget {
 		addTuningKnob(3, 2, "BODY DECAY", &module->v4Decay, 0.4f, 2.5f, BODY_DECAY);
 		addTuningKnob(4, 2, "RADIATION", &module->v4Radiation, -1.f, 1.f, RADIATION, false);
 		addTuningKnob(5, 2, "LEVEL", &module->v4Output, 0.25f, 2.f, OUTPUT);
+		addTuningKnob(0, 3, "PAIRING", &module->v4Pairing, 0.f, 1.f, PAIRING);
+		addTuningKnob(1, 3, "REACTION", &module->v4Reaction, 0.f, 2.f, REACTION);
+		addTuningKnob(2, 3, "LOBES", &module->v4Lobes, 0.f, 2.f, LOBES);
+		addTuningKnob(3, 3, "ATTACK", &module->v4Attack, 0.f, 2.f, ATTACK);
+		addTuningKnob(4, 3, "FLICK TIME", &module->v4FlickTime, 0.3f, 2.f, FLICK_TIME);
+		addTuningKnob(5, 3, "MID BODY", &module->v4MidBody, 0.f, 2.f, MID_BODY);
+		addTuningKnob(6, 3, "V3 PITCH", &module->v4V3Pitch, 0.5f, 1.5f, V3_PITCH);
 	}
 
 	void layoutAdjacent() {
