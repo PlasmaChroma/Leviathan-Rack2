@@ -1,5 +1,6 @@
 #include "../src/ReferenceSpringEngine.hpp"
 #include "../src/HelicalContinuumEngine.hpp"
+#include "../src/DoorstopContactHelixEngine.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -134,7 +135,8 @@ void usage(const char* executable) {
 		<< "                      spring-refined, rack-v2, boing-refined,\n"
 		<< "                      v3-boing-probe, v3-dark-boing, v3-deep-swing,\n"
 		<< "                      v3-deep-continuum, v3-deep-short-tail,\n"
-		<< "                      v3-deep-body-bend, or v3-deep-thick-spring\n"
+		<< "                      v3-deep-body-bend, v3-deep-thick-spring,\n"
+		<< "                      or v4-closed-coil\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -167,6 +169,7 @@ int main(int argc, char** argv) {
 			doorstop::ReferenceAnalysisOutput::ModuleOutput;
 		float radiationPhaseDegrees = 90.f;
 		bool useHelicalEngine = false;
+		bool useContactHelixEngine = false;
 		doorstop::HelicalTuningVariant helicalTuning =
 			doorstop::HelicalTuningVariant::BoingProbe;
 #endif
@@ -206,7 +209,10 @@ int main(int argc, char** argv) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 			else if (option == "--variant") {
 				const std::string variantName(value);
-				if (variantName == "v3-boing-probe"
+				if (variantName == "v4-closed-coil") {
+					useContactHelixEngine = true;
+				}
+				else if (variantName == "v3-boing-probe"
 					|| variantName == "v3-lobed-radiation"
 					|| variantName == "v3-paired-surrogate") {
 					useHelicalEngine = true;
@@ -295,6 +301,7 @@ int main(int argc, char** argv) {
 
 		doorstop::ReferenceSpringEngine engine(profile);
 		doorstop::HelicalContinuumEngine helicalEngine;
+		doorstop::ContactHelixEngine contactHelixEngine;
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		engine.setAnalysisVariant(variant);
 		engine.setAnalysisRadiationPhaseDegrees(radiationPhaseDegrees);
@@ -306,6 +313,9 @@ int main(int argc, char** argv) {
 		helicalEngine.setSampleRate(float(sampleRate));
 		helicalEngine.setSpecimenSeed(seed);
 		helicalEngine.setBreakIn(breakIn);
+		contactHelixEngine.setSampleRate(float(sampleRate));
+		contactHelixEngine.setSpecimenSeed(seed);
+		contactHelixEngine.setBreakIn(breakIn);
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		helicalEngine.setTuningVariant(helicalTuning);
 #endif
@@ -321,12 +331,14 @@ int main(int argc, char** argv) {
 			const float time = float(i) / float(sampleRate);
 			while (nextStrike < strikes.size()
 				&& strikes[nextStrike].time <= time) {
-				if (useHelicalEngine) helicalEngine.strike(strikes[nextStrike].velocity);
+				if (useContactHelixEngine) contactHelixEngine.strike(strikes[nextStrike].velocity);
+				else if (useHelicalEngine) helicalEngine.strike(strikes[nextStrike].velocity);
 				else engine.strike(strikes[nextStrike].velocity);
 				++nextStrike;
 			}
-			const float output = (useHelicalEngine
-				? helicalEngine.process(1.f / float(sampleRate)).outputVolts
+			const float output = (useContactHelixEngine
+				? contactHelixEngine.process(1.f / float(sampleRate)).outputVolts
+				: useHelicalEngine ? helicalEngine.process(1.f / float(sampleRate)).outputVolts
 				: engine.process(1.f / float(sampleRate)).outputVolts) / 5.f;
 			if (discardOutput) outputChecksum += output;
 			else samples[i] = output;

@@ -11,6 +11,7 @@ const char* engineModeName(doorstop::EngineMode mode) {
 		case doorstop::EngineMode::ReferenceV1: return "referenceV1";
 		case doorstop::EngineMode::ReferenceV2: return "referenceV2";
 		case doorstop::EngineMode::ReferenceV3: return "referenceV3";
+		case doorstop::EngineMode::ReferenceV4: return "referenceV4";
 		case doorstop::EngineMode::Legacy: return "legacy";
 		default: return "referenceV1";
 	}
@@ -59,6 +60,7 @@ bool parseEngineMode(json_t* value, doorstop::EngineMode* mode) {
 		*mode = doorstop::EngineMode::ReferenceV3;
 		return true;
 	}
+	if (name == "referenceV4") { *mode = doorstop::EngineMode::ReferenceV4; return true; }
 	return false;
 }
 
@@ -187,6 +189,29 @@ void Doorstop::process(const ProcessArgs& args) {
 		int(doorstop::HelicalTuningVariant::Count) - 1);
 	engine.setReferenceV3TuningVariant(
 		static_cast<doorstop::HelicalTuningVariant>(requestedV3Tuning));
+	engine.setReferenceV4ModelDataRevision(
+		referenceV4ModelDataRevision.load(std::memory_order_relaxed));
+	engine.getReferenceV4Engine().setLiveTuning(
+		v4Excitation.load(std::memory_order_relaxed),
+		v4Bend.load(std::memory_order_relaxed),
+		v4Twang.load(std::memory_order_relaxed),
+		v4Contact.load(std::memory_order_relaxed),
+		v4Decay.load(std::memory_order_relaxed),
+		v4Output.load(std::memory_order_relaxed));
+	engine.getReferenceV4Engine().setAdvancedTuning(
+		v4Pitch.load(std::memory_order_relaxed),
+		v4Dispersion.load(std::memory_order_relaxed),
+		v4Sweep.load(std::memory_order_relaxed),
+		v4Metal.load(std::memory_order_relaxed),
+		v4ContactLoss.load(std::memory_order_relaxed),
+		v4Gap.load(std::memory_order_relaxed),
+		v4CapMass.load(std::memory_order_relaxed),
+		v4MountCompliance.load(std::memory_order_relaxed),
+		v4BendDecay.load(std::memory_order_relaxed));
+	engine.getReferenceV4Engine().setMotionTuning(
+		v4BendRate.load(std::memory_order_relaxed),
+		v4Transfer.load(std::memory_order_relaxed),
+		v4Radiation.load(std::memory_order_relaxed));
 	const bool externalStrike = trigTrigger.process(inputs[TRIG_INPUT].getVoltage(0), 0.1f, 1.f);
 	const bool manualStrike = manualTrigger.process(params[MANUAL_PARAM].getValue(), 0.f, 1.f);
 	bool appliedStrike = false;
@@ -215,15 +240,16 @@ void Doorstop::process(const ProcessArgs& args) {
 	const doorstop::Frame frame = engine.process(args.sampleTime);
 	const float rawVisualEnergy = std::max(
 		frame.strikeLight, std::max(frame.energy, frame.visualActivity));
-	const bool usesV3VisualTracking =
-		engine.getEngineMode() == doorstop::EngineMode::ReferenceV3;
+	const bool usesPhysicalVisualTracking =
+		engine.getEngineMode() == doorstop::EngineMode::ReferenceV3
+		|| engine.getEngineMode() == doorstop::EngineMode::ReferenceV4;
 	const float trackedVisualEnergy = appliedStrike
 		? doorstop::shapeVisualEnergyActivity(
-			rawVisualEnergy, !usesV3VisualTracking)
+			rawVisualEnergy, !usesPhysicalVisualTracking)
 		: rawVisualEnergy;
 	visualEnergyEnvelope = doorstop::updateVisualEnergyEnvelope(
 		visualEnergyEnvelope, trackedVisualEnergy, appliedStrike,
-		usesV3VisualTracking, frame.sleeping, args.sampleTime);
+		usesPhysicalVisualTracking, frame.sleeping, args.sampleTime);
 	outputs[AUDIO_OUTPUT].setChannels(1);
 	outputs[AUDIO_OUTPUT].setVoltage(frame.outputVolts);
 
@@ -255,6 +281,26 @@ void Doorstop::onReset(const ResetEvent& e) {
 	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
 	referenceV3Tuning.store(
 		int(doorstop::HelicalTuningVariant::BoingProbe), std::memory_order_relaxed);
+	referenceV4ModelDataRevision.store(
+		doorstop::ContactHelixEngine::MODEL_DATA_REVISION, std::memory_order_relaxed);
+	v4Excitation.store(doorstop::contact_helix_defaults::EXCITATION, std::memory_order_relaxed);
+	v4Bend.store(doorstop::contact_helix_defaults::BEND, std::memory_order_relaxed);
+	v4Twang.store(doorstop::contact_helix_defaults::FUNDAMENTAL, std::memory_order_relaxed);
+	v4Contact.store(doorstop::contact_helix_defaults::CONTACT, std::memory_order_relaxed);
+	v4Decay.store(doorstop::contact_helix_defaults::BODY_DECAY, std::memory_order_relaxed);
+	v4Output.store(doorstop::contact_helix_defaults::OUTPUT, std::memory_order_relaxed);
+	v4Pitch.store(doorstop::contact_helix_defaults::PITCH, std::memory_order_relaxed);
+	v4Dispersion.store(doorstop::contact_helix_defaults::DISPERSION, std::memory_order_relaxed);
+	v4Sweep.store(doorstop::contact_helix_defaults::SWEEP, std::memory_order_relaxed);
+	v4Metal.store(doorstop::contact_helix_defaults::METAL, std::memory_order_relaxed);
+	v4ContactLoss.store(doorstop::contact_helix_defaults::CONTACT_LOSS, std::memory_order_relaxed);
+	v4Gap.store(doorstop::contact_helix_defaults::GAP, std::memory_order_relaxed);
+	v4CapMass.store(doorstop::contact_helix_defaults::CAP_MASS, std::memory_order_relaxed);
+	v4MountCompliance.store(doorstop::contact_helix_defaults::MOUNT_COMPLIANCE, std::memory_order_relaxed);
+	v4BendDecay.store(doorstop::contact_helix_defaults::BEND_DECAY, std::memory_order_relaxed);
+	v4BendRate.store(doorstop::contact_helix_defaults::BEND_RATE, std::memory_order_relaxed);
+	v4Transfer.store(doorstop::contact_helix_defaults::TRANSFER, std::memory_order_relaxed);
+	v4Radiation.store(doorstop::contact_helix_defaults::RADIATION, std::memory_order_relaxed);
 	specimenStatePending.store(false, std::memory_order_relaxed);
 	newSpecimenRequested.store(false, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(specimenSeed.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -299,6 +345,28 @@ json_t* Doorstop::dataToJson() {
 		int(doorstop::HelicalTuningVariant::Count) - 1));
 	json_object_set_new(rootJ, "referenceV3Tuning",
 		json_string(helicalTuningName(savedV3Tuning)));
+	json_object_set_new(rootJ, "referenceV4ModelDataRevision",
+		json_integer(referenceV4ModelDataRevision.load(std::memory_order_relaxed)));
+	json_t* v4TuningJ = json_object();
+	json_object_set_new(v4TuningJ, "excitation", json_real(v4Excitation.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "bend", json_real(v4Bend.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "twang", json_real(v4Twang.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "contact", json_real(v4Contact.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "decay", json_real(v4Decay.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "output", json_real(v4Output.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "pitch", json_real(v4Pitch.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "dispersion", json_real(v4Dispersion.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "sweep", json_real(v4Sweep.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "metal", json_real(v4Metal.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "contactLoss", json_real(v4ContactLoss.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "gap", json_real(v4Gap.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "capMass", json_real(v4CapMass.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "mountCompliance", json_real(v4MountCompliance.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "bendDecay", json_real(v4BendDecay.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "bendRate", json_real(v4BendRate.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "transfer", json_real(v4Transfer.load(std::memory_order_relaxed)));
+	json_object_set_new(v4TuningJ, "radiation", json_real(v4Radiation.load(std::memory_order_relaxed)));
+	json_object_set_new(rootJ, "referenceV4Tuning", v4TuningJ);
 	json_object_set_new(rootJ, "specimenSeed",
 		json_integer(specimenSeed.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "breakIn",
@@ -318,6 +386,25 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	int loadedModel = int(doorstop::SoundModel::ProbabilisticMix);
 	doorstop::HelicalTuningVariant loadedV3Tuning =
 		doorstop::HelicalTuningVariant::BoingProbe;
+	int loadedV4Revision = doorstop::ContactHelixEngine::MODEL_DATA_REVISION;
+	float loadedV4Excitation = doorstop::contact_helix_defaults::EXCITATION;
+	float loadedV4Bend = doorstop::contact_helix_defaults::BEND;
+	float loadedV4Twang = doorstop::contact_helix_defaults::FUNDAMENTAL;
+	float loadedV4Contact = doorstop::contact_helix_defaults::CONTACT;
+	float loadedV4Decay = doorstop::contact_helix_defaults::BODY_DECAY;
+	float loadedV4Output = doorstop::contact_helix_defaults::OUTPUT;
+	float loadedV4Pitch = doorstop::contact_helix_defaults::PITCH;
+	float loadedV4Dispersion = doorstop::contact_helix_defaults::DISPERSION;
+	float loadedV4Sweep = doorstop::contact_helix_defaults::SWEEP;
+	float loadedV4Metal = doorstop::contact_helix_defaults::METAL;
+	float loadedV4ContactLoss = doorstop::contact_helix_defaults::CONTACT_LOSS;
+	float loadedV4Gap = doorstop::contact_helix_defaults::GAP;
+	float loadedV4CapMass = doorstop::contact_helix_defaults::CAP_MASS;
+	float loadedV4MountCompliance = doorstop::contact_helix_defaults::MOUNT_COMPLIANCE;
+	float loadedV4BendDecay = doorstop::contact_helix_defaults::BEND_DECAY;
+	float loadedV4BendRate = doorstop::contact_helix_defaults::BEND_RATE;
+	float loadedV4Transfer = doorstop::contact_helix_defaults::TRANSFER;
+	float loadedV4Radiation = doorstop::contact_helix_defaults::RADIATION;
 	float loadedBreakIn = 0.f;
 	bool loadedLocked = false;
 	std::uint32_t loadedSeed = specimenSeed.load(std::memory_order_relaxed);
@@ -346,6 +433,36 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 		}
 		parseHelicalTuning(
 			json_object_get(rootJ, "referenceV3Tuning"), &loadedV3Tuning);
+		json_t* v4RevisionJ = json_object_get(rootJ, "referenceV4ModelDataRevision");
+		if (json_is_integer(v4RevisionJ) && json_integer_value(v4RevisionJ) > 0)
+			loadedV4Revision = int(json_integer_value(v4RevisionJ));
+		json_t* v4TuningJ = json_object_get(rootJ, "referenceV4Tuning");
+		auto loadV4Scale = [v4TuningJ](const char* key, float* destination,
+			float minimum, float maximum) {
+			if (!json_is_object(v4TuningJ) || !destination) return;
+			json_t* valueJ = json_object_get(v4TuningJ, key);
+			if (!json_is_number(valueJ)) return;
+			const double value = json_number_value(valueJ);
+			if (std::isfinite(value)) *destination = clamp(float(value), minimum, maximum);
+		};
+		loadV4Scale("excitation", &loadedV4Excitation, 0.25f, 2.f);
+		loadV4Scale("bend", &loadedV4Bend, 0.25f, 2.f);
+		loadV4Scale("twang", &loadedV4Twang, 0.f, 2.f);
+		loadV4Scale("contact", &loadedV4Contact, 0.25f, 2.f);
+		loadV4Scale("decay", &loadedV4Decay, 0.4f, 2.5f);
+		loadV4Scale("output", &loadedV4Output, 0.25f, 2.f);
+		loadV4Scale("pitch", &loadedV4Pitch, 0.5f, 1.5f);
+		loadV4Scale("dispersion", &loadedV4Dispersion, 0.5f, 1.5f);
+		loadV4Scale("sweep", &loadedV4Sweep, 0.f, 2.f);
+		loadV4Scale("metal", &loadedV4Metal, 0.f, 2.f);
+		loadV4Scale("contactLoss", &loadedV4ContactLoss, 0.f, 2.f);
+		loadV4Scale("gap", &loadedV4Gap, -1.f, 1.f);
+		loadV4Scale("capMass", &loadedV4CapMass, 0.5f, 2.f);
+		loadV4Scale("mountCompliance", &loadedV4MountCompliance, 0.5f, 2.f);
+		loadV4Scale("bendDecay", &loadedV4BendDecay, 0.4f, 2.5f);
+		loadV4Scale("bendRate", &loadedV4BendRate, 0.5f, 1.5f);
+		loadV4Scale("transfer", &loadedV4Transfer, 0.f, 2.f);
+		loadV4Scale("radiation", &loadedV4Radiation, -1.f, 1.f);
 		json_t* seedJ = json_object_get(rootJ, "specimenSeed");
 		if (json_is_integer(seedJ)) {
 			const json_int_t value = json_integer_value(seedJ);
@@ -372,6 +489,25 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	engineMode.store(int(loadedEngineMode), std::memory_order_relaxed);
 	soundModel.store(loadedModel, std::memory_order_relaxed);
 	referenceV3Tuning.store(int(loadedV3Tuning), std::memory_order_relaxed);
+	referenceV4ModelDataRevision.store(loadedV4Revision, std::memory_order_relaxed);
+	v4Excitation.store(loadedV4Excitation, std::memory_order_relaxed);
+	v4Bend.store(loadedV4Bend, std::memory_order_relaxed);
+	v4Twang.store(loadedV4Twang, std::memory_order_relaxed);
+	v4Contact.store(loadedV4Contact, std::memory_order_relaxed);
+	v4Decay.store(loadedV4Decay, std::memory_order_relaxed);
+	v4Output.store(loadedV4Output, std::memory_order_relaxed);
+	v4Pitch.store(loadedV4Pitch, std::memory_order_relaxed);
+	v4Dispersion.store(loadedV4Dispersion, std::memory_order_relaxed);
+	v4Sweep.store(loadedV4Sweep, std::memory_order_relaxed);
+	v4Metal.store(loadedV4Metal, std::memory_order_relaxed);
+	v4ContactLoss.store(loadedV4ContactLoss, std::memory_order_relaxed);
+	v4Gap.store(loadedV4Gap, std::memory_order_relaxed);
+	v4CapMass.store(loadedV4CapMass, std::memory_order_relaxed);
+	v4MountCompliance.store(loadedV4MountCompliance, std::memory_order_relaxed);
+	v4BendDecay.store(loadedV4BendDecay, std::memory_order_relaxed);
+	v4BendRate.store(loadedV4BendRate, std::memory_order_relaxed);
+	v4Transfer.store(loadedV4Transfer, std::memory_order_relaxed);
+	v4Radiation.store(loadedV4Radiation, std::memory_order_relaxed);
 	specimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	specimenStatePending.store(true, std::memory_order_release);

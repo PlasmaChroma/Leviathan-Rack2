@@ -133,6 +133,9 @@ TEST_BINS_NON_RACK := \
 	build/tests/doorstop_engine_spec \
 	build/tests/doorstop_reference_engine_spec \
 	build/tests/doorstop_helical_engine_spec \
+	build/tests/doorstop_contact_helix_engine_spec \
+	build/tests/doorstop_contact_helix_energy_spec \
+	build/tests/doorstop_contact_helix_compat_spec \
 	build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/sil_repair_spec \
@@ -244,9 +247,9 @@ build/tools/phonex_benchmark: tools/phonex_benchmark.cpp src/PhonexEngine.cpp sr
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_benchmark.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp -o $@
 
-build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
+build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
@@ -1050,11 +1053,20 @@ build/tests/octavia_server_lifecycle_spec: tests/octavia_server_lifecycle_spec.c
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/DoorstopVisualFeedback.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
-build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
-build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/ReferenceSpringEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+
+build/tests/doorstop_contact_helix_engine_spec: tests/doorstop_contact_helix_engine_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_engine_spec.cpp src/DoorstopContactHelixEngine.cpp -o $@
+
+build/tests/doorstop_contact_helix_energy_spec: tests/doorstop_contact_helix_energy_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_energy_spec.cpp src/DoorstopContactHelixEngine.cpp -o $@
+
+build/tests/doorstop_contact_helix_compat_spec: tests/doorstop_contact_helix_compat_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_compat_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	@mkdir -p $(dir $@)
@@ -1092,7 +1104,7 @@ build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUti
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) $(if $(ARCH_X64),-march=nehalem) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack $(if $(findstring mingw,$(CXX_MACHINE)),-lws2_32) -Wl,-rpath,/tmp/Rack2 -o $@
 
-build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexSemantic.cpp src/Phonex.hpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp src/PhonexTypes.hpp src/OctaviaSemanticControl.hpp | build/tests build/tests/doorstop_runtime_spec

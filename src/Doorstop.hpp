@@ -38,6 +38,26 @@ struct Doorstop final : Module {
 	std::atomic<int> soundModel {int(doorstop::SoundModel::ProbabilisticMix)};
 	std::atomic<int> referenceV3Tuning {
 		int(doorstop::HelicalTuningVariant::BoingProbe)};
+	std::atomic<int> referenceV4ModelDataRevision {
+		doorstop::ContactHelixEngine::MODEL_DATA_REVISION};
+	std::atomic<float> v4Excitation {doorstop::contact_helix_defaults::EXCITATION};
+	std::atomic<float> v4Bend {doorstop::contact_helix_defaults::BEND};
+	std::atomic<float> v4Twang {doorstop::contact_helix_defaults::FUNDAMENTAL};
+	std::atomic<float> v4Contact {doorstop::contact_helix_defaults::CONTACT};
+	std::atomic<float> v4Decay {doorstop::contact_helix_defaults::BODY_DECAY};
+	std::atomic<float> v4Output {doorstop::contact_helix_defaults::OUTPUT};
+	std::atomic<float> v4Pitch {doorstop::contact_helix_defaults::PITCH};
+	std::atomic<float> v4Dispersion {doorstop::contact_helix_defaults::DISPERSION};
+	std::atomic<float> v4Sweep {doorstop::contact_helix_defaults::SWEEP};
+	std::atomic<float> v4Metal {doorstop::contact_helix_defaults::METAL};
+	std::atomic<float> v4ContactLoss {doorstop::contact_helix_defaults::CONTACT_LOSS};
+	std::atomic<float> v4Gap {doorstop::contact_helix_defaults::GAP};
+	std::atomic<float> v4CapMass {doorstop::contact_helix_defaults::CAP_MASS};
+	std::atomic<float> v4MountCompliance {doorstop::contact_helix_defaults::MOUNT_COMPLIANCE};
+	std::atomic<float> v4BendDecay {doorstop::contact_helix_defaults::BEND_DECAY};
+	std::atomic<float> v4BendRate {doorstop::contact_helix_defaults::BEND_RATE};
+	std::atomic<float> v4Transfer {doorstop::contact_helix_defaults::TRANSFER};
+	std::atomic<float> v4Radiation {doorstop::contact_helix_defaults::RADIATION};
 	std::atomic<std::uint32_t> specimenSeed {1u};
 	std::atomic<std::uint32_t> pendingSpecimenSeed {1u};
 	std::atomic<bool> specimenStatePending {false};

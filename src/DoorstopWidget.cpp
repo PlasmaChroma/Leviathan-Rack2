@@ -544,6 +544,209 @@ struct DoorstopOverflowWidget final : TransparentWidget {
 	void drawOverflowScene(const DrawArgs& args);
 };
 
+struct DoorstopV4TuningOverlay;
+
+struct DoorstopV4TuningOverlayLink {
+	Widget* anchor = nullptr;
+	DoorstopV4TuningOverlay* overlay = nullptr;
+};
+
+struct DoorstopV4TuningKnob final : OpaqueWidget {
+	std::atomic<float>* value = nullptr;
+	const char* label = "";
+	float minimum = 0.f;
+	float maximum = 2.f;
+	float defaultValue = 1.f;
+	bool multiplierDisplay = true;
+	bool dragging = false;
+
+	float normalized() const {
+		const float current = value ? value->load(std::memory_order_relaxed) : defaultValue;
+		return clamp((current - minimum) / std::max(1e-6f, maximum - minimum), 0.f, 1.f);
+	}
+
+	void setNormalized(float normalizedValue) {
+		if (value) value->store(minimum + clamp(normalizedValue, 0.f, 1.f) * (maximum - minimum), std::memory_order_relaxed);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			dragging = true;
+			e.consume(this);
+			return;
+		}
+		if (e.button == GLFW_MOUSE_BUTTON_RIGHT && e.action == GLFW_PRESS) {
+			if (value) value->store(defaultValue, std::memory_order_relaxed);
+			e.consume(this);
+			return;
+		}
+		OpaqueWidget::onButton(e);
+	}
+
+	void onDragMove(const event::DragMove& e) override {
+		if (dragging) {
+			const float localDelta = -e.mouseDelta.y / std::max(0.001f, getAbsoluteZoom());
+			setNormalized(normalized() + localDelta / 140.f);
+			e.consume(this);
+			return;
+		}
+		OpaqueWidget::onDragMove(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		dragging = false;
+		OpaqueWidget::onDragEnd(e);
+	}
+
+	void onHoverScroll(const event::HoverScroll& e) override {
+		if (std::fabs(e.scrollDelta.y) > 1e-4f) {
+			setNormalized(normalized() + (e.scrollDelta.y > 0.f ? 0.02f : -0.02f));
+			e.consume(this);
+			return;
+		}
+		OpaqueWidget::onHoverScroll(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float n = normalized();
+		const Vec center(0.5f * box.size.x, 31.f);
+		const float angle = -2.35f + n * 4.70f;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, 21.f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg, center.x - 6.f, center.y - 7.f,
+			2.f, 24.f, nvgRGBA(82, 105, 130, 255), nvgRGBA(13, 19, 29, 255)));
+		nvgFill(args.vg);
+		nvgStrokeWidth(args.vg, 1.5f);
+		nvgStrokeColor(args.vg, nvgRGBA(92, 205, 230, 220));
+		nvgStroke(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x, center.y);
+		nvgLineTo(args.vg, center.x + std::sin(angle) * 16.f,
+			center.y - std::cos(angle) * 16.f);
+		nvgStrokeWidth(args.vg, 2.5f);
+		nvgStrokeColor(args.vg, nvgRGBA(236, 246, 255, 255));
+		nvgStroke(args.vg);
+		if (APP && APP->window && APP->window->uiFont) {
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFontSize(args.vg, 12.f);
+			nvgFillColor(args.vg, nvgRGBA(205, 225, 239, 255));
+			nvgText(args.vg, center.x, 59.f, label, nullptr);
+			nvgFontSize(args.vg, 11.f);
+			nvgFillColor(args.vg, nvgRGBA(110, 214, 234, 255));
+			const float current = value ? value->load(std::memory_order_relaxed) : defaultValue;
+			nvgText(args.vg, center.x, 74.f,
+				string::f(multiplierDisplay ? "%.2fx" : "%+.2f", current).c_str(), nullptr);
+		}
+	}
+};
+
+struct DoorstopV4TuningOverlay final : widget::OpaqueWidget {
+	Doorstop* module = nullptr;
+	std::shared_ptr<DoorstopV4TuningOverlayLink> link;
+	std::function<void()> closeAction;
+
+	DoorstopV4TuningOverlay() {
+		box.size = Vec(620.f, 350.f);
+	}
+
+	~DoorstopV4TuningOverlay() override {
+		if (link && link->overlay == this) link->overlay = nullptr;
+	}
+
+	void addTuningKnob(int column, int row, const char* label,
+		std::atomic<float>* value, float minimum, float maximum,
+		float defaultValue = 1.f, bool multiplierDisplay = true) {
+		auto* knob = new DoorstopV4TuningKnob();
+		knob->label = label;
+		knob->value = value;
+		knob->minimum = minimum;
+		knob->maximum = maximum;
+		knob->defaultValue = defaultValue;
+		knob->multiplierDisplay = multiplierDisplay;
+		knob->box.pos = Vec(19.f + 100.f * column, 48.f + 88.f * row);
+		knob->box.size = Vec(82.f, 80.f);
+		addChild(knob);
+	}
+
+	void buildControls() {
+		if (!module) return;
+		using namespace doorstop::contact_helix_defaults;
+		addTuningKnob(0, 0, "EXCITE", &module->v4Excitation, 0.25f, 2.f, EXCITATION);
+		addTuningKnob(1, 0, "BEND", &module->v4Bend, 0.25f, 2.f, BEND);
+		addTuningKnob(2, 0, "BEND RATE", &module->v4BendRate, 0.5f, 1.5f, BEND_RATE);
+		addTuningKnob(3, 0, "BEND DECAY", &module->v4BendDecay, 0.4f, 2.5f, BEND_DECAY);
+		addTuningKnob(4, 0, "CAP MASS", &module->v4CapMass, 0.5f, 2.f, CAP_MASS);
+		addTuningKnob(5, 0, "MOUNT", &module->v4MountCompliance, 0.5f, 2.f, MOUNT_COMPLIANCE);
+		addTuningKnob(0, 1, "PITCH", &module->v4Pitch, 0.5f, 1.5f, PITCH);
+		addTuningKnob(1, 1, "DISPERSION", &module->v4Dispersion, 0.5f, 1.5f, DISPERSION);
+		addTuningKnob(2, 1, "FUNDAMENTAL", &module->v4Twang, 0.f, 2.f, FUNDAMENTAL);
+		addTuningKnob(3, 1, "METAL", &module->v4Metal, 0.f, 2.f, METAL);
+		addTuningKnob(4, 1, "SWEEP", &module->v4Sweep, 0.f, 2.f, SWEEP);
+		addTuningKnob(5, 1, "TRANSFER", &module->v4Transfer, 0.f, 2.f, TRANSFER);
+		addTuningKnob(0, 2, "GAP", &module->v4Gap, -1.f, 1.f, GAP, false);
+		addTuningKnob(1, 2, "CONTACT K", &module->v4Contact, 0.25f, 2.f, CONTACT);
+		addTuningKnob(2, 2, "CONTACT LOSS", &module->v4ContactLoss, 0.f, 2.f, CONTACT_LOSS);
+		addTuningKnob(3, 2, "BODY DECAY", &module->v4Decay, 0.4f, 2.5f, BODY_DECAY);
+		addTuningKnob(4, 2, "RADIATION", &module->v4Radiation, -1.f, 1.f, RADIATION, false);
+		addTuningKnob(5, 2, "LEVEL", &module->v4Output, 0.25f, 2.f, OUTPUT);
+	}
+
+	void layoutAdjacent() {
+		if (!link || !link->anchor || !APP || !APP->scene) return;
+		Widget* anchor = link->anchor;
+		const Vec origin = anchor->getAbsoluteOffset(Vec());
+		const float zoom = std::max(anchor->getAbsoluteZoom(), 0.001f);
+		float x = origin.x + anchor->box.size.x * zoom + 8.f;
+		if (x + box.size.x > APP->scene->box.size.x - 8.f)
+			x = origin.x - box.size.x - 8.f;
+		box.pos = Vec(clamp(x, 8.f, std::max(8.f, APP->scene->box.size.x - box.size.x - 8.f)),
+			clamp(origin.y, 32.f, std::max(32.f, APP->scene->box.size.y - box.size.y - 8.f)));
+	}
+
+	void step() override { layoutAdjacent(); widget::OpaqueWidget::step(); }
+
+	void onButton(const event::Button& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS
+			&& e.pos.x > box.size.x - 34.f && e.pos.y < 34.f && closeAction) {
+			closeAction(); e.consume(this); return;
+		}
+		widget::OpaqueWidget::onButton(e);
+	}
+
+	void onHoverKey(const event::HoverKey& e) override {
+		if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ESCAPE && closeAction) {
+			closeAction(); e.consume(this); return;
+		}
+		widget::OpaqueWidget::onHoverKey(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 8.f);
+		nvgFillColor(args.vg, nvgRGBA(7, 13, 21, 248));
+		nvgFill(args.vg);
+		nvgStrokeWidth(args.vg, 2.f);
+		nvgStrokeColor(args.vg, nvgRGBA(71, 190, 218, 255));
+		nvgStroke(args.vg);
+		if (APP && APP->window && APP->window->uiFont) {
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+			nvgFontSize(args.vg, 16.f);
+			nvgFillColor(args.vg, nvgRGBA(225, 244, 250, 255));
+			nvgText(args.vg, 14.f, 20.f, "DOORSTOP V4 TUNING", nullptr);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFontSize(args.vg, 18.f);
+			nvgText(args.vg, box.size.x - 18.f, 19.f, "x", nullptr);
+			nvgFontSize(args.vg, 10.f);
+			nvgFillColor(args.vg, nvgRGBA(116, 151, 168, 255));
+			nvgText(args.vg, 0.5f * box.size.x, box.size.y - 17.f,
+				"Drag vertically - wheel for fine adjustment - right-click resets", nullptr);
+		}
+		Widget::draw(args);
+	}
+};
+
 struct DoorstopWidget final : ModuleWidget {
 	struct RenderingLog {
 		std::ofstream file;
@@ -556,6 +759,7 @@ struct DoorstopWidget final : ModuleWidget {
 
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::shared_ptr<DoorstopOverlayLink> overlayLink;
+	std::shared_ptr<DoorstopV4TuningOverlayLink> tuningOverlayLink;
 	widget::FramebufferWidget* springFramebuffer = nullptr;
 	DoorstopSpringWidget* springWidget = nullptr;
 	RenderingLog renderingLog;
@@ -687,6 +891,8 @@ struct DoorstopWidget final : ModuleWidget {
 		setModule(module);
 		overlayLink = std::make_shared<DoorstopOverlayLink>();
 		overlayLink->owner = this;
+		tuningOverlayLink = std::make_shared<DoorstopV4TuningOverlayLink>();
+		tuningOverlayLink->anchor = this;
 		buildSpringGeometry(overlayLink->springGeometry[0], 0.f);
 
 		PreviewBuildLogTimer previewBuildTimer("Doorstop", module);
@@ -742,12 +948,40 @@ struct DoorstopWidget final : ModuleWidget {
 	}
 
 	~DoorstopWidget() override {
+		closeV4Tuning();
 		stopRenderingLog();
 		if (!overlayLink) {
 			return;
 		}
 		overlayLink->owner = nullptr;
 		destroyOverflowWidget();
+	}
+
+	bool isV4TuningOpen() const { return tuningOverlayLink && tuningOverlayLink->overlay; }
+
+	void openV4Tuning() {
+		auto* m = dynamic_cast<Doorstop*>(module);
+		if (!m || isV4TuningOpen() || !APP || !APP->scene) return;
+		auto* overlay = new DoorstopV4TuningOverlay();
+		overlay->module = m;
+		overlay->link = tuningOverlayLink;
+		const std::shared_ptr<DoorstopV4TuningOverlayLink> link = tuningOverlayLink;
+		overlay->closeAction = [this, link]() { if (link && link->anchor == this) closeV4Tuning(); };
+		overlay->buildControls();
+		tuningOverlayLink->overlay = overlay;
+		overlay->layoutAdjacent();
+		if (APP->scene->menuBar && APP->scene->hasChild(APP->scene->menuBar))
+			APP->scene->addChildBelow(overlay, APP->scene->menuBar);
+		else APP->scene->addChild(overlay);
+	}
+
+	void closeV4Tuning() {
+		DoorstopV4TuningOverlay* overlay = tuningOverlayLink ? tuningOverlayLink->overlay : nullptr;
+		if (!overlay) return;
+		overlay->closeAction = nullptr;
+		overlay->module = nullptr;
+		tuningOverlayLink->overlay = nullptr;
+		if (overlay->parent) overlay->requestDelete(); else delete overlay;
 	}
 
 	bool validRackContext() const {
@@ -932,7 +1166,16 @@ struct DoorstopWidget final : ModuleWidget {
 			return;
 		}
 		menu->addChild(new MenuSeparator());
+		menu->addChild(createCheckMenuItem(
+			"V4 tuning panel", "",
+			[this]() { return isV4TuningOpen(); },
+			[this]() { if (isV4TuningOpen()) closeV4Tuning(); else openV4Tuning(); }));
 		menu->addChild(createSubmenuItem("Sound engine", "", [m](Menu* engineMenu) {
+			engineMenu->addChild(createCheckMenuItem(
+				"Reference V4 - Closed-coil spring (experimental)", "",
+				[m]() { return m->engineMode.load(std::memory_order_relaxed) == int(doorstop::EngineMode::ReferenceV4); },
+				[m]() { m->engineMode.store(int(doorstop::EngineMode::ReferenceV4), std::memory_order_release); }));
+			engineMenu->addChild(new MenuSeparator());
 			engineMenu->addChild(createSubmenuItem(
 				"Reference V3 family", "", [m](Menu* tuningMenu) {
 					auto addV3Tuning = [m, tuningMenu](

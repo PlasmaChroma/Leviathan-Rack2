@@ -155,6 +155,61 @@ Result experimentalV3TuningsRoundTrip() {
 		"restored=" + std::to_string(pass)};
 }
 
+Result referenceV4RoundTripsRevisionAndFallback() {
+	Doorstop source;
+	source.engineMode.store(int(doorstop::EngineMode::ReferenceV4));
+	source.referenceV4ModelDataRevision.store(99);
+	source.v4Excitation.store(1.25f);
+	source.v4Bend.store(1.5f);
+	source.v4Twang.store(0.75f);
+	source.v4Contact.store(1.75f);
+	source.v4Decay.store(2.f);
+	source.v4Output.store(0.5f);
+	source.v4Pitch.store(1.1f);
+	source.v4Dispersion.store(0.9f);
+	source.v4Sweep.store(1.2f);
+	source.v4Metal.store(0.6f);
+	source.v4ContactLoss.store(1.4f);
+	source.v4Gap.store(-0.2f);
+	source.v4CapMass.store(1.3f);
+	source.v4MountCompliance.store(1.6f);
+	source.v4BendDecay.store(1.8f);
+	source.v4BendRate.store(1.15f);
+	source.v4Transfer.store(1.35f);
+	source.v4Radiation.store(-0.4f);
+	json_t* saved = source.dataToJson();
+	Doorstop loaded;
+	loaded.dataFromJson(saved);
+	json_decref(saved);
+	loaded.process(processArgs());
+	const auto& v4 = loaded.engine.getReferenceV4Engine();
+	const bool pass = loaded.engine.getEngineMode() == doorstop::EngineMode::ReferenceV4
+		&& loaded.referenceV4ModelDataRevision.load() == 99
+		&& v4.getRequestedModelDataRevision() == 99
+		&& v4.getModelDataRevision() == doorstop::ContactHelixEngine::MODEL_DATA_REVISION
+		&& v4.getDiagnostics().modelRevisionMismatch
+		&& loaded.v4Excitation.load() == 1.25f
+		&& loaded.v4Bend.load() == 1.5f
+		&& loaded.v4Twang.load() == 0.75f
+		&& loaded.v4Contact.load() == 1.75f
+		&& loaded.v4Decay.load() == 2.f
+		&& loaded.v4Output.load() == 0.5f
+		&& loaded.v4Pitch.load() == 1.1f
+		&& loaded.v4Dispersion.load() == 0.9f
+		&& loaded.v4Sweep.load() == 1.2f
+		&& loaded.v4Metal.load() == 0.6f
+		&& loaded.v4ContactLoss.load() == 1.4f
+		&& loaded.v4Gap.load() == -0.2f
+		&& loaded.v4CapMass.load() == 1.3f
+		&& loaded.v4MountCompliance.load() == 1.6f
+		&& loaded.v4BendDecay.load() == 1.8f
+		&& loaded.v4BendRate.load() == 1.15f
+		&& loaded.v4Transfer.load() == 1.35f
+		&& loaded.v4Radiation.load() == -0.4f;
+	return {"Reference V4 selection and requested dataset revision survive reload",
+		pass, "restored=" + std::to_string(pass)};
+}
+
 Result jsonRoundTripAndReset() {
 	Doorstop source;
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
@@ -395,6 +450,7 @@ int main() {
 	results.push_back(manualStrikeHeightControlsVelocity());
 	results.push_back(jsonRoundTripAndReset());
 	results.push_back(experimentalV3TuningsRoundTrip());
+	results.push_back(referenceV4RoundTripsRevisionAndFallback());
 	results.push_back(oldPatchAndRestoreCommand());
 	results.push_back(malformedBreakInJsonIsSafe());
 	results.push_back(newModuleAndSpecimenSemantics());
