@@ -12,6 +12,7 @@
 #include "ChimeraWaveform.hpp"
 #include "ChimeraMarkerDisplay.hpp"
 #include "DebugTerminalMetrics.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
 #include "visual/VisualAssets.hpp"
@@ -351,6 +352,10 @@ struct Chimera : Module {
     std::atomic<std::uint16_t> publishedRequestedRegion{0}, publishedMarkerCount{0};
     std::atomic<std::uint32_t> publishedPlayFrame{0}, publishedRecordFrame{0};
     std::atomic<std::uint32_t> publishedRecordStartFrame{0};
+    std::atomic<float> publishedPlaybackRate{0.f};
+    std::atomic<float> publishedVuPower[2]{{0.f}, {0.f}};
+    float vuBlockPower[2] = {0.f, 0.f};
+    std::uint16_t vuBlockFrames = 0;
     std::atomic<int> publishedRecordState{0}; // Idle, armed Current/Append/Stop, recording Current/Append.
     unsigned awaitingAdoptionKind = 1; // Control dispatcher only.
     void setIoMessage(const std::string& message) {
@@ -1073,6 +1078,8 @@ struct Chimera : Module {
             recordArm == ArmStop ? 3 : slice.recordState() == chimera::Slice::Current ? 4 :
             slice.recordState() == chimera::Slice::Append ? 5 : 0;
         publishedRecordState.store(state, std::memory_order_release);
+        publishedPlaybackRate.store(reel && slice.playing() ? slice.effectiveRate() : 0.f,
+            std::memory_order_release);
         if (positions) {
             const double position = slice.playbackPosition();
             publishedPlayFrame.store(position > 0.0 ?
@@ -1744,11 +1751,25 @@ struct Chimera : Module {
         }
         return state;
     }
+    void accumulateVu(float leftVolts, float rightVolts) {
+        const float left = clamp(leftVolts * 0.2f, -4.f, 4.f);
+        const float right = clamp(rightVolts * 0.2f, -4.f, 4.f);
+        vuBlockPower[0] += left * left;
+        vuBlockPower[1] += right * right;
+        if (++vuBlockFrames < 256) return;
+        publishedVuPower[0].store(vuBlockPower[0] * (1.f / 256.f),
+            std::memory_order_release);
+        publishedVuPower[1].store(vuBlockPower[1] * (1.f / 256.f),
+            std::memory_order_release);
+        vuBlockPower[0] = vuBlockPower[1] = 0.f;
+        vuBlockFrames = 0;
+    }
     void writeOutput(const chimera::HostOutput& out) {
         outputs[AUDIO_L_OUTPUT].setVoltage(out.left);
         outputs[AUDIO_R_OUTPUT].setVoltage(out.right);
         outputs[CV_OUTPUT].setVoltage(out.cv);
         outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
+        accumulateVu(out.left, out.right);
     }
     void processOwned(const ProcessArgs& args) {
         if (!reel && (inputs[AUDIO_L_INPUT].isConnected() ||
@@ -1869,6 +1890,8 @@ struct Chimera : Module {
         if (rate == 48000) {
             bridgeResumePending = false;
             processCore(host);
+            accumulateVu(outputs[AUDIO_L_OUTPUT].getVoltage(),
+                         outputs[AUDIO_R_OUTPUT].getVoltage());
             return;
         }
         if (bridgeResumePending) {
@@ -2190,6 +2213,8 @@ struct ChimeraWidget : ModuleWidget {
     widget::FramebufferWidget* waveformCache = nullptr;
     ChimeraWaveformLayer* waveformLayer = nullptr;
     ChimeraDisplayOverlay* displayOverlay = nullptr;
+    ChimeraReelsWidget* reels = nullptr;
+    ChimeraVuMeterWidget* vuMeters[2] = {nullptr, nullptr};
     std::shared_ptr<const chimera::WaveformSummary> displayedWaveform;
     ChimeraWidget(Chimera* module) {
         setModule(module);
@@ -2208,6 +2233,39 @@ struct ChimeraWidget : ModuleWidget {
             Vec anchor;
             return panel_svg::loadPointFromSvgMm(panelPath, id, &anchor) ? anchor : fallbackMm;
         };
+        auto circleAnchor = [&](const char* id, Vec fallbackCenterMm, float fallbackRadiusMm,
+                                Vec* centerPx, float* radiusPx) {
+            Vec centerMm;
+            float radiusMm = 0.f;
+            if (!panel_svg::loadCircleFromSvg(
+                    panelPath, id, &centerMm, &radiusMm, 1.f)) {
+                centerMm = fallbackCenterMm;
+                radiusMm = fallbackRadiusMm;
+            }
+            *centerPx = mm2px(centerMm);
+            *radiusPx = mm2px(Vec(radiusMm, 0.f)).x;
+        };
+        reels = new ChimeraReelsWidget;
+        reels->owner = module;
+        reels->box.size = box.size;
+        circleAnchor("REEL_LEFT", Vec(43.11f, 10.52f), 8.63f,
+            &reels->centers[0], &reels->radii[0]);
+        circleAnchor("REEL_RIGHT", Vec(99.12f, 10.53f), 8.64f,
+            &reels->centers[1], &reels->radii[1]);
+        addChild(reels);
+        const char* vuIds[2] = {"VU_LEFT", "VU_RIGHT"};
+        const Vec vuFallbacks[2] = {Vec(17.12f, 10.53f), Vec(125.12f, 10.53f)};
+        for (unsigned channel = 0; channel < 2; ++channel) {
+            Vec center;
+            float radius = 0.f;
+            circleAnchor(vuIds[channel], vuFallbacks[channel], 8.63f, &center, &radius);
+            vuMeters[channel] = new ChimeraVuMeterWidget;
+            vuMeters[channel]->owner = module;
+            vuMeters[channel]->channel = channel;
+            vuMeters[channel]->box.pos = center.minus(Vec(radius, radius));
+            vuMeters[channel]->box.size = Vec(2.f * radius, 2.f * radius);
+            addChild(vuMeters[channel]);
+        }
         const Vec displayOrigin = mm2px(point("DISPLAY_ORIGIN", Vec(6, 14)));
         const Vec displayEnd = mm2px(point("DISPLAY_END", Vec(136, 40)));
         waveformCache = new widget::FramebufferWidget;
@@ -2270,6 +2328,8 @@ struct ChimeraWidget : ModuleWidget {
         const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
         Chimera* m = dynamic_cast<Chimera*>(module);
         displayOverlay->owner = m;
+        reels->owner = m;
+        vuMeters[0]->owner = vuMeters[1]->owner = m;
         if (m) {
             m->displayHeartbeatNs.store(Chimera::steadyNs(), std::memory_order_release);
             m->serviceStep();

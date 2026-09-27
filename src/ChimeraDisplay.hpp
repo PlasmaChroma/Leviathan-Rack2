@@ -56,6 +56,196 @@ struct ChimeraWaveformLayer : Widget {
     }
 };
 
+struct ChimeraVuMeterWidget final : TransparentWidget {
+    Chimera* owner = nullptr;
+    unsigned channel = 0;
+    float level = 0.f;
+    double lastStepTime = 0.0;
+    std::shared_ptr<window::Image> faceImage;
+    std::string facePath;
+
+    static float needleAngleForLevel(float normalizedRms) {
+        constexpr float rest = float(-138.0 * M_PI / 180.0);
+        constexpr float zeroVu = float(-58.0 * M_PI / 180.0);
+        constexpr float plusThree = float(-40.0 * M_PI / 180.0);
+        constexpr float plusThreeLevel = 1.41253754f;
+        const float bounded = clamp(normalizedRms, 0.f, plusThreeLevel);
+        if (bounded <= 1.f) return rest + (zeroVu - rest) * bounded;
+        return zeroVu + (plusThree - zeroVu) *
+            ((bounded - 1.f) / (plusThreeLevel - 1.f));
+    }
+
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        faceImage.reset();
+        facePath.clear();
+        TransparentWidget::onContextDestroy(e);
+    }
+
+    void onContextCreate(const ContextCreateEvent& e) override {
+        faceImage.reset();
+        facePath.clear();
+        TransparentWidget::onContextCreate(e);
+    }
+
+    void step() override {
+        const double now = system::getTime();
+        if (lastStepTime > 0.0 && now >= lastStepTime) {
+            const float elapsed = float(std::min(now - lastStepTime, 0.25));
+            const float power = owner && channel < 2 ?
+                owner->publishedVuPower[channel].load(std::memory_order_acquire) : 0.f;
+            const float target = std::sqrt(clamp(power, 0.f, 4.f));
+            const float tau = target > level ? 0.065f : 0.30f;
+            const float amount = 1.f - std::exp(-elapsed / tau);
+            level += (target - level) * amount;
+            if (level < 1e-5f) level = 0.f;
+        }
+        lastStepTime = now;
+        TransparentWidget::step();
+    }
+
+    int imageHandle(NVGcontext* vg) {
+        if (!vg || !APP || !APP->window) return -1;
+        const std::string desired =
+            asset::plugin(pluginInstance, "res/icon/LeviathanVU-256.png");
+        if (!faceImage || facePath != desired) {
+            faceImage = APP->window->loadImage(desired);
+            facePath = desired;
+        }
+        return visual_assets::loadRasterMipmapHandle(vg, faceImage, desired);
+    }
+
+    void draw(const DrawArgs& args) override {
+        const int image = imageHandle(args.vg);
+        if (image < 0 || box.size.x <= 0.f || box.size.y <= 0.f) return;
+        const float diameter = std::min(box.size.x, box.size.y);
+        const Vec center(box.size.x * 0.5f, box.size.y * 0.5f);
+        const float radius = diameter * 0.5f;
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, center.x, center.y, radius);
+        nvgFillPaint(args.vg, nvgImagePattern(
+            args.vg, center.x - radius, center.y - radius, diameter, diameter,
+            0.f, image, 1.f));
+        nvgFill(args.vg);
+
+        // The authored face's movement pivots at approximately (128, 194).
+        const Vec pivot(center.x, center.y - radius + diameter * (194.f / 256.f));
+        const float angle = needleAngleForLevel(level);
+        const float length = diameter * (110.f / 256.f);
+        const Vec tip(pivot.x + std::cos(angle) * length,
+                      pivot.y + std::sin(angle) * length);
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, pivot.x + 0.7f, pivot.y + 0.8f);
+        nvgLineTo(args.vg, tip.x + 0.7f, tip.y + 0.8f);
+        nvgStrokeColor(args.vg, nvgRGBA(10, 4, 4, 180));
+        nvgStrokeWidth(args.vg, std::max(1.25f, diameter * 0.014f));
+        nvgStroke(args.vg);
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, pivot.x, pivot.y);
+        nvgLineTo(args.vg, tip.x, tip.y);
+        nvgStrokeColor(args.vg, nvgRGBA(224, 32, 28, 255));
+        nvgStrokeWidth(args.vg, std::max(0.9f, diameter * 0.009f));
+        nvgStroke(args.vg);
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, pivot.x, pivot.y, std::max(1.25f, diameter * 0.027f));
+        nvgFillColor(args.vg, nvgRGBA(114, 12, 13, 255));
+        nvgFill(args.vg);
+    }
+};
+
+struct ChimeraReelsWidget final : TransparentWidget {
+    static constexpr float kNormalRpm = 33.f;
+    Chimera* owner = nullptr;
+    Vec centers[2];
+    float radii[2] = {0.f, 0.f};
+    float angle = 0.f;
+    double lastStepTime = 0.0;
+    NVGcontext* ownerVg = nullptr;
+    int imageHandle = -1;
+    int imageWidth = 0, imageHeight = 0;
+    std::string loadedPath;
+
+    static float angularVelocity(float playbackRate) {
+        return playbackRate * kNormalRpm * float(2.0 * M_PI / 60.0);
+    }
+
+    ~ChimeraReelsWidget() override {
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+    }
+
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+        loadedPath.clear();
+        TransparentWidget::onContextDestroy(e);
+    }
+
+    void onContextCreate(const ContextCreateEvent& e) override {
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+        loadedPath.clear();
+        TransparentWidget::onContextCreate(e);
+    }
+
+    bool ensureImage(NVGcontext* vg) {
+        if (!vg) return false;
+        const std::string path = asset::plugin(pluginInstance, "res/icon/Reel4-256px.png");
+        if (ownerVg == vg && loadedPath == path && imageHandle > 0 &&
+            imageWidth > 0 && imageHeight > 0 &&
+            nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+                vg, imageHandle, imageWidth, imageHeight)) return true;
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+            ownerVg, imageHandle, imageWidth, imageHeight, vg, ownerVg == vg);
+        loadedPath.clear();
+        imageHandle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+        if (imageHandle <= 0) {
+            imageHandle = -1;
+            return false;
+        }
+        ownerVg = vg;
+        loadedPath = path;
+        nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
+        if (imageWidth <= 0 || imageHeight <= 0) {
+            nvg_gfx_lifecycle::resetOwnedNvgImage(
+                ownerVg, imageHandle, imageWidth, imageHeight, vg, true);
+            loadedPath.clear();
+            return false;
+        }
+        return true;
+    }
+
+    void step() override {
+        const double now = system::getTime();
+        if (lastStepTime > 0.0 && now >= lastStepTime) {
+            const double elapsed = std::min(now - lastStepTime, 0.25);
+            const float rate = owner ?
+                owner->publishedPlaybackRate.load(std::memory_order_acquire) : 0.f;
+            angle = std::fmod(angle + angularVelocity(rate) * float(elapsed),
+                              float(2.0 * M_PI));
+        }
+        lastStepTime = now;
+        TransparentWidget::step();
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (!ensureImage(args.vg)) return;
+        for (unsigned i = 0; i < 2; ++i) {
+            if (radii[i] <= 0.f) continue;
+            nvgSave(args.vg);
+            nvgTranslate(args.vg, centers[i].x, centers[i].y);
+            nvgRotate(args.vg, angle);
+            nvgBeginPath(args.vg);
+            nvgCircle(args.vg, 0.f, 0.f, radii[i]);
+            nvgFillPaint(args.vg, nvgImagePattern(
+                args.vg, -radii[i], -radii[i], 2.f * radii[i], 2.f * radii[i],
+                0.f, imageHandle, 1.f));
+            nvgFill(args.vg);
+            nvgRestore(args.vg);
+        }
+    }
+};
+
 struct ChimeraDisplayOverlay : Widget {
     Chimera* owner = nullptr;
     chimera::MarkerDisplay markers;

@@ -20,14 +20,18 @@
       <rect id="function_bottom_middle" x="51.62" y="77.5" width="39" height="23" rx="2" />
       <rect id="function_bottom_right" x="98.74" y="77.5" width="39" height="23" rx="2" />
     </g>
-    <rect x="5.4" y="13.5" width="131.44" height="27" rx="1.6" fill="#091721" stroke="#577982" stroke-width=".35" id="rect5" />
+    <rect x="5.4000001" y="18.30007" width="131.44" height="27" rx="1.6" fill="#091721" stroke="#577982" stroke-width="0.35" id="rect5" />
     <g id="component_anchors" inkscape:groupmode="layer" inkscape:label="Component Anchors" style="display:none;fill-opacity:0.2;stroke-width:0.45">
       <g id="anchor_bounds" style="fill:none;stroke:#ff5cd6;stroke-width:0.45;stroke-dasharray:1.5,0.8">
         <rect id="BRANDING_WAVE_LEFT_RASTER" x="42.216099" y="123.3819" width="13.06748" height="5.1181002" />
         <rect id="BRANDING_WAVE_RIGHT_RASTER" x="86.956742" y="123.3819" width="13.06748" height="5.1181002" />
         <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="54.760335" y="119.43102" width="32.71933" height="12.24054" />
-        <circle id="DISPLAY_ORIGIN" cx="6" cy="14" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
-        <circle id="DISPLAY_END" cx="136" cy="40" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle id="DISPLAY_ORIGIN" cx="6" cy="18.800072" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle id="DISPLAY_END" cx="136" cy="44.800014" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle id="REEL_LEFT" cx="43.11084" cy="10.522306" r="8.6301374" style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.739726" />
+        <circle id="REEL_RIGHT" cx="99.11599" cy="10.528615" r="8.6364651" style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.740268" />
+        <circle id="VU_LEFT" cx="17.12" cy="10.52546" r="8.6333" style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.74" />
+        <circle id="VU_RIGHT" cx="125.12" cy="10.52546" r="8.6333" style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.74" />
       </g>
       <g id="anchor_main_params" style="fill:#42d7df;stroke:#a8fbff">
         <circle id="SOS_PARAM" cx="110.80341" cy="63.327232" r="5.6700001" />

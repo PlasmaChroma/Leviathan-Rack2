@@ -23,7 +23,7 @@ public:
 
     explicit Slice(Reel* reel = 0) : reel_(reel), state_(Idle), play_(true), retrigger_(false),
         inop_(false), currentRegion_(0), writer_(0), appendStart_(0),
-        position_(0.0),
+        position_(0.0), effectiveRate_(0.f),
         wetGain_(1.f), sourceBlend_(0.f),
         lastWet_{0.f, 0.f}, stopTail_{0.f, 0.f}, stopTailRemaining_(0),
         frame_(0), lastBoundaryFrame_(0), eosgRemaining_(0), hadBoundary_(false),
@@ -48,6 +48,7 @@ public:
         recordSeekPending_ = false;
         currentRegion_ = 0;
         position_ = 0.0;
+        effectiveRate_ = 0.f;
         eosgRemaining_ = 0;
         hadBoundary_ = false;
         grains_.reset();
@@ -144,6 +145,7 @@ public:
     std::uint32_t writerFrame() const { return writer_; }
     std::uint32_t recordSegmentStartFrame() const { return recordSegmentStart_; }
     double playbackPosition() const { return position_; }
+    float effectiveRate() const { return effectiveRate_; }
     std::uint16_t requestedRegion() const { return selection_.requested(); }
     std::uint16_t organizeBin() const { return selection_.organizeBin(); }
     void setInop(bool inop) {
@@ -237,6 +239,7 @@ public:
         bool naturalBoundary = framePrepared_ ? preparedNaturalBoundary_ : false;
         bool naturalCompletion = false;
         const CoreOutput c = framePrepared_ ? preparedControls_ : stepControls(input);
+        effectiveRate_ = c.rate;
         if (!framePrepared_) naturalBoundary = resolveSelection(c);
         framePrepared_ = false;
         const int clockMode = clockConnected_ ?
@@ -523,6 +526,7 @@ private:
     std::uint32_t recordSegmentStart_ = 0;
     bool recordSeekPending_ = false;
     double position_;
+    float effectiveRate_;
     float wetGain_, sourceBlend_;
     StereoFrame lastWet_, stopTail_;
     std::uint8_t stopTailRemaining_;

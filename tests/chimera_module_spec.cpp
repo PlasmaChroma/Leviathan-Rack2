@@ -1236,6 +1236,22 @@ int main() {
     need(reparsedOptions.valid && reparsedOptions.values.mcr[1] == 0.0625f &&
          reparsedOptions.extras.at("future_mode") == "v1",
          "options text export round-trips all recognized and unknown fields");
+    {
+        Chimera meterModule;
+        meterModule.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        meterModule.inputs[Chimera::AUDIO_R_INPUT].channels = 1;
+        for (unsigned frame = 0; frame < 256; ++frame) {
+            const float sign = frame & 1u ? -1.f : 1.f;
+            meterModule.inputs[Chimera::AUDIO_L_INPUT].setVoltage(5.f * sign);
+            meterModule.inputs[Chimera::AUDIO_R_INPUT].setVoltage(2.5f * sign);
+            meterModule.process(args);
+        }
+        const float leftPower = meterModule.publishedVuPower[0].load();
+        const float rightPower = meterModule.publishedVuPower[1].load();
+        need(leftPower > 0.8f && leftPower < 1.1f &&
+             rightPower > 0.18f && rightPower < 0.3f,
+             "VU block power follows final normalized left and right outputs");
+    }
     auto ratePosition = [&args](int mode, float knob) {
         chimera::Reel rateReel(4, 4);
         for (std::uint32_t frame = 0; frame < 1000; ++frame)
@@ -1445,6 +1461,15 @@ int main() {
         ChimeraDisplayOverlay markerOverlay;
         markerOverlay.owner = &selectionModule;
         markerOverlay.step();
+        need(std::fabs(ChimeraReelsWidget::angularVelocity(1.f) -
+                 float(33.0 * 2.0 * M_PI / 60.0)) < 1e-6f &&
+             ChimeraReelsWidget::angularVelocity(-1.f) < 0.f,
+             "reels rotate at signed 33 RPM for unit Vari-Speed");
+        need(ChimeraVuMeterWidget::needleAngleForLevel(0.f) <
+                 ChimeraVuMeterWidget::needleAngleForLevel(1.f) &&
+             ChimeraVuMeterWidget::needleAngleForLevel(1.f) <
+                 ChimeraVuMeterWidget::needleAngleForLevel(1.41253754f),
+             "VU needle maps silence, zero VU, and plus three in scale order");
         need(ChimeraDisplayOverlay::markerPointRadius(380.f, 2) >= 3.f &&
              ChimeraDisplayOverlay::markerPointRadius(380.f, chimera::kMaxSplices) <= 1.f &&
              ChimeraDisplayOverlay::markerStemWidth(2) >

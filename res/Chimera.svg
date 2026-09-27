@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="268.66811"
-     inkscape:cy="242.83464"
+     inkscape:zoom="1.710733"
+     inkscape:cx="264.79877"
+     inkscape:cy="269.18286"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -133,14 +133,14 @@
          rx="2" />
     </g>
     <rect
-       x="5.4"
-       y="13.5"
+       x="5.4000001"
+       y="18.30007"
        width="131.44"
        height="27"
        rx="1.6"
        fill="#091721"
        stroke="#577982"
-       stroke-width=".35"
+       stroke-width="0.35"
        id="rect5" />
     <g
        id="component_anchors"
@@ -171,15 +171,40 @@
         <circle
            id="DISPLAY_ORIGIN"
            cx="6"
-           cy="14"
+           cy="18.800072"
            r="1.5"
            style="fill:#ff5cd6;fill-opacity:0.45" />
         <circle
            id="DISPLAY_END"
            cx="136"
-           cy="40"
+           cy="44.800014"
            r="1.5"
            style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle
+           id="REEL_LEFT"
+           cx="43.11084"
+           cy="10.522306"
+           r="8.6301374"
+           style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.739726"
+           />
+        <circle
+           id="REEL_RIGHT"
+           cx="99.11599"
+           cy="10.528615"
+           r="8.6364651"
+           style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.740268" />
+        <circle
+           id="VU_LEFT"
+           cx="17.12"
+           cy="10.52546"
+           r="8.6333"
+           style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.74" />
+        <circle
+           id="VU_RIGHT"
+           cx="125.12"
+           cy="10.52546"
+           r="8.6333"
+           style="fill:#ff5cd6;fill-opacity:0.2;stroke-width:0.74" />
       </g>
       <g
          id="anchor_main_params"
