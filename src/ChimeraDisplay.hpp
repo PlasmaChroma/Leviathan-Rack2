@@ -169,7 +169,7 @@ struct ChimeraDisplayOverlay : Widget {
             const unsigned requested = owner->publishedRequestedRegion.load(std::memory_order_acquire);
             const float pointRadius = markerPointRadius(width, markers.count);
             const NVGcolor ordinaryColor = nvgRGBA(238, 177, 83, 225);
-            const NVGcolor currentColor = nvgRGBA(91, 229, 222, 255);
+            const NVGcolor currentColor = nvgRGBA(166, 244, 96, 255);
             const NVGcolor requestedColor = nvgRGBA(196, 161, 246, 255);
 
             // Stems retain precise timing at any density. Marker zero is now

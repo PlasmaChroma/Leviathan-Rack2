@@ -55,7 +55,7 @@ XML_NS = "http://www.w3.org/XML/1998/namespace"
 
 THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_text", "glass_text_input", "glass_text_output"}
 THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
-RUNTIME_ANCHOR_GROUP_IDS = {"plasma_conduit_anchors"}
+RUNTIME_ANCHOR_GROUP_IDS = {"component_anchors", "plasma_conduit_anchors"}
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)

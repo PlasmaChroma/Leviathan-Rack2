@@ -21,6 +21,7 @@ struct SnapshotMetadata {
     std::uint64_t documentRevision;
     std::uint64_t audioRevision;
     std::uint64_t capturedThroughFrame;
+    std::uint32_t stereoFrames;
 };
 
 // A Reel is prepared/destroyed off audio. After adoption, exactly one core
@@ -57,7 +58,7 @@ public:
           references_(new std::uint8_t[pages_ + reservePages_]{}),
           freeCount_(reservePages), validFrames_(0), markerCount_(0), nextMarkerId_(1),
           documentRevision_(0), audioRevision_(0), capturedThroughFrame_(0),
-          cowCopies_(0), overflow_(false), recordingStopped_(false) {
+          cowCopies_(0), stereoFrameCount_(0), overflow_(false), recordingStopped_(false) {
         snapshots_[0].prepare(pages_);
         for (unsigned i = 0; i < pages_; ++i) { active_[i] = i; references_[i] = 1; }
         for (unsigned i = 0; i < reservePages_; ++i) free_[i] = pages_ + i;
@@ -138,6 +139,8 @@ public:
     std::uint64_t cowCopies() const { return cowCopies_; }
     bool overflowed() const { return overflow_; }
     bool recordingStopped() const { return recordingStopped_; }
+    bool hasStereoAudio() const { return stereoFrameCount_ != 0; }
+    std::uint32_t stereoFrameCount() const { return stereoFrameCount_; }
     SnapshotState state(unsigned slot = 0) const { return snapshots_[slot].state; } // Core owner only.
     bool readyForWorker(unsigned slot = 0) const {
         return slot < kSnapshotSlots && snapshots_[slot].ready.load(std::memory_order_acquire);
@@ -194,7 +197,13 @@ private:
         }
         StereoFrame& destination = page(active_[logical]).frames[frame % kPageFrames];
         const StereoFrame old = destination;
+        const bool oldStereo = frame < validFrames_ && channelsDiffer(old);
+        const bool newStereo = channelsDiffer(value);
         destination = value;
+        if (oldStereo != newStereo) {
+            if (newStereo) ++stereoFrameCount_;
+            else --stereoFrameCount_;
+        }
         if (UpdateMoments) moments_.update(frame, old, value, [this](unsigned i) {
             return page(active_[i/kPageFrames]).frames[i%kPageFrames];
         });
@@ -290,6 +299,7 @@ public:
         meta.documentRevision = documentRevision_;
         meta.audioRevision = audioRevision_;
         meta.capturedThroughFrame = capturedThroughFrame;
+        meta.stereoFrames = stereoFrameCount_;
         cut.scan = cut.reclaim = 0;
         cut.ready.store(false, std::memory_order_release);
         cut.state = Capturing;
@@ -359,6 +369,9 @@ public:
     }
 
 private:
+    static bool channelsDiffer(StereoFrame value) {
+        return std::memcmp(&value.l, &value.r, sizeof(float)) != 0;
+    }
     Page& page(unsigned physical) const {
         const unsigned base = pages_ + reservePages_;
         return physical < base ? pool_[physical] : scratch_->page(physical - base);
@@ -403,6 +416,7 @@ private:
     std::uint32_t nextMarkerId_;
     std::uint64_t documentRevision_, audioRevision_, capturedThroughFrame_;
     std::uint64_t cowCopies_;
+    std::uint32_t stereoFrameCount_;
     bool overflow_, recordingStopped_;
 };
 

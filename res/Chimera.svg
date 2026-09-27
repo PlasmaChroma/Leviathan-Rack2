@@ -23,14 +23,15 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
-     inkscape:cx="268.66812"
-     inkscape:cy="242.83465"
+     inkscape:cx="268.66811"
+     inkscape:cy="242.83464"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="labels" />
+     inkscape:current-layer="svg43"
+     showgrid="false" />
   <defs
      id="defs2">
     <linearGradient
@@ -74,26 +75,63 @@
   </defs>
   <g
      id="panel_art">
-    <g id="theme_background"><rect
-       width="142.24"
-       height="128.5"
-       fill="#000000"
-       id="rect2" /></g>
-    <g id="function_groups" fill="none" stroke="#698294" stroke-width="0.25" opacity="0.25">
-      <rect id="function_top_left" x="4.5" y="50.5" width="39" height="26" rx="2" />
-      <rect id="function_top_middle" x="51.62" y="50.5" width="39" height="26" rx="2" />
-      <rect id="function_top_right" x="98.74" y="50.5" width="39" height="26" rx="2" />
-      <rect id="function_bottom_left" x="4.5" y="77.5" width="39" height="23" rx="2" />
-      <rect id="function_bottom_middle" x="51.62" y="77.5" width="39" height="23" rx="2" />
-      <rect id="function_bottom_right" x="98.74" y="77.5" width="39" height="23" rx="2" />
+    <g
+       id="theme_background">
+      <rect
+         width="142.24"
+         height="128.5"
+         fill="#000000"
+         id="rect2" />
     </g>
-
-    <path
-       d="M5 49.5H137.24"
+    <g
+       id="function_groups"
+       fill="none"
        stroke="#698294"
-       stroke-width=".35"
-       opacity=".7"
-       id="path4" />
+       stroke-width="0.25"
+       opacity="0.25">
+      <rect
+         id="function_top_left"
+         x="4.6093616"
+         y="57.827232"
+         width="38.890636"
+         height="18.672766"
+         rx="2" />
+      <rect
+         id="function_top_middle"
+         x="51.510635"
+         y="56.842979"
+         width="39.10936"
+         height="19.657021"
+         rx="2" />
+      <rect
+         id="function_top_right"
+         x="99.614891"
+         y="57.280426"
+         width="38.125099"
+         height="19.219574"
+         rx="2" />
+      <rect
+         id="function_bottom_left"
+         x="4.5"
+         y="77.5"
+         width="39"
+         height="23"
+         rx="2" />
+      <rect
+         id="function_bottom_middle"
+         x="51.62"
+         y="77.5"
+         width="39"
+         height="23"
+         rx="2" />
+      <rect
+         id="function_bottom_right"
+         x="98.74"
+         y="77.5"
+         width="39"
+         height="23"
+         rx="2" />
+    </g>
     <rect
        x="5.4"
        y="13.5"
@@ -104,234 +142,273 @@
        stroke="#577982"
        stroke-width=".35"
        id="rect5" />
-    <path
-       d="M7 15H135M7 39H135"
-       stroke="#d2a56e"
-       stroke-width=".18"
-       opacity=".7"
-       id="path5" />
     <g
        id="component_anchors"
-       style="display:none">
-      <circle id="UNSPLICE_BUTTON" cx="96" cy="103" r=".1" />
-      <rect
-         id="BRANDING_WAVE_LEFT_RASTER"
-         x="42.216099"
-         y="123.3819"
-         width="13.06748"
-         height="5.1181002" />
-      <rect
-         id="BRANDING_WAVE_RIGHT_RASTER"
-         x="86.956742"
-         y="123.3819"
-         width="13.06748"
-         height="5.1181002" />
-      <rect
-         id="BRANDING_LEVIATHAN_LOGO_RASTER"
-         x="54.760335"
-         y="119.43102"
-         width="32.71933"
-         height="12.24054" />
-      <circle
-         id="DISPLAY_ORIGIN"
-         cx="6"
-         cy="14"
-         r=".1" />
-      <circle
-         id="DISPLAY_END"
-         cx="136"
-         cy="40"
-         r=".1" />
-      <circle
-         id="SOS_PARAM"
-         cx="118.24"
-         cy="56"
-         r=".1" />
-      <circle
-         id="GENE_SIZE_PARAM"
-         cx="24"
-         cy="56"
-         r=".1" />
-      <circle
-         id="VARISPEED_PARAM"
-         cx="71.12"
-         cy="56"
-         r=".1" />
-      <circle
-         id="MORPH_PARAM"
-         cx="24"
-         cy="80"
-         r=".1" />
-      <circle
-         id="SLIDE_PARAM"
-         cx="71.12"
-         cy="80"
-         r=".1" />
-      <circle
-         id="ORGANIZE_PARAM"
-         cx="118.24"
-         cy="80"
-         r=".1" />
-      <circle
-         id="GENE_ATT_PARAM"
-         cx="34"
-         cy="69.5"
-         r=".1" />
-      <circle
-         id="VARISPEED_ATT_PARAM"
-         cx="81.12"
-         cy="69.5"
-         r=".1" />
-      <circle
-         id="SLIDE_ATT_PARAM"
-         cx="81.12"
-         cy="93"
-         r=".1" />
-      <circle
-         id="REC_PARAM"
-         cx="60"
-         cy="103"
-         r=".1" />
-      <circle
-         id="SPLICE_PARAM"
-         cx="72"
-         cy="103"
-         r=".1" />
-      <circle
-         id="SHIFT_PARAM"
-         cx="84"
-         cy="103"
-         r=".1" />
-      <circle
-         id="SOS_CV_INPUT"
-         cx="118.24"
-         cy="69.5"
-         r=".1" />
-      <circle
-         id="GENE_SIZE_CV_INPUT"
-         cx="14"
-         cy="69.5"
-         r=".1" />
-      <circle
-         id="VARISPEED_CV_INPUT"
-         cx="61.12"
-         cy="69.5"
-         r=".1" />
-      <circle
-         id="MORPH_CV_INPUT"
-         cx="24"
-         cy="93"
-         r=".1" />
-      <circle
-         id="SLIDE_CV_INPUT"
-         cx="61.12"
-         cy="93"
-         r=".1" />
-      <circle
-         id="ORGANIZE_CV_INPUT"
-         cx="118.24"
-         cy="93"
-         r=".1" />
-      <circle
-         id="CLOCK_INPUT"
-         cx="36"
-         cy="113"
-         r=".1" />
-      <circle
-         id="PLAY_INPUT"
-         cx="48"
-         cy="113"
-         r=".1" />
-      <circle
-         id="REC_INPUT"
-         cx="60"
-         cy="113"
-         r=".1" />
-      <circle
-         id="SPLICE_INPUT"
-         cx="72"
-         cy="113"
-         r=".1" />
-      <circle
-         id="SHIFT_INPUT"
-         cx="84"
-         cy="113"
-         r=".1" />
-      <circle
-         id="AUDIO_L_INPUT"
-         cx="12"
-         cy="113"
-         r=".1" />
-      <circle
-         id="AUDIO_R_INPUT"
-         cx="24"
-         cy="113"
-         r=".1" />
-      <circle
-         id="AUDIO_L_OUTPUT"
-         cx="96"
-         cy="113"
-         r=".1" />
-      <circle
-         id="AUDIO_R_OUTPUT"
-         cx="108"
-         cy="113"
-         r=".1" />
-      <circle
-         id="CV_OUTPUT"
-         cx="120"
-         cy="113"
-         r=".1" />
-      <circle
-         id="EOSG_OUTPUT"
-         cx="132"
-         cy="113"
-         r=".1" />
-      <circle
-         id="REC_LIGHT"
-         cx="10"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="REC_ARMED_LIGHT"
-         cx="25"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="PLAY_LIGHT"
-         cx="40"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="PENDING_LIGHT"
-         cx="56"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="CLOCK_LIGHT"
-         cx="72"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="PM_LIGHT"
-         cx="88"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="IO_BUSY_LIGHT"
-         cx="103"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="CLIP_LIGHT"
-         cx="118"
-         cy="43.5"
-         r=".1" />
-      <circle
-         id="ERROR_LIGHT"
-         cx="133"
-         cy="43.5"
-         r=".1" />
+       inkscape:groupmode="layer"
+       inkscape:label="Component Anchors"
+       style="display:inline;fill-opacity:0.2;stroke-width:0.45">
+      <g
+         id="anchor_bounds"
+         style="fill:none;stroke:#ff5cd6;stroke-width:0.45;stroke-dasharray:1.5,0.8">
+        <rect
+           id="BRANDING_WAVE_LEFT_RASTER"
+           x="42.216099"
+           y="123.3819"
+           width="13.06748"
+           height="5.1181002" />
+        <rect
+           id="BRANDING_WAVE_RIGHT_RASTER"
+           x="86.956742"
+           y="123.3819"
+           width="13.06748"
+           height="5.1181002" />
+        <rect
+           id="BRANDING_LEVIATHAN_LOGO_RASTER"
+           x="54.760335"
+           y="119.43102"
+           width="32.71933"
+           height="12.24054" />
+        <circle
+           id="DISPLAY_ORIGIN"
+           cx="6"
+           cy="14"
+           r="1.5"
+           style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle
+           id="DISPLAY_END"
+           cx="136"
+           cy="40"
+           r="1.5"
+           style="fill:#ff5cd6;fill-opacity:0.45" />
+      </g>
+      <g
+         id="anchor_main_params"
+         style="fill:#42d7df;stroke:#a8fbff">
+        <circle
+           id="SOS_PARAM"
+           cx="110.80341"
+           cy="63.327232"
+           r="5.6700001" />
+        <circle
+           id="GENE_SIZE_PARAM"
+           cx="36.139149"
+           cy="64.420853"
+           r="5.6700001" />
+        <circle
+           id="VARISPEED_PARAM"
+           cx="70.13575"
+           cy="63.074894"
+           r="5.6700001" />
+        <circle
+           id="MORPH_PARAM"
+           cx="32.420853"
+           cy="90.389359"
+           r="5.6700001" />
+        <circle
+           id="SLIDE_PARAM"
+           cx="84.134048"
+           cy="90.717445"
+           r="5.6700001" />
+        <circle
+           id="ORGANIZE_PARAM"
+           cx="109.81915"
+           cy="86.780426"
+           r="5.6700001" />
+      </g>
+      <g
+         id="anchor_attenuators"
+         style="fill:#f08a24;stroke:#ffd09a">
+        <circle
+           id="GENE_ATT_PARAM"
+           cx="22.845106"
+           cy="69.937447"
+           r="4" />
+        <circle
+           id="VARISPEED_ATT_PARAM"
+           cx="84.204315"
+           cy="69.5"
+           r="4" />
+        <circle
+           id="SLIDE_ATT_PARAM"
+           cx="69.090218"
+           cy="91.468933"
+           r="4" />
+      </g>
+      <g
+         id="anchor_buttons"
+         style="fill:#e5b35b;stroke:#fff0ba">
+        <circle
+           id="REC_PARAM"
+           cx="60"
+           cy="103"
+           r="3" />
+        <circle
+           id="SPLICE_PARAM"
+           cx="72"
+           cy="103"
+           r="3" />
+        <circle
+           id="SHIFT_PARAM"
+           cx="84"
+           cy="103"
+           r="3" />
+        <circle
+           id="UNSPLICE_BUTTON"
+           cx="96"
+           cy="103"
+           r="3" />
+      </g>
+      <g
+         id="anchor_inputs"
+         style="fill:#5bd9df;stroke:#c2fcff">
+        <circle
+           id="SOS_CV_INPUT"
+           cx="126.11404"
+           cy="68.40638"
+           r="4.0799999" />
+        <circle
+           id="GENE_SIZE_CV_INPUT"
+           cx="10.391064"
+           cy="69.828087"
+           r="4.0799999" />
+        <circle
+           id="VARISPEED_CV_INPUT"
+           cx="55.799999"
+           cy="69.5"
+           r="4.0799999" />
+        <circle
+           id="MORPH_CV_INPUT"
+           cx="14.37617"
+           cy="91.79702"
+           r="4.0799999" />
+        <circle
+           id="SLIDE_CV_INPUT"
+           cx="57.401703"
+           cy="91.79702"
+           r="4.0799999" />
+        <circle
+           id="ORGANIZE_CV_INPUT"
+           cx="125.56723"
+           cy="90.37532"
+           r="4.0799999" />
+        <circle
+           id="CLOCK_INPUT"
+           cx="36"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="PLAY_INPUT"
+           cx="48"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="REC_INPUT"
+           cx="60"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="SPLICE_INPUT"
+           cx="72"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="SHIFT_INPUT"
+           cx="84"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="AUDIO_L_INPUT"
+           cx="12"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="AUDIO_R_INPUT"
+           cx="24"
+           cy="113"
+           r="4.08" />
+      </g>
+      <g
+         id="anchor_outputs"
+         style="fill:#e5b35b;stroke:#fff0ba">
+        <circle
+           id="AUDIO_L_OUTPUT"
+           cx="96"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="AUDIO_R_OUTPUT"
+           cx="108"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="CV_OUTPUT"
+           cx="120"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="EOSG_OUTPUT"
+           cx="132"
+           cy="113"
+           r="4.08" />
+      </g>
+      <g
+         id="anchor_lights"
+         style="stroke:#f7fbff;stroke-width:0.35">
+        <circle
+           id="REC_LIGHT"
+           cx="10"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#f37159" />
+        <circle
+           id="REC_ARMED_LIGHT"
+           cx="25"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#e5b35b" />
+        <circle
+           id="PLAY_LIGHT"
+           cx="40"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#62db91" />
+        <circle
+           id="PENDING_LIGHT"
+           cx="56"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#e5b35b" />
+        <circle
+           id="CLOCK_LIGHT"
+           cx="72"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#65a9ff" />
+        <circle
+           id="PM_LIGHT"
+           cx="88"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#c4a1f6" />
+        <circle
+           id="IO_BUSY_LIGHT"
+           cx="103"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#f7fbff" />
+        <circle
+           id="CLIP_LIGHT"
+           cx="118"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#f37159" />
+        <circle
+           id="ERROR_LIGHT"
+           cx="133"
+           cy="50.200001"
+           r="2.3299999"
+           style="fill:#f37159" />
+      </g>
     </g>
   </g>
   <g
@@ -345,45 +422,41 @@
        id="g14">
       <text
          x="10"
-         y="48"
+         y="54.700001"
          id="text6">REC</text>
       <text
          x="25"
-         y="48"
+         y="54.700001"
          id="text7">ARM</text>
       <text
          x="40"
-         y="48"
+         y="54.700001"
          id="text8">PLAY</text>
       <text
          x="56"
-         y="48"
+         y="54.700001"
          id="text9">PEND</text>
       <text
          x="72"
-         y="48"
+         y="54.700001"
          id="text10">CLK</text>
       <text
          x="88"
-         y="48"
+         y="54.700001"
          id="text11">PM</text>
       <text
          x="103"
-         y="48"
+         y="54.700001"
          id="text12">BUSY</text>
       <text
          x="118"
-         y="48"
+         y="54.700001"
          id="text13">CLIP</text>
       <text
          x="133"
-         y="48"
+         y="54.700001"
          id="text14">ERR</text>
     </g>
-
-
-
-
     <text
        id="reworked_module_title_text"
        x="71.138527"
@@ -393,161 +466,149 @@
          sodipodi:role="line"
          id="tspan43"
          style="fill:url(#linearGradient36)">Chimera</tspan></text>
-
-    <g id="theme_text_input" inkscape:label="Input Text">
-<g
-       id="g20">
-      <text
-         x="118.24"
-         y="64.5"
-         id="text15">S.O.S.</text>
-      <text
-         x="24"
-         y="64.5"
-         id="text16">GENE SIZE</text>
-      <text
-         x="71.12"
-         y="64.5"
-         id="text17">VARI-SPEED</text>
-      <text
-         x="24"
-         y="88"
-         id="text18">MORPH</text>
-      <text
-         x="71.12"
-         y="88"
-         id="text19">SLIDE</text>
-      <text
-         x="118.24"
-         y="88"
-         id="text20">ORGANIZE</text>
+    <g
+       id="theme_text_input"
+       inkscape:label="Input Text">
+      <g
+         id="g20">
+        <text
+           x="110.80341"
+           y="71.827232"
+           id="text15">S.O.S.</text>
+        <text
+           x="36.139149"
+           y="72.920845"
+           id="text16">GENE SIZE</text>
+        <text
+           x="70.13575"
+           y="71.57489"
+           id="text17">VARI-SPEED</text>
+        <text
+           x="32.420853"
+           y="98.389359"
+           id="text18">MORPH</text>
+        <text
+           x="84.134048"
+           y="98.717445"
+           id="text19">SLIDE</text>
+        <text
+           x="109.81915"
+           y="94.780426"
+           id="text20">ORGANIZE</text>
+      </g>
+      <g
+         fill="#9fc8d0"
+         id="g23">
+        <text
+           x="22.845106"
+           y="75.937447"
+           id="text21">GENE CV ±</text>
+        <text
+           x="84.204315"
+           y="75.5"
+           id="text22">RATE CV ±</text>
+        <text
+           x="69.090218"
+           y="97.968933"
+           id="text23">SLIDE CV ±</text>
+      </g>
+      <g
+         id="g26">
+        <text
+           x="96"
+           y="108.5"
+           id="unsplice_label">UNSPLICE</text>
+        <text
+           x="60"
+           y="108.5"
+           id="text24">REC</text>
+        <text
+           x="72"
+           y="108.5"
+           id="text25">SPLICE</text>
+        <text
+           x="84"
+           y="108.5"
+           id="text26">SHIFT</text>
+      </g>
+      <g
+         id="g43_input">
+        <text
+           x="126.11404"
+           y="74.40638"
+           id="text27">S.O.S.</text>
+        <text
+           x="10.391064"
+           y="75.828087"
+           id="text28">GENE</text>
+        <text
+           x="55.799999"
+           y="75.5"
+           id="text29">RATE</text>
+        <text
+           x="14.37617"
+           y="98.29702"
+           id="text30">MORPH</text>
+        <text
+           x="57.401703"
+           y="98.29702"
+           id="text31">SLIDE</text>
+        <text
+           x="125.56723"
+           y="96.87532"
+           id="text32">ORG</text>
+        <text
+           x="36"
+           y="119.5"
+           id="text33">CLOCK</text>
+        <text
+           x="48"
+           y="119.5"
+           id="text34">PLAY</text>
+        <text
+           x="60"
+           y="119.5"
+           id="text35">REC</text>
+        <text
+           x="72"
+           y="119.5"
+           id="text36">SPLICE</text>
+        <text
+           x="84"
+           y="119.5"
+           id="text37">SHIFT</text>
+        <text
+           x="12"
+           y="119.5"
+           id="text38">IN L</text>
+        <text
+           x="24"
+           y="119.5"
+           id="text39">IN R</text>
+      </g>
     </g>
-<g
-       fill="#9fc8d0"
-       id="g23">
-      <text
-         x="34"
-         y="75.5"
-         id="text21">GENE CV ±</text>
-      <text
-         x="81.12"
-         y="75.5"
-         id="text22">RATE CV ±</text>
-      <text
-         x="81.12"
-         y="99.5"
-         id="text23">SLIDE CV ±</text>
+    <g
+       id="theme_text_output"
+       inkscape:label="Output Text">
+      <g
+         id="g43_output">
+        <text
+           x="96"
+           y="119.5"
+           id="text40">OUT L</text>
+        <text
+           x="108"
+           y="119.5"
+           id="text41">OUT R</text>
+        <text
+           x="120"
+           y="119.5"
+           id="text42">CV OUT</text>
+        <text
+           x="132"
+           y="119.5"
+           id="text43">EOSG</text>
+      </g>
     </g>
-<g
-       id="g26">
-      <text x="96" y="108.5" id="unsplice_label">UNSPLICE</text>
-      <text
-         x="60"
-         y="108.5"
-         id="text24">REC</text>
-      <text
-         x="72"
-         y="108.5"
-         id="text25">SPLICE</text>
-      <text
-         x="84"
-         y="108.5"
-         id="text26">SHIFT</text>
-    </g>
-<g
-       id="g43_input">
-      <text
-         x="118.24"
-         y="75.5"
-         id="text27">S.O.S.</text>
-      <text
-         x="14"
-         y="75.5"
-         id="text28">GENE</text>
-      <text
-         x="61.12"
-         y="75.5"
-         id="text29">RATE</text>
-      <text
-         x="24"
-         y="99.5"
-         id="text30">MORPH</text>
-      <text
-         x="61.12"
-         y="99.5"
-         id="text31">SLIDE</text>
-      <text
-         x="118.24"
-         y="99.5"
-         id="text32">ORG</text>
-      <text
-         x="36"
-         y="119.5"
-         id="text33">CLOCK</text>
-      <text
-         x="48"
-         y="119.5"
-         id="text34">PLAY</text>
-      <text
-         x="60"
-         y="119.5"
-         id="text35">REC</text>
-      <text
-         x="72"
-         y="119.5"
-         id="text36">SPLICE</text>
-      <text
-         x="84"
-         y="119.5"
-         id="text37">SHIFT</text>
-      <text
-         x="12"
-         y="119.5"
-         id="text38">IN L</text>
-      <text
-         x="24"
-         y="119.5"
-         id="text39">IN R</text>
-
-
-
-
-    </g>
-    </g>
-
-    <g id="theme_text_output" inkscape:label="Output Text">
-<g
-       id="g43_output">
-
-
-
-
-
-
-
-
-
-
-
-
-
-      <text
-         x="96"
-         y="119.5"
-         id="text40">OUT L</text>
-      <text
-         x="108"
-         y="119.5"
-         id="text41">OUT R</text>
-      <text
-         x="120"
-         y="119.5"
-         id="text42">CV OUT</text>
-      <text
-         x="132"
-         y="119.5"
-         id="text43">EOSG</text>
-    </g>
-    </g>
-</g>
+  </g>
 </svg>

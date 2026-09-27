@@ -23,8 +23,9 @@ struct ImportResult {
 // snapshot lease must outlive this call; only the frozen pages are read.
 bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, unsigned snapshot = 0);
 
-// Strict import accepts only canonical 48 kHz stereo float32. The caller
-// chooses prepared capacity; production import uses the full kMaxPages.
+// Strict import accepts Chimera's canonical 48 kHz mono/stereo float32. Mono
+// samples are duplicated into the Reel's internal stereo representation. The
+// caller chooses prepared capacity; production import uses the full kMaxPages.
 ImportResult readStrict(std::istream& in, std::uint32_t capacityPages = kMaxPages);
 
 // Offline import of ordinary PCM/IEEE-float WAVs. A long source is rejected

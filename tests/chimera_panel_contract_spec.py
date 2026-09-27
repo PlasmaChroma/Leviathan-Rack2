@@ -17,6 +17,11 @@ def keyed(root):
             for element in root.iter() if "id" in element.attrib}
 
 
+def element(root, element_id):
+    return next(item for item in root.iter()
+                if item.attrib.get("id") == element_id)
+
+
 class ChimeraPanelContractTest(unittest.TestCase):
     def test_28_hp_and_runtime_anchors(self):
         self.assertEqual(MASTER.attrib["width"], "142.24mm")
@@ -37,6 +42,18 @@ class ChimeraPanelContractTest(unittest.TestCase):
         }
         self.assertTrue(required <= keyed(MASTER).keys())
         self.assertTrue(required <= keyed(PANEL).keys())
+
+    def test_master_anchors_are_visible_guides_and_runtime_anchors_are_hidden(self):
+        master_group = element(MASTER, "component_anchors")
+        panel_group = element(PANEL, "component_anchors")
+        self.assertIn("display:inline", master_group.attrib.get("style", ""))
+        self.assertIn("display:none", panel_group.attrib.get("style", ""))
+        anchors = keyed(MASTER)
+        self.assertAlmostEqual(float(anchors["SOS_PARAM"]["r"]), 5.67)
+        self.assertAlmostEqual(float(anchors["GENE_ATT_PARAM"]["r"]), 4.0)
+        self.assertAlmostEqual(float(anchors["REC_PARAM"]["r"]), 3.0)
+        self.assertAlmostEqual(float(anchors["CLOCK_INPUT"]["r"]), 4.08)
+        self.assertAlmostEqual(float(anchors["REC_LIGHT"]["r"]), 2.33)
 
     def test_display_and_control_rows_do_not_overlap(self):
         anchors = keyed(MASTER)

@@ -66,7 +66,9 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, uns
     if (meta.validFrames > kMaxReelFrames || meta.markerCount > kMaxSplices) {
         error = "snapshot_bounds"; return false;
     }
-    const std::uint64_t dataBytes = std::uint64_t(meta.validFrames) * 8;
+    const std::uint16_t channels = meta.stereoFrames ? 2 : 1;
+    const std::uint16_t frameBytes = channels * 4;
+    const std::uint64_t dataBytes = std::uint64_t(meta.validFrames) * frameBytes;
     const std::uint64_t cueBytes = 4 + std::uint64_t(meta.markerCount) * 24;
     const std::uint64_t riffBytes = 4 + (8 + 18) + (8 + 4) +
                                     (8 + cueBytes) + (8 + dataBytes);
@@ -80,8 +82,8 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, uns
     }
     out.write("RIFF", 4); put32(out, std::uint32_t(riffBytes)); out.write("WAVE", 4);
     out.write("fmt ", 4); put32(out, 18);
-    put16(out, 3); put16(out, 2); put32(out, 48000);
-    put32(out, 384000); put16(out, 8); put16(out, 32); put16(out, 0);
+    put16(out, 3); put16(out, channels); put32(out, 48000);
+    put32(out, 48000u * frameBytes); put16(out, frameBytes); put16(out, 32); put16(out, 0);
     out.write("fact", 4); put32(out, 4); put32(out, meta.validFrames);
     out.write("cue ", 4); put32(out, std::uint32_t(cueBytes));
     put32(out, meta.markerCount);
@@ -94,7 +96,7 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, uns
     }
     out.write("data", 4); put32(out, std::uint32_t(dataBytes));
     // Encode a bounded chunk at a time, preserving canonical little-endian
-    // bytes without two iostream calls for every stereo frame.
+    // bytes without per-sample iostream calls.
     const unsigned chunkFrames = 131072;
     std::unique_ptr<char[]> buffer(new char[chunkFrames * 8]);
     for (std::uint32_t begin = 0; begin < meta.validFrames;) {
@@ -102,11 +104,11 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error, uns
         for (unsigned i = 0; i < count; ++i) {
             const StereoFrame sample = reel.readSnapshot(begin+i, snapshot);
             const std::uint32_t bits[2] = {floatBits(sample.l), floatBits(sample.r)};
-            for (unsigned channel = 0; channel < 2; ++channel)
+            for (unsigned channel = 0; channel < channels; ++channel)
                 for (unsigned byte = 0; byte < 4; ++byte)
-                    buffer[i*8+channel*4+byte] = char(bits[channel] >> (byte*8));
+                    buffer[i*frameBytes+channel*4+byte] = char(bits[channel] >> (byte*8));
         }
-        out.write(buffer.get(), count*8);
+        out.write(buffer.get(), count*frameBytes);
         if (!out) { error = "write_failed"; return false; }
         begin += count;
     }
@@ -126,6 +128,7 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
     const std::uint64_t end = std::uint64_t(riffBytes) + 8;
     if (end < 12 || end > std::uint64_t(fileLength)) return failure("truncated_riff");
     bool haveFmt = false, haveData = false, haveFact = false;
+    std::uint16_t channels = 0, frameBytes = 0;
     std::uint32_t factFrames = 0, dataBytes = 0;
     std::uint64_t labelBytes = 0;
     std::uint64_t dataOffset = 0;
@@ -141,14 +144,15 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
         if (next > end || next < payload) return failure("chunk_out_of_bounds");
         if (std::memcmp(chunk, "fmt ", 4) == 0) {
             if (haveFmt || size < 16 || size > 1048576) return failure("invalid_fmt");
-            std::uint16_t format = 0, channels = 0, align = 0, bits = 0;
+            std::uint16_t format = 0, align = 0, bits = 0;
             std::uint32_t rate = 0, byteRate = 0;
             if (!get16(in, format) || !get16(in, channels) || !get32(in, rate) ||
                 !get32(in, byteRate) || !get16(in, align) || !get16(in, bits))
                 return failure("truncated_fmt");
-            if (format != 3 || channels != 2 || rate != 48000 ||
-                byteRate != 384000 || align != 8 || bits != 32)
-                return failure("not_canonical_float32_stereo_48k");
+            if (format != 3 || (channels != 1 && channels != 2) || rate != 48000 ||
+                align != channels * 4 || byteRate != 48000u * align || bits != 32)
+                return failure("not_canonical_float32_48k");
+            frameBytes = align;
             haveFmt = true;
         }
         else if (std::memcmp(chunk, "fact", 4) == 0) {
@@ -188,8 +192,8 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
     }
     if (cursor != end) return failure("trailing_chunk_bytes");
     if (!haveFmt || !haveData) return failure("missing_fmt_or_data");
-    if (dataBytes % 8) return failure("misaligned_data");
-    const std::uint32_t frames = dataBytes / 8;
+    if (!frameBytes || dataBytes % frameBytes) return failure("misaligned_data");
+    const std::uint32_t frames = dataBytes / frameBytes;
     if (frames > kMaxReelFrames || frames > capacityPages * kPageFrames)
         return failure("reel_too_long");
     if (haveFact && factFrames != frames) return failure("fact_length_mismatch");
@@ -239,8 +243,9 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
     SampleBuffer samples(in, dataBytes);
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
         std::uint32_t lBits = 0, rBits = 0;
-        if (!get32(samples, lBits) || !get32(samples, rBits)) return failure("truncated_data");
-        float l = fromBits(lBits), r = fromBits(rBits);
+        if (!get32(samples, lBits) || (channels == 2 && !get32(samples, rBits)))
+            return failure("truncated_data");
+        float l = fromBits(lBits), r = channels == 2 ? fromBits(rBits) : l;
         if (!std::isfinite(l)) { l = 0.f; ++result.nonfiniteSamples; }
         if (!std::isfinite(r)) { r = 0.f; ++result.nonfiniteSamples; }
         if (!result.reel->appendImported({l, r})) return failure("reel_write_failed");

@@ -13,61 +13,73 @@
   </defs>
   <g id="panel_art">
     <g id="function_groups" fill="none" stroke="#698294" stroke-width="0.25" opacity="0.25">
-      <rect id="function_top_left" x="4.5" y="50.5" width="39" height="26" rx="2" />
-      <rect id="function_top_middle" x="51.62" y="50.5" width="39" height="26" rx="2" />
-      <rect id="function_top_right" x="98.74" y="50.5" width="39" height="26" rx="2" />
+      <rect id="function_top_left" x="4.6093616" y="57.827232" width="38.890636" height="18.672766" rx="2" />
+      <rect id="function_top_middle" x="51.510635" y="56.842979" width="39.10936" height="19.657021" rx="2" />
+      <rect id="function_top_right" x="99.614891" y="57.280426" width="38.125099" height="19.219574" rx="2" />
       <rect id="function_bottom_left" x="4.5" y="77.5" width="39" height="23" rx="2" />
       <rect id="function_bottom_middle" x="51.62" y="77.5" width="39" height="23" rx="2" />
       <rect id="function_bottom_right" x="98.74" y="77.5" width="39" height="23" rx="2" />
     </g>
-    <path d="M5 49.5H137.24" stroke="#698294" stroke-width=".35" opacity=".7" id="path4" />
     <rect x="5.4" y="13.5" width="131.44" height="27" rx="1.6" fill="#091721" stroke="#577982" stroke-width=".35" id="rect5" />
-    <path d="M7 15H135M7 39H135" stroke="#d2a56e" stroke-width=".18" opacity=".7" id="path5" />
-    <g id="component_anchors" style="display:none">
-      <circle id="UNSPLICE_BUTTON" cx="96" cy="103" r=".1" />
-      <rect id="BRANDING_WAVE_LEFT_RASTER" x="42.216099" y="123.3819" width="13.06748" height="5.1181002" />
-      <rect id="BRANDING_WAVE_RIGHT_RASTER" x="86.956742" y="123.3819" width="13.06748" height="5.1181002" />
-      <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="54.760335" y="119.43102" width="32.71933" height="12.24054" />
-      <circle id="DISPLAY_ORIGIN" cx="6" cy="14" r=".1" />
-      <circle id="DISPLAY_END" cx="136" cy="40" r=".1" />
-      <circle id="SOS_PARAM" cx="118.24" cy="56" r=".1" />
-      <circle id="GENE_SIZE_PARAM" cx="24" cy="56" r=".1" />
-      <circle id="VARISPEED_PARAM" cx="71.12" cy="56" r=".1" />
-      <circle id="MORPH_PARAM" cx="24" cy="80" r=".1" />
-      <circle id="SLIDE_PARAM" cx="71.12" cy="80" r=".1" />
-      <circle id="ORGANIZE_PARAM" cx="118.24" cy="80" r=".1" />
-      <circle id="GENE_ATT_PARAM" cx="34" cy="69.5" r=".1" />
-      <circle id="VARISPEED_ATT_PARAM" cx="81.12" cy="69.5" r=".1" />
-      <circle id="SLIDE_ATT_PARAM" cx="81.12" cy="93" r=".1" />
-      <circle id="REC_PARAM" cx="60" cy="103" r=".1" />
-      <circle id="SPLICE_PARAM" cx="72" cy="103" r=".1" />
-      <circle id="SHIFT_PARAM" cx="84" cy="103" r=".1" />
-      <circle id="SOS_CV_INPUT" cx="118.24" cy="69.5" r=".1" />
-      <circle id="GENE_SIZE_CV_INPUT" cx="14" cy="69.5" r=".1" />
-      <circle id="VARISPEED_CV_INPUT" cx="61.12" cy="69.5" r=".1" />
-      <circle id="MORPH_CV_INPUT" cx="24" cy="93" r=".1" />
-      <circle id="SLIDE_CV_INPUT" cx="61.12" cy="93" r=".1" />
-      <circle id="ORGANIZE_CV_INPUT" cx="118.24" cy="93" r=".1" />
-      <circle id="CLOCK_INPUT" cx="36" cy="113" r=".1" />
-      <circle id="PLAY_INPUT" cx="48" cy="113" r=".1" />
-      <circle id="REC_INPUT" cx="60" cy="113" r=".1" />
-      <circle id="SPLICE_INPUT" cx="72" cy="113" r=".1" />
-      <circle id="SHIFT_INPUT" cx="84" cy="113" r=".1" />
-      <circle id="AUDIO_L_INPUT" cx="12" cy="113" r=".1" />
-      <circle id="AUDIO_R_INPUT" cx="24" cy="113" r=".1" />
-      <circle id="AUDIO_L_OUTPUT" cx="96" cy="113" r=".1" />
-      <circle id="AUDIO_R_OUTPUT" cx="108" cy="113" r=".1" />
-      <circle id="CV_OUTPUT" cx="120" cy="113" r=".1" />
-      <circle id="EOSG_OUTPUT" cx="132" cy="113" r=".1" />
-      <circle id="REC_LIGHT" cx="10" cy="43.5" r=".1" />
-      <circle id="REC_ARMED_LIGHT" cx="25" cy="43.5" r=".1" />
-      <circle id="PLAY_LIGHT" cx="40" cy="43.5" r=".1" />
-      <circle id="PENDING_LIGHT" cx="56" cy="43.5" r=".1" />
-      <circle id="CLOCK_LIGHT" cx="72" cy="43.5" r=".1" />
-      <circle id="PM_LIGHT" cx="88" cy="43.5" r=".1" />
-      <circle id="IO_BUSY_LIGHT" cx="103" cy="43.5" r=".1" />
-      <circle id="CLIP_LIGHT" cx="118" cy="43.5" r=".1" />
-      <circle id="ERROR_LIGHT" cx="133" cy="43.5" r=".1" />
+    <g id="component_anchors" inkscape:groupmode="layer" inkscape:label="Component Anchors" style="display:none;fill-opacity:0.2;stroke-width:0.45">
+      <g id="anchor_bounds" style="fill:none;stroke:#ff5cd6;stroke-width:0.45;stroke-dasharray:1.5,0.8">
+        <rect id="BRANDING_WAVE_LEFT_RASTER" x="42.216099" y="123.3819" width="13.06748" height="5.1181002" />
+        <rect id="BRANDING_WAVE_RIGHT_RASTER" x="86.956742" y="123.3819" width="13.06748" height="5.1181002" />
+        <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="54.760335" y="119.43102" width="32.71933" height="12.24054" />
+        <circle id="DISPLAY_ORIGIN" cx="6" cy="14" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
+        <circle id="DISPLAY_END" cx="136" cy="40" r="1.5" style="fill:#ff5cd6;fill-opacity:0.45" />
+      </g>
+      <g id="anchor_main_params" style="fill:#42d7df;stroke:#a8fbff">
+        <circle id="SOS_PARAM" cx="110.80341" cy="63.327232" r="5.6700001" />
+        <circle id="GENE_SIZE_PARAM" cx="36.139149" cy="64.420853" r="5.6700001" />
+        <circle id="VARISPEED_PARAM" cx="70.13575" cy="63.074894" r="5.6700001" />
+        <circle id="MORPH_PARAM" cx="32.420853" cy="90.389359" r="5.6700001" />
+        <circle id="SLIDE_PARAM" cx="84.134048" cy="90.717445" r="5.6700001" />
+        <circle id="ORGANIZE_PARAM" cx="109.81915" cy="86.780426" r="5.6700001" />
+      </g>
+      <g id="anchor_attenuators" style="fill:#f08a24;stroke:#ffd09a">
+        <circle id="GENE_ATT_PARAM" cx="22.845106" cy="69.937447" r="4" />
+        <circle id="VARISPEED_ATT_PARAM" cx="84.204315" cy="69.5" r="4" />
+        <circle id="SLIDE_ATT_PARAM" cx="69.090218" cy="91.468933" r="4" />
+      </g>
+      <g id="anchor_buttons" style="fill:#e5b35b;stroke:#fff0ba">
+        <circle id="REC_PARAM" cx="60" cy="103" r="3" />
+        <circle id="SPLICE_PARAM" cx="72" cy="103" r="3" />
+        <circle id="SHIFT_PARAM" cx="84" cy="103" r="3" />
+        <circle id="UNSPLICE_BUTTON" cx="96" cy="103" r="3" />
+      </g>
+      <g id="anchor_inputs" style="fill:#5bd9df;stroke:#c2fcff">
+        <circle id="SOS_CV_INPUT" cx="126.11404" cy="68.40638" r="4.0799999" />
+        <circle id="GENE_SIZE_CV_INPUT" cx="10.391064" cy="69.828087" r="4.0799999" />
+        <circle id="VARISPEED_CV_INPUT" cx="55.799999" cy="69.5" r="4.0799999" />
+        <circle id="MORPH_CV_INPUT" cx="14.37617" cy="91.79702" r="4.0799999" />
+        <circle id="SLIDE_CV_INPUT" cx="57.401703" cy="91.79702" r="4.0799999" />
+        <circle id="ORGANIZE_CV_INPUT" cx="125.56723" cy="90.37532" r="4.0799999" />
+        <circle id="CLOCK_INPUT" cx="36" cy="113" r="4.08" />
+        <circle id="PLAY_INPUT" cx="48" cy="113" r="4.08" />
+        <circle id="REC_INPUT" cx="60" cy="113" r="4.08" />
+        <circle id="SPLICE_INPUT" cx="72" cy="113" r="4.08" />
+        <circle id="SHIFT_INPUT" cx="84" cy="113" r="4.08" />
+        <circle id="AUDIO_L_INPUT" cx="12" cy="113" r="4.08" />
+        <circle id="AUDIO_R_INPUT" cx="24" cy="113" r="4.08" />
+      </g>
+      <g id="anchor_outputs" style="fill:#e5b35b;stroke:#fff0ba">
+        <circle id="AUDIO_L_OUTPUT" cx="96" cy="113" r="4.08" />
+        <circle id="AUDIO_R_OUTPUT" cx="108" cy="113" r="4.08" />
+        <circle id="CV_OUTPUT" cx="120" cy="113" r="4.08" />
+        <circle id="EOSG_OUTPUT" cx="132" cy="113" r="4.08" />
+      </g>
+      <g id="anchor_lights" style="stroke:#f7fbff;stroke-width:0.35">
+        <circle id="REC_LIGHT" cx="10" cy="50.200001" r="2.3299999" style="fill:#f37159" />
+        <circle id="REC_ARMED_LIGHT" cx="25" cy="50.200001" r="2.3299999" style="fill:#e5b35b" />
+        <circle id="PLAY_LIGHT" cx="40" cy="50.200001" r="2.3299999" style="fill:#62db91" />
+        <circle id="PENDING_LIGHT" cx="56" cy="50.200001" r="2.3299999" style="fill:#e5b35b" />
+        <circle id="CLOCK_LIGHT" cx="72" cy="50.200001" r="2.3299999" style="fill:#65a9ff" />
+        <circle id="PM_LIGHT" cx="88" cy="50.200001" r="2.3299999" style="fill:#c4a1f6" />
+        <circle id="IO_BUSY_LIGHT" cx="103" cy="50.200001" r="2.3299999" style="fill:#f7fbff" />
+        <circle id="CLIP_LIGHT" cx="118" cy="50.200001" r="2.3299999" style="fill:#f37159" />
+        <circle id="ERROR_LIGHT" cx="133" cy="50.200001" r="2.3299999" style="fill:#f37159" />
+      </g>
     </g>
   </g>
 </svg>

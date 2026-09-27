@@ -16,6 +16,10 @@ static std::uint32_t u32(const std::string& bytes, std::size_t at) {
            (std::uint32_t(std::uint8_t(bytes[at+2])) << 16) |
            (std::uint32_t(std::uint8_t(bytes[at+3])) << 24);
 }
+static std::uint16_t u16(const std::string& bytes, std::size_t at) {
+    return std::uint16_t(std::uint8_t(bytes[at])) |
+           (std::uint16_t(std::uint8_t(bytes[at+1])) << 8);
+}
 static void set32(std::string& bytes, std::size_t at, std::uint32_t value) {
     for (int i = 0; i < 4; ++i) bytes[at+i] = char(value >> (8*i));
 }
@@ -143,6 +147,46 @@ int main() {
         }
     }
     {
+        chimera::Reel mono(2, 2);
+        for (unsigned i = 0; i < 300; ++i) {
+            const float sample = float(i) / 301.f;
+            need(mono.write(i, {sample, sample}, i), "prepare mono Reel");
+        }
+        need(!mono.hasStereoAudio() && mono.stereoFrameCount() == 0,
+             "identical retained channels remain mono");
+        need(mono.beginSnapshot(300), "capture mono save cut");
+        while (!mono.readyForWorker()) mono.maintenanceTick();
+        need(mono.snapshotMetadata().stereoFrames == 0,
+             "mono classification is part of the immutable snapshot");
+        need(mono.write(7, {0.25f, -0.25f}, 301) && mono.hasStereoAudio() &&
+             mono.stereoFrameCount() == 1,
+             "a differing retained frame promotes the active Reel to stereo");
+        std::ostringstream encoded(std::ios::binary);
+        std::string monoError;
+        need(chimera::wav::writeCanonical(encoded, mono, monoError),
+             "write canonical mono snapshot WAV");
+        const std::string monoBytes = encoded.str();
+        const std::size_t fmt = monoBytes.find("fmt ");
+        const std::size_t data = monoBytes.rfind("data");
+        need(fmt != std::string::npos && data != std::string::npos &&
+             u16(monoBytes, fmt+10) == 1 && u32(monoBytes, fmt+16) == 192000 &&
+             u16(monoBytes, fmt+20) == 4 && u32(monoBytes, data+4) == 300*4,
+             "mono header and payload use one float32 channel");
+        std::istringstream decoded(monoBytes, std::ios::binary);
+        auto restored = chimera::wav::readStrict(decoded, 2);
+        need(bool(restored) && !restored.reel->hasStereoAudio() &&
+             restored.reel->validFrames() == 300,
+             "strict embedded loader restores canonical mono as duplicated channels");
+        for (unsigned i = 0; i < 300; ++i) {
+            const auto original = mono.readSnapshot(i);
+            const auto roundtrip = restored.reel->readActive(i);
+            need(sameBits(original.l, roundtrip.l) && sameBits(roundtrip.l, roundtrip.r),
+                 "mono snapshot roundtrip preserves exact samples");
+        }
+        need(mono.write(7, {0.25f, 0.25f}, 302) && !mono.hasStereoAudio(),
+             "overwriting the last differing frame returns the active Reel to mono");
+    }
+    {
         // More than two chunks plus a partial tail; verify bytes after each
         // writer-buffer boundary and the final short write through roundtrip.
         const unsigned frames = 2*131072+17;
@@ -251,7 +295,8 @@ int main() {
         std::string bad = bytes;
         bad[fmt+10] = 1; // Mono channel count.
         std::istringstream stream(bad, std::ios::binary);
-        need(!chimera::wav::readStrict(stream, 2), "strict import rejects mono");
+        need(!chimera::wav::readStrict(stream, 2),
+             "strict import rejects an inconsistent mono header");
     }
     {
         std::string bad = bytes;
