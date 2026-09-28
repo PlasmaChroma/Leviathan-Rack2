@@ -7,6 +7,13 @@
 **Recovered architecture:** PIC18 application firmware, strongly consistent with PIC18F46K22 / PIC18LF46K22 family behavior  
 **Intended use:** behavioral reimplementation, interoperability work, emulator/module design, further reverse engineering, and validation against physical hardware.
 
+**Investigation update — 28 September 2026:** Leading interval acceptance/loss,
+period replacement and phase correction, calibrated-ADC tempo interpolation,
+ISR reload ordering, and numerical timing-commit guards now have executable
+models/fixtures. See Sections 4, 7.5, 26.9 and
+`docs/TIMING_RECONSTRUCTION.md`. Full Human Programming and history-based
+channel transition scheduling remain open.
+
 ---
 
 ## 0. Executive summary
@@ -225,31 +232,58 @@ The firmware contains distinct external-edge capture, tap/UI timing, stored temp
 
 ## 4.2 External acquisition
 
-**Confidence: B for two-edge acquisition; C for filtering details.**
+**Confidence: A for the recovered capture-consumer rules below; B for documented two-edge acquisition. Full source arbitration remains partial.**
 
 The Leading Tempo input is read on **RA4**. Rising edges capture elapsed timing.
 
 The manual explicitly states that TEMPI requires a minimum of **two incoming pulses** to measure and lock to a new external clock. That is consistent with direct period measurement: one edge establishes a reference point and the next provides an interval.
 
-Behavioral model:
+The ISR captures elapsed ticks, master countdown, and master wave level on a
+rising edge (`0x088C–0x08C4`). It clears elapsed and enables further counting.
+With counting initially disabled and elapsed zero, the first edge captures
+zero; the next supplies a measured interval.
+
+Recovered foreground rules (`0x4C18–0x4F64`):
+
+- Zero capture means no pending interval.
+- Nonzero intervals below **399 ticks**, or signed-negative intervals, are
+  rejected; measurement-enable and elapsed are cleared.
+- Accepted intervals produce `Hnew = clamp(trunc(interval/2), 200, 0xFFFFFF)`.
+- A changed Hnew directly replaces requested half-period; there is no
+  moving-average period filter in this path. The live countdown is shortened
+  only if it exceeds Hnew, and timing is marked dirty.
+- An equal Hnew skips period replacement and phase correction.
+- With nonnegative elapsed, measurement is cleared at `elapsed >= 0xFFFFFF`,
+  or, after an interval has been accepted, at **`elapsed > 15*H`**. The latter
+  is 7.5 requested full periods and is checked by the foreground service.
+- With Tap enabled and no other candidate, loss of input retains requested H;
+  it does not stop the master or immediately reload the stored tempo.
+
+On a changed Hnew, there is a separate transient reload correction using the
+captured master countdown R and captured level L:
 
 ```cpp
-onLeadingRisingEdge(now) {
-    if (havePreviousEdge) {
-        measuredPeriod = now - previousEdge;
-        updateLeadingPeriod(measuredPeriod);
-    }
-    previousEdge = now;
-}
+forward = Hnew - R;
+while (forward > Hnew/2) forward = truncTowardZero(forward/2);
+backward = R;
+while (backward > Hnew/2) backward = truncTowardZero(backward/2);
+currentReload = L ? Hnew + forward : Hnew - backward;
 ```
 
-Do **not** assume that `updateLeadingPeriod()` is merely `leadingPeriod = measuredPeriod`. The `leading_tempo_service` at `0x4B16` contains history/sanity logic that has not yet been completely reduced.
+These are signed 32-bit operations with wrapping storage, not an absolute
+phase-error calculation. The corrected reload is distinct from requested H
+and the already-running countdown. See `docs/TIMING_RECONSTRUCTION.md` for
+addresses, examples, tested domains, and the distinction between interval
+rejection and timeout flags.
 
-The manual's warning that fast-to-slow tempo changes take time is behaviorally important: absence of an expected edge cannot immediately distinguish a slower clock from a stopped clock.
+The capture mailbox also has Human Programming writers. Complete source
+priority, Follow transitions, asynchronous interleavings, and downstream
+channel resynchronization remain unresolved; do not infer end-to-end lock
+behavior from the interval consumer alone.
 
 ## 4.3 Internal tempo control
 
-**Confidence: C.**
+**Confidence: A for the digital helper with supplied calibration thresholds; D for the physical voltage/time conversion.**
 
 When Tap Tempo is disabled, the State combo control and associated CV input change Leading Tempo rather than State.
 
@@ -262,9 +296,35 @@ The firmware contains a 16-entry tempo-control table:
 2500,   1750,   1000,   250
 ```
 
-This table participates in the control path, apparently as a calibrated/interpolated period curve. The exact end-to-end `voltage -> tempo` law is not yet proven.
+Routine `0x627C` returns a candidate full-period value. For a 10-bit ADC sample
+x, previous accepted ADC P, and calibrated thresholds T:
 
-A reimplementation should therefore treat a simple linear BPM mapping as an approximation unless/until `0x627C` and surrounding ADC/calibration logic are fully reconstructed or a real module is measured.
+```text
+d = min(10, floor(P/50) + 2)
+invalid x=0xFFFF or max(0,P-d) <= x <= P+d:
+    retain P; return 2*requestedHalfPeriod
+otherwise:
+    remember x; set control-moved flag
+    x <= T[0]+d: return 2*table[0]
+    x > T[15]: return table[15]
+    x == T[j]: return table[j]  (after the low-end branch)
+    T[j] < x < T[j+1]:
+        slope = trunc((table[j]-table[j+1])/(T[j+1]-T[j]))
+        return table[j+1] + slope*(T[j+1]-x)
+```
+
+The low-end doubling and truncation **before** multiplication are recovered
+behavior. The caller rounds the candidate down to an even integer, divides
+by two, and clamps H to `[200, 0xFFFFFF]`. In particular, table value 250
+becomes H=200 after clamping.
+
+A changed control candidate is admitted when Tap is disabled and external
+measurement-enable is zero. An accepted nonzero capture later in that service
+overrides it. Tests cover these cases, not every source-priority transition.
+
+The digital interpolation gap is closed for supplied calibration arrays.
+Actual per-unit calibration, voltage scaling, and tick-to-seconds conversion
+are still missing; a linear BPM knob would remain a software approximation.
 
 ---
 
@@ -522,6 +582,34 @@ Therefore two fidelity tiers should be distinguished:
 **Parameter-compatible implementation:** reproduce ratio and phase arithmetic but apply changes using a reasonable sample-domain scheduler.
 
 **Behaviorally faithful implementation:** also reproduce the timing commit/history state machine around transitions.
+
+## 7.5 Recovered transition constraints
+
+**Confidence: A for the isolated numerical guards and ISR reload fragments;
+the complete commit state machine remains C/D.**
+
+At `0x2540–0x26A4`, the timing-commit service defers the current lane's later
+commit work when either signed master/channel countdown is below **76 ticks**,
+or when channel countdown lies within the inclusive range
+`[channelNextHalfPeriod-75, channelNextHalfPeriod+75]`.
+
+These conditions supplement earlier UI/history gates; passing them does not
+guarantee a commit. The remaining history/phase decision logic is still open.
+
+The ISR master and all six channel timers share this reload ordering:
+
+```text
+decrement countdown
+if signed countdown <= 0:
+    toggle level
+    countdown = currentReload
+    currentReload = nextReload
+```
+
+The old current value is loaded before next is promoted. Therefore writing
+only next does not immediately replace the running interval. Foreground
+corrections can also write these fields. This rule, combined with the one-ISR
+output pipeline, must be considered when validating actual edge times.
 
 ---
 
@@ -1664,6 +1752,31 @@ leaves only Mesh State 63 enabled from those two target States.
 
 Do not interpret an interleaved `F8` as timing input in this parser.
 
+## 26.9 Recovered timing boundary fixtures
+
+Run `python3 tools/validate_timing.py` from this dossier directory. The report
+is `analysis/timing_validation.json`; readable models and evidence addresses
+are in `tools/timing_models.py` and `docs/TIMING_RECONSTRUCTION.md`.
+
+Required boundary examples:
+
+- Capture 398 is rejected; capture 399 is accepted and clamps to H=200.
+- At H=8000 with an accepted external interval, elapsed 120000 retains
+  measurement; 120001 clears it.
+- A capture of 16000 at H=8000 skips phase correction even with a nonzero
+  captured countdown.
+- A capture of 32000 with captured countdown 4000 gives requested H=16000;
+  the transient reload is 12000 for captured low and 22000 for captured high.
+- Synthetic `T[j]=32+64*j`, previous ADC=0: ADC 35 returns candidate 199032;
+  ADC 64 returns 189984. ADC 34 takes the low-end branch and returns 400000.
+- Channel next H=800: remaining 725 and 875 defer at the numerical guard;
+  724 and 876 pass it if the master/channel minimum-countdown guards pass.
+- Timer `(current=333, next=777, remaining=1)` toggles and becomes
+  `(current=777, next=777, remaining=333)` on the next ISR countdown service.
+
+Fixtures validate isolated recovered digital paths. Synthetic calibration and
+a shared instruction decoder/harness do not establish hardware equivalence.
+
 ---
 
 # 27. High-value remaining reverse engineering
@@ -1687,15 +1800,19 @@ Goal: reproduce exactly how a new ratio/phase is transitioned into a running clo
 
 This is likely the key to making a clone *feel* indistinguishable during live programming rather than merely matching steady-state ratios.
 
+**Progress:** the 76-tick / ±75-tick numerical guards and ISR reload ordering
+are verified (Section 7.5). History selection and the remaining commit
+equations are still open.
+
 ## 27.3 Leading Tempo filtering — `0x4B16`
 
-Goal: establish:
+**Progress:** interval acceptance, direct requested-period replacement,
+transient phase correction, and digital clock-loss thresholds are recovered
+and tested (Section 4.2). No moving-average interval filter exists in that
+tested capture-consumer path.
 
-- edge-history depth
-- smoothing
-- clock-loss policy
-- fast-to-slow transition behavior
-- re-lock behavior
+Remaining: full source/Follow arbitration, Human Programming interaction,
+interrupt interleavings, and end-to-end fast/slow/re-lock output traces.
 
 ## 27.4 Voltage-controlled tempo law — `0x627C` and calibration helpers
 
@@ -1705,7 +1822,9 @@ Goal:
 ADC/calibration -> internal Leading period
 ```
 
-including interpolation through the recovered tempo-control table.
+**Progress:** `0x627C` deadband, endpoint branches, and integer interpolation
+are recovered and tested (Section 4.3). Remaining: calibration construction,
+actual unit calibration, physical voltage mapping, and tick-to-seconds scale.
 
 ## 27.5 Exact phase edit transforms — `0x11C0`
 
@@ -1930,8 +2049,10 @@ The largest remaining gap in this model is `commitTimingChangesWithSyncPolicy()`
 | Select Bus parser/protocol | A/B | Solved |
 | Mesh bitmap | A/B | Solved |
 | Leading external period capture | A/B | Strong |
-| Leading filtering/re-lock policy | C/D | Partial |
-| Voltage-controlled tempo curve | C/D | Partial |
+| Leading capture acceptance/loss and correction | A | Tested digital path; full source arbitration/re-lock partial |
+| ADC tempo interpolation/deadband | A | Solved for supplied thresholds |
+| Physical voltage-controlled tempo curve | D | Calibration/timebase unresolved |
+| Timing commit numerical guards / ISR reload order | A | Verified fragments; complete scheduler partial |
 | Physical clock output voltage | D | Not recovered |
 
 ---
@@ -1995,7 +2116,7 @@ That architecture is the part worth preserving. It is what makes TEMPI more than
 | `0x4B16` | `leading_tempo_service` | Leading clock acquisition/control |
 | `0x4F66` | `mod_routing_service` | Shift and Run/Stop runtime routing |
 | `0x5B66` | `build_adc_calibration_thresholds` | calibrated State/tempo ADC thresholds |
-| `0x627C` | unresolved tempo/control helper | likely control interpolation path |
+| `0x627C` | calibrated_tempo_control | ADC movement deadband and integer period interpolation |
 | `0x65DE` | `recompute_ratio_and_phase` | derived timer and phase values |
 | `0x6BFA` | `paste_or_mutate` | State/Bank paste and mutation |
 | `0x6E56` | `factory_reset_states` | factory initialization |
@@ -2114,3 +2235,8 @@ The recovery validation included:
 ```
 
 All packaged assertions passed. The custom decoder and harness share instruction definitions, so this remains a strong internal validation rather than independent third-party certification.
+
+The follow-up timing investigation adds `tools/timing_models.py`,
+`tools/validate_timing.py`, `analysis/timing_validation.json`, and
+`docs/TIMING_RECONSTRUCTION.md`. Its report records separate coverage counts
+and limitations; it does not upgrade the original harness to a full emulator.

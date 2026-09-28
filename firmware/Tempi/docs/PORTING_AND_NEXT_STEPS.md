@@ -1,5 +1,12 @@
 # Reimplementation guidance and next investigations
 
+**28 September follow-up:** see `TIMING_RECONSTRUCTION.md` and Sections 4/7.5
+of `../TEMPI71_BEHAVIORAL_ENGINEERING_SPEC.md`. The ADC tempo helper's digital
+law is now reduced for supplied calibration; capture acceptance/loss, master
+reload correction, ISR reload order, and commit numerical guards are verified.
+The table below identifies remaining work, including unresolved portions of
+those routines.
+
 ## A practical behavioral core
 
 A software version should separate a musical state from its running timing state. Store each program as six signed ratio codes, six phase bytes, and two masks. Keep active timer records, phase offsets, dirty flags, source routing, and run gates outside that stored structure.
@@ -22,7 +29,7 @@ After the real tick is measured, use a fractional accumulator to map hardware ti
 |---|---|---|
 | `0x234A` | Complete timing commit / synchronization transitions | Defines when new ratios and phase values take effect |
 | `0x340A` | Human-programming interval normalization and quantization | Converts taps into stored ratio and phase codes |
-| `0x4B16` | Leading-clock tracking and tempo-control law | Establishes acquisition, loss-of-clock, and tempo interpolation behavior |
+| `0x4B16` | Full source/Follow arbitration and end-to-end re-lock | Capture acceptance/loss and correction are verified; asynchronous integration remains open |
 | `0x4F66` | Exact MOD state machine | Separates shift, toggle, momentary, stop, and restart cases |
 | `0x11C0` | Gesture and edit-page transition table | Needed for front-panel compatibility rather than parameter-only emulation |
 | `0x5B66` and `0x693A` | Calibration equations and interaction | Maps real ADC values to state thresholds |

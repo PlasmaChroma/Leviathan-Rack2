@@ -12,6 +12,13 @@ Use this alongside `TEMPI71_BEHAVIORAL_ENGINEERING_SPEC.md`.
 - [ ] Clamp recovered half-period to `[200, 0xFFFFFF]` if reproducing hardware arithmetic domain.
 - [ ] Rational alignment factor and six-way LCM preserved.
 - [ ] Divider vs multiplier phase-reference asymmetry preserved.
+- [ ] Capture acceptance floor of 399 ticks and H clamp reproduced.
+- [ ] External measurement timeout: elapsed >= 0xFFFFFF, or accepted interval and elapsed > 15*H.
+- [ ] Requested period replacement separated from transient master reload correction.
+- [ ] Equal measured half-period does not force master phase correction.
+- [ ] ADC tempo deadband, low-end doubling, and divide-before-multiply interpolation reproduced for chosen calibration.
+- [ ] ISR reload ordering preserved: countdown receives old current before next is promoted.
+- [ ] Commit scheduler accounts for recovered <76-tick and next-period ±75-tick guards; these do not replace the unresolved history scheduler.
 
 ## Channel behavior
 - [ ] 50% clock output mode.
@@ -76,3 +83,13 @@ Use this alongside `TEMPI71_BEHAVIORAL_ENGINEERING_SPEC.md`.
 - [ ] Shift state is discarded by State change.
 - [ ] Run/Stop produces transient phase displacement rather than simple gate masking.
 - [ ] State CV overrides prior Gate stepping.
+- [ ] New timing fixtures in `tools/validate_timing.py` matched by the implementation.
+
+## Reconstruction status (28 September 2026)
+
+`analysis/timing_validation.json` records 13,409 passing follow-up cases.
+Digital tempo interpolation is resolved for supplied calibration thresholds;
+capture acceptance/loss, master correction, ISR reload order, and commit
+numerical guards are verified. Physical calibration/timebase, full source
+arbitration, Human quantization, and complete channel timing commit remain open.
+Checkboxes above track a future implementation, not reconstruction completion.

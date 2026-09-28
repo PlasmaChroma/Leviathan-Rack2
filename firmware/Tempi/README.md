@@ -4,7 +4,15 @@
 
 The supplied `tempi71(1).wav` contains an exact digital pulse-width transmission of ASCII Intel HEX. All 2,323 record checksums pass, and the recovered payload plus its pause manifest reconstructs the original PCM sample-for-sample.
 
-Start with **`index.html`**, the self-contained dossier, or **`REPORT.md`** for its Markdown overview. This investigation concerns the supplied file; it is not an official Make Noise specification or a complete hardware emulator.
+Start with **`index.html`**, the original self-contained recovery dossier, or **`REPORT.md`** for its Markdown overview. This investigation concerns the supplied file; it is not an official Make Noise specification or a complete hardware emulator.
+
+For the evolving behavioral contract, use
+[`TEMPI71_BEHAVIORAL_ENGINEERING_SPEC.md`](TEMPI71_BEHAVIORAL_ENGINEERING_SPEC.md).
+The 28 September timing investigation is documented in
+[`docs/TIMING_RECONSTRUCTION.md`](docs/TIMING_RECONSTRUCTION.md), with a separate
+reproducible report at `analysis/timing_validation.json`.
+These follow-up findings are maintained in Markdown; the prebuilt HTML is the
+original recovery snapshot.
 
 ## Package contents
 
@@ -35,6 +43,7 @@ python -m pip install -r requirements.txt
 python tools/recover_wav.py
 python tools/analyze_code.py
 python tools/validate_and_extract.py
+python tools/validate_timing.py
 python tools/export_metadata.py
 ```
 
