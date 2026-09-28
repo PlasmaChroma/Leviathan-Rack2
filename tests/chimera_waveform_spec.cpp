@@ -24,8 +24,8 @@ int main() {
          before->peak == 0.75f && after->peak == 0.9f,
          "waveform summaries distinguish a protected cut from newer audio");
     need(!before->stereo && !after->stereo &&
-         before->leftHigh[8] == 0.75f && after->leftLow[8] == -0.9f &&
-         before->rightHigh[8] == 0.75f && after->rightLow[8] == -0.9f,
+         before->leftHigh[32] == 0.75f && after->leftLow[32] == -0.9f &&
+         before->rightHigh[32] == 0.75f && after->rightLow[32] == -0.9f,
          "peak bins include the exact overwritten sample");
     chimera::Reel antiphase(1, 0);
     need(antiphase.write(0, {0.7f, -0.7f}, 0), "populate antiphase Reel");
@@ -55,7 +55,7 @@ int main() {
          display->markerCount == chimera::kMaxSplices && display->peak == 0.8f &&
          display->stereo && display->leftHigh[0] == 0.8f &&
          display->rightHigh[0] == 0.f,
-         "full-length waveform keeps a bounded 128-bin and 300-marker summary");
+         "full-length waveform keeps a bounded 512-bin and 300-marker summary");
     std::printf("Full-capacity worker waveform build: %.2f ms\n", milliseconds);
     std::puts("PASS: Chimera worker waveform peaks, markers, and COW cut");
 }

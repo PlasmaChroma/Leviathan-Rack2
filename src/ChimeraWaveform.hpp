@@ -11,7 +11,7 @@ namespace chimera {
 
 // Immutable, worker-built display data. UI drawing never visits Reel pages.
 struct WaveformSummary {
-    static constexpr std::size_t kBins = 128;
+    static constexpr std::size_t kBins = 512;
     std::array<float, kBins> leftLow{};
     std::array<float, kBins> leftHigh{};
     std::array<float, kBins> rightLow{};

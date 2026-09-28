@@ -2331,9 +2331,10 @@ struct ChimeraWidget : ModuleWidget {
         addParam(append);
         addParam(createParamCentered<SmallGoldButton>(mm2px(point("SPLICE_PARAM", Vec(72, 103))), module, Chimera::SPLICE_PARAM));
         auto* shift = createParamCentered<SmallGoldButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM);
-        shift->setColor(nvgRGB(190, 255, 30));
+        shift->setColor(nvgRGB(196, 161, 246));
         addParam(shift);
         auto* unsplice = createWidgetCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))));
+        unsplice->setColor(nvgRGB(106, 221, 215));
         unsplice->owner = module;
         addChild(unsplice);
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SOS_CV_INPUT", Vec(118.24, 69.5))), module, Chimera::SOS_CV_INPUT));
