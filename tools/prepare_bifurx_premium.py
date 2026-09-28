@@ -38,6 +38,9 @@ def stage(pro_root: Path, drm_dir: Path, rack_dir: Path) -> Path:
 
     payload = expected_files(ROOT)
     payload.update({p: (pro_root / p).read_bytes() for p in PRO_FILES})
+    # Premium validation always exercises licensing, even if the caller passes
+    # the local Pro testing switch. Set it before Pro evaluates its Makefile.
+    payload["Makefile"] = b'override PRO_DRM := 1\n' + payload["Makefile"]
     # Flag/header-location changes invalidate this build's objects, never the
     # normal Leviathan build. Source changes retain normal incremental behavior.
     payload["Makefile"] += (

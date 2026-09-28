@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 from pathlib import Path
 import re
 import subprocess
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTORS = ROOT / 'doc/Morphagene-Codex/reference_vectors.json'
@@ -41,16 +43,36 @@ def main() -> None:
     def add(line: str, *expected: float) -> None:
         cases.append((line, list(expected)))
 
+    # The original authored rate/PRNG anchors predate the audited MG204 ROM.
+    tables = ROOT / 'firmware/Morphagene/tables'
+    def table(name):
+        with (tables / (name + '.csv')).open() as f:
+            return [float(row['value']) for row in csv.DictReader(f)]
+    magnitude, positive = table('varispeed_magnitude'), table('varispeed_positive')
+    launch = table('morph_launch')
+    def f32(x):
+        return struct.unpack('<f', struct.pack('<f', x))[0]
+    def rate_target(x, mode):
+        x = f32(max(0, min(1, x)))
+        if mode == 2:
+            return positive[max(0, min(295, int(f32(x*328))-16))]
+        i = min(399, int(f32(x*400))) & (~1 if mode == 0 else ~3)
+        return magnitude[i-200] if i > 199 else -magnitude[196-i] if i <= 196 else 0
+
     for v in data['classicRate']:
-        add(f"classic {v['knob']} {v['attenuverter']} {v['cvVolts']}", v['rate'])
+        add(f"classic {v['knob']} {v['attenuverter']} {v['cvVolts']}",
+            rate_target(v['knob']+v['attenuverter']*max(-24,min(24,v['cvVolts']))/8,0))
     for v in data['pitchRate']:
-        add(f"pitch {v['mode']} {v['knob']} {v['attenuverter']} {v['cvVolts']}", v['rate'])
+        value=rate_target(v['knob'],v['mode'])*2**max(-8,min(8,v['attenuverter']*v['cvVolts']))
+        add(f"pitch {v['mode']} {v['knob']} {v['attenuverter']} {v['cvVolts']}",max(-32,min(32,value)))
     for v in data['sos']:
         add(f"sos {v['knob']} {int(v['patched'])} {v['cvVolts']}", v['mix'])
     for v in data['finiteGene']:
         add(f"gene {v['spliceFrames']} {v['normalizedControl']}", v['frames'])
     for v in data['morphDensity']:
-        add(f"density {v['morph']}", v['density'], v['hopFor480FrameGene'])
+        code=min(4095,int(f32(v['morph'])*4096))
+        index=min(21,int(f32(f32(code/4096)*f32(33.99))))
+        add(f"density {v['morph']}", 1/launch[index],480*launch[index])
     for v in data['cubic']:
         add('cubic ' + ' '.join(map(str, [*v['taps'], v['fraction']])), v['value'])
     for v in data['windows']:
@@ -62,8 +84,9 @@ def main() -> None:
             v['unityBlend'], v['effectiveWindow'])
     state = data['prng']['seed']
     for v in data['prng']['draws']:
-        add(f'prng {state}', v['uint32'], v['uniform'])
-        state = v['uint32']
+        next_state=(state*0x0bb38435+0x3619636b)&0xffffffff
+        add(f'prng {state}', next_state, (next_state>>8)/16777216)
+        state = next_state
     for v in data['stereoBalance']:
         add(f"pan {v['pan']}", v['gainL'], v['gainR'])
     for v in data['onePole']:

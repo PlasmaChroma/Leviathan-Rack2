@@ -33,7 +33,7 @@ public:
         metadataRegionPending_(false), frozenRegion_{0, 0},
         pmEnabled_(false), pmActive_(false), pmBlend_(0.f), leftEnergy_(0.f),
         quietFrames_(0), loudFrames_(0),
-        primaryPhase_(0.f), ratioA_(2), ratioB_(1.5), ratioC_(4.0/3.0),
+        primaryPhase_(0.f), ratioA_(2), ratioB_(1.5), ratioC_(firmware::defaultChordThird),
         clockConnected_(false), clockEdge_(false), clockWaiting_(false),
         clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 

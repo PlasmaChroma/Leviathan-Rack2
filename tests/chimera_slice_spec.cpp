@@ -7,7 +7,7 @@
 static void need(bool ok, const char* what) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", what); std::exit(1); }
 }
-static chimera::CoreInput input(float left, float right, float sos = 0.f, float rate = 5.f/6.f) {
+static chimera::CoreInput input(float left, float right, float sos = 0.f, float rate = chimera::firmware::forwardUnityKnob) {
     chimera::CoreInput in{};
     in.live = chimera::StereoFrame{left, right};
     in.controls.sos = sos;
@@ -210,7 +210,7 @@ int main() {
     chimera::Slice reverseWriter(&playheadReel);
     reverseWriter.setConditioning(false);
     reverseWriter.setInop(true);
-    auto reverseSeekInput = input(0.f, 0.f, 0.f, 1.f/6.f);
+    auto reverseSeekInput = input(0.f, 0.f, 0.f, chimera::firmware::reverseUnityKnob);
     for (int frame = 0; frame < 10; ++frame) reverseWriter.step(reverseSeekInput);
     const std::uint32_t reverseAddress = static_cast<std::uint32_t>(
         std::floor(reverseWriter.playbackPosition()));
@@ -369,12 +369,12 @@ int main() {
     need(near(playback.step(input(0.f, 0.f, 1.f)).audio.l, 0.f),
          "Play rise restarts forward full-Splice at origin");
     playback.setPlay(false);
-    for (int i = 0; i < 1000; ++i) playback.step(input(0.f, 0.f, 1.f, 1.f/6.f));
+    for (int i = 0; i < 1000; ++i) playback.step(input(0.f, 0.f, 1.f, chimera::firmware::reverseUnityKnob));
     playback.setPlay(true);
-    need(near(playback.step(input(0.f, 0.f, 1.f, 1.f/6.f)).audio.l, 15.f/48.f, 0.002f),
+    need(near(playback.step(input(0.f, 0.f, 1.f, chimera::firmware::reverseUnityKnob)).audio.l, 15.f/48.f, 0.002f),
          "Play rise restarts reverse full-Splice at wrapped origin minus one");
 
-    const float rateKnobs[] = {5.f/6.f, 1.f};
+    const float rateKnobs[] = {chimera::firmware::forwardUnityKnob, 1.f};
     const int expectedTravelFrames[] = {16, 8};
     for (int caseIndex = 0; caseIndex < 2; ++caseIndex) {
         chimera::Slice cycle(&tagged);
@@ -395,7 +395,7 @@ int main() {
     for (std::uint32_t i = 0; i < 4800; ++i)
         need(longReel.write(i, chimera::StereoFrame{0.f, 0.f}, i),
              "prepare 4800-frame full-Splice timing fixture");
-    double lowKnob = 0.5, highKnob = 5.0/6.0;
+    double lowKnob = 0.5, highKnob = chimera::firmware::forwardUnityKnob;
     for (int i = 0; i < 40; ++i) {
         const double mid = 0.5 * (lowKnob + highKnob);
         if (chimera::profile1::classicRate(mid) < 0.5) lowKnob = mid;
@@ -404,7 +404,7 @@ int main() {
     float halfKnob = static_cast<float>(highKnob);
     while (chimera::profile1::classicRate(halfKnob) < 0.5)
         halfKnob = std::nextafter(halfKnob, 1.f);
-    const float timingKnobs[] = {halfKnob, 5.f/6.f, 1.f};
+    const float timingKnobs[] = {halfKnob, chimera::firmware::forwardUnityKnob, 1.f};
     const int traversalFrames[] = {9600, 4800, 2400};
     for (int variant = 0; variant < 3; ++variant) {
         chimera::Slice timing(&longReel);
@@ -517,7 +517,7 @@ int main() {
     need(atStop.recording && near(atStop.audio.l, 0.f) &&
          zeroRate.writerPosition() == (writerBeforeStop + 1000) % 16,
          "wet fades silent at Stop while writer keeps advancing one frame per tick");
-    const float writerRates[] = {0.5f, 1.f/6.f, 1.f, 5.f/6.f};
+    const float writerRates[] = {0.5f, chimera::firmware::reverseUnityKnob, 1.f, chimera::firmware::forwardUnityKnob};
     for (int variant = 0; variant < 4; ++variant) {
         chimera::Reel destination(1, 1);
         for (int i = 0; i < 16; ++i)
@@ -648,7 +648,7 @@ int main() {
     reverseRamp.setRampCv(true);
     reverseRamp.setPlay(false);
     chimera::CoreInput reverseInput = finiteInput;
-    reverseInput.controls.rate = 1.f/6.f;
+    reverseInput.controls.rate = chimera::firmware::reverseUnityKnob;
     reverseRamp.step(reverseInput);
     reverseRamp.setPlay(true);
     for (int frame = 0; frame <= 300; ++frame) {
@@ -1070,7 +1070,7 @@ int main() {
             need(combinedReel.beginSnapshot(combined.frame()),
                  "snapshot starts during dense PM/Current processing");
         combinedInput.pmRightVolts = (frame / 16) & 1 ? 5.f : -5.f;
-        combinedInput.controls.rate = (frame / 250) & 1 ? 1.f/6.f : 5.f/6.f;
+        combinedInput.controls.rate = (frame / 250) & 1 ? chimera::firmware::reverseUnityKnob : chimera::firmware::forwardUnityKnob;
         const chimera::Slice::Output out = combined.step(combinedInput);
         need(std::isfinite(out.audio.l) && std::isfinite(out.audio.r) &&
              !combined.overloaded(),
@@ -1116,7 +1116,8 @@ int main() {
     collided.setClockPlayback(true, false, 600, false, 1);
     collided.step(clockInput); // Settle the finite-Gene control before playback.
     collided.setPlay(true);
-    for (int frame = 0; frame < 600; ++frame) {
+    // Clocked duration retains the 800-frame bin above the 600-frame boundary.
+    for (int frame = 0; frame < 800; ++frame) {
         collided.setClockPlayback(true, false, 600, false, 1);
         collided.step(clockInput);
     }

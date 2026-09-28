@@ -48,7 +48,7 @@ int main() {
         }
         else if (op == "prng") {
             std::uint32_t seed; std::cin >> seed;
-            Xorshift32 random(seed);
+            FirmwareRandom random(seed);
             const std::uint32_t next = random.next();
             std::cout << next << ' ' << static_cast<double>(next >> 8) / 16777216.0 << '\n';
         }

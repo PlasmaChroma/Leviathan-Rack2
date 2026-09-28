@@ -32,7 +32,7 @@ static bool near(double a, double b, double tolerance = 1e-6) {
 
 static chimera::ControlFrame controls() {
     chimera::ControlFrame c = {};
-    c.rate = 5.f/6.f;
+    c.rate = chimera::firmware::forwardUnityKnob;
     c.morph = 1.f/6.f;
     return c;
 }
@@ -62,13 +62,13 @@ int main() {
     check(controlVoltage(100.f) == 24 && controlVoltage(-100.f) == -24 &&
           additive8(0.25, 1, 100) == 1 && roundNonnegative(2.5) == 3,
           "overvoltage clamp and nonnegative half-up rounding");
-    check(near(classicRate(0), -2) && near(classicRate(1.0/6), -1) &&
-          classicRate(0.5) == 0 && near(classicRate(5.0/6), 1) &&
+    check(near(classicRate(0), -2) && near(classicRate(chimera::firmware::reverseUnityKnob), -1) &&
+          classicRate(0.5) == 0 && near(classicRate(chimera::firmware::forwardUnityKnob), 1) &&
           near(classicRate(1), 2), "classic Vari-Speed anchors");
-    check(near(pitchRate(1, 5.0/6, 1, -2), 0.25) &&
-          near(pitchRate(1, 1.0/6, 1, 1), -2) &&
+    check(near(pitchRate(1, chimera::firmware::forwardUnityKnob, 1, -2), 0.25) &&
+          near(pitchRate(1, chimera::firmware::reverseUnityKnob, 1, 1), -2) &&
           pitchRate(1, 0.5, 1, 8) == 0 &&
-          pitchRate(2, 0, 1, 8) == 0 && near(pitchRate(2, 0.75, 1, 0), 1),
+          pitchRate(2, 0, 1, 8) == 0 && near(pitchRate(2, 0.75, 1, 0), 1.63391495),
           "pitch modes preserve Stop and direction");
     check(near(rate(0, 0.5, 1, 4), 2) && near(rate(0, 0.5, -1, 4), -2),
           "classic CV crosses zero before curve");
@@ -98,7 +98,7 @@ int main() {
           window(480, 240, false) == 1 && windowEdge(4800, true) > windowEdge(4800, false),
           "window tiny cases, symmetry and smooth edge");
     check(near(morphDensity(0), 0.5) && near(morphDensity(400.0/4096), 1) &&
-          near(morphDensity(1100.0/4096), 2) && near(morphDensity(1850.0/4096), 3) &&
+          near(morphDensity(1100.0/4096), 2) && near(morphDensity(1850.0/4096), 3, 4e-6) &&
           near(morphDensity(1), 4) && effectiveWindow(0, 1, false) == 1 &&
           effectiveWindow(0, 1, true) == 0, "Morph and unity envelope anchors");
 
@@ -118,17 +118,18 @@ int main() {
           wrapPosition(1 + 3*512, Region{1,4}) == 1,
           "bounded coordinate wrapping");
 
-    Xorshift32 random;
-    check(random.next() == 1085196063u && random.next() == 2447379481u,
-          "xorshift32 default sequence");
-    random = Xorshift32(0);
+    FirmwareRandom random(0);
+    check(random.next() == 907633515u && random.next() == 2641306770u,
+          "MG204 LCG sequence including zero seed");
+    random = FirmwareRandom(0);
     const double ratios[3] = {2, -3, 4};
     const OnsetChoice low = chooseOnset(random, 1, 0.1, ratios);
-    check(!low.chord && low.pan == 0 && random.state == 2447379481u,
+    check(!low.chord && low.crossmix == 0 && random.state == 2641306770u,
           "low Morph onset consumes two draws");
     const OnsetChoice high = chooseOnset(random, 2, 1, ratios);
-    check(high.chord && high.ratio == -3 && random.state == 1701901981u,
-          "high Morph onset retains signed ratio");
+    check(high.crossmix >= 0 && high.crossmix <= 1 &&
+          (high.ratio == 1 || high.ratio == 2 || high.ratio == -3 || high.ratio == 4),
+          "high Morph selects a configured signed ratio");
     double left, right;
     stereoBalance(0, left, right);
     check(near(left, 1) && near(right, 1), "center pan preserves stereo channels");

@@ -121,6 +121,7 @@ SOURCE_FILES = (
     "res/bifurx/Bifurx-LT.png",
     "res/icon/Bifurx-CS-96c.png",
     "res/icon/Eclipse2Knob.svg",
+    "res/icon/Eclipse2KnobShadow.svg",
     "res/icon/HaloKnob2Back.svg",
     "res/icon/HaloKnobCenter.svg",
     "res/icon/HaloKnobCenterLit.svg",
@@ -145,12 +146,21 @@ SOURCE_FILES = (
 MAKEFILE = r"""# Standalone Bifurx VCV Rack plugin build.
 RACK_DIR ?= ../Rack-SDK
 
-# Vendored VCV DRM is required for every Pro build.
+# DRM is enabled by default; PRO_DRM=0 builds without DRM for local testing.
+PRO_DRM ?= 1
+ifneq ($(PRO_DRM),0)
+ifneq ($(PRO_DRM),1)
+$(error PRO_DRM must be 0 or 1)
+endif
+endif
 DRM_DIR ?= DRM
+ifeq ($(PRO_DRM),1)
 ifeq ($(shell test -f "$(DRM_DIR)/drm.hpp" && echo yes),)
 $(error Missing VCV DRM header at $(DRM_DIR)/drm.hpp; set DRM_DIR to its directory)
 endif
-FLAGS += -DLEVIATHAN_PRO_DRM=1 -I"$(DRM_DIR)"
+FLAGS += -I"$(DRM_DIR)"
+endif
+FLAGS += -DLEVIATHAN_PRO_DRM=$(PRO_DRM)
 CFLAGS +=
 CXXFLAGS +=
 LDFLAGS +=
@@ -169,7 +179,13 @@ include $(RACK_DIR)/plugin.mk
 FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
 
 # A bootstrap/build-flag change must also refresh existing Pro objects.
-$(OBJECTS): Makefile
+$(OBJECTS): Makefile build/pro-drm-mode
+
+# Changing mode rebuilds objects; repeated builds in the same mode stay incremental.
+.PHONY: pro-drm-mode-force
+build/pro-drm-mode: pro-drm-mode-force
+	@mkdir -p $(@D)
+	@if test "$(PRO_DRM)" != "$$(cat $@ 2>/dev/null)"; then echo "$(PRO_DRM)" > $@; fi
 
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
@@ -234,6 +250,12 @@ regenerated from the union of panel SVGs in this repository.
 
 The `Makefile`, `plugin.json`, `src/plugin.cpp`, `src/plugin.hpp`, this file,
 and other Pro-only files remain owned by this repository after initial setup.
+
+For local testing without a license key, run `make -j10 PRO_DRM=0 dist` in
+the platform build shell (MINGW64 on Windows). This omits DRM entirely.
+DRM is enabled by default; use `make -j10 PRO_DRM=1 dist` for release builds.
+Objects rebuild automatically when switching modes. Pass `PRO_DRM=0` on every
+build or install invocation that should remain DRM-free.
 """
 
 PLUGIN_HPP = r"""#pragma once
@@ -337,12 +359,10 @@ PLUGIN_CPP = r"""#include "plugin.hpp"
 #include <iomanip>
 #include <mutex>
 
-#if !defined(LEVIATHAN_PRO_DRM) || !LEVIATHAN_PRO_DRM
-#error "Leviathan Pro must be built with VCV DRM enabled"
-#endif
-
 Plugin* pluginInstance = nullptr;
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 drm::Context* leviathanDrmContext = nullptr;
+#endif
 
 namespace {
 std::atomic<bool> dragonKingDebugEnabled {false};
@@ -439,17 +459,19 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
-	visual_assets::loadSettings();
 	leviathan::theme::persistence::initializeFromUserStorage();
 	p->addModel(modelBifurx);
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 	leviathanDrmContext = new drm::Context("Leviathan-Pro", p);
+#endif
 }
 
 void destroy() {
 	bifurx::shutdownBifurxRenderService();
-	visual_assets::saveSettings();
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 	delete leviathanDrmContext;
 	leviathanDrmContext = nullptr;
+#endif
 }
 """
 

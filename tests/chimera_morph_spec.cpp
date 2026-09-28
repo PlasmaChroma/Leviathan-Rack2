@@ -39,8 +39,8 @@ int main() {
             unsigned launches = 0;
             for (unsigned frame = 1; frame <= 1000000; ++frame) {
                 launches += scheduler.step();
-                need(launches == std::uint64_t(frame)*factor.denominator /
-                    (duration*factor.numerator), "rational schedules never gain or lose a launch");
+                need(launches == static_cast<unsigned>(double(frame) /
+                    (duration * double(firmware::morph_launch[s]))), "ROM intervals preserve fractional launch phase");
             }
         }
     }
@@ -57,21 +57,21 @@ int main() {
     const double ratios[] = {2,1.5,4.0/3.0};
     optionsText::Values defaults;
     need(defaults.mcr[0] == 2.f && defaults.mcr[1] == 1.5f &&
-         defaults.mcr[2] == 4.f/3.f, "option parser shares recovered defaults");
+         defaults.mcr[2] == firmware::defaultChordThird, "option parser shares recovered defaults");
     for (double control : {0., .5, .6}) {
-        profile1::Xorshift32 random(17);
+        profile1::FirmwareRandom random(17);
         for (int i=0;i<1000;++i) {
             const auto choice=profile1::chooseOnset(random,i%4,control,ratios);
-            need(choice.ratio==1 && (control>.5 || choice.pan==0),
+            need(choice.ratio==1 && (control>.5 || choice.crossmix==0),
                 "random distribution obeys recovered thresholds");
         }
     }
-    profile1::Xorshift32 randomA(17), randomB(17);
+    profile1::FirmwareRandom randomA(17), randomB(17);
     for (unsigned i = 0; i < 1000; ++i) {
         const auto a = profile1::chooseOnset(randomA,i%4,1,ratios);
         const auto b = profile1::chooseOnset(randomB,i%4,1,ratios);
-        need(a.pan == b.pan && a.ratio == b.ratio &&
-             a.ratio == (i%4 ? ratios[i%4-1] : 1), "seeded per-slot default ratios");
+        need(a.crossmix == b.crossmix && a.ratio == b.ratio &&
+             (a.ratio == 1 || a.ratio == 2 || a.ratio == 1.5 || a.ratio == 4.0/3.0), "seeded discrete chord choices");
     }
     Reel reel(20,20);
     for (unsigned i=0;i<4800;++i) need(reel.write(i,{1.f,1.f},i),"prepare source");
@@ -85,8 +85,8 @@ int main() {
         for (unsigned frame=0;frame<6000;++frame) {
             const auto out=grains.step(reel,region,c);
             if(out.completions && !firstCompletion) firstCompletion=frame;
-            need(grains.onsetCount()==1+std::uint64_t(frame)*morph::stages[s].denominator /
-                (600*morph::stages[s].numerator),"DSP output-time cadence independent of Vari-Speed");
+            need(grains.onsetCount()==1+static_cast<unsigned>(double(frame) /
+                (600*double(firmware::morph_launch[s]))),"DSP output-time cadence independent of Vari-Speed");
             need(out.readers<=4 && std::isfinite(out.audio.l),"four bounded independent voices");
             if(s==0 && frame>=600 && frame<1200) need(out.readers==0 && out.audio.l==0,
                 "counterclockwise produces real silence between genes");
@@ -109,33 +109,36 @@ int main() {
     for(int i=0;i<450;++i)transition.step(reel,region,c);
     unsigned ages[3];double positions[3],gains[3],savedRatios[3];
     for(int i=0;i<3;++i){ages[i]=transition.slotAge(i);positions[i]=transition.slotPosition(i);
-        gains[i]=transition.slotPanGain(i);savedRatios[i]=transition.slotRatio(i);}
+        gains[i]=transition.slotCrossmix(i);savedRatios[i]=transition.slotRatio(i);}
     const auto count=transition.onsetCount();c.morph=0;
     const auto out=transition.step(reel,region,c);
     need(transition.onsetCount()==count && std::fabs(out.audio.l-1)<1e-5,
         "stage change preserves audio and does not retrigger");
     for(int i=0;i<3;++i)need(transition.slotAge(i)==ages[i]+1 &&
-        transition.slotPosition(i)==positions[i]+1 && transition.slotPanGain(i)==gains[i] &&
+        transition.slotPosition(i)==positions[i]+1 && transition.slotCrossmix(i)==gains[i] &&
         transition.slotRatio(i)==savedRatios[i],"stage changes preserve independent voices and latched choices");
     Grains defaultsDsp; c.morph=1;
     for(int i=0;i<1800;++i)defaultsDsp.step(reel,region,c);
-    need(defaultsDsp.slotRatio(0)==1 && defaultsDsp.slotRatio(1)==2 &&
-         defaultsDsp.slotRatio(2)==1.5 && defaultsDsp.slotRatio(3)==4.0/3.0,
-         "DSP uses recovered default voice ratios");
-    Grains reverse;reverse.setChordRatios(2,-1.5,4.0/3.0);c.morph=1;
-    for(int i=0;i<1800;++i)reverse.step(reel,region,c);
-    need(reverse.slotRatio(0)==1 && reverse.slotRatio(1)==2 &&
-         reverse.slotRatio(2)==-1.5 && reverse.slotRatio(3)==4.0/3.0,"only configured voice reverses");
+    for (int i=0;i<4;++i) need(defaultsDsp.slotRatio(i)==1 || defaultsDsp.slotRatio(i)==2 ||
+        defaultsDsp.slotRatio(i)==1.5 || defaultsDsp.slotRatio(i)==firmware::defaultChordThird,
+        "DSP uses recovered default chord choices");
+    Grains reverse;reverse.setChordRatios(-2,-1.5,-4.0/3.0);c.morph=1;
+    bool reversed=false;
+    for(int i=0;i<1800;++i) {
+        reverse.step(reel,region,c);
+        for(int slot=0;slot<4;++slot) reversed=reversed || reverse.slotRatio(slot)<0;
+    }
+    need(reversed,"configured negative chord ratios reverse selected voices");
     double before[4];for(int i=0;i<4;++i)before[i]=reverse.slotPosition(i);
     reverse.step(reel,region,c); // slot zero launches here; other heads retain position.
     for(int i=1;i<4;++i)need(std::fabs(reverse.slotPosition(i)-
         profile1::wrapPosition(before[i]+reverse.slotRatio(i),region))<1e-8,"signed per-voice source increments");
     double latchedPan[4],latchedRatio[4];
-    for(int i=0;i<4;++i){latchedPan[i]=reverse.slotPanGain(i);latchedRatio[i]=reverse.slotRatio(i);}
+    for(int i=0;i<4;++i){latchedPan[i]=reverse.slotCrossmix(i);latchedRatio[i]=reverse.slotRatio(i);}
     c.morph=.7f; // Still stage 21; continuous depth moves, existing choices must not.
     for(int frame=0;frame<100;++frame) {
         reverse.step(reel,region,c);
-        for(int i=0;i<4;++i)need(reverse.slotPanGain(i)==latchedPan[i] &&
+        for(int i=0;i<4;++i)need(reverse.slotCrossmix(i)==latchedPan[i] &&
             reverse.slotRatio(i)==latchedRatio[i],"upper continuous choices remain latched for each Gene");
     }
     Grains stress; stress.setChordRatios(-16,.0625,16);

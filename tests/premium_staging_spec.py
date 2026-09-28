@@ -2,6 +2,7 @@
 """Exercise Premium snapshot isolation and dependency validation without DRM."""
 from pathlib import Path
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,27 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import prepare_bifurx_premium as prepare
 import sync_bifurx_to_pro as sync
+
+
+class PremiumResourceClosureSpec(unittest.TestCase):
+    def test_eclipse2_constructor_assets_reach_pro_sync(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "src/visual/VisualAssets.cpp").read_text(encoding="utf-8")
+        constructor = source.split("Eclipse2Knob::Eclipse2Knob() {", 1)[1].split(
+            "void Eclipse2Knob::step()", 1)[0]
+        resources = set(re.findall(r'loadPluginSvgCached\("([^"]+)"\)', constructor))
+        self.assertTrue(resources)
+        payload = sync.expected_files(root)
+        for resource in resources:
+            self.assertIn(resource, payload, "Eclipse2 runtime asset missing from Pro sync")
+            self.assertEqual(payload[resource], (root / resource).read_bytes())
+        with tempfile.TemporaryDirectory(prefix="pro-resource-sync-") as temp:
+            destination = Path(temp)
+            (destination / ".git").mkdir()
+            with patch.object(sync, "generated_atlas", return_value=b"test atlas"):
+                sync.synchronize(root, destination, init=True, dry_run=False)
+            for resource in resources:
+                self.assertEqual((destination / resource).read_bytes(), payload[resource])
 
 
 class PremiumStagingSpec(unittest.TestCase):

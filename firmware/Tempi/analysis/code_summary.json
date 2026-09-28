@@ -1,0 +1,108 @@
+{
+  "roots": [
+    "0x000800",
+    "0x000808"
+  ],
+  "reachable_instructions": 16422,
+  "reachable_bytes": 36546,
+  "function_entries": 80,
+  "direct_call_sites": 270,
+  "instruction_histogram": {
+    "BSF": 95,
+    "MOVFF": 1511,
+    "BTFSS": 117,
+    "BCF": 294,
+    "MOVLB": 682,
+    "BRA": 639,
+    "MOVLW": 2091,
+    "BTFSC": 144,
+    "MOVWF": 1867,
+    "MOVF": 2069,
+    "BZ": 393,
+    "DECF": 56,
+    "ADDWFC": 827,
+    "IORWF": 289,
+    "BNZ": 384,
+    "ADDWF": 761,
+    "INFSNZ": 44,
+    "XORWF": 208,
+    "ANDWF": 107,
+    "XORLW": 210,
+    "CLRF": 1241,
+    "LFSR": 45,
+    "MULLW": 244,
+    "TBLRD*+": 95,
+    "RETFIE": 1,
+    "INCF": 189,
+    "BC": 61,
+    "SUBWF": 137,
+    "SUBWFB": 198,
+    "BNC": 53,
+    "CALL": 270,
+    "RETURN": 82,
+    "RRCF": 52,
+    "DECFSZ": 24,
+    "RLCF": 441,
+    "GOTO": 25,
+    "SETF": 30,
+    "ANDLW": 12,
+    "IORLW": 29,
+    "NOP_CONT": 10,
+    "SUBLW": 5,
+    "CPFSGT": 35,
+    "RETLW": 28,
+    "ADDLW": 67,
+    "TBLRD*-": 2,
+    "COMF": 45,
+    "CPFSLT": 14,
+    "TBLRD*": 2,
+    "NEGF": 14,
+    "SWAPF": 2,
+    "MULWF": 181
+  },
+  "unrecovered_targets": [],
+  "unresolved_pcl_writes": [],
+  "uncovered_flash_ranges": [
+    {
+      "start": "0x000804",
+      "end": "0x000807",
+      "length": 4
+    },
+    {
+      "start": "0x0092B8",
+      "end": "0x009317",
+      "length": 96
+    },
+    {
+      "start": "0x009442",
+      "end": "0x0094BF",
+      "length": 126
+    },
+    {
+      "start": "0x00977E",
+      "end": "0x00978F",
+      "length": 18
+    },
+    {
+      "start": "0x0097AC",
+      "end": "0x0097CD",
+      "length": 34
+    },
+    {
+      "start": "0x0097D8",
+      "end": "0x0097DF",
+      "length": 8
+    },
+    {
+      "start": "0x00FD40",
+      "end": "0x00FE3F",
+      "length": 256
+    }
+  ],
+  "cautions": [
+    "A reachable address is not proof every branch can execute.",
+    "Call entries are not source-level function boundaries.",
+    "Indirect control flow is not guessed.",
+    "SFR names assume PIC18(L)F46K22-family compatibility."
+  ]
+}

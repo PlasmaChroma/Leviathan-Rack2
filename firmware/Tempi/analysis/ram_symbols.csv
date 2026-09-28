@@ -1,0 +1,57 @@
+address,bytes,analyst_name,interpretation,evidence,confidence
+0x030,12,channel_source_pointers,6 x uint16 data-memory pointers,ISR; main,High
+0x03E,1,current_state,0..63,0x8540; 0x88D4,High
+0x041,4,master_current_halfperiod,uint32 ticks,ISR,High
+0x045,4,master_requested_halfperiod,uint32 ticks,0x65DE; ISR,High
+0x049,4,master_countdown,int32 ticks,ISR,High
+0x04D,1,constant_true_source,uint8 = 1,C runtime; main,High
+0x400,24,human_elapsed_timers,6 x uint32 ticks,ISR; 0x340A,High
+0x418,24,human_captured_intervals,6 x uint32 ticks,ISR; 0x340A,High
+0x430,6,human_timer_enables,6 x uint8,ISR,High
+0x436,6,channel_wave_levels,6 x uint8,ISR,High
+0x43C,6,pending_output_levels,6 x uint8,0x083C..0x0880; ISR,High
+0x446,4,external_tempo_elapsed,uint32 ticks,ISR,High
+0x44E,2,uart_ring_write_index,uint16; wraps 460,ISR,High
+0x450,2,mod_source_pointer,data-memory pointer,0x8DC2; ISR,High
+0x454,2,active_low_button_mask,~(PORTC | PORTD<<8) & 0xC066,0x0EA4..0x0EC0,High
+0x456,2,master_alignment_counter,uint16,ISR,High
+0x45D,1,sysex_payload_index,uint8,0x71AA,High
+0x45E,1,serial_status,C0/F0/F4 or zero,0x71AA,High
+0x47E,1,master_wave_level,uint8,ISR,High
+0x47F,1,global_timing_dirty,boolean,0x8540; 0x65DE,High
+0x493,1,follow_enable,boolean,0x7D08; 0x7BBA; 0x8DC2,High
+0x498,72,six_channel_timer_records,"6 x {uint32 current,uint32 next,int32 remaining}",ISR,High
+0x4E0,6,channel_output_enable,6 x uint8,0x8540; ISR,High
+0x4E6,2,previous_adc_state,uint16,0x78FC,High
+0x4F5,1,mod_toggle_level,uint8,ISR; 0x4F66,High
+0x4F6,1,mod_gate_level,uint8,ISR; 0x4F66,High
+0x500,32,state_adc_thresholds,16 x uint16,0x5B66; 0x78FC,High
+0x520,24,computed_phase_offsets,6 x int32 ticks,0x65DE,High
+0x538,12,active_ratio_codes,"6 x int16, EEPROM sign-extended",0x8540; 0x7E54,High
+0x544,8,mesh_state_bitmap,64 bits,0x7D08,High
+0x55E,6,previous_channel_source_levels,6 x uint8,ISR,High
+0x570,6,active_phase_codes,6 x uint8,0x8540; 0x65DE,High
+0x586,4,captured_external_tempo_interval,uint32,ISR; 0x4B16,High
+0x595,2,uart_ring_read_index,uint16; wraps 460,0x71AA,High
+0x5A3,1,adc_nonblocking_state,"0=start,1=busy,2=read",0x9318,High
+0x5B6,8,lcg_state,uint64,0x8446,High
+0x5BE,24,computed_channel_halfperiods,6 x uint32,0x65DE,High
+0x5DC,6,channel_mod_enable,6 x uint8,0x8540; 0x4F66,High
+0x5E2,6,per_channel_timing_dirty,6 x uint8,0x65DE,High
+0x5E8,6,channel_run_gate,6 x uint8,ISR; 0x4F66,High
+0x5EE,3,select_bus_header,00 02 2D,C runtime; 0x71AA,High
+0x5F1,1,select_bus_subcommand,uint8,0x71AA,High
+0x5F3,2,last_adc_result,uint16,0x9318,High
+0x5F7,2,master_alignment_length,uint16 master cycles,0x93FC; ISR,High
+0x5FA,1,requested_serial_state,uint8,0x71AA; 0x7A5C,High
+0x65C,16,ui_button_debounce,8 x uint16,0x11C0,High
+0x66C,12,fast_channel_button_debounce,6 x uint16,0x7336,High
+0x678,12,ratio_alignment_factors,6 x uint16,0x8BCC; 0x65DE,High
+0x6A0,8,dirty_state_bitmap,64 bits,0x8B16,High
+0x700,120,master_history,10 x 12-byte timing snapshots,ISR,High
+0x800,64,cached_mod_masks,uint8[64],0x87FA; 0x8540,High
+0x840,64,cached_output_enable_masks,uint8[64],0x87FA; 0x8540,High
+0x9AE,64,tempo_control_table,16 x uint32 copied from 0x9442,C runtime; 0x4B16,High
+0xA60,460,uart_receive_ring,uint8[460],ISR; 0x71AA,High
+0xC2C,384,cached_ratio_codes,int8[64][6],0x87FA; 0x8540,High
+0xDAC,384,cached_phase_codes,uint8[64][6],0x87FA; 0x8540,High

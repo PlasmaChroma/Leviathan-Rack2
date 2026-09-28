@@ -9,8 +9,8 @@
 namespace chimera {
 
 // Fixed four-slot scheduler. Constructed off the audio thread with fixed window
-// and pan tables; step() never allocates. Gene LUT mapping is cached until its
-// inputs change; grain-launch pan uses a precomputed table.
+// window table; step() never allocates. Gene LUT mapping is cached until its
+// inputs change; stereo crossmix and pitch choices are latched at launch.
 class Grains {
 public:
     struct ClockDrive {
@@ -42,9 +42,7 @@ public:
         (void) geneSize::lut(); // Initialize the firmware LUT off the audio thread.
         for (std::uint32_t i = 0; i <= 2048; ++i)
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
-        for (std::uint32_t i = 0; i <= 2048; ++i)
-            pan_[i] = std::sqrt(2.0) * std::cos(profile1::kPi * i / 4096.0);
-        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = 4.0/3.0;
+        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = firmware::defaultChordThird;
         reset();
     }
 
@@ -64,7 +62,7 @@ public:
             ratios_[i] = profile1::finite(incoming[i]) && std::fabs(incoming[i]) >= 0.0625 &&
                 std::fabs(incoming[i]) <= 16.0 ? incoming[i] : 1.0;
     }
-    void setSeed(std::uint32_t seed) { random_ = profile1::Xorshift32(seed); }
+    void setSeed(std::uint32_t seed) { random_ = profile1::FirmwareRandom(seed); }
     void reset(double coordinate = 0.0) {
         continuousMorph_.value = 0.f;
         scheduler_.reset();
@@ -102,7 +100,7 @@ public:
     }
     std::uint32_t slotAge(std::uint8_t slot) const { return slot < 4 ? slots_[slot].age : 0; }
     double slotPosition(std::uint8_t slot) const { return slot < 4 ? slots_[slot].position : 0; }
-    double slotPanGain(std::uint8_t slot) const { return slot < 4 ? slots_[slot].left : 0; }
+    double slotCrossmix(std::uint8_t slot) const { return slot < 4 ? slots_[slot].crossmix : 0; }
     double slotRatio(std::uint8_t slot) const { return slot < 4 ? slots_[slot].ratio : 0.0; }
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
     double trajectoryOffset() const { return trajectoryOffset_; }
@@ -270,8 +268,9 @@ public:
                 const double w = voiceWeight(v) * (transitionRemaining_ ?
                     (1.0 - transitionFraction) : (1.0 - tailFraction));
                 const StereoFrame source = read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource);
-                sumL += source.l * v.left * w;
-                sumR += source.r * v.right * w;
+                const StereoFrame mixed = profile1::stereoCrossmix(source, v.crossmix);
+                sumL += mixed.l * w;
+                sumR += mixed.r * w;
                 weightSum += w;
                 ++result.readers;
                 const double increment = profile1::clamp(c.rate * v.ratio, -512.0, 512.0);
@@ -289,8 +288,9 @@ public:
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
                 const StereoFrame source = read(reel, tail.region, tail.position + pmOffset, c.rate * tail.ratio + delta + pmDelta, result.invalidSource);
-                tailLast_[i] = StereoFrame{static_cast<float>(source.l * tail.left * w),
-                                           static_cast<float>(source.r * tail.right * w)};
+                const StereoFrame mixed = profile1::stereoCrossmix(source, tail.crossmix);
+                tailLast_[i] = StereoFrame{static_cast<float>(mixed.l * w),
+                                           static_cast<float>(mixed.r * w)};
                 tailWeightLast_[i] = w;
                 sumL += tailLast_[i].l;
                 sumR += tailLast_[i].r;
@@ -359,16 +359,13 @@ private:
         }
         return cachedGeneFrames_;
     }
-    double panGain(double x) const {
-        const unsigned i = static_cast<unsigned>(x);
-        return i >= 2048 ? pan_[2048] : pan_[i] + (pan_[i+1] - pan_[i]) * (x - i);
-    }
     struct Voice {
         bool active = false;
         bool smooth = false;
         bool full = false;
         std::uint32_t age = 0, length = 0;
-        double position = 0, ratio = 1, unity = 0, left = 1, right = 1;
+        double position = 0, ratio = 1, unity = 0;
+        float crossmix = 0.f;
         double travel = 0, wallEstimate = 1;
         Region region{0, 0};
     };
@@ -456,9 +453,7 @@ private:
         v.ratio = choice.ratio;
         v.smooth = smooth_;
         v.unity = profile1::unityBlend(density, smooth_);
-        const double panIndex = (profile1::clamp(choice.pan, -1.0, 1.0) + 1.0) * 1024.0;
-        v.left = panGain(panIndex);
-        v.right = panGain(2048.0 - panIndex);
+        v.crossmix = choice.crossmix;
         ++onsetCount_;
         if (natural && !replacing && v.unity > 0 && !immediate_) {
             pendingResidual_ = true;
@@ -494,12 +489,11 @@ private:
     double primaryPosition_, slide_;
     std::uint8_t nextSlot_;
     std::uint64_t onsetCount_;
-    profile1::Xorshift32 random_;
+    profile1::FirmwareRandom random_;
     bool smooth_;
     bool immediate_ = false;
     double ratios_[3];
     float edge_[2049];
-    double pan_[2049];
     std::uint32_t cachedGeneRegion_ = 0, cachedGeneFrames_ = 0;
     int cachedGeneCode_ = -1;
     bool geneClockValid_ = false, cachedGeneClock_ = false;

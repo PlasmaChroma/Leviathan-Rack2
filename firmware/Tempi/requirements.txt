@@ -1,0 +1,2 @@
+# Used only by tools/recover_wav.py. All code-analysis tools use Python stdlib.
+numpy>=1.24

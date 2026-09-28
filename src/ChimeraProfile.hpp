@@ -62,31 +62,33 @@ inline double additive8(double knob, double att, double cv) {
 inline double additive5(double knob, double cv) {
     return clamp01(knob + clamp(cv, -24.0, 24.0) / 5.0);
 }
+// Post-calibration firmware target; Rack's CV front end remains separate.
+inline float rateTarget(float normalized, int mode) {
+    const float x = static_cast<float>(clamp01(normalized));
+    if (mode == 2) {
+        int i = static_cast<int>(x * 328.f) - 16;
+        i = i < 0 ? 0 : (i > 295 ? 295 : i);
+        return firmware::varispeed_positive[i];
+    }
+    int i = static_cast<int>(x * 400.f);
+    if (i > 399) i = 399;
+    i &= mode == 0 ? ~1 : ~3;
+    if (i > 199) return firmware::varispeed_magnitude[i - 200];
+    if (i <= 196) return -firmware::varispeed_magnitude[196 - i];
+    return 0.f;
+}
 inline double classicRateFromCoordinate(double x) {
-    x = clamp(x, -1.0, 1.0);
-    const double magnitude = std::fabs(x);
-    if (magnitude <= kStopEpsilon) return 0.0;
-    // Rack parameters are float32. Snap their nominal 1x anchor so a full
-    // traversal at the default 5/6 knob does not gain a frame over time.
-    if (std::fabs(magnitude - 2.0/3.0) < 1e-7) return x < 0.0 ? -1.0 : 1.0;
-    const double q = (magnitude - kStopEpsilon) / (1.0 - kStopEpsilon);
-    // Offline: log(0.5) / log((2/3 - kStopEpsilon)/(1-kStopEpsilon)).
-    const double gamma = 1.7093004823153926;
-    return (x < 0.0 ? -1.0 : 1.0) * 2.0 * levi_math::powUnitAudio(q, gamma);
+    return rateTarget(static_cast<float>((clamp(x, -1.0, 1.0) + 1.0) * 0.5), 0);
 }
 inline double classicRate(double knob, double att = 0.0, double cv = 0.0) {
     return classicRateFromCoordinate(2.0 * clamp01(knob) - 1.0 +
         clamp(att, -1.0, 1.0) * clamp(cv, -24.0, 24.0) / 4.0);
 }
 inline double forwardBaseRate(double knob) {
-    const double k = clamp01(knob);
-    if (k <= kStopEpsilon) return 0.0;
-    const double q = (k - kStopEpsilon) / (1.0 - kStopEpsilon);
-    // Offline: log(0.5) / log((0.75-kStopEpsilon)/(1-kStopEpsilon)).
-    return 2.0 * levi_math::powUnitAudio(q, 2.409141663090681);
+    return rateTarget(static_cast<float>(knob), 2);
 }
 inline double pitchRate(int mode, double knob, double att, double cv) {
-    const double base = mode == 2 ? forwardBaseRate(knob) : classicRate(knob);
+    const double base = rateTarget(static_cast<float>(knob), mode);
     const double pitchVolts = clamp(clamp(att, -1.0, 1.0) * clamp(cv, -24.0, 24.0), -8.0, 8.0);
     return clamp(base * levi_math::exp2Pitch(pitchVolts), -32.0, 32.0);
 }
@@ -211,26 +213,36 @@ inline StereoFrame readCubic(const StereoFrame* reel, Region region, double coor
                        static_cast<float>(cubic(a.r,b.r,c.r,d.r,t))};
 }
 
-struct Xorshift32 {
+struct FirmwareRandom {
     std::uint32_t state;
-    explicit Xorshift32(std::uint32_t seed = kDefaultSeed) : state(seed ? seed : kDefaultSeed) {}
+    explicit FirmwareRandom(std::uint32_t seed = kDefaultSeed) : state(seed) {}
     std::uint32_t next() {
-        state ^= state << 13; state ^= state >> 17; state ^= state << 5;
+        state = state * 0x0bb38435u + 0x3619636bu;
         return state;
     }
     double uniform() { return static_cast<double>(next() >> 8) / 16777216.0; }
 };
-struct OnsetChoice { bool chord; double pan; std::uint8_t slot; double ratio; };
-inline OnsetChoice chooseOnset(Xorshift32& random, std::uint8_t slot,
+struct OnsetChoice { bool chord; float crossmix; std::uint8_t slot; double ratio; };
+inline OnsetChoice chooseOnset(FirmwareRandom& random, std::uint8_t slot,
                                double morph, const double ratios[3]) {
-    // Provisional seeded activation and uniform pan distribution.
-    const double high = morph::pitchDepth(morph);
-    const double activation = random.uniform();
-    const double panDraw = random.uniform();
-    const bool chord = slot != 0 && activation < high;
-    return OnsetChoice{chord, (2.0 * panDraw - 1.0) * morph::panDepth(morph),
+    const float m = static_cast<float>(clamp01(morph));
+    const float scale = 1.f / 4294967296.f;
+    const float test = static_cast<float>(random.next()) * (scale * 0.5f);
+    float pitchRandom = static_cast<float>(random.next());
+    float crossmix = 0.f;
+    if (m - 0.5f >= test) {
+        crossmix = pitchRandom * scale;
+        pitchRandom = static_cast<float>(random.next());
+    }
+    const float depth = (m - 0.6f) * (scale * 9.999f);
+    const int index = m > 0.6f ? static_cast<int>(depth * pitchRandom) : 0;
+    return OnsetChoice{index != 0, crossmix,
                        static_cast<std::uint8_t>(slot % kMusicalVoices),
-                       chord ? ratios[(slot - 1) % 3] : 1.0};
+                       index ? ratios[index - 1] : 1.0};
+}
+inline StereoFrame stereoCrossmix(StereoFrame source, float p) {
+    const float q = 1.f - p;
+    return {q * source.l + p * source.r, p * source.l + q * source.r};
 }
 inline void stereoBalance(double pan, double& left, double& right) {
     const double angle = kPi * (clamp(pan, -1.0, 1.0) + 1.0) / 4.0;

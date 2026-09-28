@@ -1255,9 +1255,16 @@ test-chimera-rate-preparation: | build/tests
 	$(call run_rack_test_bin,build/tests/chimera_rate_preparation_spec)
 
 .PHONY: test-chimera-morph
-test-chimera-morph: | build/tests
+test-chimera-morph: test-chimera-firmware-alignment | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-mismatched-new-delete -fno-fast-math -Isrc tests/chimera_morph_spec.cpp -o build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_morph_spec$(if $(ARCH_WIN),.exe,)
+
+.PHONY: test-chimera-firmware-alignment
+test-chimera-firmware-alignment: | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -ffp-contract=off -Isrc tests/chimera_firmware_alignment_spec.cpp -o build/tests/chimera_firmware_alignment_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_firmware_alignment_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++17 -O3 $(if $(ARCH_X64),-march=nehalem,) -ffast-math -Wall -Wextra -Isrc tests/chimera_firmware_alignment_spec.cpp -o build/tests/chimera_firmware_alignment_fast_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_firmware_alignment_fast_spec$(if $(ARCH_WIN),.exe,)
 
 .PHONY: test-chimera-sos
 test-chimera-sos: | build/tests

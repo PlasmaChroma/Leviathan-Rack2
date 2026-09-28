@@ -62,7 +62,9 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     float level = 0.f;
     double lastStepTime = 0.0;
     std::shared_ptr<window::Image> faceImage;
+    std::shared_ptr<window::Image> overlayImage;
     std::string facePath;
+    std::string overlayPath;
 
     static float needleAngleForLevel(float normalizedRms) {
         constexpr float rest = float(-138.0 * M_PI / 180.0);
@@ -77,13 +79,17 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
 
     void onContextDestroy(const ContextDestroyEvent& e) override {
         faceImage.reset();
+        overlayImage.reset();
         facePath.clear();
+        overlayPath.clear();
         TransparentWidget::onContextDestroy(e);
     }
 
     void onContextCreate(const ContextCreateEvent& e) override {
         faceImage.reset();
+        overlayImage.reset();
         facePath.clear();
+        overlayPath.clear();
         TransparentWidget::onContextCreate(e);
     }
 
@@ -103,19 +109,19 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
         TransparentWidget::step();
     }
 
-    int imageHandle(NVGcontext* vg) {
+    int imageHandle(NVGcontext* vg, std::shared_ptr<window::Image>& image,
+                    std::string& path, const char* relativePath) {
         if (!vg || !APP || !APP->window) return -1;
-        const std::string desired =
-            asset::plugin(pluginInstance, "res/icon/LeviathanVU-256.png");
-        if (!faceImage || facePath != desired) {
-            faceImage = APP->window->loadImage(desired);
-            facePath = desired;
+        const std::string desired = asset::plugin(pluginInstance, relativePath);
+        if (!image || path != desired) {
+            image = APP->window->loadImage(desired);
+            path = desired;
         }
-        return visual_assets::loadRasterMipmapHandle(vg, faceImage, desired);
+        return visual_assets::loadRasterMipmapHandle(vg, image, desired);
     }
 
     void draw(const DrawArgs& args) override {
-        const int image = imageHandle(args.vg);
+        const int image = imageHandle(args.vg, faceImage, facePath, "res/icon/LeviathanVU-256.png");
         if (image < 0 || box.size.x <= 0.f || box.size.y <= 0.f) return;
         const float diameter = std::min(box.size.x, box.size.y);
         const Vec center(box.size.x * 0.5f, box.size.y * 0.5f);
@@ -130,9 +136,9 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
         // The authored face's movement pivots at approximately (128, 194).
         const Vec pivot(center.x, center.y - radius + diameter * (194.f / 256.f));
         const float angle = needleAngleForLevel(level);
-        const float length = diameter * (110.f / 256.f);
-        const Vec tip(pivot.x + std::cos(angle) * length,
-                      pivot.y + std::sin(angle) * length);
+        const float length = diameter * (116.f / 256.f);
+        const Vec direction(std::cos(angle), std::sin(angle));
+        const Vec tip = pivot.plus(direction.mult(length));
         nvgLineCap(args.vg, NVG_ROUND);
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, pivot.x + 0.7f, pivot.y + 0.8f);
@@ -146,10 +152,16 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
         nvgStrokeColor(args.vg, nvgRGBA(224, 32, 28, 255));
         nvgStrokeWidth(args.vg, std::max(0.9f, diameter * 0.009f));
         nvgStroke(args.vg);
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, pivot.x, pivot.y, std::max(1.25f, diameter * 0.027f));
-        nvgFillColor(args.vg, nvgRGBA(114, 12, 13, 255));
-        nvgFill(args.vg);
+
+        // Authored bezel/escutcheon masks both the full needle and its shadow.
+        const int overlay = imageHandle(args.vg, overlayImage, overlayPath, "res/icon/VU-Overlay-256.png");
+        if (overlay >= 0) {
+            nvgBeginPath(args.vg);
+            nvgRect(args.vg, center.x - radius, center.y - radius, diameter, diameter);
+            nvgFillPaint(args.vg, nvgImagePattern(args.vg, center.x - radius, center.y - radius,
+                diameter, diameter, 0.f, overlay, 1.f));
+            nvgFill(args.vg);
+        }
     }
 };
 

@@ -19,7 +19,7 @@ static void need(bool value,const char* message) {
 static bool near(double a,double b,double tolerance=2e-6){return std::fabs(a-b)<tolerance;}
 static chimera::CoreInput input(float control) {
     chimera::CoreInput in{};
-    in.controls.sos=control;in.controls.rate=5.f/6.f;
+    in.controls.sos=control;in.controls.rate=chimera::firmware::forwardUnityKnob;
     in.controls.morph=400.f/4096.f;
     in.live={5.f,-2.5f};
     return in;
@@ -90,7 +90,7 @@ int main() {
             reel.write(i,frame,i);reference.write(i,frame,i);}
         Slice slice(&reel), monitor(&reference);slice.setConditioning(false);monitor.setConditioning(false);
         slice.setInop(inop);slice.setChordRatios(2,-1.5,4.0/3);monitor.setChordRatios(2,-1.5,4.0/3);
-        in=input(.75f);in.controls.rate=1.f/6.f;in.controls.gene=1564.f/4095.f;
+        in=input(.75f);in.controls.rate=chimera::firmware::reverseUnityKnob;in.controls.gene=1564.f/4095.f;
         in.controls.morph=1;in.controls.slide=.7f;
         for(int i=0;i<3000;++i){slice.step(in);monitor.step(in);}
         need(append?slice.startAppend():slice.startCurrent(),"transformed capture starts");

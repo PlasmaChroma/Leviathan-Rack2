@@ -1,0 +1,1066 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempi 71 — Firmware Recovery Dossier</title><style>
+:root{--ink:#1c2838;--muted:#536579;--paper:#fff;--bg:#edf2f5;--line:#d6e0e7;--accent:#006d77;--nav:#122836}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.66 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.sidebar{position:fixed;inset:0 auto 0 0;width:258px;overflow:auto;background:var(--nav);color:#eaf3f7;padding:28px 22px}.brand{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#91c9cf}.sidebar h2{font-size:27px;line-height:1.2;margin:12px 0 26px}.sidebar a{display:block;padding:8px 0;color:#dbe9ee;text-decoration:none;font-size:14px}.sidebar a:hover{color:#90e2e7}.sidebar .small{font-size:12px;color:#a4b5c2;border-top:1px solid #3a4c5a;margin-top:24px;padding-top:18px}
+main{margin-left:258px;padding:36px 4vw 70px;max-width:1510px}.hero{background:var(--nav);color:white;border-radius:12px;padding:38px 42px;margin-bottom:28px}.eyebrow{text-transform:uppercase;letter-spacing:.15em;font-size:12px;color:#9bdddf}.hero h1{font-size:40px;line-height:1.14;margin:12px 0 18px}.hero p{max-width:880px;color:#d8e4ec}.chips{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 0}.chip{padding:8px 13px;background:#25414e;border:1px solid #42606d;border-radius:6px;font-size:13px}.chip strong{color:#a6f1da}.notice{background:#fff3d9;border-left:4px solid #c28218;padding:16px 22px;border-radius:4px;margin:22px 0;color:#4f4027}
+article{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:32px 42px;margin:24px 0;scroll-margin-top:20px}article h1{font-size:30px;line-height:1.25;color:#124853;margin-top:0}h2{font-size:23px;line-height:1.3;margin:36px 0 16px;padding-top:14px;border-top:1px solid var(--line)}h3{font-size:19px;line-height:1.35;margin-top:26px}p{margin:13px 0}a{color:#006d77;overflow-wrap:anywhere}strong{font-weight:650}code{font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eff4f7;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere}pre{background:#132b38;color:#e9f2f8;border-radius:7px;padding:18px 20px;overflow:auto;line-height:1.5}pre code{background:none;padding:0;color:inherit;white-space:pre;overflow-wrap:normal}table{width:100%;border-collapse:collapse;margin:20px 0;font-size:13px;line-height:1.5;table-layout:auto}th{background:#e9f1f4;color:#153e4b;font-weight:650;text-align:left}td,th{padding:10px 12px;border:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tbody tr:nth-child(even){background:#f8fafb}blockquote{border-left:4px solid var(--accent);padding:1px 20px;margin-left:0;color:var(--muted)}li{margin:8px 0}.download{display:flex;flex-wrap:wrap;gap:10px}.download a{padding:9px 14px;border:1px solid #bed6dd;border-radius:5px;text-decoration:none;background:#f7fbfc;font-size:14px}.section-number{color:#758b9c;font-size:12px;text-transform:uppercase;letter-spacing:.14em}.footer{font-size:12px;color:var(--muted)}
+@media(max-width:1050px){.sidebar{position:static;width:auto;padding:18px 22px}.sidebar h2{margin:8px 0;font-size:23px}.sidebar nav{display:flex;flex-wrap:wrap;gap:0 20px}.sidebar .small{display:none}main{margin-left:0;padding:18px}.hero{padding:26px}.hero h1{font-size:32px}article{padding:22px}table{font-size:12px}td,th{padding:8px}}
+@media print{body{background:white;font-size:10pt}.sidebar,.download,.chips{display:none}main{margin:0;padding:0;max-width:none}.hero{background:white!important;color:#132b38;padding:0;border-radius:0}.hero p,.eyebrow{color:#3f5263}.hero h1{font-size:28pt}article{border:0;border-radius:0;padding:0;margin:25px 0;break-before:page}h1,h2,h3{break-after:avoid}pre{white-space:pre-wrap;background:#f1f5f7;color:#172b3a;break-inside:avoid}pre code{white-space:pre-wrap}tr{break-inside:avoid}thead{display:table-header-group}table{font-size:8pt}.notice{background:#faf4e7}a{color:inherit}}
+</style></head><body>
+<aside class="sidebar"><div class="brand">Firmware engineering</div><h2>TEMPI 71<br>Recovery dossier</h2><nav><a href="#overview">Engineering report</a><a href="#transport">WAV transport</a><a href="#io">Controls and I/O</a><a href="#storage">Memory and states</a><a href="#algorithms">Recovered algorithms</a><a href="#bus">Select Bus protocol</a><a href="#validation">Validation and limits</a><a href="#next">Porting and next work</a><a href="#sources">Sources and provenance</a></nav><p class="small">27 September 2026<br>Source: user-supplied WAV<br>Program addresses: bytes<br>Analyst labels ≠ original symbols</p></aside>
+<main><header class="hero"><div class="eyebrow">Exact payload recovery · PIC18 analysis</div><h1>Inside Tempi’s firmware</h1><p>The WAV yields readable Intel HEX and a PIC18 application—not ARM. This dossier connects the recovered bytes to clock math, state storage, physical I/O, and Select Bus behavior.</p><div class="chips"><span class="chip"><strong>2,323</strong> checksums pass</span><span class="chip"><strong>37,110</strong> recovered bytes</span><span class="chip"><strong>16,422</strong> decoded instructions</span><span class="chip"><strong>Exact</strong> PCM round trip</span></div></header>
+<div class="notice"><strong>Evidence boundary:</strong> a recovered application is not a complete hardware image. The resident bootloader, actual EEPROM contents, physical clock frequency, and analog circuitry are not recovered. Synthetic and padded files are explicitly marked.</div>
+<div class="download"><a href="firmware/tempi71_recovered.hex">Recovered Intel HEX</a><a href="analysis/disassembly_reachable.asm">Addressed disassembly</a><a href="analysis/functions.csv">Function lookup</a><a href="analysis/io_map.csv">GPIO map</a><a href="analysis/validation.json">Validation results</a><a href="README.md">Package guide</a></div>
+<article id="overview"><div class="section-number">01 / Engineering report</div><h1>Tempi 71: recovered firmware and internal architecture</h1>
+<p><strong>Investigation date:</strong> 27 September 2026<br />
+<strong>Input:</strong> user-supplied <code>tempi71(1).wav</code><br />
+<strong>Result:</strong> exact transport recovery; PIC18 disassembly; executable models of selected routines; substantial state, GPIO, timing, and Select Bus reconstruction.</p>
+<h2>1. What was actually recovered</h2>
+<p>The ARM hypothesis does not fit this file. The payload contains legacy <strong>PIC18 instructions</strong>, PIC18 reset and interrupt-vector conventions, banked data-memory accesses, and peripheral-register operations consistent with the <strong>PIC18(L)F46K22 family</strong>. The instruction architecture is established much more firmly than the exact chip suffix: a device-ID read or a legible PCB photograph would still be needed to distinguish physical variants.</p>
+<p>This is not an opaque compressed blob. The audio transmits readable <strong>ASCII Intel HEX</strong> using variable-duration, alternating-polarity half-cycles. Every record's length and checksum passes. A separate reconstruction step rebuilds the PCM using the decoded bits and recorded pause positions, and the result matches the original PCM exactly.</p>
+<table>
+<thead>
+<tr>
+  <th>Recovery result</th>
+  <th style="text-align:right">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>WAV channels / sample format</td>
+  <td style="text-align:right">Mono, signed 16-bit PCM</td>
+</tr>
+<tr>
+  <td>Sample rate</td>
+  <td style="text-align:right">40,000 Hz</td>
+</tr>
+<tr>
+  <td>Samples</td>
+  <td style="text-align:right">6,627,265</td>
+</tr>
+<tr>
+  <td>Duration</td>
+  <td style="text-align:right">165.681625 seconds</td>
+</tr>
+<tr>
+  <td>Decoded ASCII payload</td>
+  <td style="text-align:right">102,104 bytes</td>
+</tr>
+<tr>
+  <td>Intel HEX records</td>
+  <td style="text-align:right">2,323</td>
+</tr>
+<tr>
+  <td>Data records</td>
+  <td style="text-align:right">2,320</td>
+</tr>
+<tr>
+  <td>Address-extension records</td>
+  <td style="text-align:right">2</td>
+</tr>
+<tr>
+  <td>End-of-file records</td>
+  <td style="text-align:right">1</td>
+</tr>
+<tr>
+  <td>Actual recovered addressed bytes</td>
+  <td style="text-align:right">37,110</td>
+</tr>
+<tr>
+  <td>Recovered program-memory bytes</td>
+  <td style="text-align:right">37,088</td>
+</tr>
+<tr>
+  <td>Decoded reachable instructions</td>
+  <td style="text-align:right">16,422</td>
+</tr>
+<tr>
+  <td>Reachable instruction bytes</td>
+  <td style="text-align:right">36,546</td>
+</tr>
+<tr>
+  <td>Entry-point candidates</td>
+  <td style="text-align:right">80</td>
+</tr>
+<tr>
+  <td>Direct CALL sites</td>
+  <td style="text-align:right">270</td>
+</tr>
+</tbody>
+</table>
+<p>The 80 entries are call targets and important vectors/startup entries, not a claim that the original source contained exactly 80 C functions. Recursive decoding found no out-of-image direct targets, unsupported reachable instruction words, or unresolved writes to the program-counter low register. That is strong internal consistency, not an independently certified decompilation.</p>
+<h3>Recovered regions</h3>
+<table>
+<thead>
+<tr>
+  <th>Program/configuration address range, inclusive</th>
+  <th style="text-align:right">Bytes</th>
+  <th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>0x000800–0x0097DF</code></td>
+  <td style="text-align:right">36,832</td>
+  <td>Application, runtime initialization data, helpers, and padding/reset words</td>
+</tr>
+<tr>
+  <td><code>0x00FD40–0x00FE3F</code></td>
+  <td style="text-align:right">256</td>
+  <td>Factory states and other constant/mask tables</td>
+</tr>
+<tr>
+  <td><code>0x200000–0x200007</code></td>
+  <td style="text-align:right">8</td>
+  <td>User-ID area, all <code>FF</code></td>
+</tr>
+<tr>
+  <td><code>0x300000–0x30000D</code></td>
+  <td style="text-align:right">14</td>
+  <td>Configuration-byte records</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Not recovered:</strong> flash <code>0x000000–0x0007FF</code>, untransmitted flash gaps, physical EEPROM contents, silicon device ID, per-unit calibration, source-level names, debug symbols, or schematics.</p>
+<p>The address origin matters. The main raw binary begins at <strong>program byte address <code>0x800</code></strong>, not zero. The separate high constant block must also be loaded at its correct address. The Intel HEX file is the least ambiguous container because it retains all addresses.</p>
+<h2>2. Evidence levels</h2>
+<p>This dossier distinguishes four kinds of result:</p>
+<p><strong>Recovered bytes</strong> are exact observations from the supplied file. <strong>Executed-routine results</strong> come from the included instruction-level harness and are checked against readable mathematical models. <strong>Strong inferences</strong> connect software behavior to a musical or physical role. <strong>Open questions</strong> require more tracing, independent emulation, or measurements on a real module.</p>
+<p>All function names in the disassembly and tables are analyst names. Program addresses are always <strong>byte addresses</strong>; RAM addresses refer to a different address space. A label such as <code>ratio_to_halfperiod</code> is a useful reverse lookup, not an original symbol extracted from the developer's build.</p>
+<p>The primary reference set is deliberately small: Make Noise's product page and manual; Microchip's PIC18(L)F2X/4XK22 data sheet; and the gputils PIC18F46K22 register/configuration definitions. The public product page identifies firmware 71, but the inspected English PDF says it documents firmware 60. Firmware observations in this dossier therefore take precedence over assumptions derived from that older manual. See <code>references/SOURCES.md</code>.</p>
+<h2>3. Execution architecture</h2>
+<p>The application has a conventional embedded foreground/interrupt split. It is not processing audio samples or running an ARM DSP framework.</p>
+<p>At <code>0x0800</code>, the application reset vector jumps to <code>0x11BC</code>, which jumps to C-runtime startup at <code>0x779A</code>. Startup initializes RAM from several flash tables, clears working areas, and transfers to <code>main</code> at <code>0x8998</code>.</p>
+<p><code>main</code> calls the hardware initializer at <code>0x81F8</code>, prepares six channel-source pointers and state variables, and repeatedly services this sequence:</p>
+<pre><code class="language-text">0x7A5C  state selection, including Select Bus parser and state ADC
+0x4B16  leading-tempo service
+0x7336  fast six-channel button edge/debounce service
+0x340A  human-programming service
+0x11C0  eight-button UI state machine
+0x65DE  ratio and phase recomputation
+0x234A  timing commit / synchronization service
+0x4F66  MOD routing and run/stop service
+0x3F32  LED / UI display service
+repeat
+</code></pre>
+<p>A high-priority interrupt entry at <code>0x0808</code> checks the Timer2 flag. On each timer event, it drives outputs, captures inputs, advances master/channel counters, polls UART receive, and services timing-sensitive button capture. The foreground loop does the more expensive arithmetic and editing operations.</p>
+<h3>The six-channel engine</h3>
+<p>Each channel has a 12-byte timer record at RAM <code>0x498 + 12*c</code>, with current duration, next duration, and signed countdown fields. Separate arrays hold its square-wave state and pending output level. The source for a channel is selected through a RAM pointer, which allows the MOD machinery to alter routing/gating without replacing the timer engine.</p>
+<p>The interrupt begins by copying the <strong>previously prepared</strong> six output bits to <code>LATB</code>. Later in the same interrupt it computes new pending bits. Consequently there is a one-interrupt-event pipeline between updating a pending value and that value being driven at the GPIO.</p>
+<p>The six GPIOs are written sequentially, not with one atomic six-bit port assignment. The pipeline does not imply simultaneous physical edges; any instruction-level skew and the analog output-buffer behavior would need hardware timing work.</p>
+<p>Output preparation combines the channel's waveform level, source level, enable/mute state, and run gate. Muting or stopping is not simply deletion of the stored ratio. The engine preserves separate timing, routing, and output-enable state.</p>
+<h2>4. Most useful reconstructed algorithms</h2>
+<h3>Ratio encoding is signed and quarter-stepped</h3>
+<p>The EEPROM stores one signed byte per channel. Loading a state sign-extends it to a 16-bit working value. Routine <code>0x7E54</code> turns that code into a halfperiod using integer arithmetic.</p>
+<p>For master halfperiod <code>H</code> and code <code>r</code>, before bounds and 32-bit overflow behavior:</p>
+<pre><code class="language-text">r &gt; 0:  channel_halfperiod = trunc(4*H / (r+4))
+r = 0:  channel_halfperiod = H
+r &lt; 0:  channel_halfperiod = trunc(H*(4-r) / 4)
+</code></pre>
+<p>Thus <code>+4</code> means ×2, <code>+8</code> means ×3, <code>-4</code> means ÷2, <code>-8</code> means ÷3, and <code>0</code> means unity. Fine steps change the multiplier or divisor by <strong>0.25</strong>, not by a fixed percentage or an equal-tempered frequency step.</p>
+<p>The routine clamps its result to <strong>200 through <code>0xFFFFFF</code> timer ticks</strong>. The included model preserves the actual signed-32-bit intermediate behavior and truncation, rather than silently replacing the calculation with ideal floating-point arithmetic. The tested musical code span is <code>-124..124</code>.</p>
+<h3>Phase uses different reference periods on opposite sides of unity</h3>
+<p>Routine <code>0x65DE</code> computes phase offsets at RAM <code>0x520 + 4*c</code>. With phase byte <code>p</code>:</p>
+<pre><code class="language-text">division, r &lt; 0:        offset = trunc(2*p*master_halfperiod / 4)
+unity/multiplication:   offset = trunc(2*p*channel_halfperiod / 4)
+</code></pre>
+<p>In ordinary non-overflowing cases, each phase-code step is therefore a quarter of a <strong>master cycle</strong> for divisions, but a quarter of a <strong>channel cycle</strong> for unity or multiplication. Treating phase as a universal normalized knob over each channel's period would not reproduce this calculation.</p>
+<p>This establishes the computed offset. It does not by itself fully specify when the synchronization service applies a changed offset to an already-running channel; that larger transition state machine remains only partially reconstructed.</p>
+<h3>Alignment uses reduced rational denominators and least common multiples</h3>
+<p>Routine <code>0x8BCC</code> derives an integer alignment factor from each ratio. For negative codes it reduces <code>(4-r)/4</code>; for nonnegative codes it derives the denominator of <code>(r+4)/4</code>. Routine <code>0x93FC</code> combines channel factors through the LCM helper at <code>0x7F8E</code>.</p>
+<p>This explains why the design maintains master-cycle counters and history snapshots in addition to six independent countdowns. It is retaining rational synchronization information, not merely running six unrelated oscillators at floating-point frequencies. Exact overflow policy for a six-way alignment length and every resynchronization transition are not claimed as finished here.</p>
+<h3>State selection has calibrated hysteresis</h3>
+<p>The state selector uses 16 ADC thresholds and remembers the preceding state. Its hysteresis margin is <strong>one third of an adjacent threshold gap, rounded down</strong>. This was established by tracing the division helper and checked with 4,096 synthetic ADC/previous-state fixtures. It is not a simple <code>floor(adc*16/1024)</code> mapper.</p>
+<h3>Mutation randomness is reproducible</h3>
+<p>Routine <code>0x8446</code> maintains a 64-bit linear-congruential generator:</p>
+<pre><code class="language-text">state = (state * 6364136223846793005 + 1) modulo 2^64
+returned_value = (state &gt;&gt; 49) &amp; 0xFF
+</code></pre>
+<p>The return is noteworthy: the code shifts by 49 and copies a nonadjacent high byte into the 16-bit return location. The result observed in all tested cases is an <strong>8-bit value</strong>, not the 15-bit value one might expect from the shift alone. This dossier records the behavior without assuming whether it was intended.</p>
+<p>The mutation routine consumes random values using modulo-based perturbations, including <code>rand % 7 - 3</code> and <code>rand % 5 - 2</code>. A compatible implementation should retain this generator and byte extraction if deterministic behavior matters. Full seed provenance and every clipping/normalization path in mutation remain open.</p>
+<h2>5. States, persistence, and presets</h2>
+<p>The firmware's state structure can be recovered much more precisely than “four banks of sixteen.” Each state consumes <strong>14 logical bytes</strong>: six signed ratio codes, six phase bytes, an output-enable mask, and a MOD mask.</p>
+<p>In EEPROM those bytes are <strong>column-major</strong>, not contiguous 14-byte records. With state <code>s</code> in <code>0..63</code> and channel <code>c</code> in <code>0..5</code>:</p>
+<pre><code class="language-text">ratio[c]       EEPROM[0x000 + 64*c + s]
+phase[c]       EEPROM[0x180 + 64*c + s]
+enable_mask    EEPROM[0x300 + s]
+mod_mask       EEPROM[0x340 + s]
+</code></pre>
+<p>All 64 addressing cases were executed and checked. The 896-byte state area fits in the 1 KB EEPROM model used by the code; the remaining area holds globals and calibration.</p>
+<p>RAM caches use a different layout: channel-interleaved ratio bytes at <code>0xC2C + 6*s</code>, phase bytes at <code>0xDAC + 6*s</code>, and two 64-byte mask arrays. A 64-bit dirty bitmap supports editing, storing, and reverting. “Edited in RAM” and “stored to EEPROM” are genuinely different operations in the implementation.</p>
+<p>The factory-reset routine at <code>0x6E56</code> was executed with its interactive-calibration branch disabled. Its 1,101 writes touched 908 distinct EEPROM bytes. This generated the two explicitly named <strong>SYNTHETIC</strong> EEPROM files. They reconstruct code-defined defaults, not the contents of anyone's physical Tempi.</p>
+<p>The preset tables were also extracted directly from flash. Bank A contains recognizable power-of-two, prime, consecutive, even, odd, Fibonacci, mixed-ratio, phase, and noninteger patterns. The remaining 48 states are initialized to unity and zero phase. Exact ratio/phase bytes for all 64 states are supplied in CSV and JSON.</p>
+<h2>6. I/O and Select Bus</h2>
+<p>The primary digital I/O mapping is substantially resolved. The six clock outputs map, in channel order, to <strong>RB5, RB3, RB1, RB2, RB4, RB0</strong>. Six channel buttons map to <strong>RC2, RC5, RD7, RC1, RC6, RD6</strong>; the two program buttons use <strong>RC0 and RE2</strong>.</p>
+<p>The leading clock is read on RA4. State selection uses RA5 for its gate and AN3/RA3 for the analog control. RA0 supplies the MOD level. UART1 receive on RC7 is the strong Select Bus candidate. The firmware explicitly disables UART transmission; RC6 is used as a channel-button input, not as an active serial transmitter.</p>
+<p>The Select Bus parser at <code>0x71AA</code> was recovered down to message bytes. It recognizes exact status values <code>C0</code>, <code>F0</code>, <code>F4</code>, and <code>F7</code>; the system-exclusive header it checks is <strong><code>00 02 2D</code></strong>. It implements program selection, copy/store dispatch, a 64-state Mesh bitmap, current-state initialization, and reversion through higher-level routines.</p>
+<p>The details are in <code>docs/SELECT_BUS.md</code>, including accepted and ignored status behavior, the 460-byte receive ring, and recorded byte-by-byte test traces. This is not a claim that arbitrary MIDI traffic or MIDI Clock drives the module. In particular, the examined parser does not schedule clocks from <code>F8</code> bytes.</p>
+<h2>7. What is still not established</h2>
+<p>The recovered initializer sets the Timer2 prescaler and postscaler but does not establish a recovered write to PR2. The oscillator's physical frequency is also unknown. Absolute tick duration must therefore remain conditional. For example, <strong>64 MHz and PR2=255 would imply 48 µs per Timer2 interrupt</strong>, but neither assumption is a measured property of this module.</p>
+<p>Likewise, SPBRG1 is set to 32 with the low-speed 8-bit baud generator. Its baud is <code>Fosc/(64*33)</code>, not automatically 31,250. Do not hard-code either an absolute clock rate or a standard MIDI baud based solely on this analysis.</p>
+<p>Other limits include input comparator thresholds and inversion outside the MCU, output-voltage levels and impedances, actual analog CV scaling, exact LED colors/driver part, the bootloader's waveform tolerance and flash policy, and complete gesture-to-timing behavior for every UI state.</p>
+<p>The supplied image contains configuration bytes indicating code-protection and other policies under the candidate MCU interpretation. Those are update-file contents, not live fuse measurements, and they do not reveal which records the missing bootloader accepts.</p>
+<h2>8. How to use the artifacts</h2>
+<p>For further reverse engineering, begin with the addressed disassembly and <code>functions.csv</code>, then use <code>calls.csv</code>, <code>ram_symbols.csv</code>, and register cross-references to find the code behind a behavior. For a behavioral reimplementation, begin with the executable ratio, phase, ADC, state, and random models and their test vectors.</p>
+<p>The next highest-value technical work is the complete timing-commit state machine at <code>0x234A</code>, followed by human-programming normalization at <code>0x340A</code>, MOD transition details at <code>0x4F66</code>, and precise UI gesture timing. A logic-analyzer capture and a chip/oscillator photograph would resolve several hardware unknowns much faster than further guessing from constants.</p>
+<p><strong>Bottom line:</strong> this recovery provides the real application bytes and a substantial engineering model, including several exact implementation details absent from a user-facing manual. It is a sound starting point for a faithful implementation, but it is not presented as an already validated, cycle-accurate Tempi clone.</p>
+</article><article id="transport"><div class="section-number">02 / WAV transport</div><h1>Transport recovery and provenance</h1>
+<h2>Exact waveform format</h2>
+<p>The input is 16-bit signed mono PCM at 40 kHz. Its only values are zero and ±32767. The first 40,000 samples are zero. After that, the signal alternates polarity at every run boundary.</p>
+<table>
+<thead>
+<tr>
+  <th>Run length</th>
+  <th style="text-align:right">Duration</th>
+  <th>Meaning</th>
+  <th style="text-align:right">Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>3 samples</td>
+  <td style="text-align:right">75 µs</td>
+  <td>Data bit 1</td>
+  <td style="text-align:right">295,565</td>
+</tr>
+<tr>
+  <td>10 samples</td>
+  <td style="text-align:right">250 µs</td>
+  <td>Data bit 0</td>
+  <td style="text-align:right">521,267</td>
+</tr>
+<tr>
+  <td>350 samples</td>
+  <td style="text-align:right">8.75 ms</td>
+  <td>Pause / synchronization half-cycle</td>
+  <td style="text-align:right">1,394</td>
+</tr>
+</tbody>
+</table>
+<p>The data bits are assembled MSB-first into bytes. There are 816,832 data bits and no partial final byte. Repeated equal bits would form square waves at approximately 6.667 kHz or 2 kHz, but the decoding rule is <strong>half-cycle duration</strong>. Describing this simply as conventional fixed-baud UART FSK would lose the actual format.</p>
+<p>There are 115 pause half-cycles after the one-second leading silence. The first data half-cycle begins at sample 80,250. The payload appears in 583 contiguous data bursts: 579 bursts of 1,408 bits, plus one each of 704, 352, 448, and 96 bits. A normal 1,408-bit burst contains 176 ASCII characters, corresponding to four ordinary 16-byte Intel HEX records with their line endings.</p>
+<p>No encryption or compression layer is needed to recover this payload. No transport CRC32 is present in the decoded representation. Each Intel HEX record has its own additive checksum. The lack of another visible wrapper does not establish the missing bootloader's complete authentication or programming policy.</p>
+<h2>Integrity checks</h2>
+<p><code>tools/recover_wav.py</code> verifies sample format, amplitude, polarity alternation, allowed run lengths, complete bytes, ASCII decoding, record lengths, record checksums, supported record types, EOF, and absence of conflicting duplicate memory bytes.</p>
+<p>It then reconstructs all data-run lengths <strong>from the recovered ASCII bytes</strong>, inserts pauses from <code>transport/timing.json</code>, restores the alternating signal and leading silence, and compares every PCM byte. This is stronger than recognizing a few plausible firmware strings.</p>
+<table>
+<thead>
+<tr>
+  <th>Object</th>
+  <th>SHA-256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Original WAV</td>
+  <td><code>dfea58ec1694b63f645dc85af62d0971077942b281ae445c04ebaa2bebcbd09c</code></td>
+</tr>
+<tr>
+  <td>Recovered ASCII HEX</td>
+  <td><code>fee378dcb92fa2f85bf4ef8bdb35f12b61920612576f9aca302ab46bcf00a5c8</code></td>
+</tr>
+<tr>
+  <td>Main application segment</td>
+  <td><code>bb758bd099e200cf1f806b1ba274aa47f2375f7874422a66ccb55d22418daf04</code></td>
+</tr>
+<tr>
+  <td>High constant segment</td>
+  <td><code>7bb18a582c1e84a28b8ad45f4e9f65068762b6c88672a72e88fcced18fee2410</code></td>
+</tr>
+</tbody>
+</table>
+<p>All other digests are in <code>SHA256SUMS.txt</code> and <code>analysis/recovery.json</code>.</p>
+<p>The first transmitted record is:</p>
+<pre><code class="language-text">:10080000DEEF08F0FF00FF004E82E1CF08F0E2CFFC
+</code></pre>
+<p>Its first four data bytes decode as a PIC18 GOTO to byte address <code>0x11BC</code>. Subsequent vector, runtime, and peripheral behavior strongly corroborate that interpretation.</p>
+<h2>File semantics</h2>
+<p>The four recovered <code>.bin</code> segments contain only transmitted bytes. <code>tempi71_flash64k_FF_FILLED.bin</code> is a convenience mapping of the program address space; its mask contains <code>FF</code> at recovered positions and <code>00</code> elsewhere. A filled <code>FF</code> and a recovered <code>FF</code> are different evidence states.</p>
+<p>The two files beginning <code>SYNTHETIC_</code> are derived by running a recovered initialization routine. They are not transport extractions and must not be confused with the raw segments. Their written-byte mask distinguishes code-defined writes from the initial fill.</p>
+<p><code>transport/record_sample_map.csv</code> connects each record to its first sample and time. <code>data_bursts.csv</code> indexes contiguous data intervals. <code>timing.json</code> retains the information needed for exact PCM reconstruction. These maps make an independent decoder comparison possible without searching through the entire waveform manually.</p>
+<h2>Reproduction limits</h2>
+<p>The decoder intentionally rejects resampled or noisy data. It does not estimate zero crossings, compensate for DC offset, correct bit errors, or model an analog input comparator. A robust decoder for a recording played through an audio interface would be a separate task.</p>
+<p>The official product page links an update called Tempi 71, but the vendor ZIP was not independently downloaded and compared byte-for-byte during this run. Provenance in this package is anchored to the <strong>user-supplied WAV and its hash</strong>, not an unperformed vendor-file comparison.</p>
+</article><article id="io"><div class="section-number">03 / Controls and I/O</div><h1>Module controls, ports, and digital I/O</h1>
+<h2>Panel-level interface</h2>
+<p>The documented interface has six clock outputs, six illuminated channel buttons, two program buttons, a leading-tempo input, a MOD gate input, state-select gate and CV inputs, and a combined manual/CV control. State selection can also arrive over the Select Bus. This panel inventory is checked against Make Noise's manual; the GPIO mappings below come from the recovered firmware.</p>
+<p>The distinction matters: firmware reveals which MCU bits are read or written. It does not reveal the electrical transfer function of a jack buffer, its protection components, or the physical package-pin number of an unconfirmed chip variant.</p>
+<h2>Clock outputs</h2>
+<table>
+<thead>
+<tr>
+  <th>Channel</th>
+  <th>MCU output</th>
+  <th>Pending bit</th>
+  <th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td>RB5 / LATB5</td>
+  <td>RAM <code>0x43C</code>, bit 0</td>
+  <td>Program <code>0x083C–0x0844</code></td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>RB3 / LATB3</td>
+  <td>RAM <code>0x43D</code>, bit 0</td>
+  <td><code>0x0848–0x0850</code></td>
+</tr>
+<tr>
+  <td>3</td>
+  <td>RB1 / LATB1</td>
+  <td>RAM <code>0x43E</code>, bit 0</td>
+  <td><code>0x0854–0x085C</code></td>
+</tr>
+<tr>
+  <td>4</td>
+  <td>RB2 / LATB2</td>
+  <td>RAM <code>0x43F</code>, bit 0</td>
+  <td><code>0x0860–0x0868</code></td>
+</tr>
+<tr>
+  <td>5</td>
+  <td>RB4 / LATB4</td>
+  <td>RAM <code>0x440</code>, bit 0</td>
+  <td><code>0x086C–0x0874</code></td>
+</tr>
+<tr>
+  <td>6</td>
+  <td>RB0 / LATB0</td>
+  <td>RAM <code>0x441</code>, bit 0</td>
+  <td><code>0x0878–0x0880</code></td>
+</tr>
+</tbody>
+</table>
+<p>All 64 logical output patterns were tested against this interrupt prefix. It preserves RB6/RB7 and updates the six mapped bits individually. Physical output voltage, active polarity after any external buffer, and channel-to-channel propagation skew were not measured.</p>
+<p>The manufacturer describes default half-duty clocks and an optional nominal 10 ms trigger mode. The code has separate output-mode state and timer scheduling, but this dossier does not equate the <code>200</code>-tick arithmetic floor with a proven physical 10 ms duration. Those are different claims.</p>
+<h2>Buttons</h2>
+<table>
+<thead>
+<tr>
+  <th>Control</th>
+  <th>MCU input</th>
+  <th>Direct sample instruction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Channel 1</td>
+  <td>RC2</td>
+  <td><code>0x11F2</code></td>
+</tr>
+<tr>
+  <td>Channel 2</td>
+  <td>RC5</td>
+  <td><code>0x11FA</code></td>
+</tr>
+<tr>
+  <td>Channel 3</td>
+  <td>RD7</td>
+  <td><code>0x1202</code></td>
+</tr>
+<tr>
+  <td>Channel 4</td>
+  <td>RC1</td>
+  <td><code>0x120A</code></td>
+</tr>
+<tr>
+  <td>Channel 5</td>
+  <td>RC6</td>
+  <td><code>0x1212</code></td>
+</tr>
+<tr>
+  <td>Channel 6</td>
+  <td>RD6</td>
+  <td><code>0x121A</code></td>
+</tr>
+<tr>
+  <td>PGM_A</td>
+  <td>RC0</td>
+  <td><code>0x1222</code></td>
+</tr>
+<tr>
+  <td>PGM_B</td>
+  <td>RE2</td>
+  <td><code>0x122A</code></td>
+</tr>
+</tbody>
+</table>
+<p>The active-low six-button sample assembled by the interrupt is:</p>
+<pre><code class="language-text">button_mask = ~(PORTC | (PORTD &lt;&lt; 8)) &amp; 0xC066
+</code></pre>
+<p>The corresponding little-endian masks at flash <code>0xFE0D</code> are:</p>
+<pre><code class="language-text">CH1 0x0004   CH2 0x0020   CH3 0x8000
+CH4 0x0002   CH5 0x0040   CH6 0x4000
+</code></pre>
+<p>These constants independently corroborate the direct sampling order. The fast channel-only debounce routine at <code>0x7336</code> is distinct from the larger eight-button UI service at <code>0x11C0</code>. Its duration counters at RAM <code>0x66C</code> should not be mistaken for the eight-key debounce area at <code>0x65C</code>.</p>
+<p>The UI supports combinations of presses, holds, and repeated presses; the large service routine is included in full, but not every gesture threshold has been converted into a high-level transition table. A panel-compatible implementation needs that additional work rather than just attaching increment/decrement callbacks to eight buttons.</p>
+<h2>Signal inputs and bus</h2>
+<table>
+<thead>
+<tr>
+  <th>Function</th>
+  <th>MCU signal</th>
+  <th>Recovered behavior</th>
+  <th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Leading tempo</td>
+  <td>RA4</td>
+  <td>Rising-edge capture of elapsed master timing</td>
+  <td>High</td>
+</tr>
+<tr>
+  <td>MOD</td>
+  <td>RA0</td>
+  <td>Sampled gate level and separately toggled state</td>
+  <td>High inference from routing consumers</td>
+</tr>
+<tr>
+  <td>State-select gate</td>
+  <td>RA5</td>
+  <td>Edge-driven state stepping, also reflected in UI service</td>
+  <td>High inference</td>
+</tr>
+<tr>
+  <td>State CV / combo control</td>
+  <td>AN3 / RA3</td>
+  <td>Only selected analog input; calibrated state quantizer</td>
+  <td>High inference</td>
+</tr>
+<tr>
+  <td>Select Bus receive</td>
+  <td>RX1 / RC7</td>
+  <td>UART ring and proprietary message parser</td>
+  <td>High inference</td>
+</tr>
+</tbody>
+</table>
+<p>ANSELA is set to <code>0x08</code>, ADC channel selection to AN3, and other examined port analog enables are cleared. The ADC wrapper is nonblocking: it cycles through start, wait, and consume-result stages and otherwise returns the last result. Its initial invalid-result sentinel is <code>0xFFFF</code>.</p>
+<p>The manual specifies a 0–5 V state-CV range and describes receive-only Select Bus operation on the power-bus CV line. Those are documented interface statements, not electrical measurements made during this study. The front-end scaling and jack thresholds cannot be reconstructed from a single ADC-channel selection.</p>
+<h2>LED hardware interface</h2>
+<p><code>0x953C</code> shifts a 16-bit word LSB-first using RD5 for data and RD2 for clock; <code>0x979E</code> pulses RD4 as a latch. The one/zero bit helpers are <code>0x9742</code> and <code>0x9756</code>. This is a software-driven serial LED interface, not evidence for a specific external shift-register part number.</p>
+<p>RC3, RC4, RD0, RD1, and RD3 also appear in UI/indicator writes. Their exact lamp/color assignment is not fully named. RE0 and RE1 are configured as outputs, but no explicit LATE write was identified in the recovered application. They remain unresolved rather than being assigned invented roles.</p>
+<h2>Hardware initialization and timing caveat</h2>
+<p>Key direction-register values are TRISA=<code>FF</code>, TRISB=<code>C0</code>, TRISC=<code>E7</code>, TRISD=<code>C0</code>, and TRISE=<code>04</code>. The serial peripheral is asynchronous, 8-bit, receive-enabled, transmit-disabled. RC6's channel-button use is consistent with that transmit disable.</p>
+<p>Timer2 uses prescale 1 and postscale 3. With oscillator frequency <code>Fosc</code> and PR2 value <code>P</code>:</p>
+<pre><code class="language-text">interrupt_period = 4 * (P+1) * 3 / Fosc
+</code></pre>
+<p>No recovered application write establishes PR2. Assuming the reset value and assuming an oscillator frequency are both additional assumptions. The missing resident bootloader may leave peripheral state behind.</p>
+<p>UART1's programmed divisor is:</p>
+<pre><code class="language-text">baud = Fosc / (64 * (32+1))
+</code></pre>
+<p>Actual bus baud and timer-event duration should be measured or confirmed from the bootloader/board before a cycle-accurate recreation is attempted.</p>
+</article><article id="storage"><div class="section-number">04 / Memory and states</div><h1>Memory layout, persistence, and factory reconstruction</h1>
+<h2>State format</h2>
+<p>A state is six signed ratio bytes, six phase bytes, one enable mask, and one MOD mask. Four groups of sixteen states are addressed as a flat state number <code>0..63</code>. Bits 0–5 of each mask correspond to the six channels. The factory enable mask is <code>FF</code>, not merely <code>3F</code>; the upper two bits exist in storage even though the channel loader only consumes the six relevant bits.</p>
+<table>
+<thead>
+<tr>
+  <th>Field</th>
+  <th>EEPROM address</th>
+  <th>RAM cache address</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Ratio, channel c</td>
+  <td><code>0x000 + 64*c + s</code></td>
+  <td><code>0xC2C + 6*s + c</code></td>
+</tr>
+<tr>
+  <td>Phase, channel c</td>
+  <td><code>0x180 + 64*c + s</code></td>
+  <td><code>0xDAC + 6*s + c</code></td>
+</tr>
+<tr>
+  <td>Output-enable mask</td>
+  <td><code>0x300 + s</code></td>
+  <td><code>0x840 + s</code></td>
+</tr>
+<tr>
+  <td>MOD mask</td>
+  <td><code>0x340 + s</code></td>
+  <td><code>0x800 + s</code></td>
+</tr>
+</tbody>
+</table>
+<p>The active state loader at <code>0x8540</code> sign-extends ratios into RAM <code>0x538 + 2*c</code>, copies phase bytes to <code>0x570+c</code>, expands enable bits into <code>0x4E0+c</code>, and expands MOD bits into <code>0x5DC+c</code>. It marks timing dirty so the foreground arithmetic can rebuild channel parameters.</p>
+<p>The 896-byte state payload is exactly <code>64 * 14</code>. EEPROM globals occupy the remainder of the 1 KB address space. The byte driver masks addresses with <code>0x3FF</code>; this is direct evidence for the EEPROM size assumed by the code.</p>
+<h2>Persistence routines</h2>
+<table>
+<thead>
+<tr>
+  <th>Entry, program byte address</th>
+  <th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>0x972A</code></td>
+  <td>Read one EEPROM byte</td>
+</tr>
+<tr>
+  <td><code>0x9576</code></td>
+  <td>Write one EEPROM byte</td>
+</tr>
+<tr>
+  <td><code>0x9710</code></td>
+  <td>Base-plus-offset EEPROM write helper</td>
+</tr>
+<tr>
+  <td><code>0x87FA</code></td>
+  <td>Load one state's EEPROM planes into RAM caches</td>
+</tr>
+<tr>
+  <td><code>0x976A</code></td>
+  <td>Load all 64 states, then activate selected state</td>
+</tr>
+<tr>
+  <td><code>0x8540</code></td>
+  <td>Activate a cached state</td>
+</tr>
+<tr>
+  <td><code>0x8B16</code></td>
+  <td>Test/set/clear dirty-state bitmap</td>
+</tr>
+<tr>
+  <td><code>0x871A</code></td>
+  <td>Store dirty states and associated persistent settings</td>
+</tr>
+<tr>
+  <td><code>0x964A</code></td>
+  <td>Reload/revert dirty state data and current settings</td>
+</tr>
+<tr>
+  <td><code>0x88D4</code></td>
+  <td>Select Bus copy/store dispatcher</td>
+</tr>
+<tr>
+  <td><code>0x6E56</code></td>
+  <td>Factory initialization</td>
+</tr>
+<tr>
+  <td><code>0x8DC2</code></td>
+  <td>Store global settings</td>
+</tr>
+<tr>
+  <td><code>0x9678</code></td>
+  <td>Store the leading-tempo value</td>
+</tr>
+</tbody>
+</table>
+<p>The dirty bitmap occupies RAM <code>0x6A0–0x6A7</code>. It permits an edited performance state to differ from its saved state without repeatedly writing EEPROM.</p>
+<p>The EEPROM write routine disables global interrupts, performs the <code>55/AA</code> unlock sequence, starts the write, and waits for the hardware write bit to clear before restoring the previous interrupt-enable state. This is an observed code path. A clock disturbance during a real save is a plausible consequence, but no physical timing trace was taken and the harness completes writes instantly.</p>
+<h2>Partial global map</h2>
+<p>A machine-readable partial map is supplied in <code>analysis/global_eeprom_partial_map.csv</code>. The most firmly anchored fields are the saved state index at <code>0x3FD</code>, follow flag at <code>0x3F5</code>, and three-byte leading-tempo value at <code>0x3F6–0x3F8</code>. Other fields relate to MOD mode, raw-versus-toggled MOD source selection, human resolution, and clock/tap configuration.</p>
+<p>Addresses <code>0x3E3–0x3E9</code> participate in calibration-mode/endpoint logic; they are not supplied as a per-unit EEPROM image by this WAV. The factory routine's noninteractive path does not manufacture valid physical calibration readings.</p>
+<p>An initially surprising write to <code>0x3F0</code> is preserved as observed. It comes from a base-plus-offset calculation and must not be silently relabeled as <code>0x3B0</code>. The partial map leaves uncertain semantics explicitly unresolved.</p>
+<h2>Factory preset extraction</h2>
+<p>Flash <code>0xFD4D–0xFDAC</code> holds 16 × 6 phase bytes. Flash <code>0xFDAD–0xFE0C</code> holds 16 × 6 signed ratio bytes. The factory routine clears all 64 states, gives them enabled outputs and no MOD assignments, then overwrites the first sixteen with these tables.</p>
+<table>
+<thead>
+<tr>
+  <th>Bank A slot, 1-based</th>
+  <th>Recovered ratios, channels 1–6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td>Unity on all channels</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>÷1, ÷2, ÷4, ÷8, ÷16, ÷32</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td>÷2, ÷3, ÷5, ÷7, ÷11, ÷13</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td>÷1, ÷2, ÷3, ÷4, ÷5, ÷6</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td>÷2, ÷4, ÷6, ÷8, ÷10, ÷12</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td>÷3, ÷5, ÷7, ÷9, ÷11, ÷13</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td>÷2, ÷3, ÷5, ÷8, ÷13, ÷21</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td>×1, ×2, ×4, ×8, ×16, ×32</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td>×2, ×3, ×5, ×7, ×11, ×13</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td>×1, ×2, ×3, ×4, ×5, ×6</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td>×2, ×4, ×6, ×8, ×10, ×12</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td>×3, ×5, ×7, ×9, ×11, ×13</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td>×2, ×3, ×5, ×8, ×13, ×21</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td>×2, ×3, ×4, ÷2, ÷3, ÷4</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td>÷1.5 on all channels; phase codes 0,1,2,3,4,5</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td>÷2, ÷2.25, ÷2.5, ÷2.75, ÷3, ÷3.25</td>
+</tr>
+</tbody>
+</table>
+<p>These numbers are derived from the extracted bytes and ratio routine, not copied as a substitute for binary analysis. Slot 15 is particularly useful: the byte tables establish both its exact noninteger ratio and its six explicit phase codes.</p>
+<h2>Synthetic EEPROM boundaries</h2>
+<p><code>SYNTHETIC_factory_eeprom.bin</code> starts with 1,024 bytes of <code>FF</code>, then applies only writes made by <code>0x6E56</code> with argument zero. That suppresses the interactive calibration branch. The write trace contains 1,101 operations and covers 908 unique addresses: all 896 state bytes plus 12 distinct global bytes.</p>
+<p>Its companion mask contains <code>FF</code> for a byte written by that routine and <code>00</code> for a byte not established by this reconstruction. A mask-zero value is not known to be the real factory or current value of a physical module. This image is suitable for studying defaults, not for replacing a unit's EEPROM.</p>
+<h2>RAM and constants</h2>
+<p><code>ram_symbols.csv</code> lists the named arrays and fields with evidence addresses. <code>SIMULATED_ram_after_c_runtime.bin</code> is the harness's runtime-initialized RAM snapshot, not a JTAG/ICSP memory capture. It includes working-memory/SFR space in a simplified model.</p>
+<p>The runtime copies a 16-entry integer table from flash <code>0x9442</code> to RAM <code>0x9AE</code>. Its values are:</p>
+<pre><code class="language-text">200000 180000 130000 80000 70000 40000 12000 10000
+8500   6000   5000   3500  2500  1750  1000  250
+</code></pre>
+<p>The table is linked to the tempo-control path. Its exact interpolation and end-to-end voltage law are not presented as fully reconstructed here. Exposing the constants is useful without assigning an unsupported volts-to-BPM formula.</p>
+</article><article id="algorithms"><div class="section-number">05 / Recovered algorithms</div><h1>Executable algorithm notes</h1>
+<p>The mathematical models in <code>tools/models.py</code> are extracted behavioral models, not original source and not a complete module. Each verified model has corresponding machine-code execution tests in <code>tools/validate_and_extract.py</code>.</p>
+<h2>1. Ratio to halfperiod — program 0x7E54</h2>
+<p><strong>Inputs:</strong> signed 16-bit ratio at RAM <code>0x060</code>, signed 32-bit master halfperiod at RAM <code>0x062</code>. <strong>Output:</strong> 32-bit halfperiod at RAM <code>0x060</code>.</p>
+<pre><code class="language-python">h = signed32(master_halfperiod)
+if r &gt; 0:
+    h = trunc_div(signed32(h * 4), r + 4)
+elif r &lt; 0:
+    h = trunc_div(signed32(h * (4 - r)), 4)
+if h &gt;= 0x01000000:
+    h = 0x00FFFFFF
+if h &lt; 200:
+    h = 200
+return h
+</code></pre>
+<p><code>trunc_div</code> rounds toward zero. A port should avoid depending on host-language overflow rules: explicitly constrain intermediate values to signed 32-bit behavior.</p>
+<table>
+<thead>
+<tr>
+  <th style="text-align:right">Ratio code</th>
+  <th>Musical ratio</th>
+  <th style="text-align:right">Halfperiod for H=8000</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td style="text-align:right">-124</td>
+  <td>÷32</td>
+  <td style="text-align:right">256000</td>
+</tr>
+<tr>
+  <td style="text-align:right">-8</td>
+  <td>÷3</td>
+  <td style="text-align:right">24000</td>
+</tr>
+<tr>
+  <td style="text-align:right">-4</td>
+  <td>÷2</td>
+  <td style="text-align:right">16000</td>
+</tr>
+<tr>
+  <td style="text-align:right">-2</td>
+  <td>÷1.5</td>
+  <td style="text-align:right">12000</td>
+</tr>
+<tr>
+  <td style="text-align:right">0</td>
+  <td>Unity</td>
+  <td style="text-align:right">8000</td>
+</tr>
+<tr>
+  <td style="text-align:right">1</td>
+  <td>×1.25</td>
+  <td style="text-align:right">6400</td>
+</tr>
+<tr>
+  <td style="text-align:right">4</td>
+  <td>×2</td>
+  <td style="text-align:right">4000</td>
+</tr>
+<tr>
+  <td style="text-align:right">8</td>
+  <td>×3</td>
+  <td style="text-align:right">2666</td>
+</tr>
+<tr>
+  <td style="text-align:right">124</td>
+  <td>×32</td>
+  <td style="text-align:right">250</td>
+</tr>
+</tbody>
+</table>
+<p>The ratio code is not a signed count of extra clock pulses. The two sides of zero encode multiplier magnitude and divisor magnitude using different reciprocal relationships. A smooth linear interpolation of the code is consequently not a linear interpolation of frequency across the full span.</p>
+<p><strong>Validation:</strong> 249 codes at seven input halfperiods, totaling 1,743 fixtures. Inputs cover zero, subminimum values, ordinary periods, and the maximum clamped-scale value. See <code>ratio_test_vectors.csv</code>.</p>
+<h2>2. Phase offset — program 0x65DE</h2>
+<p>The ratio calculation is called for each dirty channel. The result goes to RAM <code>0x5BE + 4*c</code>. The phase computation then uses either the master halfperiod or that result:</p>
+<pre><code class="language-python">base = H if r &lt; 0 else ratio_halfperiod(r, H)
+offset = trunc_div(signed32(base * (phase_byte &amp; 255) * 2), 4)
+</code></pre>
+<p>The output is stored at <code>0x520 + 4*c</code>. For a divisor, <code>p=1</code> means one quarter of a master full cycle. For a multiplier or unity, it means one quarter of the channel full cycle.</p>
+<p>For example, at <code>H=8000</code>, ratio code <code>-8</code> produces a 24,000-tick channel halfperiod, but phase code 1 produces only a 4,000-tick offset. A naïve “quarter of that divided clock” model would instead produce 12,000 ticks and would be wrong for this routine.</p>
+<p><strong>Validation:</strong> seven ratio codes and six phase bytes, applied to all six channels through the complete recomputation routine. These 42 six-lane fixtures agree with the model. They verify the computed offset, not the entire real-time phase-update scheduler.</p>
+<h2>3. Rational alignment — programs 0x8BCC, 0x7F8E, 0x93FC</h2>
+<p>The per-channel alignment factor is:</p>
+<pre><code class="language-text">r &lt; 0:  (4-r) / gcd(4-r, 4)
+r &gt;= 0: 4 / gcd(r+4, 4)
+</code></pre>
+<p>It is the reduced denominator of the output/master frequency ratio. Thus ÷3 requires three master cycles to return to a common phase, while ×1.25 requires four. Integer multiples have factor one.</p>
+<p>The LCM helper combines factors. Its observed calling convention uses 16-bit arguments at RAM <code>0x01F</code> and <code>0x021</code>, with result at <code>0x01F</code>. A 32-bit product and integer remainder/division helpers implement the arithmetic. The foreground code stores a resulting master alignment length at RAM <code>0x5F7</code>, which the interrupt uses in its counter wrap logic.</p>
+<p><strong>Validation:</strong> all 249 ratio-factor cases; seven representative LCM pairs. This is not an exhaustive proof of behavior when the full six-way alignment length overflows its stored width.</p>
+<h2>4. State ADC hysteresis — program 0x78FC</h2>
+<p>The calibration builder populates 16 ascending uint16 thresholds at RAM <code>0x500</code>. The previous state is at <code>0x4E6</code>. The ADC wrapper returns the latest reading or the sentinel <code>0xFFFF</code>.</p>
+<pre><code class="language-python">if adc == 0xFFFF:
+    return previous
+j = first index whose threshold[j] is greater than adc
+if no such index:
+    return 15
+if j == 0:
+    return 0
+margin = (threshold[j] - threshold[j-1]) // 3
+if previous == j and adc &lt;= threshold[j-1] + margin:
+    return j-1
+if previous == j-1 and adc &lt;= threshold[j] - margin:
+    return j-1
+return j
+</code></pre>
+<p>Equality matters. The upper threshold search uses a strict comparison; the two hysteresis decisions include equality. The margin is a divide-by-three calculation, not a three-bit shift.</p>
+<p><strong>Validation:</strong> 16 previous states × 256 ADC test values = 4,096 fixtures. The ADC-read wrapper is substituted with a controlled value; thresholds are synthetic. This does not verify real-unit calibration or analog noise behavior.</p>
+<h2>5. Random generator — program 0x8446</h2>
+<p>The generator has eight bytes of state at <code>0x5B6–0x5BD</code>. It multiplies by <code>0x5851F42D4C957F2D</code>, adds one, and retains the low 64 bits.</p>
+<p>The extraction loop loads 50 into its counter but decrements before each iteration, resulting in <strong>49 shifts</strong>. The code copies the low shifted byte to the return low byte and copies the third shifted byte to the return high byte. The latter is zero after a 49-bit shift of a 64-bit word. Hence:</p>
+<pre><code class="language-text">next = (old * 0x5851F42D4C957F2D + 1) &amp; 0xFFFFFFFFFFFFFFFF
+result = (next &gt;&gt; 49) &amp; 0xFF
+</code></pre>
+<p>For seed 1, the next state is <code>0x5851F42D4C957F2E</code>. The routine returns <code>0x28</code>, not <code>0x2C28</code>. That difference is covered by the tests. The multiplier's use alone is not evidence for a complete PCG algorithm; no such algorithm name is assigned here.</p>
+<p>Modulo 7 and modulo 5 consumers produce small signed mutation perturbations. Because the source has 256 outcomes, such modulo reductions are not perfectly uniform. This is a mathematical consequence of the observed byte extraction, not a measured musical bias.</p>
+<p><strong>Validation:</strong> 64 seeds, including zero, one, all ones, and deterministic pseudorandom test seeds. Both the next state and returned value match.</p>
+<h2>6. Interrupt engine and synchronization — partially reconstructed</h2>
+<p>The Timer2 interrupt performs a fixed, unrolled six-channel service. A conceptual outline is:</p>
+<pre><code class="language-text">drive previously prepared outputs
+sample RA4; on a rising edge capture external-tempo timing
+advance master countdown and master alignment counter
+if UART receive flag: enqueue one byte
+sample MOD level and update its rising-edge toggle
+update source-related master-history snapshots
+for each channel:
+    detect source transition / choose synchronization history
+    decrement its signed countdown
+    when elapsed: toggle channel level and rotate duration fields
+    compute its next pending output from source, enable, run gate, and level
+sample active-low channel buttons and capture timing events
+advance human timing counters
+return from interrupt
+</code></pre>
+<p>The foreground timing service at <code>0x234A</code> updates timer parameters, histories, phase relationships, and transition guards. It is over 4 KB of reachable instructions. Its full state-transition behavior has not yet been reduced to executable high-level code.</p>
+<p>A ten-entry timing-history structure at RAM <code>0x700</code> stores 12-byte snapshots, with related phase/cycle arrays elsewhere. Those histories are important evidence against treating clock updates as immediate frequency assignments with an arbitrary oscillator phase reset.</p>
+<h2>7. Human programming and MOD — traced, not fully specified</h2>
+<p>Human programming uses six elapsed/captured timer arrays and combines measured taps with ratio and phase quantization. The large service at <code>0x340A</code>, the UI service at <code>0x11C0</code>, and their helper routines are the next places to trace. The mere availability of a captured interval does not establish the precise tap acceptance, normalization, or phase-quantization law.</p>
+<p>MOD processing at <code>0x4F66</code> consumes both a sampled gate and a latched toggle, maintains per-channel MOD enables, and operates through channel-source pointers and run gates. This establishes the architecture needed for shift and run/stop behavior, but not every mode's complete transition order.</p>
+<p>For implementation work, preserve the distinction between a verified arithmetic function and an unfinished event-state machine. Replacing the latter with a plausible musical behavior may produce a useful module, but it would be an explicit design approximation rather than a recovered fact.</p>
+</article><article id="bus"><div class="section-number">06 / Select Bus protocol</div><h1>Select Bus: recovered receive protocol</h1>
+<p><strong>Parser:</strong> program <code>0x71AA–0x7334</code><br />
+<strong>Header bytes:</strong> <code>00 02 2D</code><br />
+<strong>Direction observed:</strong> receive only.</p>
+<p>This is a reconstruction of the parser in the supplied firmware, not a universal specification for Make Noise devices or all Select Bus revisions. The header is identified from initialized RAM and comparison instructions; no unsupported assignment of a manufacturer-ID registry entry is necessary.</p>
+<h2>Receive path</h2>
+<p>The Timer2 interrupt polls UART1's receive flag and deposits a byte at RAM <code>0xA60 + write_index</code>. The ring has <strong>460 bytes</strong>, ending at <code>0xC2B</code>, and wraps at <code>0x1CC</code>. The foreground parser consumes at most one queued byte per call. Producer index is at <code>0x44E</code>; consumer index at <code>0x595</code>.</p>
+<p>No separate UART receive interrupt is required by this observed path. A completely occupied ring can become ambiguous without an explicit full flag; no overflow protection claim is made. On UART overrun the parser toggles continuous receive off and back on. Explicit framing-error handling was not identified.</p>
+<h2>Status handling</h2>
+<table>
+<thead>
+<tr>
+  <th>Byte</th>
+  <th>Interpretation in this parser</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>C0</code></td>
+  <td>Begin one-data-byte program/state request</td>
+</tr>
+<tr>
+  <td><code>F0</code></td>
+  <td>Begin a header-checked proprietary payload</td>
+</tr>
+<tr>
+  <td><code>F4</code></td>
+  <td>Begin one-data-byte copy/store request</td>
+</tr>
+<tr>
+  <td><code>F7</code></td>
+  <td>Clear parser status and payload index</td>
+</tr>
+<tr>
+  <td>Other bytes <code>80..FF</code></td>
+  <td>Ignored without generally cancelling the current accepted status</td>
+</tr>
+</tbody>
+</table>
+<p>Only the exact <code>C0</code> status is selected; <code>C1..CF</code> are not equivalent alternatives. A consumed <code>C0</code> data byte ends that message, so generic MIDI running-status behavior must not be assumed.</p>
+<h2>Program/state request</h2>
+<pre><code class="language-text">C0 ss
+</code></pre>
+<p>The data byte is copied to RAM <code>0x5FA</code>, and parser status is cleared. The higher-level state-selection service applies range, follow, bank/offset, and local-control logic. A parser accepting a byte is not proof that the physical module will immediately recall that number in every mode.</p>
+<p>A test frame <code>C0 25</code> queues decimal state 37. A later <code>C1 26</code> does not replace it. <code>C0 F8 16</code> queues decimal 22: the interleaved <code>F8</code> is ignored by this parser rather than interpreted here as a scheduling clock.</p>
+<h2>Copy/store dispatch</h2>
+<pre><code class="language-text">F4 dd
+</code></pre>
+<p>For <code>dd &lt; 64</code>, the parser calls <code>0x88D4</code> with W=<code>dd</code> and RAM <code>0x029</code>=0. This is the copy-current-program-to-target-state path. For <code>64 &lt;= dd &lt; 128</code>, it calls the same routine with W=0 and RAM <code>0x029</code>=1, selecting the persistent-store path. It also clears the Mesh bitmap and performs follow-dependent UI bookkeeping.</p>
+<p>The included tests verify these exact dispatcher calls with a hook. They do not execute a real device's EEPROM save or establish its duration.</p>
+<p><strong>Persistent commands can overwrite saved data on hardware.</strong> The tools in this package are offline and never send any bytes to a serial port or module.</p>
+<h2>Header-checked payload</h2>
+<pre><code class="language-text">F0 00 02 2D [commands...] F7
+</code></pre>
+<p>A mismatch in any of the first three data bytes clears status/index. After a correct header, the parser accepts the following subcommands:</p>
+<table>
+<thead>
+<tr>
+  <th style="text-align:right">Command</th>
+  <th>Following data</th>
+  <th>Recovered action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td style="text-align:right"><code>00</code></td>
+  <td>State <code>ss</code></td>
+  <td>Clear that state bit in the Mesh bitmap</td>
+</tr>
+<tr>
+  <td style="text-align:right"><code>01</code></td>
+  <td>State <code>ss</code></td>
+  <td>Set that state bit in the Mesh bitmap</td>
+</tr>
+<tr>
+  <td style="text-align:right"><code>02</code></td>
+  <td>None</td>
+  <td>Call <code>0x8EE6</code>: initialize the current cached state</td>
+</tr>
+<tr>
+  <td style="text-align:right"><code>03</code></td>
+  <td>None</td>
+  <td>Call <code>0x964A</code>: revert/reload dirty states and settings</td>
+</tr>
+</tbody>
+</table>
+<p>The Mesh bitmap is eight bytes at RAM <code>0x544</code>. Its helper at <code>0x7D08</code> also supports tests, clearing all bits, and checking whether any bits are active. Follow state gates the helper's query behavior, so bitmap mutation and its effect on selection are not the same operation.</p>
+<p>Commands 0 and 1 consume a command/state pair, then rewind the payload index to accept another pair. Commands 2 and 3 invoke their action after the command byte and return toward command parsing. The byte-level trace tests exercise the header, set/clear pairs, invalid header handling, and message termination; not every combination involving initialization/revert is exhaustively tested.</p>
+<p>Example, setting Mesh states 7 and 63 and then clearing state 7:</p>
+<pre><code class="language-text">F0 00 02 2D 01 07 01 3F 00 07 F7
+</code></pre>
+<p>The tested final bitmap has only state 63 set.</p>
+<h2>Electrical and timing limits</h2>
+<p>UART receive is configured as asynchronous 8-bit input, with TX disabled. The low-speed, 8-bit baud generator has SPBRG1=32. Therefore its nominal receiver baud is <code>Fosc/2112</code>. Actual <code>Fosc</code> has not been established.</p>
+<p>Do not assume that this stream belongs on a conventional MIDI DIN port, that UART logic levels equal Eurorack CV levels, or that arbitrary power-bus wiring is safe. The official manual's receive-only Select Bus description corroborates the interface role; it does not replace an electrical schematic.</p>
+</article><article id="validation"><div class="section-number">07 / Validation and limits</div><h1>Validation, reverse lookups, and limits</h1>
+<h2>Completed checks</h2>
+<table>
+<thead>
+<tr>
+  <th>Test family</th>
+  <th style="text-align:right">Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Intel HEX checksum and length</td>
+  <td style="text-align:right">2,323 records, all pass</td>
+</tr>
+<tr>
+  <td>PCM reconstruction</td>
+  <td style="text-align:right">All 6,627,265 samples match</td>
+</tr>
+<tr>
+  <td>C-runtime initialization</td>
+  <td style="text-align:right">10,331 harness-executed instructions</td>
+</tr>
+<tr>
+  <td>EEPROM addressing</td>
+  <td style="text-align:right">All 64 states, all 14 logical bytes each</td>
+</tr>
+<tr>
+  <td>Factory state reconstruction</td>
+  <td style="text-align:right">All 64 states compared against tables/default writes</td>
+</tr>
+<tr>
+  <td>Factory write trace</td>
+  <td style="text-align:right">1,101 writes, 908 unique addresses</td>
+</tr>
+<tr>
+  <td>Ratio conversion</td>
+  <td style="text-align:right">1,743 input/code fixtures</td>
+</tr>
+<tr>
+  <td>Phase conversion</td>
+  <td style="text-align:right">42 fixtures, each checked on all six lanes</td>
+</tr>
+<tr>
+  <td>Alignment factors</td>
+  <td style="text-align:right">All 249 tested ratio codes</td>
+</tr>
+<tr>
+  <td>LCM helper</td>
+  <td style="text-align:right">Seven representative argument pairs</td>
+</tr>
+<tr>
+  <td>Output GPIO mapping</td>
+  <td style="text-align:right">All 64 six-bit output patterns</td>
+</tr>
+<tr>
+  <td>Random generator</td>
+  <td style="text-align:right">64 seeds, full state and return value</td>
+</tr>
+<tr>
+  <td>ADC hysteresis</td>
+  <td style="text-align:right">4,096 synthetic fixtures</td>
+</tr>
+<tr>
+  <td>Select Bus parser</td>
+  <td style="text-align:right">Seven focused message scenarios</td>
+</tr>
+</tbody>
+</table>
+<p><code>analysis/validation.json</code> is the generated result, not a hand-written claim. Assertions fail the test process on mismatch. Test vectors and traces are retained where useful.</p>
+<h2>What the harness is</h2>
+<p>The harness executes selected legacy PIC18 instructions against recovered program bytes. It models arithmetic flags, banked RAM, indirect addressing, table reads, branches/calls/returns, and immediate-completion EEPROM access. It is enough to test isolated arithmetic, initialization, memory mapping, and parser paths.</p>
+<p>It does <strong>not</strong> model oscillator timing, real peripheral clocks, ADC acquisition, asynchronous interrupts, analog circuitry, UART line sampling, hardware stack limits, all special-function-register side effects, or complete fast-interrupt context restoration. Its cycle counter is an internal approximation, not a measured performance result. The full firmware has not been booted into a faithful virtual board.</p>
+<p>The instruction decoder and harness share definitions. Agreement between them is valuable but is not independent validation against a second PIC18 implementation. Independent disassembly/emulation and hardware traces would raise confidence further.</p>
+<h2>Navigation and reverse lookups</h2>
+<p><code>functions.csv</code> contains entry addresses, inferred names, reachable instruction counts, address extents, and call counts. <code>calls.csv</code> maps caller entry and call-site address to callee. <code>callgraph.dot</code> is Graphviz source for the call graph.</p>
+<p><code>ram_symbols.csv</code> gives named fields with evidence addresses. <code>direct_data_xrefs.csv</code> indexes direct RAM/SFR references. <code>sfr_xrefs.csv</code> is the peripheral-focused subset. These indexes are conservative: an unresolved bank operand remains unresolved, and indirect RAM-pointer accesses do not magically become named cross-references.</p>
+<p><code>instructions.json</code> preserves decoded instruction fields. <code>constant_tables.json</code> preserves exact selected flash data. <code>strings_candidates.txt</code> contains raw printable candidates, not authenticated messages, source names, or compiler identifiers. Instruction bytes often happen to be printable.</p>
+<p>No original C source, symbol/debug table, compiler-version string, or independently verified exact physical part identification was recovered. Searches for public Tempi/PIC18 source or a confirmed MCU match did not supply a primary source establishing the exact chip; the family assignment rests on the binary and register/configuration fit.</p>
+<h2>Architecture confidence</h2>
+<p>Legacy PIC18 decoding is supported by a coherent reset jump, interrupt service, C-runtime initialization, thousands of valid instructions, correctly resolved calls, and meaningful register operations. The K22 family is supported by the specific analog/peripheral map and configuration layout. A 64 KB, PORTD/PORTE-equipped variant is consistent with the high data block and observed GPIOs.</p>
+<p>The F46K22 versus LF46K22 suffix, device revision, package, and physical oscillator remain unmeasured. A chip photograph or device-ID read would be stronger evidence than additional speculation from the same register map.</p>
+<h2>Security/programming scope</h2>
+<p>This work decodes a file supplied by the user and analyzes a musical instrument's application. It does not bypass hardware read protection. The configuration records contain protection-related bits under the candidate-device interpretation, but those bytes do not show the live state of a unit.</p>
+<p>The missing bootloader prevents conclusions about waveform acceptance thresholds, supported update records, fuse-writing policy, recovery behavior, or whether the recovered application can run after programming a blank chip. No hardware programming is attempted or recommended from the supplied artifacts.</p>
+<h2>Evidence gaps that matter for a clone</h2>
+<p>The exact arithmetic models do not yet specify full UI gesture timing, tap normalization, clock locking/relocking, phase-commit transitions, every MOD mode, save-time timing effects, or electrical thresholds. A module may sound and behave plausibly while differing on these boundaries. The package therefore separates exact models from partially named services and does not claim end-to-end behavioral equivalence.</p>
+</article><article id="next"><div class="section-number">08 / Porting and next work</div><h1>Reimplementation guidance and next investigations</h1>
+<h2>A practical behavioral core</h2>
+<p>A software version should separate a musical state from its running timing state. Store each program as six signed ratio codes, six phase bytes, and two masks. Keep active timer records, phase offsets, dirty flags, source routing, and run gates outside that stored structure.</p>
+<p>Reuse the recovered integer ratio and phase calculations before designing new continuous controls. The “quarter step” is a step in multiplier/divisor magnitude, not a universal percentage. Likewise, divider phase and multiplier phase have different reference periods. Test against the supplied vectors before connecting a front panel.</p>
+<p>Keep a state cache and explicit save/revert semantics. A user editing a state should not implicitly overwrite persistent storage. The column-major hardware EEPROM layout need not be a software application's native layout, but an importer/exporter must preserve it exactly.</p>
+<p>For deterministic mutation, retain the observed 64-bit recurrence and 8-bit extraction. Do not substitute a host PRNG while claiming identical results. Seed selection and mutation clipping still require further tracing.</p>
+<h2>Time representation</h2>
+<p>The hardware's absolute interrupt tick is unresolved. A software implementation can use abstract ticks initially or a documented chosen timebase. It must not present that chosen rate as a recovered physical fact.</p>
+<p>After the real tick is measured, use a fractional accumulator to map hardware ticks into the host's sample clock rather than rounding every hardware period to a fixed number of samples. Preserve integer countdown and output-pipeline semantics where they affect transitions. Whether to reproduce sequential GPIO skew is a separate fidelity choice.</p>
+<h2>Highest-value remaining code</h2>
+<table>
+<thead>
+<tr>
+  <th>Address</th>
+  <th>Investigation</th>
+  <th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>0x234A</code></td>
+  <td>Complete timing commit / synchronization transitions</td>
+  <td>Defines when new ratios and phase values take effect</td>
+</tr>
+<tr>
+  <td><code>0x340A</code></td>
+  <td>Human-programming interval normalization and quantization</td>
+  <td>Converts taps into stored ratio and phase codes</td>
+</tr>
+<tr>
+  <td><code>0x4B16</code></td>
+  <td>Leading-clock tracking and tempo-control law</td>
+  <td>Establishes acquisition, loss-of-clock, and tempo interpolation behavior</td>
+</tr>
+<tr>
+  <td><code>0x4F66</code></td>
+  <td>Exact MOD state machine</td>
+  <td>Separates shift, toggle, momentary, stop, and restart cases</td>
+</tr>
+<tr>
+  <td><code>0x11C0</code></td>
+  <td>Gesture and edit-page transition table</td>
+  <td>Needed for front-panel compatibility rather than parameter-only emulation</td>
+</tr>
+<tr>
+  <td><code>0x5B66</code> and <code>0x693A</code></td>
+  <td>Calibration equations and interaction</td>
+  <td>Maps real ADC values to state thresholds</td>
+</tr>
+<tr>
+  <td><code>0x6BFA</code></td>
+  <td>Full mutation normalization and seed path</td>
+  <td>Completes deterministic state/bank mutation behavior</td>
+</tr>
+<tr>
+  <td><code>0x466A</code> and other unnamed helpers</td>
+  <td>Service/diagnostic roles</td>
+  <td>Avoids misclassifying auxiliary code as the missing resident bootloader</td>
+</tr>
+</tbody>
+</table>
+<h2>Most decisive hardware evidence</h2>
+<p>A legible MCU and oscillator photograph would narrow the exact part and clock. A logic-analyzer capture of one steady channel, an external tempo edge, a ratio change, and a phase change would constrain timer rate and transition ordering. A known 1 KB EEPROM dump from a consenting owner would validate globals and calibration layout; the read-only decoder here is ready for such a file.</p>
+<p>Clock tests should include transitions rather than just steady-state ratios: faster-to-slower external tempo, signal loss and return, mute/unmute, MOD run/stop, state recall during activity, and a phase change just before an expected edge. Those cases are where a plausible implementation is most likely to diverge from the original.</p>
+<h2>Independent tooling check</h2>
+<p>Load the recovered program segments at their true byte addresses in an independent PIC18 disassembler. Start by checking the GOTO at <code>0x0800</code> and the timer handler at <code>0x0808</code>; confirm that your tool's address units are bytes rather than instruction words. Add the <code>0xFD40</code> data block separately when using raw binaries. The Intel HEX preserves address regions and is preferable when the importer supports it.</p>
+<p>Do not force an ARM/Thumb language, relocate the application to zero, or interpret all uncovered constant bytes as instructions. The generated symbol and cross-reference CSVs can serve as navigation aids, but remain analyst annotations rather than authoritative compiler metadata.</p>
+</article><article id="sources"><div class="section-number">09 / Sources and provenance</div><h1>Sources and provenance</h1>
+<h2>Primary analyzed material</h2>
+<p><strong>User-supplied WAV:</strong> originally mounted as <code>tempi71(1).wav</code>, retained as <code>input/tempi71.wav</code>. SHA-256: <code>dfea58ec1694b63f645dc85af62d0971077942b281ae445c04ebaa2bebcbd09c</code>.</p>
+<p>All instruction addresses, recovered data tables, exact transport rules, state-memory layouts, parser bytes, and executed-routine results originate from this file. Firmware bytes remain the manufacturer's material; the package does not assign an open-source license to them.</p>
+<h2>Public primary references inspected on 27 September 2026</h2>
+<ol>
+<li><p><strong>Make Noise — Tempi product page</strong><br />
+<a href="https://www.makenoisemusic.com/modules/tempi/">https://www.makenoisemusic.com/modules/tempi/</a><br />
+Used for product identity, feature context, and the public firmware-71 link. It is not a source for the exact recovered GPIOs or algorithms.</p>
+</li>
+<li><p><strong>Make Noise — English Tempi manual PDF</strong><br />
+<a href="https://www.makenoise-manuals.com/tempi/tempi-manual.pdf">https://www.makenoise-manuals.com/tempi/tempi-manual.pdf</a><br />
+34 pages. The inspected manual identifies itself as firmware-60 documentation. Panel pages, factory-setting pages, state-CV range, nominal output mode descriptions, and Select Bus direction were used as cross-checks. Panel and factory-setting pages were also inspected visually. Version differences are not silently resolved in favor of the older manual.</p>
+</li>
+<li><p><strong>Microchip — PIC18(L)F2X/4XK22 data sheet, DS40001412G</strong><br />
+<a href="https://ww1.microchip.com/downloads/en/DeviceDoc/40001412G.pdf">https://ww1.microchip.com/downloads/en/DeviceDoc/40001412G.pdf</a><br />
+Used for the candidate-family memory/peripheral model, legacy instruction encodings, timer/UART relationships, and device-family distinctions. The instruction table was inspected visually in addition to parsed text. The data sheet does not identify the chip fitted to a Tempi.</p>
+</li>
+<li><p><strong>gputils — p18f46k22.inc</strong><br />
+<a href="https://raw.githubusercontent.com/ilovezfs/gputils/master/gputils/header/p18f46k22.inc">https://raw.githubusercontent.com/ilovezfs/gputils/master/gputils/header/p18f46k22.inc</a><br />
+Used as a primary open-source cross-check for register addresses and fuse-field interpretation. Symbol names in the custom decoder follow the candidate device family; this is not a chip readback.</p>
+</li>
+</ol>
+<p>The URLs are reference pointers; no third-party manual PDFs or repository snapshots are bundled. Internet access from the execution container was unavailable, so binaries from external URLs were not silently imported.</p>
+<h2>Lookup results that did not establish a fact</h2>
+<p>The official update archive was linked by the product page but was not independently downloaded and hash-compared. The input's version label is therefore corroborated by naming and product context, not vendor-file identity verification.</p>
+<p>Public searches for Tempi/PIC18 source and exact MCU identification did not locate a primary source confirming the installed part or supplying original source code. Printable-byte scanning did not produce an authenticated source-symbol or compiler-version table. The exact MCU/package and compiler remain unconfirmed.</p>
+<p>No forum assertion, unrelated Select Bus implementation, or another Make Noise module's transport was substituted for evidence from this WAV.</p>
+</article><p class="footer">Independent analysis of the supplied file. Not an official Make Noise specification. All extracted bytes, source hashes, test limitations, and inferred labels are documented in the package.</p></main></body></html>

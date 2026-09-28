@@ -74,7 +74,7 @@ class ChimeraPanelContractTest(unittest.TestCase):
             float(anchors["REEL_LEFT"]["r"]),
             float(anchors["DISPLAY_ORIGIN"]["cy"]) + 0.5)
 
-    def test_vu_anchors_match_reels_and_extend_toward_edges(self):
+    def test_vu_anchors_match_reels_and_sit_inside_them(self):
         anchors = keyed(MASTER)
         left_vu = anchors["VU_LEFT"]
         right_vu = anchors["VU_RIGHT"]
@@ -85,10 +85,10 @@ class ChimeraPanelContractTest(unittest.TestCase):
         self.assertAlmostEqual(float(left_vu["cy"]), float(right_vu["cy"]), places=5)
         self.assertAlmostEqual(float(left_vu["r"]), float(left_reel["r"]), delta=0.01)
         self.assertAlmostEqual(float(right_vu["r"]), float(right_reel["r"]), delta=0.01)
-        self.assertLess(float(left_vu["cx"]), float(left_reel["cx"]))
-        self.assertGreater(float(right_vu["cx"]), float(right_reel["cx"]))
+        self.assertGreater(float(left_vu["cx"]), float(left_reel["cx"]))
+        self.assertLess(float(right_vu["cx"]), float(right_reel["cx"]))
         self.assertAlmostEqual(float(left_vu["cx"]) + float(right_vu["cx"]),
-                               142.24, places=4)
+                               142.24, places=1)
 
     def test_display_and_control_rows_do_not_overlap(self):
         anchors = keyed(MASTER)

@@ -1,0 +1,15 @@
+address,name,value,interpretation,caveat
+0x300000,CONFIG1L,FF,Unimplemented/reserved byte,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300001,CONFIG1H,32,HSHP primary oscillator; PLL enabled; primary clock enabled; fail-safe and switchover off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300002,CONFIG2L,19,Power-up timer and brown-out reset disabled,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300003,CONFIG2H,3C,Watchdog disabled; watchdog postscale field 32768,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300004,CONFIG3L,FF,Unimplemented/reserved byte,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300005,CONFIG3H,B5,MCLR enabled; PORTB analog-at-reset disabled; peripheral pin options,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300006,CONFIG4L,81,Legacy instruction set; low-voltage programming off; stack reset on,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300007,CONFIG4H,FF,Unimplemented/reserved byte,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300008,CONFIG5L,00,Application code protection enabled for blocks 0..3,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x300009,CONFIG5H,80,Boot code protection enabled; EEPROM read protection off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x30000A,CONFIG6L,0F,Application write protection off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x30000B,CONFIG6H,80,Boot/config write protection enabled; EEPROM write protection off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x30000C,CONFIG7L,0F,Application table-read protection off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback
+0x30000D,CONFIG7H,40,Boot table-read protection off,Interpretation assumes PIC18(L)F46K22; update records are not hardware fuse readback

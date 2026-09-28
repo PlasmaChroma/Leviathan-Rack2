@@ -34,17 +34,17 @@ int main() {
         const float expected = 480000.f * std::exp2(float(150 - 3*(code/4)) / 341.f);
         need(near(mapAdc(480000, code).durationSamples, expected), "firmware curve across every ordinary code");
     }
-    need(quantize(800.f, 1200) == 1200.f && quantize(799.f, 1200) == 600.f &&
-         near(quantize(599.f, 1200), 400.f) && quantize(399.f, 1200) == 300.f &&
-         near(quantize(299.f, 1200), 200.f) && quantize(199.f, 1200) == 150.f,
-         "clock quantizes to the binary/ternary subdivision family");
-    need(mapAdc(1152000, 200, true).durationSamples == 576000.f,
+    need(quantize(800.f, 1200) == 1200.f && near(quantize(799.f, 1200), 800.f) &&
+         near(quantize(599.f, 1200), 600.f) && near(quantize(399.f, 1200), 400.f) &&
+         near(quantize(299.f, 1200), 300.f) && near(quantize(199.f, 1200), 200.f),
+         "clock retains the current upper bin at each lower boundary");
+    need(near(mapAdc(1152000, 200, true).durationSamples, 768000.f),
          "clock quantization uses original unfolded splice length");
     const std::uint32_t twoThirdBits = 0x3f2aaa9fU;
     float twoThirds;
     std::memcpy(&twoThirds, &twoThirdBits, sizeof(twoThirds));
     need(quantize(twoThirds * 1200.f, 1200) == 1200.f &&
-         quantize(std::nextafter(twoThirds * 1200.f, 0.f), 1200) == 600.f,
+         quantize(std::nextafter(twoThirds * 1200.f, 0.f), 1200) == twoThirds * 1200.f,
          "clock threshold uses the exact firmware float constant");
 
     Reel reel(40, 40);
@@ -85,7 +85,7 @@ int main() {
         Grains grains;
         const bool valid = state == 1;
         const unsigned duration = profile1::finiteGeneFrames(10000, c.gene, valid);
-        need(duration == (valid ? 833u : 998u), "clock integration duration fixture");
+        need(duration == (valid ? 1250u : 998u), "clock integration duration fixture");
         const Grains::ClockDrive clock(1, false, state ? 2400 : 0, state == 2);
         for (unsigned i = 0; i <= duration; ++i) {
             const auto out = grains.step(reel, {0, 10000}, c, false, false, false, 0, clock);

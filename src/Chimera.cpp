@@ -40,23 +40,26 @@ struct ChimeraRateQuantity : ParamQuantity {
 
     double speedAt(float knob) const {
         const int mode = rateMode ? rateMode->load(std::memory_order_relaxed) : 0;
-        return mode == 2 ? chimera::profile1::forwardBaseRate(knob)
-                         : chimera::profile1::classicRate(knob);
+        return chimera::profile1::rateTarget(knob, mode);
     }
 
     float getDisplayValue() override { return static_cast<float>(speedAt(getValue())); }
 
-    void setDisplayValue(float speed) override {
+    float knobForSpeed(float speed) const {
         const bool forwardOnly = rateMode && rateMode->load(std::memory_order_relaxed) == 2;
-        if (!std::isfinite(speed)) return;
-        const float target = clamp(speed, forwardOnly ? 0.f : -2.f, 2.f);
+        const float target = clamp(speed, forwardOnly ? 0.f : -2.f, forwardOnly ? 4.f : 2.f);
         float low = 0.f, high = 1.f;
         for (int i = 0; i < 24; ++i) {
             const float mid = 0.5f * (low + high);
             if (speedAt(mid) < target) low = mid;
             else high = mid;
         }
-        setImmediateValue(0.5f * (low + high));
+        // The firmware curve is stepped: choose the nearest reachable rate.
+        return std::fabs(speedAt(low) - target) < std::fabs(speedAt(high) - target) ? low : high;
+    }
+
+    void setDisplayValue(float speed) override {
+        if (std::isfinite(speed)) setImmediateValue(knobForSpeed(speed));
     }
 
     std::string getDisplayValueString() override {
@@ -228,7 +231,7 @@ struct Chimera : Module {
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
     std::atomic<int> rsopSetting{0}, inputGainSetting{1};
-    std::atomic<float> mcrSetting[3]{{2.f}, {1.5f}, {4.f/3.f}};
+    std::atomic<float> mcrSetting[3]{{2.f}, {1.5f}, {chimera::firmware::defaultChordThird}};
     // 0 idle, 2 control-side writing, 1 ready, 3 audio-side adopting.
     std::atomic<int> optionsTextStageState{0};
     chimera::optionsText::Values stagedOptionsText;
@@ -397,7 +400,7 @@ struct Chimera : Module {
         configParam(SOS_PARAM, 0.f, 1.f, 0.f, "S.O.S.");
         configParam(GENE_SIZE_PARAM, 0.f, 1.f, 0.f, "Gene Size");
         auto* rateQuantity = configParam<ChimeraRateQuantity>(VARISPEED_PARAM, 0.f, 1.f,
-            5.f/6.f, "Vari-Speed", "×");
+            chimera::firmware::forwardUnityKnob, "Vari-Speed", "×");
         rateQuantity->rateMode = &vsopSetting;
         configParam(MORPH_PARAM, 0.f, 1.f, 1.f/6.f, "Morph");
         configParam(SLIDE_PARAM, 0.f, 1.f, 0.f, "Slide");
@@ -2248,13 +2251,13 @@ struct ChimeraWidget : ModuleWidget {
         reels = new ChimeraReelsWidget;
         reels->owner = module;
         reels->box.size = box.size;
-        circleAnchor("REEL_LEFT", Vec(43.11f, 10.52f), 8.63f,
+        circleAnchor("REEL_LEFT", Vec(17.12f, 10.52f), 8.63f,
             &reels->centers[0], &reels->radii[0]);
-        circleAnchor("REEL_RIGHT", Vec(99.12f, 10.53f), 8.64f,
+        circleAnchor("REEL_RIGHT", Vec(125.12f, 10.53f), 8.64f,
             &reels->centers[1], &reels->radii[1]);
         addChild(reels);
         const char* vuIds[2] = {"VU_LEFT", "VU_RIGHT"};
-        const Vec vuFallbacks[2] = {Vec(17.12f, 10.53f), Vec(125.12f, 10.53f)};
+        const Vec vuFallbacks[2] = {Vec(43.11f, 10.53f), Vec(99.12f, 10.53f)};
         for (unsigned channel = 0; channel < 2; ++channel) {
             Vec center;
             float radius = 0.f;

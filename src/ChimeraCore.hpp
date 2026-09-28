@@ -14,7 +14,7 @@ public:
              rateEvaluations_(0) {
         holds_[0] = profile1::FiniteHold(0.f);        // S.O.S.
         holds_[1] = profile1::FiniteHold(0.f);        // Gene
-        holds_[2] = profile1::FiniteHold(5.f/6.f);   // Vari-Speed
+        holds_[2] = profile1::FiniteHold(firmware::forwardUnityKnob); // Vari-Speed
         holds_[3] = profile1::FiniteHold(1.f/6.f);   // Morph
         holds_[4] = profile1::FiniteHold(0.f);        // Slide
         holds_[5] = profile1::FiniteHold(0.f);        // Organize
@@ -26,7 +26,7 @@ public:
         rateCoordinate_.setTau(0.001);
         pitchVolts_.setTau(0.00025);
         morph_.setTau(0.002);
-        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = 4.0/3.0;
+        ratios_[0] = 2.0; ratios_[1] = 1.5; ratios_[2] = firmware::defaultChordThird;
     }
 
     void setRateMode(int mode) { rateMode_ = mode >= 0 && mode <= 2 ? mode : 0; }
@@ -35,7 +35,7 @@ public:
         ratios_[1] = validRatio(second) ? second : 1.0;
         ratios_[2] = validRatio(third) ? third : 1.0;
     }
-    void setSeed(std::uint32_t seed) { random_ = profile1::Xorshift32(seed); }
+    void setSeed(std::uint32_t seed) { random_ = profile1::FirmwareRandom(seed); }
     void setSourcePosition(double coordinate) {
         if (profile1::finite(coordinate)) sourcePosition_ = coordinate;
     }
@@ -83,7 +83,7 @@ public:
         if (mappedMode_ != rateMode_ || mappedCoordinate_ != coordinate || mappedPitch_ != pitch) {
             if (mappedMode_ != rateMode_ || mappedCoordinate_ != coordinate)
                 mappedBaseRate_ = rateMode_ == 0 ? profile1::classicRateFromCoordinate(coordinate) :
-                    rateMode_ == 2 ? profile1::forwardBaseRate(coordinate) : profile1::classicRate(coordinate);
+                    profile1::rateTarget(static_cast<float>(coordinate), rateMode_);
             if (rateMode_ != 0 && (mappedMode_ != rateMode_ || mappedPitch_ != pitch))
                 mappedPitchScale_ = levi_math::exp2Pitch(pitch);
             mappedRate_ = rateMode_ == 0 ? mappedBaseRate_ :
@@ -133,7 +133,7 @@ private:
     profile1::OnePole sos_, gene_, rateCoordinate_, pitchVolts_, morph_;
     profile1::GeneMode geneMode_;
     morph::Continuous continuousMorph_;
-    profile1::Xorshift32 random_;
+    profile1::FirmwareRandom random_;
     std::uint8_t nextSlot_;
     double sourcePosition_;
     int rateMode_;

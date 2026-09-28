@@ -1,0 +1,1474 @@
+[
+  {
+    "state": 0,
+    "bank": 0,
+    "slot": 0,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 1,
+    "bank": 0,
+    "slot": 1,
+    "ratio_codes": [
+      0,
+      -4,
+      -12,
+      -28,
+      -60,
+      -124
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 2,
+    "bank": 0,
+    "slot": 2,
+    "ratio_codes": [
+      -4,
+      -8,
+      -16,
+      -24,
+      -40,
+      -48
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 3,
+    "bank": 0,
+    "slot": 3,
+    "ratio_codes": [
+      0,
+      -4,
+      -8,
+      -12,
+      -16,
+      -20
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 4,
+    "bank": 0,
+    "slot": 4,
+    "ratio_codes": [
+      -4,
+      -12,
+      -20,
+      -28,
+      -36,
+      -44
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 5,
+    "bank": 0,
+    "slot": 5,
+    "ratio_codes": [
+      -8,
+      -16,
+      -24,
+      -32,
+      -40,
+      -48
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 6,
+    "bank": 0,
+    "slot": 6,
+    "ratio_codes": [
+      -4,
+      -8,
+      -16,
+      -28,
+      -48,
+      -80
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 7,
+    "bank": 0,
+    "slot": 7,
+    "ratio_codes": [
+      0,
+      4,
+      12,
+      28,
+      60,
+      124
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 8,
+    "bank": 0,
+    "slot": 8,
+    "ratio_codes": [
+      4,
+      8,
+      16,
+      24,
+      40,
+      48
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 9,
+    "bank": 0,
+    "slot": 9,
+    "ratio_codes": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      20
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 10,
+    "bank": 0,
+    "slot": 10,
+    "ratio_codes": [
+      4,
+      12,
+      20,
+      28,
+      36,
+      44
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 11,
+    "bank": 0,
+    "slot": 11,
+    "ratio_codes": [
+      8,
+      16,
+      24,
+      32,
+      40,
+      48
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 12,
+    "bank": 0,
+    "slot": 12,
+    "ratio_codes": [
+      4,
+      8,
+      16,
+      28,
+      48,
+      80
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 13,
+    "bank": 0,
+    "slot": 13,
+    "ratio_codes": [
+      4,
+      8,
+      12,
+      -4,
+      -8,
+      -12
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 14,
+    "bank": 0,
+    "slot": 14,
+    "ratio_codes": [
+      -2,
+      -2,
+      -2,
+      -2,
+      -2,
+      -2
+    ],
+    "phase_codes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 15,
+    "bank": 0,
+    "slot": 15,
+    "ratio_codes": [
+      -4,
+      -5,
+      -6,
+      -7,
+      -8,
+      -9
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 16,
+    "bank": 1,
+    "slot": 0,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 17,
+    "bank": 1,
+    "slot": 1,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 18,
+    "bank": 1,
+    "slot": 2,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 19,
+    "bank": 1,
+    "slot": 3,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 20,
+    "bank": 1,
+    "slot": 4,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 21,
+    "bank": 1,
+    "slot": 5,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 22,
+    "bank": 1,
+    "slot": 6,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 23,
+    "bank": 1,
+    "slot": 7,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 24,
+    "bank": 1,
+    "slot": 8,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 25,
+    "bank": 1,
+    "slot": 9,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 26,
+    "bank": 1,
+    "slot": 10,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 27,
+    "bank": 1,
+    "slot": 11,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 28,
+    "bank": 1,
+    "slot": 12,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 29,
+    "bank": 1,
+    "slot": 13,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 30,
+    "bank": 1,
+    "slot": 14,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 31,
+    "bank": 1,
+    "slot": 15,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 32,
+    "bank": 2,
+    "slot": 0,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 33,
+    "bank": 2,
+    "slot": 1,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 34,
+    "bank": 2,
+    "slot": 2,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 35,
+    "bank": 2,
+    "slot": 3,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 36,
+    "bank": 2,
+    "slot": 4,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 37,
+    "bank": 2,
+    "slot": 5,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 38,
+    "bank": 2,
+    "slot": 6,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 39,
+    "bank": 2,
+    "slot": 7,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 40,
+    "bank": 2,
+    "slot": 8,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 41,
+    "bank": 2,
+    "slot": 9,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 42,
+    "bank": 2,
+    "slot": 10,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 43,
+    "bank": 2,
+    "slot": 11,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 44,
+    "bank": 2,
+    "slot": 12,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 45,
+    "bank": 2,
+    "slot": 13,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 46,
+    "bank": 2,
+    "slot": 14,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 47,
+    "bank": 2,
+    "slot": 15,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 48,
+    "bank": 3,
+    "slot": 0,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 49,
+    "bank": 3,
+    "slot": 1,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 50,
+    "bank": 3,
+    "slot": 2,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 51,
+    "bank": 3,
+    "slot": 3,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 52,
+    "bank": 3,
+    "slot": 4,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 53,
+    "bank": 3,
+    "slot": 5,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 54,
+    "bank": 3,
+    "slot": 6,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 55,
+    "bank": 3,
+    "slot": 7,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 56,
+    "bank": 3,
+    "slot": 8,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 57,
+    "bank": 3,
+    "slot": 9,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 58,
+    "bank": 3,
+    "slot": 10,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 59,
+    "bank": 3,
+    "slot": 11,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 60,
+    "bank": 3,
+    "slot": 12,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 61,
+    "bank": 3,
+    "slot": 13,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 62,
+    "bank": 3,
+    "slot": 14,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  },
+  {
+    "state": 63,
+    "bank": 3,
+    "slot": 15,
+    "ratio_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "phase_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "enable_mask": 63,
+    "mod_mask": 0
+  }
+]

@@ -1268,15 +1268,30 @@ int main() {
         rateModule.process(args);
         return rateModule.slice.primaryPosition();
     };
-    const double forwardPitch = ratePosition(1, 5.f/6.f);
-    const double reversePitch = ratePosition(1, 1.f/6.f);
+    const double forwardPitch = ratePosition(1, chimera::firmware::forwardUnityKnob);
+    const double reversePitch = ratePosition(1, chimera::firmware::reverseUnityKnob);
     const double forwardOnlyPitch = ratePosition(2, 0.75f);
     const double forwardOnlyStop = ratePosition(2, 0.f);
     need(std::fabs(forwardPitch - 2.0) < 0.001 &&
          std::fabs(reversePitch - 997.0) < 0.001 &&
-         std::fabs(forwardOnlyPitch - 2.0) < 0.001 &&
+         std::fabs(forwardOnlyPitch - 2.0 * 1.63391495) < 0.001 &&
          std::fabs(forwardOnlyStop) < 0.001,
          "module vsop modes drive bidirectional and forward-only 1 V/oct playback");
+    {
+        Chimera displayedRate;
+        auto* quantity = static_cast<ChimeraRateQuantity*>(displayedRate.getParamQuantity(Chimera::VARISPEED_PARAM));
+        need(quantity->speedAt(displayedRate.params[Chimera::VARISPEED_PARAM].getValue()) == 1.f,
+             "new module starts at firmware unity rate");
+        for (int mode=0;mode<3;++mode) {
+            displayedRate.vsopSetting.store(mode);
+            for (float target : {0.f, 1.f, 2.f}) {
+                need(quantity->speedAt(quantity->knobForSpeed(target)) == target,
+                     "typed rate lands on firmware plateau");
+            }
+        }
+        need(quantity->speedAt(quantity->knobForSpeed(4.f)) == 4.f,
+             "forward-only readout accepts firmware 4x range");
+    }
     {
         chimera::Reel eventReel(40, 40);
         for (std::uint32_t frame = 0; frame < 9600; ++frame)
