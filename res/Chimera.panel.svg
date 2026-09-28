@@ -47,6 +47,7 @@
         <circle id="SLIDE_ATT_PARAM" cx="69.090218" cy="91.468933" r="4" />
       </g>
       <g id="anchor_buttons" style="fill:#e5b35b;stroke:#fff0ba">
+        <circle id="APPEND_PARAM" cx="48" cy="103" r="3" />
         <circle id="REC_PARAM" cx="60" cy="103" r="3" />
         <circle id="SPLICE_PARAM" cx="72" cy="103" r="3" />
         <circle id="SHIFT_PARAM" cx="84" cy="103" r="3" />
@@ -68,10 +69,10 @@
         <circle id="AUDIO_R_INPUT" cx="24" cy="113" r="4.08" />
       </g>
       <g id="anchor_outputs" style="fill:#e5b35b;stroke:#fff0ba">
-        <circle id="AUDIO_L_OUTPUT" cx="96" cy="113" r="4.08" />
-        <circle id="AUDIO_R_OUTPUT" cx="108" cy="113" r="4.08" />
-        <circle id="CV_OUTPUT" cx="120" cy="113" r="4.08" />
-        <circle id="EOSG_OUTPUT" cx="132" cy="113" r="4.08" />
+        <circle id="AUDIO_L_OUTPUT" cx="120" cy="113" r="4.08" />
+        <circle id="AUDIO_R_OUTPUT" cx="132" cy="113" r="4.08" />
+        <circle id="CV_OUTPUT" cx="108" cy="113" r="4.08" />
+        <circle id="EOSG_OUTPUT" cx="96" cy="113" r="4.08" />
       </g>
       <g id="anchor_lights" style="stroke:#f7fbff;stroke-width:0.35">
         <circle id="REC_LIGHT" cx="10" cy="50.200001" r="2.3299999" style="fill:#f37159" />

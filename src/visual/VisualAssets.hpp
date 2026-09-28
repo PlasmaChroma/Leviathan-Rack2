@@ -256,6 +256,16 @@ struct GoldButton : app::SvgSwitch {
 };
 
 struct SmallGoldButton : app::Switch {
+	// UI-thread palette assignment; legacy gold is retained until setColor().
+	struct Palette {
+		NVGcolor socket = nvgRGB(32, 25, 18);
+		NVGcolor faceLight = nvgRGB(255, 239, 146);
+		NVGcolor faceDark = nvgRGB(156, 86, 20);
+		NVGcolor rimLight = nvgRGB(255, 248, 186);
+		NVGcolor rimDark = nvgRGB(80, 36, 8);
+		NVGcolor glint = nvgRGB(255, 255, 230);
+		NVGcolor glintFade = nvgRGB(255, 226, 120);
+	};
 	widget::FramebufferWidget* shadowFb = nullptr;
 	widget::FramebufferWidget* staticFb = nullptr;
 	widget::FramebufferWidget* faceFb = nullptr;
@@ -266,8 +276,17 @@ struct SmallGoldButton : app::Switch {
 
 	SmallGoldButton();
 	explicit SmallGoldButton(float sizePx);
+	// Opaque cap color; shading is derived once, not on every frame.
+	void setColor(NVGcolor color);
+	void resetColor();
+	const Palette& getPalette() const { return palette; }
 	void step() override;
 	void draw(const DrawArgs& args) override;
+
+private:
+	Palette palette;
+	NVGcolor assignedColor = {};
+	bool customColor = false;
 };
 
 // Standard 24 px loop/cycle control, matching the former GoldButton hit area.
@@ -559,6 +578,8 @@ struct LeviathanHaloKnob2 : app::Knob {
 		LedArcConfig ledArc;
 		BloomConfig bloom;
 		bool bipolar = false;
+		// UI-only mapping for controls whose semantic zero spans a raw-value plateau.
+		float (*visualValue)(engine::ParamQuantity*, float) = nullptr;
 	};
 
 	struct GlowArcWidget : TransparentWidget {
@@ -601,6 +622,7 @@ struct LeviathanHaloKnob2 : app::Knob {
 	std::shared_ptr<window::Svg> centerLitSvg;
 	Config config;
 	float lastBloomAmount = -1.f;
+	float lastVisualValue = -1.f;
 	bool hovered = false;
 	bool dragging = false;
 	bool centerLit = false;

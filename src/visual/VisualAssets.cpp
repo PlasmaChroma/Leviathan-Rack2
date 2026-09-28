@@ -2770,6 +2770,9 @@ struct SmallGoldButtonShadowLayer : TransparentWidget {
 };
 
 struct SmallGoldButtonStaticLayer : TransparentWidget {
+	SmallGoldButton* owner = nullptr;
+	explicit SmallGoldButtonStaticLayer(SmallGoldButton* owner) : owner(owner) {}
+
 	void draw(const DrawArgs& args) override {
 		const float s = std::min(box.size.x, box.size.y);
 		if (s <= 1.f) {
@@ -2785,7 +2788,7 @@ struct SmallGoldButtonStaticLayer : TransparentWidget {
 			center.y - s * 0.16f,
 			s * 0.20f,
 			socketR,
-			nvgRGBA(32, 25, 18, 255),
+			owner->getPalette().socket,
 			nvgRGBA(5, 5, 7, 255)));
 		nvgFill(args.vg);
 
@@ -2820,8 +2823,8 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 			faceCenter.y - faceR * 0.48f,
 			faceR * 0.10f,
 			faceR * 1.18f,
-			nvgRGBA(255, 239, 146, int(std::round(crossfade(255.f, 218.f, p)))),
-			nvgRGBA(156, 86, 20, 255)));
+			nvgTransRGBA(owner->getPalette().faceLight, int(std::round(crossfade(255.f, 218.f, p)))),
+			owner->getPalette().faceDark));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
@@ -2832,8 +2835,8 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 			faceCenter.y - faceR,
 			faceCenter.x,
 			faceCenter.y + faceR,
-			nvgRGBA(255, 248, 186, int(std::round(crossfade(170.f, 92.f, p)))),
-			nvgRGBA(80, 36, 8, 205)));
+			nvgTransRGBA(owner->getPalette().rimLight, int(std::round(crossfade(170.f, 92.f, p)))),
+			nvgTransRGBA(owner->getPalette().rimDark, 205)));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
@@ -2843,8 +2846,8 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 			faceCenter.y - faceR * 0.36f,
 			0.f,
 			faceR * 0.38f,
-			nvgRGBA(255, 255, 230, int(std::round(crossfade(128.f, 54.f, p)))),
-			nvgRGBA(255, 226, 120, 0)));
+			nvgTransRGBA(owner->getPalette().glint, int(std::round(crossfade(128.f, 54.f, p)))),
+			nvgTransRGBA(owner->getPalette().glintFade, 0)));
 		nvgFill(args.vg);
 	}
 };
@@ -2872,7 +2875,7 @@ SmallGoldButton::SmallGoldButton(float buttonSizePx) {
 	staticFb = new widget::FramebufferWidget();
 	staticFb->dirtyOnSubpixelChange = false;
 	staticFb->box.size = box.size;
-	SmallGoldButtonStaticLayer* staticLayer = new SmallGoldButtonStaticLayer();
+	SmallGoldButtonStaticLayer* staticLayer = new SmallGoldButtonStaticLayer(this);
 	staticLayer->box.size = box.size;
 	staticFb->addChild(staticLayer);
 	addChild(staticFb);
@@ -2885,6 +2888,39 @@ SmallGoldButton::SmallGoldButton(float buttonSizePx) {
 	faceFb->addChild(faceLayer);
 	addChild(faceFb);
 	lastRenderedPressAmount = -1.f;
+}
+
+void SmallGoldButton::setColor(NVGcolor color) {
+	// Alpha is owned by the material/press animation, not the assigned pigment.
+	color.r = std::isfinite(color.r) ? clamp(color.r, 0.f, 1.f) : 0.f;
+	color.g = std::isfinite(color.g) ? clamp(color.g, 0.f, 1.f) : 0.f;
+	color.b = std::isfinite(color.b) ? clamp(color.b, 0.f, 1.f) : 0.f;
+	color.a = 1.f;
+	if (customColor && color.r == assignedColor.r
+		&& color.g == assignedColor.g && color.b == assignedColor.b) {
+		return;
+	}
+	assignedColor = color;
+	customColor = true;
+	const NVGcolor white = nvgRGB(255, 255, 255);
+	const NVGcolor black = nvgRGB(0, 0, 0);
+	palette.socket = nvgLerpRGBA(color, black, 0.9f);
+	palette.faceLight = nvgLerpRGBA(color, white, 0.3f);
+	palette.faceDark = nvgLerpRGBA(color, black, 0.5f);
+	palette.rimLight = nvgLerpRGBA(color, white, 0.6f);
+	palette.rimDark = nvgLerpRGBA(color, black, 0.75f);
+	palette.glint = nvgLerpRGBA(color, white, 0.85f);
+	palette.glintFade = color;
+	if (staticFb) staticFb->setDirty();
+	if (faceFb) faceFb->setDirty();
+}
+
+void SmallGoldButton::resetColor() {
+	if (!customColor) return;
+	customColor = false;
+	palette = Palette{};
+	if (staticFb) staticFb->setDirty();
+	if (faceFb) faceFb->setDirty();
 }
 
 void SmallGoldButton::step() {

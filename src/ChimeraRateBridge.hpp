@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ChimeraTypes.hpp"
 #include <speex/speex_resampler.h>
 #include <cmath>
 #include <cstdint>
@@ -10,7 +11,7 @@ namespace chimera {
 // Rack-facing values, sampled once per host frame. The bridge owns delayed
 // copies; neither the core nor the resampler reads mutable Rack ports later.
 struct HostState {
-    float params[12]{};
+    float params[NUM_PARAMS]{};
     float volts[13]{};
     bool connected[13]{};
     unsigned rises[5]{}; // PLAY, CLOCK, REC, SPLICE, SHIFT

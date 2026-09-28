@@ -937,7 +937,7 @@ int main() {
         json_decref(traversal);
     }
     Chimera module;
-    need(module.getNumParams() == 12 && module.getNumInputs() == 13 &&
+    need(module.getNumParams() == 13 && module.getNumInputs() == 13 &&
          module.getNumOutputs() == 4 && module.getNumLights() == 9,
          "Rack-facing schema counts");
     need(module.reel == nullptr && module.stores.chargedBytes() == 0 && !module.service,
@@ -1288,7 +1288,23 @@ int main() {
                 need(quantity->speedAt(quantity->knobForSpeed(target)) == target,
                      "typed rate lands on firmware plateau");
             }
+            if (mode != 2)
+                need(quantity->knobForSpeed(0.f) == 0.5f,
+                     "typed bidirectional zero uses the visual midpoint");
         }
+        displayedRate.vsopSetting.store(0);
+        displayedRate.params[Chimera::VARISPEED_PARAM].setValue(0.4975f);
+        need(quantity->speedAt(displayedRate.params[Chimera::VARISPEED_PARAM].getValue()) == 0.f &&
+             ChimeraBipolarHaloKnob::visualValue(quantity, 0.4975f) == 0.5f,
+             "firmware zero plateau renders at the bipolar visual center");
+        displayedRate.params[Chimera::VARISPEED_PARAM].setValue(0.4875f);
+        need(quantity->speedAt(displayedRate.params[Chimera::VARISPEED_PARAM].getValue()) < 0.f &&
+             ChimeraBipolarHaloKnob::visualValue(quantity, 0.4875f) == 0.4875f,
+             "negative speed keeps its own arc position");
+        displayedRate.vsopSetting.store(2);
+        displayedRate.params[Chimera::VARISPEED_PARAM].setValue(0.f);
+        need(ChimeraBipolarHaloKnob::visualValue(quantity, 0.f) == 0.f,
+             "forward-only zero remains at its minimum position");
         need(quantity->speedAt(quantity->knobForSpeed(4.f)) == 4.f,
              "forward-only readout accepts firmware 4x range");
     }
@@ -2211,6 +2227,33 @@ int main() {
     for (std::uint32_t i = 0; i < 4; ++i)
         need(optionReel.write(i, chimera::StereoFrame{0.f, 0.f}, i),
              "prepare REC assignment fixture");
+    {
+        chimera::Reel appendReel(1, 1);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            need(appendReel.write(i, chimera::StereoFrame{0.f, 0.f}, i),
+                 "prepare APPEND button fixture");
+        Chimera appendModule;
+        appendModule.reel = &appendReel;
+        appendModule.slice.setReel(&appendReel);
+        appendModule.rsopSetting.store(0); // REC defaults to Current.
+        appendModule.params[Chimera::APPEND_PARAM].setValue(1.f);
+        appendModule.process(args);
+        need(appendModule.slice.recordState() == chimera::Slice::Idle,
+             "APPEND press waits for release");
+        appendModule.params[Chimera::APPEND_PARAM].setValue(0.f);
+        appendModule.process(args);
+        need(appendModule.slice.recordState() == chimera::Slice::Append &&
+             appendModule.slice.writerPosition() == 5,
+             "APPEND button records at Reel end regardless of REC assignment");
+        appendModule.process(args);
+        appendModule.params[Chimera::APPEND_PARAM].setValue(1.f);
+        appendModule.process(args);
+        appendModule.params[Chimera::APPEND_PARAM].setValue(0.f);
+        appendModule.process(args);
+        need(appendModule.slice.recordState() == chimera::Slice::Idle &&
+             appendReel.markerCount() == 2 && appendReel.region(1).begin == 4,
+             "APPEND stop creates a Splice at the take's starting frame");
+    }
     {
         Chimera optionModule;
         optionModule.reel = &optionReel;

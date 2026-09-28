@@ -262,6 +262,11 @@
          id="anchor_buttons"
          style="fill:#e5b35b;stroke:#fff0ba">
         <circle
+           id="APPEND_PARAM"
+           cx="48"
+           cy="103"
+           r="3" />
+        <circle
            id="REC_PARAM"
            cx="60"
            cy="103"
@@ -356,22 +361,22 @@
          style="fill:#e5b35b;stroke:#fff0ba">
         <circle
            id="AUDIO_L_OUTPUT"
-           cx="96"
-           cy="113"
-           r="4.08" />
-        <circle
-           id="AUDIO_R_OUTPUT"
-           cx="108"
-           cy="113"
-           r="4.08" />
-        <circle
-           id="CV_OUTPUT"
            cx="120"
            cy="113"
            r="4.08" />
         <circle
-           id="EOSG_OUTPUT"
+           id="AUDIO_R_OUTPUT"
            cx="132"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="CV_OUTPUT"
+           cx="108"
+           cy="113"
+           r="4.08" />
+        <circle
+           id="EOSG_OUTPUT"
+           cx="96"
            cy="113"
            r="4.08" />
       </g>
@@ -539,6 +544,10 @@
       <g
          id="g26">
         <text
+           x="48"
+           y="108.5"
+           id="append_label">REC+</text>
+        <text
            x="96"
            y="108.5"
            id="unsplice_label">UNSPLICE</text>
@@ -617,19 +626,19 @@
       <g
          id="g43_output">
         <text
-           x="96"
+           x="120"
            y="119.5"
            id="text40">OUT L</text>
         <text
-           x="108"
+           x="132"
            y="119.5"
            id="text41">OUT R</text>
         <text
-           x="120"
+           x="108"
            y="119.5"
            id="text42">CV OUT</text>
         <text
-           x="132"
+           x="96"
            y="119.5"
            id="text43">EOSG</text>
       </g>

@@ -633,7 +633,9 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				float activeMix = clamp((highValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0)
 					- clamp((lowValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
 				float cursorIndex = floor(clamp(uValue * 16.0 - 0.0001, 0.0, 15.9999));
-				float cursorSegment = (1.0 - step(0.5, abs(segmentIndex - cursorIndex))) * step(0.0001, uValue);
+				float cursorVisible = uBipolar > 0.5
+					? step(0.0001, abs(uValue - 0.5)) : step(0.0001, uValue);
+				float cursorSegment = (1.0 - step(0.5, abs(segmentIndex - cursorIndex))) * cursorVisible;
 				vec4 core = mix(uLed[2], uLed[0], activeMix);
 				vec4 hot = mix(uLed[3], uLed[1], activeMix);
 				vec4 valueColor = mix(core, hot, clamp((segmentLocal - 0.072) / 0.856, 0.0, 1.0));
@@ -1099,9 +1101,13 @@ void LeviathanHaloKnob2::updateCenterSvg() {
 void LeviathanHaloKnob2::step() {
 	app::Knob::step();
 	const float bloom = settings::haloBrightness;
-	if (std::fabs(bloom - lastBloomAmount) > 1e-4f) {
+	const float value = normalizedParamValue();
+	const bool visualChanged = std::fabs(value - lastVisualValue) > 1e-6f;
+	if (visualChanged && centerLayer) centerLayer->valueNorm = value;
+	if (visualChanged || std::fabs(bloom - lastBloomAmount) > 1e-4f) {
+		lastVisualValue = value;
 		lastBloomAmount = bloom;
-		if (glSurface) glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(bloom));
+		if (glSurface) glSurface->setVisualState(value, haloBloomAmount(bloom));
 	}
 }
 
@@ -1132,6 +1138,7 @@ void LeviathanHaloKnob2::onDragEnd(const event::DragEnd& e) {
 void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	app::Knob::onChange(e);
 	const float value = normalizedParamValue();
+	lastVisualValue = value;
 	if (centerLayer) centerLayer->valueNorm = value;
 	if (glSurface) glSurface->setVisualState(value, haloBloomAmount(lastBloomAmount));
 }
@@ -1151,5 +1158,6 @@ float LeviathanHaloKnob2::normalizedParamValue() {
 	const float minValue = pq->getMinValue();
 	const float range = pq->getMaxValue() - minValue;
 	if (range <= 1e-6f) return 0.5f;
-	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+	const float normalized = clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+	return config.visualValue ? config.visualValue(pq, normalized) : normalized;
 }

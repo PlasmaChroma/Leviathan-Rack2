@@ -16,7 +16,7 @@ static const std::uint32_t kDspProfile = 1;
 enum ParamId {
     SOS_PARAM, GENE_SIZE_PARAM, VARISPEED_PARAM, MORPH_PARAM,
     SLIDE_PARAM, ORGANIZE_PARAM, GENE_ATT_PARAM, VARISPEED_ATT_PARAM,
-    SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, NUM_PARAMS
+    SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, APPEND_PARAM, NUM_PARAMS
 };
 enum InputId {
     AUDIO_L_INPUT, AUDIO_R_INPUT, SOS_CV_INPUT, GENE_SIZE_CV_INPUT,
@@ -66,7 +66,7 @@ struct CoreOutput {
     std::uint32_t randomState;
 };
 
-static_assert(NUM_PARAMS == 12 && NUM_INPUTS == 13 && NUM_OUTPUTS == 4 && NUM_LIGHTS == 9,
+static_assert(NUM_PARAMS == 13 && APPEND_PARAM == 12 && NUM_INPUTS == 13 && NUM_OUTPUTS == 4 && NUM_LIGHTS == 9,
               "Chimera v1 Rack schema changed");
 static_assert(kMaxReelFrames / kPageFrames == kMaxPages, "Chimera page capacity changed");
 static_assert(sizeof(StereoFrame) == 8, "Chimera stereo frame must be float32 x2");

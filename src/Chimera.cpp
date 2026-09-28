@@ -48,6 +48,7 @@ struct ChimeraRateQuantity : ParamQuantity {
     float knobForSpeed(float speed) const {
         const bool forwardOnly = rateMode && rateMode->load(std::memory_order_relaxed) == 2;
         const float target = clamp(speed, forwardOnly ? 0.f : -2.f, forwardOnly ? 4.f : 2.f);
+        if (!forwardOnly && target == 0.f) return 0.5f;
         float low = 0.f, high = 1.f;
         for (int i = 0; i < 24; ++i) {
             const float mid = 0.5f * (low + high);
@@ -69,9 +70,16 @@ struct ChimeraRateQuantity : ParamQuantity {
 
 struct ChimeraBipolarHaloKnob : LeviathanHaloKnob2 {
     ChimeraBipolarHaloKnob() : LeviathanHaloKnob2(bipolarConfig()) {}
+    static float visualValue(engine::ParamQuantity* quantity, float normalized) {
+        auto* rate = dynamic_cast<ChimeraRateQuantity*>(quantity);
+        if (rate && rate->rateMode && rate->rateMode->load(std::memory_order_relaxed) != 2 &&
+            rate->speedAt(normalized) == 0.f) return 0.5f;
+        return normalized;
+    }
     static Config bipolarConfig() {
         Config config;
         config.bipolar = true;
+        config.visualValue = visualValue;
         return config;
     }
 };
@@ -91,7 +99,7 @@ struct Chimera : Module {
     enum ParamIds {
         SOS_PARAM, GENE_SIZE_PARAM, VARISPEED_PARAM, MORPH_PARAM,
         SLIDE_PARAM, ORGANIZE_PARAM, GENE_ATT_PARAM, VARISPEED_ATT_PARAM,
-        SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, NUM_PARAMS
+        SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, APPEND_PARAM, NUM_PARAMS
     };
     enum InputIds {
         AUDIO_L_INPUT, AUDIO_R_INPUT, SOS_CV_INPUT, GENE_SIZE_CV_INPUT,
@@ -121,6 +129,7 @@ struct Chimera : Module {
     CHIMERA_ASSERT_ID(REC_PARAM);
     CHIMERA_ASSERT_ID(SPLICE_PARAM);
     CHIMERA_ASSERT_ID(SHIFT_PARAM);
+    CHIMERA_ASSERT_ID(APPEND_PARAM);
     CHIMERA_ASSERT_ID(AUDIO_L_INPUT);
     CHIMERA_ASSERT_ID(AUDIO_R_INPUT);
     CHIMERA_ASSERT_ID(SOS_CV_INPUT);
@@ -372,12 +381,14 @@ struct Chimera : Module {
     }
     bool lastRecJack = false;
     bool lastRecButton = false;
+    bool lastAppendButton = false;
     bool lastClock = false;
     bool lastShiftJack = false;
     bool lastShiftButton = false;
     bool lastSpliceJack = false;
     bool lastSpliceButton = false;
-    bool ignoreRecRelease = false, ignoreShiftRelease = false, ignoreSpliceRelease = false;
+    bool ignoreRecRelease = false, ignoreAppendRelease = false;
+    bool ignoreShiftRelease = false, ignoreSpliceRelease = false;
     bool playInitialized = false, lastPlayLogical = true, transportPlay = true;
     bool stopAtPrimaryBoundary = false;
     int lastPlayMode = 0;
@@ -410,6 +421,7 @@ struct Chimera : Module {
         configParam(VARISPEED_ATT_PARAM, -1.f, 1.f, 0.f, "Vari-Speed CV amount");
         configParam(SLIDE_ATT_PARAM, -1.f, 1.f, 0.f, "Slide CV amount");
         configButton(REC_PARAM, "Record");
+        configButton(APPEND_PARAM, "Append recording");
         configButton(SPLICE_PARAM, "Splice");
         configButton(SHIFT_PARAM, "Shift");
         configInput(AUDIO_L_INPUT, "Audio left");
@@ -1722,6 +1734,7 @@ struct Chimera : Module {
         }
         bypassActive = true;
         const chimera::HostState host = captureHost();
+        baselineAppendButton(host);
         lastRecButton = host.params[REC_PARAM] > 0.5f;
         lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
         lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
@@ -1741,6 +1754,10 @@ struct Chimera : Module {
         lights[REC_ARMED_LIGHT].setBrightness(0.f);
         if (measurePerf) debugMetrics.recordProcess(
             debug_terminal::elapsedNsSince(processStart));
+    }
+    void baselineAppendButton(const chimera::HostState& host) {
+        lastAppendButton = host.params[APPEND_PARAM] > 0.5f;
+        ignoreAppendRelease = lastAppendButton;
     }
     chimera::HostState captureHost() {
         chimera::HostState state;
@@ -1791,6 +1808,7 @@ struct Chimera : Module {
         const unsigned rate = supported ? static_cast<unsigned>(args.sampleRate) : 0u;
         requestedHostRate.store(rate, std::memory_order_release);
         if (!rate) {
+            baselineAppendButton(host);
             cancelRecording();
             // A resumed supported rate must adopt a freshly primed bridge.
             // Keep the old allocation for off-audio retirement below.
@@ -1818,6 +1836,7 @@ struct Chimera : Module {
             return;
         }
         if (rate != activeHostRate.load(std::memory_order_relaxed)) {
+            baselineAppendButton(host);
             cancelRecording();
             playInitialized = false;
             stopAtPrimaryBoundary = false;
@@ -1886,6 +1905,7 @@ struct Chimera : Module {
             lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
             lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
             activeHostRate.store(rate, std::memory_order_release);
+            baselineAppendButton(host);
             bridgeError.store(false, std::memory_order_release);
             lights[IO_BUSY_LIGHT].setBrightness(0.f);
         }
@@ -1981,6 +2001,7 @@ struct Chimera : Module {
         const bool shiftButton = host.params[SHIFT_PARAM] > 0.5f;
         const bool spliceButton = host.params[SPLICE_PARAM] > 0.5f;
         const bool rec = host.params[REC_PARAM] > 0.5f;
+        const bool appendButton = host.params[APPEND_PARAM] > 0.5f;
         slice.setInputGain(inputGainSetting.load(std::memory_order_relaxed));
         const unsigned selectionCommands = host.selectionCommands;
         const bool shiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ?
@@ -2002,6 +2023,9 @@ struct Chimera : Module {
         const bool recButtonReleased = !rec && lastRecButton && !ignoreRecRelease;
         if (!rec) ignoreRecRelease = false;
         lastRecButton = rec;
+        const bool appendButtonReleased = !appendButton && lastAppendButton && !ignoreAppendRelease;
+        if (!appendButton) ignoreAppendRelease = false;
+        lastAppendButton = appendButton;
         const bool recJack = recGate.update(host.connected[REC_INPUT] ?
             host.volts[REC_INPUT] : 0.f);
         const bool clockConnected = host.connected[CLOCK_INPUT];
@@ -2050,11 +2074,12 @@ struct Chimera : Module {
         else {
             const unsigned jackRises = host.rises[2] ? host.rises[2] :
                 ((recJack && !lastRecJack) ? 1u : 0u);
-            const unsigned requests = jackRises +
+            const unsigned otherRequests = jackRises +
                 ((command == 1 || command == 2 || command == 4 || recButtonReleased) ? 1u : 0u);
+            const unsigned requests = otherRequests + unsigned(appendButtonReleased);
             for (unsigned request = 0; request < requests; ++request) {
             if (!reel) prepareRequested.store(true, std::memory_order_release);
-            const bool append = command == 2 ||
+            const bool append = request >= otherRequests || command == 2 ||
                 (command != 1 && (command == 4 ?
                     rsopSetting.load(std::memory_order_relaxed) == 0 :
                     rsopSetting.load(std::memory_order_relaxed) == 1));
@@ -2298,9 +2323,16 @@ struct ChimeraWidget : ModuleWidget {
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("GENE_ATT_PARAM", Vec(34, 69.5))), module, Chimera::GENE_ATT_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("VARISPEED_ATT_PARAM", Vec(81.12, 69.5))), module, Chimera::VARISPEED_ATT_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("SLIDE_ATT_PARAM", Vec(81.12, 93))), module, Chimera::SLIDE_ATT_PARAM));
-        addParam(createParamCentered<SmallGoldButton>(mm2px(point("REC_PARAM", Vec(60, 103))), module, Chimera::REC_PARAM));
+        auto* record = createParamCentered<SmallGoldButton>(mm2px(point("REC_PARAM", Vec(60, 103))), module, Chimera::REC_PARAM);
+        record->setColor(nvgRGB(220, 55, 65));
+        addParam(record);
+        auto* append = createParamCentered<SmallGoldButton>(mm2px(point("APPEND_PARAM", Vec(48, 103))), module, Chimera::APPEND_PARAM);
+        append->setColor(nvgRGB(220, 55, 65));
+        addParam(append);
         addParam(createParamCentered<SmallGoldButton>(mm2px(point("SPLICE_PARAM", Vec(72, 103))), module, Chimera::SPLICE_PARAM));
-        addParam(createParamCentered<SmallGoldButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM));
+        auto* shift = createParamCentered<SmallGoldButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM);
+        shift->setColor(nvgRGB(190, 255, 30));
+        addParam(shift);
         auto* unsplice = createWidgetCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))));
         unsplice->owner = module;
         addChild(unsplice);
@@ -2317,10 +2349,10 @@ struct ChimeraWidget : ModuleWidget {
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SHIFT_INPUT", Vec(84, 113))), module, Chimera::SHIFT_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("AUDIO_L_INPUT", Vec(12, 113))), module, Chimera::AUDIO_L_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("AUDIO_R_INPUT", Vec(24, 113))), module, Chimera::AUDIO_R_INPUT));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_L_OUTPUT", Vec(96, 113))), module, Chimera::AUDIO_L_OUTPUT));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_R_OUTPUT", Vec(108, 113))), module, Chimera::AUDIO_R_OUTPUT));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("CV_OUTPUT", Vec(120, 113))), module, Chimera::CV_OUTPUT));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("EOSG_OUTPUT", Vec(132, 113))), module, Chimera::EOSG_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("EOSG_OUTPUT", Vec(96, 113))), module, Chimera::EOSG_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("CV_OUTPUT", Vec(108, 113))), module, Chimera::CV_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_L_OUTPUT", Vec(120, 113))), module, Chimera::AUDIO_L_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_R_OUTPUT", Vec(132, 113))), module, Chimera::AUDIO_R_OUTPUT));
         addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("REC_LIGHT", Vec(10, 43.5))), module, Chimera::REC_LIGHT));
         addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("REC_ARMED_LIGHT", Vec(25, 43.5))), module, Chimera::REC_ARMED_LIGHT));
         addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(point("PLAY_LIGHT", Vec(40, 43.5))), module, Chimera::PLAY_LIGHT));

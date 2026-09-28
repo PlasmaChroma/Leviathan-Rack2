@@ -32,7 +32,7 @@ class ChimeraPanelContractTest(unittest.TestCase):
             "SOS_PARAM", "GENE_SIZE_PARAM",
             "VARISPEED_PARAM", "MORPH_PARAM", "SLIDE_PARAM", "ORGANIZE_PARAM",
             "GENE_ATT_PARAM", "VARISPEED_ATT_PARAM", "SLIDE_ATT_PARAM",
-            "REC_PARAM", "SPLICE_PARAM", "SHIFT_PARAM", "UNSPLICE_BUTTON", "SOS_CV_INPUT",
+            "APPEND_PARAM", "REC_PARAM", "SPLICE_PARAM", "SHIFT_PARAM", "UNSPLICE_BUTTON", "SOS_CV_INPUT",
             "GENE_SIZE_CV_INPUT", "VARISPEED_CV_INPUT", "MORPH_CV_INPUT",
             "SLIDE_CV_INPUT", "ORGANIZE_CV_INPUT", "CLOCK_INPUT",
             "PLAY_INPUT", "REC_INPUT", "SPLICE_INPUT", "SHIFT_INPUT",
@@ -54,6 +54,7 @@ class ChimeraPanelContractTest(unittest.TestCase):
         self.assertAlmostEqual(float(anchors["SOS_PARAM"]["r"]), 5.67, places=5)
         self.assertAlmostEqual(float(anchors["GENE_ATT_PARAM"]["r"]), 4.0)
         self.assertAlmostEqual(float(anchors["REC_PARAM"]["r"]), 3.0)
+        self.assertAlmostEqual(float(anchors["APPEND_PARAM"]["r"]), 3.0)
         self.assertAlmostEqual(float(anchors["CLOCK_INPUT"]["r"]), 4.08)
         self.assertAlmostEqual(float(anchors["REC_LIGHT"]["r"]), 2.33, places=5)
 
@@ -109,6 +110,29 @@ class ChimeraPanelContractTest(unittest.TestCase):
         self.assertGreaterEqual(buttons - second_cv, 9)
         self.assertGreaterEqual(jacks - buttons, 9)
         self.assertEqual(float(anchors["UNSPLICE_BUTTON"]["cy"]), buttons)
+
+    def test_append_button_sits_left_of_record(self):
+        anchors = keyed(MASTER)
+        self.assertEqual(float(anchors["APPEND_PARAM"]["cx"]), 48)
+        self.assertEqual(float(anchors["REC_PARAM"]["cx"]), 60)
+        self.assertEqual(float(keyed(PANEL)["APPEND_PARAM"]["cx"]), 48)
+        label = element(MASTER, "append_label")
+        self.assertEqual((float(label.attrib["x"]), label.text), (48, "REC+"))
+
+    def test_output_order_and_labels(self):
+        anchors = keyed(MASTER)
+        self.assertEqual(float(anchors["SHIFT_INPUT"]["cx"]), 84)
+        for jack_id, x in (
+                ("EOSG_OUTPUT", 96), ("CV_OUTPUT", 108),
+                ("AUDIO_L_OUTPUT", 120), ("AUDIO_R_OUTPUT", 132)):
+            self.assertEqual(float(anchors[jack_id]["cx"]), x)
+            self.assertEqual(float(keyed(PANEL)[jack_id]["cx"]), x)
+        for label_id, x, caption in (
+                ("text43", 96, "EOSG"), ("text42", 108, "CV OUT"),
+                ("text40", 120, "OUT L"), ("text41", 132, "OUT R")):
+            label = element(MASTER, label_id)
+            self.assertEqual(float(label.attrib["x"]), x)
+            self.assertEqual(label.text, caption)
 
     def test_generated_labels_have_no_stale_developer_warning(self):
         master_text = " ".join((element.text or "") for element in MASTER.iter()

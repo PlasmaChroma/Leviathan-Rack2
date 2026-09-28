@@ -151,6 +151,8 @@ Some current rendering caches still invalidate on the aggregate color generation
 
 Reuse the controls and visual language in [VisualAssets.hpp](src/visual/VisualAssets.hpp): Eclipse/Eclipse2 knobs, Halo/HaloKnob2 controls, Magitek2 input/output jacks, gold and aperture buttons, switches, sliders, and orb/Torx screws. Preserve existing parameter ranges, orientation, gestures, and light behavior when changing a component.
 
+`SmallGoldButton` supports per-instance cap colors through `setColor(nvgRGB(r, g, b))` on the UI thread. It derives shaded face, rim, glint, and socket colors once and invalidates only the affected framebuffers. Assigned alpha is ignored; the material and press animation own opacity. Unconfigured buttons retain the original gold palette exactly; `resetColor()` restores it. This API is inherited by `LoopGoldButton` and `SmallGoldApertureButton`; the aperture light's `setBaseColor()` remains independent of the cap color. For example, after `createParamCentered<SmallGoldButton>(...)`, call `button->setColor(nvgRGB(220, 55, 65))` before `addParam(button)` to give that instance a red cap.
+
 Branding helpers support mirrored Perfect Wave anchors (`BRANDING_WAVE_LEFT_RASTER` / `BRANDING_WAVE_RIGHT_RASTER`), a solo anchor, and compact Leviathan logos. Prefer those helpers and SVG rectangle anchors to new per-module raster placement logic. [doc/branding.md](doc/branding.md) records the historical Rubik/Ancient typography; its older background palette predates the current pure-black base/theme workflow.
 
 | Shared facility | Intended use |

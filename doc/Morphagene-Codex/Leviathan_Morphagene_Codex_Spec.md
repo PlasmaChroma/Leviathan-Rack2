@@ -140,7 +140,10 @@ All normalized primary controls use `[0,1]`. Attenuverters use `[-1,1]`. Buttons
 | 9 | `REC_PARAM` | Record | 0 | Release-resolved record command. |
 | 10 | `SPLICE_PARAM` | Splice | 0 | Release-resolved marker command. |
 | 11 | `SHIFT_PARAM` | Shift | 0 | Release-resolved next-Splice command. |
-| 12 | `NUM_PARAMS` | — | — | Sentinel. |
+| 12 | `APPEND_PARAM` | REC+ (Append) | 0 | Release-resolved end-of-Reel recording; a completed take creates a Splice at its start. |
+| 13 | `NUM_PARAMS` | — | — | Sentinel. |
+
+`APPEND_PARAM` was appended after the original twelve parameters. It always selects Append recording independent of the REC assignment; pressing it while armed or recording stops/cancels through the shared recording state machine. Previous parameter IDs remain unchanged.
 
 Configure Vari-Speed travel at ±112.5° from noon (225° total) so its `1/6`, `1/2`, and `5/6` positions correspond to 9:30 reverse 1×, noon Stop, and 2:30 forward 1×. Other controls may retain the normal theme travel. Do not give Vari-Speed a snapping detent that compromises fine modulation. Add context actions “Forward 1×”, “Reverse 1×”, and “Stop” that set the knob appropriately for its current mode.
 
