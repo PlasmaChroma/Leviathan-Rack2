@@ -350,6 +350,7 @@ struct Chimera : Module {
     std::atomic<bool> primaryPreRecordActive{false}; // Includes the unannounced core-side cut.
 
     std::atomic<std::uint32_t> publishedValidFrames{0};
+    std::atomic<std::uint32_t> publishedCapacityFrames{0};
     chimera::MarkerDisplayMailbox markerDisplay;
     std::atomic<std::uint16_t> publishedRegion{0};
     std::atomic<std::uint16_t> publishedRequestedRegion{0}, publishedMarkerCount{0};
@@ -357,7 +358,7 @@ struct Chimera : Module {
     std::atomic<std::uint32_t> publishedRecordStartFrame{0};
     std::atomic<float> publishedPlaybackRate{0.f};
     std::atomic<float> publishedVuPower[2]{{0.f}, {0.f}};
-    float vuBlockPower[2] = {0.f, 0.f};
+    float vuPowerState[2] = {0.f, 0.f};
     std::uint16_t vuBlockFrames = 0;
     std::atomic<int> publishedRecordState{0}; // Idle, armed Current/Append/Stop, recording Current/Append.
     unsigned awaitingAdoptionKind = 1; // Control dispatcher only.
@@ -1071,6 +1072,7 @@ struct Chimera : Module {
         publishedDocumentRevision.store(reel ? reel->documentRevision() : 0, std::memory_order_release);
         publishedAudioRevision.store(reel ? reel->audioRevision() : 0, std::memory_order_release);
         publishedValidFrames.store(reel ? reel->validFrames() : 0, std::memory_order_release);
+        publishedCapacityFrames.store(reel ? reel->capacityFrames() : 0, std::memory_order_release);
         publishedRegion.store(slice.currentRegion(), std::memory_order_release);
         publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
         publishedMarkerCount.store(reel ? reel->markerCount() : 0, std::memory_order_release);
@@ -1708,7 +1710,6 @@ struct Chimera : Module {
     void processBypass(const ProcessArgs& args) override {
         const bool measurePerf = isDragonKingDebugEnabled();
         const auto processStart = debug_terminal::debugTimerStart(measurePerf);
-        (void) args;
         if (ownership.tryAudio()) {
             coreCommands();
             cancelRecording();
@@ -1735,7 +1736,7 @@ struct Chimera : Module {
             chimera::profile1::audio(host.volts[AUDIO_L_INPUT]) : 0.f;
         const float right = host.connected[AUDIO_R_INPUT] ?
             chimera::profile1::audio(host.volts[AUDIO_R_INPUT]) : left;
-        writeOutput({left, right, 0.f, false});
+        writeOutput({left, right, 0.f, false}, args.sampleTime);
         lights[REC_LIGHT].setBrightness(0.f);
         lights[REC_ARMED_LIGHT].setBrightness(0.f);
         if (measurePerf) debugMetrics.recordProcess(
@@ -1754,25 +1755,23 @@ struct Chimera : Module {
         }
         return state;
     }
-    void accumulateVu(float leftVolts, float rightVolts) {
+    void accumulateVu(float leftVolts, float rightVolts, float sampleTime) {
         const float left = clamp(leftVolts * 0.2f, -4.f, 4.f);
         const float right = clamp(rightVolts * 0.2f, -4.f, 4.f);
-        vuBlockPower[0] += left * left;
-        vuBlockPower[1] += right * right;
+        const float amount = clamp(30.f * sampleTime, 0.f, 1.f);
+        vuPowerState[0] += (left * left - vuPowerState[0]) * amount;
+        vuPowerState[1] += (right * right - vuPowerState[1]) * amount;
         if (++vuBlockFrames < 256) return;
-        publishedVuPower[0].store(vuBlockPower[0] * (1.f / 256.f),
-            std::memory_order_release);
-        publishedVuPower[1].store(vuBlockPower[1] * (1.f / 256.f),
-            std::memory_order_release);
-        vuBlockPower[0] = vuBlockPower[1] = 0.f;
+        publishedVuPower[0].store(vuPowerState[0], std::memory_order_release);
+        publishedVuPower[1].store(vuPowerState[1], std::memory_order_release);
         vuBlockFrames = 0;
     }
-    void writeOutput(const chimera::HostOutput& out) {
+    void writeOutput(const chimera::HostOutput& out, float sampleTime) {
         outputs[AUDIO_L_OUTPUT].setVoltage(out.left);
         outputs[AUDIO_R_OUTPUT].setVoltage(out.right);
         outputs[CV_OUTPUT].setVoltage(out.cv);
         outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
-        accumulateVu(out.left, out.right);
+        accumulateVu(out.left, out.right, sampleTime);
     }
     void processOwned(const ProcessArgs& args) {
         if (!reel && (inputs[AUDIO_L_INPUT].isConnected() ||
@@ -1811,7 +1810,7 @@ struct Chimera : Module {
             lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
             lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
             if (reel) reel->maintenanceTick();
-            writeOutput({});
+            writeOutput({}, args.sampleTime);
             bridgeError.store(true, std::memory_order_release);
             lights[IO_BUSY_LIGHT].setBrightness(0.f);
             lights[PM_LIGHT].setBrightness(0.f);
@@ -1838,7 +1837,7 @@ struct Chimera : Module {
                 chimera::RateBridge* empty = nullptr;
                 if (!retiredBridge.compare_exchange_strong(empty, activeBridge,
                         std::memory_order_acq_rel)) {
-                    writeOutput({});
+                    writeOutput({}, args.sampleTime);
                     lights[IO_BUSY_LIGHT].setBrightness(1.f);
                     return;
                 }
@@ -1846,7 +1845,7 @@ struct Chimera : Module {
             }
             if (rate != 48000) {
                 if (retiredBridge.load(std::memory_order_acquire)) {
-                    writeOutput({});
+                    writeOutput({}, args.sampleTime);
                     lights[IO_BUSY_LIGHT].setBrightness(1.f);
                     return;
                 }
@@ -1858,7 +1857,7 @@ struct Chimera : Module {
                         retiredBridge.compare_exchange_strong(empty, ready,
                             std::memory_order_acq_rel);
                     }
-                    writeOutput({});
+                    writeOutput({}, args.sampleTime);
                     lights[IO_BUSY_LIGHT].setBrightness(1.f);
                     return;
                 }
@@ -1894,7 +1893,7 @@ struct Chimera : Module {
             bridgeResumePending = false;
             processCore(host);
             accumulateVu(outputs[AUDIO_L_OUTPUT].getVoltage(),
-                         outputs[AUDIO_R_OUTPUT].getVoltage());
+                         outputs[AUDIO_R_OUTPUT].getVoltage(), args.sampleTime);
             return;
         }
         if (bridgeResumePending) {
@@ -1916,7 +1915,7 @@ struct Chimera : Module {
         }
         const chimera::HostOutput out = activeBridge->step(host,
             [this](const chimera::HostState& delayed) { return processCore(delayed); });
-        writeOutput(out);
+        writeOutput(out, args.sampleTime);
         if (activeBridge->failed()) {
             cancelRecording();
             // The next callback retires this faulted converter; the service
@@ -2267,10 +2266,15 @@ struct ChimeraWidget : ModuleWidget {
             vuMeters[channel]->channel = channel;
             vuMeters[channel]->box.pos = center.minus(Vec(radius, radius));
             vuMeters[channel]->box.size = Vec(2.f * radius, 2.f * radius);
+            reels->intakePoints[channel] =
+                ChimeraReelsWidget::tapeIntakePoint(reels->centers[channel], center);
             addChild(vuMeters[channel]);
         }
         const Vec displayOrigin = mm2px(point("DISPLAY_ORIGIN", Vec(6, 14)));
         const Vec displayEnd = mm2px(point("DISPLAY_END", Vec(136, 40)));
+        // Leave clearance above the SVG bezel (0.5 mm above the preview).
+        for (unsigned channel = 0; channel < 2; ++channel)
+            reels->intakePoints[channel].y = displayOrigin.y - mm2px(Vec(0.f, 1.5f)).y;
         waveformCache = new widget::FramebufferWidget;
         waveformCache->box.pos = displayOrigin;
         waveformCache->box.size = displayEnd.minus(displayOrigin);

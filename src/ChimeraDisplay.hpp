@@ -60,7 +60,6 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     Chimera* owner = nullptr;
     unsigned channel = 0;
     float level = 0.f;
-    double lastStepTime = 0.0;
     std::shared_ptr<window::Image> faceImage;
     std::shared_ptr<window::Image> overlayImage;
     std::string facePath;
@@ -94,18 +93,10 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     }
 
     void step() override {
-        const double now = system::getTime();
-        if (lastStepTime > 0.0 && now >= lastStepTime) {
-            const float elapsed = float(std::min(now - lastStepTime, 0.25));
-            const float power = owner && channel < 2 ?
-                owner->publishedVuPower[channel].load(std::memory_order_acquire) : 0.f;
-            const float target = std::sqrt(clamp(power, 0.f, 4.f));
-            const float tau = target > level ? 0.065f : 0.30f;
-            const float amount = 1.f - std::exp(-elapsed / tau);
-            level += (target - level) * amount;
-            if (level < 1e-5f) level = 0.f;
-        }
-        lastStepTime = now;
+        const float power = owner && channel < 2 ?
+            owner->publishedVuPower[channel].load(std::memory_order_acquire) : 0.f;
+        level = std::sqrt(clamp(power, 0.f, 4.f));
+        if (level < 1e-5f) level = 0.f;
         TransparentWidget::step();
     }
 
@@ -167,8 +158,11 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
 
 struct ChimeraReelsWidget final : TransparentWidget {
     static constexpr float kNormalRpm = 33.f;
+    static constexpr float kTapeHubRatio = 0.36f;
+    static constexpr float kTapeOuterRatio = 0.91f;
     Chimera* owner = nullptr;
     Vec centers[2];
+    Vec intakePoints[2];
     float radii[2] = {0.f, 0.f};
     float angle = 0.f;
     double lastStepTime = 0.0;
@@ -179,6 +173,43 @@ struct ChimeraReelsWidget final : TransparentWidget {
 
     static float angularVelocity(float playbackRate) {
         return playbackRate * kNormalRpm * float(2.0 * M_PI / 60.0);
+    }
+
+    static float tapeProgress(std::uint32_t position, std::uint32_t total) {
+        if (!total) return 0.f;
+        return clamp(float(std::min(position, total)) / float(total), 0.f, 1.f);
+    }
+
+    static float tapeRadius(float reelRadius, float amount) {
+        const float inner = reelRadius * kTapeHubRatio;
+        const float outer = reelRadius * kTapeOuterRatio;
+        const float bounded = clamp(amount, 0.f, 1.f);
+        return std::sqrt(inner * inner + bounded * (outer * outer - inner * inner));
+    }
+
+    static Vec tapeExitPoint(Vec center, Vec intake, float radius) {
+        const Vec towardIntake = intake.minus(center);
+        const float distanceSquared = towardIntake.x * towardIntake.x +
+            towardIntake.y * towardIntake.y;
+        if (distanceSquared <= 0.f || radius <= 0.f) return center;
+        const float radiusSquared = radius * radius;
+        if (distanceSquared <= radiusSquared)
+            return center.plus(towardIntake.mult(radius / std::sqrt(distanceSquared)));
+        // Inner-facing tangents: clockwise rotation feeds the left span out
+        // and winds the right span in. Reversing transport reverses both.
+        const float side = towardIntake.x >= 0.f ? 1.f : -1.f;
+        const Vec perpendicular(side * towardIntake.y, -side * towardIntake.x);
+        const float tangentScale = radius * std::sqrt(distanceSquared - radiusSquared) /
+            distanceSquared;
+        return center.plus(towardIntake.mult(radiusSquared / distanceSquared))
+            .plus(perpendicular.mult(tangentScale));
+    }
+
+    static Vec tapeIntakePoint(Vec reelCenter, Vec vuCenter) {
+        const float spacing = vuCenter.x - reelCenter.x;
+        // Move toward the VU without lowering the intake, softening the approach.
+        return Vec(reelCenter.x + spacing * 0.6f,
+            reelCenter.y + std::fabs(spacing) * 0.5f);
     }
 
     ~ChimeraReelsWidget() override {
@@ -242,6 +273,60 @@ struct ChimeraReelsWidget final : TransparentWidget {
 
     void draw(const DrawArgs& args) override {
         if (!ensureImage(args.vg)) return;
+        float progress = 0.f;
+        bool haveTape = false;
+        if (owner) {
+            const bool recording = owner->recordingActive.load(std::memory_order_acquire);
+            const std::uint32_t position = recording ?
+                owner->publishedRecordFrame.load(std::memory_order_acquire) :
+                owner->publishedPlayFrame.load(std::memory_order_acquire);
+            const std::uint32_t total = recording ?
+                owner->publishedCapacityFrames.load(std::memory_order_acquire) :
+                owner->publishedValidFrames.load(std::memory_order_acquire);
+            haveTape = total != 0;
+            progress = tapeProgress(position, total);
+        }
+        if (haveTape) {
+            const float amounts[2] = {1.f - progress, progress};
+            const NVGcolor tapeColor = nvgRGBA(106, 221, 215, 235);
+            for (unsigned i = 0; i < 2; ++i) {
+                if (radii[i] <= 0.f) continue;
+                const float tape = tapeRadius(radii[i], amounts[i]);
+                const float tapeWidth = std::max(1.f, radii[i] * 0.055f);
+                // Inset the stroke centerline so its outer edge meets the wound tape.
+                const Vec exit = tapeExitPoint(centers[i], intakePoints[i],
+                    std::max(0.f, tape - tapeWidth * 0.5f));
+                nvgBeginPath(args.vg);
+                nvgMoveTo(args.vg, exit.x, exit.y);
+                nvgLineTo(args.vg, intakePoints[i].x, intakePoints[i].y);
+                nvgStrokeColor(args.vg, tapeColor);
+                nvgStrokeWidth(args.vg, tapeWidth);
+                nvgLineCap(args.vg, NVG_ROUND);
+                nvgStroke(args.vg);
+                nvgBeginPath(args.vg);
+                nvgCircle(args.vg, centers[i].x, centers[i].y, tape);
+                nvgFillColor(args.vg, tapeColor);
+                nvgFill(args.vg);
+            }
+        }
+        // Fixed guides cover the tape endpoints, including when the reels are empty.
+        for (unsigned i = 0; i < 2; ++i) {
+            if (radii[i] <= 0.f) continue;
+            const Vec p = intakePoints[i];
+            const Vec size = mm2px(Vec(3.2f, 1.1f));
+            const float x = p.x - size.x * 0.5f;
+            const float y = p.y - size.y * 0.5f;
+            nvgBeginPath(args.vg);
+            nvgRoundedRect(args.vg, x, y, size.x, size.y, size.y * 0.4f);
+            nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, y, x, y + size.y,
+                nvgRGB(140, 161, 166), nvgRGB(43, 61, 69)));
+            nvgFill(args.vg);
+            nvgBeginPath(args.vg);
+            nvgRoundedRect(args.vg, x + 1.f, y + 1.f, size.x - 2.f,
+                size.y - 2.f, 0.6f);
+            nvgFillColor(args.vg, nvgRGB(5, 12, 17));
+            nvgFill(args.vg);
+        }
         for (unsigned i = 0; i < 2; ++i) {
             if (radii[i] <= 0.f) continue;
             nvgSave(args.vg);

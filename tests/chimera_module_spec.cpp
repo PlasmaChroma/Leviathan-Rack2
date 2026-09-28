@@ -1240,7 +1240,7 @@ int main() {
         Chimera meterModule;
         meterModule.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
         meterModule.inputs[Chimera::AUDIO_R_INPUT].channels = 1;
-        for (unsigned frame = 0; frame < 256; ++frame) {
+        for (unsigned frame = 0; frame < 4096; ++frame) {
             const float sign = frame & 1u ? -1.f : 1.f;
             meterModule.inputs[Chimera::AUDIO_L_INPUT].setVoltage(5.f * sign);
             meterModule.inputs[Chimera::AUDIO_R_INPUT].setVoltage(2.5f * sign);
@@ -1250,7 +1250,7 @@ int main() {
         const float rightPower = meterModule.publishedVuPower[1].load();
         need(leftPower > 0.8f && leftPower < 1.1f &&
              rightPower > 0.18f && rightPower < 0.3f,
-             "VU block power follows final normalized left and right outputs");
+             "VU energy follows MindMeld ballistics on normalized left and right outputs");
     }
     auto ratePosition = [&args](int mode, float knob) {
         chimera::Reel rateReel(4, 4);
@@ -1480,6 +1480,43 @@ int main() {
                  float(33.0 * 2.0 * M_PI / 60.0)) < 1e-6f &&
              ChimeraReelsWidget::angularVelocity(-1.f) < 0.f,
              "reels rotate at signed 33 RPM for unit Vari-Speed");
+        need(ChimeraReelsWidget::tapeProgress(0, 48000) == 0.f &&
+             ChimeraReelsWidget::tapeProgress(24000, 48000) == 0.5f &&
+             ChimeraReelsWidget::tapeProgress(96000, 48000) == 1.f &&
+             ChimeraReelsWidget::tapeProgress(1, 0) == 0.f,
+             "reel tape progress clamps position against the selected total length");
+        const float emptyTapeRadius = ChimeraReelsWidget::tapeRadius(100.f, 0.f);
+        const float halfTapeRadius = ChimeraReelsWidget::tapeRadius(100.f, 0.5f);
+        const float fullTapeRadius = ChimeraReelsWidget::tapeRadius(100.f, 1.f);
+        need(std::fabs(emptyTapeRadius - 36.f) < 1e-5f &&
+             emptyTapeRadius < halfTapeRadius && halfTapeRadius < fullTapeRadius &&
+             std::fabs(fullTapeRadius - 91.f) < 1e-5f,
+             "reel tape radius grows by wound area from hub cutout to outer rim");
+        const Vec leftReel(10.f, 10.f), leftVu(30.f, 10.f);
+        const Vec leftIntake = ChimeraReelsWidget::tapeIntakePoint(leftReel, leftVu);
+        const Vec rightReel(30.f, 10.f), rightVu(10.f, 10.f);
+        const Vec rightIntake = ChimeraReelsWidget::tapeIntakePoint(rightReel, rightVu);
+        need(leftIntake.x == 22.f && rightIntake.x == 18.f &&
+             leftIntake.y == 20.f && rightIntake.y == 20.f,
+             "tape intakes stay between each reel and VU");
+        for (float amount : {0.f, 0.5f, 1.f}) {
+            const float radius = ChimeraReelsWidget::tapeRadius(8.f, amount);
+            const Vec leftExit = ChimeraReelsWidget::tapeExitPoint(leftReel, leftIntake, radius);
+            const Vec rightExit = ChimeraReelsWidget::tapeExitPoint(rightReel, rightIntake, radius);
+            const Vec leftRadius = leftExit.minus(leftReel);
+            const Vec rightRadius = rightExit.minus(rightReel);
+            const Vec feed = leftIntake.minus(leftExit);
+            const Vec pickup = rightExit.minus(rightIntake);
+            need(std::fabs(leftRadius.norm() - radius) < 1e-5f &&
+                 std::fabs(rightRadius.norm() - radius) < 1e-5f &&
+                 std::fabs(leftRadius.x * feed.x + leftRadius.y * feed.y) < 1e-4f &&
+                 std::fabs(rightRadius.x * pickup.x + rightRadius.y * pickup.y) < 1e-4f &&
+                 std::fabs(leftRadius.x + rightRadius.x) < 1e-5f &&
+                 std::fabs(leftRadius.y - rightRadius.y) < 1e-5f &&
+                 leftRadius.x * feed.y - leftRadius.y * feed.x > 0.f &&
+                 rightRadius.x * pickup.y - rightRadius.y * pickup.x > 0.f,
+                 "empty, half and full tape spans are tangent and follow feed/pickup rotation");
+        }
         need(ChimeraVuMeterWidget::needleAngleForLevel(0.f) <
                  ChimeraVuMeterWidget::needleAngleForLevel(1.f) &&
              ChimeraVuMeterWidget::needleAngleForLevel(1.f) <
