@@ -33,6 +33,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from split_svg_labels import find_inkscape, path_for_executable
+from bifurx_raster_tone import neutralize_light_panel, save_runtime_png
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -353,6 +354,7 @@ def build_combined(
     colors: int,
     linear_light_resize: bool,
     output_size: tuple[int, int],
+    neutral_strength: float = 0.0,
 ) -> None:
     tight_kernel_radius = max(1, round(tight_radius_px * supersample))
     tight_kernel_size = tight_kernel_radius * 2 + 1
@@ -386,6 +388,8 @@ def build_combined(
         raise ValueError(
             f"{background_path} is {background.size}, expected full-resolution {SOURCE_SIZE}"
         )
+    if neutral_strength:
+        background = neutralize_light_panel(background, neutral_strength)
 
     background_srgb = np.asarray(background, dtype=np.float32) / 255.0
     combined_linear = srgb_to_linear(background_srgb)
@@ -411,10 +415,7 @@ def build_combined(
     )
     if not linear_light_resize and output_size != SOURCE_SIZE:
         combined = combined.resize(output_size, Image.Resampling.LANCZOS)
-    if colors > 0:
-        combined = combined.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    combined.save(destination, format="PNG", optimize=True)
+    save_runtime_png(combined, destination, colors)
     if output_size == SOURCE_SIZE:
         resize_mode = "native/no resize"
     else:
@@ -483,10 +484,16 @@ def main() -> int:
         help="label-mask supersampling factor (default: 2)",
     )
     parser.add_argument(
+        "--light-neutral-strength",
+        type=float,
+        default=0.70,
+        help="low-chroma neutralization applied only to the light background (default: 0.70)",
+    )
+    parser.add_argument(
         "--colors",
         type=int,
-        default=0,
-        help="indexed-PNG palette size; 0 preserves full RGB (default: 0)",
+        default=256,
+        help="perceptual indexed-PNG palette size; 0 preserves full RGB (default: 256)",
     )
     parser.add_argument(
         "--linear-light-resize",
@@ -540,6 +547,8 @@ def main() -> int:
         parser.error("--supersample must be between 1 and 8")
     if args.colors != 0 and not 16 <= args.colors <= 256:
         parser.error("--colors must be 0 or between 16 and 256")
+    if not 0.0 <= args.light_neutral_strength <= 1.0:
+        parser.error("--light-neutral-strength must be between 0 and 1")
     if args.runtime_base_dir and args.native_resolution:
         parser.error("--native-resolution requires the full source-compositor path")
 
@@ -603,6 +612,7 @@ def main() -> int:
         colors=args.colors,
         linear_light_resize=args.linear_light_resize,
         output_size=output_size,
+        neutral_strength=args.light_neutral_strength,
     )
     build_combined(
         args.dark_background,
@@ -623,6 +633,7 @@ def main() -> int:
         colors=args.colors,
         linear_light_resize=args.linear_light_resize,
         output_size=output_size,
+        neutral_strength=0.0,
     )
     return 0
 
