@@ -1,0 +1,1242 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Spectraphon SP67 — Firmware & DSP Analysis</title><style>
+:root{--ink:#18313a;--muted:#546973;--accent:#13777c;--line:#d4e0e2;--wash:#edf4f4;--nav:#102b34}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f4f7f7;color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:var(--nav);color:#fff;padding:48px max(24px,calc((100vw - 1120px)/2));border-bottom:5px solid #3bb5af}header .eyebrow{font-size:12px;letter-spacing:.19em;text-transform:uppercase;color:#98d9d6}header h1{font-size:clamp(32px,5vw,52px);line-height:1.12;margin:12px 0 16px}header p{max-width:870px;color:#d2e4e8;margin:0}header .meta{margin-top:20px;font-size:13px;color:#b7d2d7}
+nav{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:12px 18px;box-shadow:0 3px 8px #102b3409}nav a{font-size:13px;font-weight:650;text-decoration:none;color:var(--accent);padding:6px 9px;border-radius:5px}nav a:hover{background:var(--wash)}
+main{max-width:1160px;margin:28px auto 80px;padding:0 20px}section{background:#fff;border:1px solid var(--line);border-radius:10px;padding:34px 46px;margin-bottom:28px;scroll-margin-top:110px}.section-kicker{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px}section h1{font-size:30px;line-height:1.2;margin-top:0}h2{margin-top:38px;font-size:24px;line-height:1.3}h3{margin-top:28px;font-size:19px}p{margin:13px 0 18px}a{color:#0b717b}strong{font-weight:700}code{font:0.89em/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--wash);border-radius:3px;padding:2px 4px;overflow-wrap:anywhere}pre{background:#132e37;color:#e2f0f1;padding:18px 22px;border-radius:7px;overflow-x:auto;line-height:1.5}pre code{background:none;color:inherit;padding:0;overflow-wrap:normal}table{display:block;max-width:100%;overflow:auto;border-collapse:collapse;margin:22px 0;font-size:14px;line-height:1.5}th,td{padding:12px 14px;text-align:left;border:1px solid var(--line);vertical-align:top}th{background:var(--wash);font-weight:700}tr:nth-child(even) td{background:#fafcfc}td code{white-space:normal}.source{font-size:.9em}li{padding:2px 0}footer{max-width:1100px;margin:0 auto 36px;padding:0 24px;color:var(--muted);font-size:13px}blockquote{margin-left:0;border-left:4px solid var(--accent);padding:6px 22px;background:var(--wash)}
+@media(max-width:700px){section{padding:24px 20px}nav{position:static}main{padding:0 10px}header{padding:32px 24px}h2{font-size:21px}table{font-size:12px}th,td{padding:8px}}
+@media print{body{background:#fff;font-size:10pt}nav{display:none}header{padding:20px;background:#fff;color:#000;border-bottom:2px solid #333}header p,header .meta,header .eyebrow{color:#333}main{max-width:none;margin:0;padding:0}section{border:0;border-radius:0;padding:16px 0;break-before:page}pre{white-space:pre-wrap;background:#eee;color:#111}table{display:table;font-size:8pt}h1,h2,h3{break-after:avoid}tr{break-inside:avoid}}
+</style></head><body><header><div class="eyebrow">Leviathan research · firmware reconstruction</div><h1>Spectraphon SP67</h1><p>Architecture, spectral analysis, polynomial synthesis, Array persistence, and a reproducible implementation foundation.</p><div class="meta">28 September 2026 · 178,932 input bytes · 9 extracted tables · 31 passing host tests · hardware equivalence not yet validated</div></header><nav><a href="#report">Main analysis</a><a href="#dsp">DSP equations</a><a href="#arrays">Array format</a><a href="#controls">Controls &amp; I/O</a><a href="#codex">Codex handoff</a><a href="#tools">Tools &amp; reproduction</a><a href="#sources">Sources &amp; provenance</a></nav><main><section id="report"><div class="section-kicker">Main analysis</div><h1>Spectraphon SP67 — firmware and DSP reconstruction</h1>
+<p><strong>Analysis date:</strong> 28 September 2026<br />
+<strong>Input:</strong> the user's <code>sp67.dat</code>, 178,932 bytes<br />
+<strong>SHA-256:</strong> <code>b50a87b9bd4f6ad90007918a16e8a4d033e2236c863faec55f5585abe34927d9</code><br />
+<strong>Scope:</strong> read-only static analysis, extracted data, instruction-derived mathematical models, and host-side tests. No firmware flashing, ARM execution, physical module measurement, or original source/debug symbols.</p>
+<h2>Executive findings</h2>
+<p>The image is directly interpretable as a little-endian Thumb application linked at <code>0x08020000</code>. More importantly, substantial portions of its application behavior are now recognizable: a quadrature harmonic analyzer, two spectral Array readers, a polynomial resynthesis path controlled by Partials, mode-specific Noise/Chaos branches, and an ordinary RIFF/WAVE persistence layer.</p>
+<p>The essential architectural result is <strong>not “an FFT feeds a generic wavetable oscillator.”</strong> The traced SAM path constructs harmonic sine/cosine references, demodulates the input against those references, filters the quadrature components, and estimates their magnitudes. The normal synthesis path evaluates paired polynomial recurrences; changing Partials changes those recurrences, not just a final volume multiplier. Arrays store spectral coefficients rather than recordings of the original input waveform.</p>
+<p>The strongest recovered implementation facts are:</p>
+<table>
+<thead>
+<tr>
+  <th>Area</th>
+  <th>Result</th>
+  <th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Executable</td>
+  <td>Raw application image; base <code>0x08020000</code>; reset <code>0x08036430</code></td>
+  <td>Vector table and startup instructions</td>
+</tr>
+<tr>
+  <td>Processor</td>
+  <td>Cortex-M7/FP-capable STM32H7, H743/H753-class match</td>
+  <td>Thumb/FP instructions, vectors, peripheral addresses; sources S4–S5</td>
+</tr>
+<tr>
+  <td>Audio timing</td>
+  <td>64 stereo frames per callback; DSP math assumes 48 kHz</td>
+  <td><code>0x08032678</code>, <code>0x08032680</code>, <code>0x0803038c</code>; pitch constants</td>
+</tr>
+<tr>
+  <td>Spectral storage</td>
+  <td>64 float32 values per frame</td>
+  <td>Array readers and save loop</td>
+</tr>
+<tr>
+  <td>Normal active bank</td>
+  <td>At most 60 terms, processed in groups of four</td>
+  <td>Analyzer and standard synthesis loop bounds</td>
+</tr>
+<tr>
+  <td>SAM</td>
+  <td>Harmonic quadrature demodulation; two cascaded one-poles per component</td>
+  <td><code>0x0802f4ac–0x0802f9bc</code></td>
+</tr>
+<tr>
+  <td>SAO linear</td>
+  <td>Adjacent-frame interpolation plus nonlinear Focus shaping</td>
+  <td><code>0x0802cd0c</code>, <code>0x0802ce5c</code></td>
+</tr>
+<tr>
+  <td>SAO planar</td>
+  <td>Four-frame interpolation, with unusual edge arithmetic</td>
+  <td><code>0x0802cfac</code>, <code>0x0802d0f8</code></td>
+</tr>
+<tr>
+  <td>Partials</td>
+  <td>Polynomial carrier shaping with a cubic compensation curve</td>
+  <td><code>0x08030cd4–0x08030fd2</code> and mirrored branch</td>
+</tr>
+<tr>
+  <td>Saved Arrays</td>
+  <td>Mono PCM16 WAV, 64 serialized coefficients per spectrum</td>
+  <td><code>0x08033af8</code></td>
+</tr>
+<tr>
+  <td>Compatibility caveat</td>
+  <td>Header finalization appears to retain 32-bit alignment/rate fields for PCM16</td>
+  <td><code>0x080338f4–0x080339fa</code></td>
+</tr>
+<tr>
+  <td>Recoverable assets</td>
+  <td>Nine numerical tables, including a 64 × 64 factory Array</td>
+  <td><code>tables/manifest.json</code></td>
+</tr>
+</tbody>
+</table>
+<p>This is a useful implementation foundation, but <strong>not a complete behavioral clone</strong>. The full Noise/Chaos equations, UI state transitions, calibrated jack-to-ADC mapping, physical output calibration, capture scheduling, and all phase/FM interactions remain incompletely translated.</p>
+<h2>1. Evidence conventions and reproducibility</h2>
+<p><strong>B — byte evidence:</strong> an address, byte sequence, table extent, constant, branch or pointer is directly recoverable from this exact upload.<br />
+<strong>T — translated behavior:</strong> a mathematical or structural interpretation of instructions. This is stronger than a guess but remains subject to independent review and dynamic testing.<br />
+<strong>D — documented behavior:</strong> stated in manufacturer documentation; not automatically proven by the binary.<br />
+<strong>H — hypothesis:</strong> plausible interpretation that needs more tracing or measurement.<br />
+<strong>U — unresolved:</strong> insufficient evidence for a defensible exact implementation.</p>
+<p>Addresses throughout are runtime flash addresses unless described as RAM or file offsets. To convert flash to file offset, subtract <code>0x08020000</code>. Analyst-assigned names in the ELF, CSVs and prose are not recovered original symbol names.</p>
+<p>The analysis uses LLVM's ARM disassembler through a small Python/ctypes wrapper. A conservative control-flow inventory and a separate linear sweep are included. The latter deliberately retains an <strong>UNVERIFIED</strong> label because a linear sweep interprets literal pools and other inline data as instructions. Even the control-flow inventory has heuristic function boundaries, unresolved switches and indirect branches. Its candidate count is not the number of original C/C++ functions, and its decoded-byte count is not a proof of complete code coverage.</p>
+<p>Reproduce table extraction and the ELF with <code>scripts/export_assets.py</code>; reproduce disassembly with <code>scripts/inspect_firmware.py</code> and <code>scripts/build_inventory.py</code>. The disassembler currently expects the LLVM 19 shared-library location used by this environment. Reference math and the WAV tools do not depend on LLVM.</p>
+<p>The input was never executed. The host tests validate consistency of the supplied tools and translations, not equality to hardware recordings.</p>
+<h2>2. Image identity and startup</h2>
+<h3>2.1 Memory layout</h3>
+<table>
+<thead>
+<tr>
+  <th>Item</th>
+  <th>Recovered value</th>
+  <th>Level</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>File length</td>
+  <td><code>0x2baf4</code> / 178,932 bytes</td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Initial stack pointer</td>
+  <td><code>0x20020000</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Reset vector word</td>
+  <td><code>0x08036431</code> — Thumb entry at <code>0x08036430</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Application vector table</td>
+  <td>166 words / <code>0x298</code> bytes</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td>Main entry</td>
+  <td><code>0x08034060</code></td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td>Low-level system initialization</td>
+  <td><code>0x08035b40</code></td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td>Initialized-data source</td>
+  <td><code>0x08049ac8</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Initialized-data destination</td>
+  <td><code>[0x20000000, 0x2000001c)</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Startup zero range</td>
+  <td><code>[0x20002030, 0x20014fa4)</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Last nonzero byte</td>
+  <td>File offset <code>0x29ae3</code> / address <code>0x08049ae3</code></td>
+  <td>B</td>
+</tr>
+<tr>
+  <td>Trailing zero region</td>
+  <td><code>0x2010</code> bytes</td>
+  <td>B</td>
+</tr>
+</tbody>
+</table>
+<p>The reset handler sets up the stack, copies the initialized-data image, zeroes the startup BSS range, and transfers through initialization into main. Many DSP locations below the startup BSS range are explicitly initialized elsewhere. Do not infer that every useful global must lie inside the linker-style BSS interval listed above.</p>
+<p>The application offset is 128 KiB above the normal STM32 internal-flash origin. This strongly suggests space reserved for a resident updater/bootloader. <strong>The supplied file does not contain that lower flash region.</strong> Consequently, the exact bootloader file-selection logic, authenticity checks, update recovery behavior, and accepted image conventions cannot be recovered from this upload alone.</p>
+<p>The terminal zeros are directly observed. Whether they represent linker padding, an unused section, or an updater convention is unresolved. Their presence does not prove a checksum scheme or a particular flash-write alignment.</p>
+<h3>2.2 Architecture and numerical environment</h3>
+<p>The instruction stream includes Thumb-2 and both single- and double-precision floating-point operations. The vector/peripheral footprint is consistent with an STM32H743/H753-class design. ST documents the corresponding Cortex-M7 family and its double-precision floating-point unit <a class="source" href="#sources">[S4]</a>; the official device startup file provides the matching interrupt ordering <a class="source" href="#sources">[S5]</a>. This does not identify a package marking, exact silicon revision, or populated flash capacity.</p>
+<p>Main enables instruction/data caching and sets the floating-point flush-to-zero control bit. Thus subnormal arithmetic, fused multiply-add behavior and conversion instructions matter when seeking a close numerical match. A naive host double-precision rewrite is a useful conceptual model, but is not automatically bit-identical.</p>
+<p>ARM's <code>VFNMS</code> operation is especially important here: its arithmetic is <strong>product minus the old destination</strong>, not old destination minus product <a class="source" href="#sources">[S6]</a>. Misreading that instruction reverses recurrence signs and substantially changes the inferred synthesis algorithm.</p>
+<h2>3. Recovered application architecture</h2>
+<p>A defensible high-level organization is:</p>
+<pre><code class="language-text">Resident updater / bootloader       [not in uploaded image]
+               |
+     application reset and main
+               |
+  processor, RAM, peripheral setup
+               |
+  filesystem / Array restore / UI initialization
+               |
+     DMA / audio half-buffer callbacks
+               |
+       audio_block_process(offset)
+               |
+       +-- fast CV and input acquisition
+       +-- pitch, FM and mode state
+       +-- harmonic reference generation
+       +-- SAM quadrature analysis
+       +-- SAO spectral interpolation
+       +-- standard / Noise / Chaos synthesis
+       +-- envelope / sub / clocked-CV generation
+       +-- fixed-point output buffers
+</code></pre>
+<p>Array I/O and button/clock processing are visible as separate routines, while much of the sample processing is in a large monolithic function. HAL-like peripheral code and FatFs-like filesystem code account for a significant portion of the image. These library-family identifications derive from register accesses, argument conventions, object layouts and call-site behavior; the original library revision and all compiler settings are not recovered.</p>
+<p>A useful point for a Rack implementation is that the conceptual separation above is cleaner than the compiled layout. There is no reason to recreate the monolithic function structure in a new plugin. Preserve numerical ordering where it affects results, but use explicit analyzer, spectral-reader, oscillator, control-state and persistence components.</p>
+<h2>4. Interrupts, DMA and audio cadence</h2>
+<p>The non-default external interrupt footprint contains DMA1 Streams 0–7, ADC, EXTI9_5, SPI5, DMAMUX1 overrun and BDMA channel 0. Core exception handlers and SysTick are also present. The complete vector words are exported in <code>analysis/vector_table.csv</code>.</p>
+<p>Two small callbacks are unusually helpful:</p>
+<pre><code class="language-text">0x08032678: pass offset 128; tail-branch to 0x0802e750
+0x08032680: pass offset   0; tail-branch to 0x0802e750
+</code></pre>
+<p>Inside that destination, the sample loop advances its interleaved index by two and stops at 128. This is 64 stereo frames per callback. Pitch calculations use a reciprocal of 48,000, and WAV initialization also writes 48,000 as metadata. Together these support a nominal 48 kHz DSP timebase. <strong>The recovered math assumes 48 kHz; this is not an independent physical measurement of the converter clock.</strong> At that nominal rate, a block spans approximately 1.333 ms.</p>
+<p>A DWT cycle-counter read at <code>0xe0001004</code> appears in processing/profiling logic. This is useful evidence that timing is monitored, but it is not itself a measurement of module CPU usage in this analysis.</p>
+<p>SPI5 initialization is present. It must not automatically be labeled the SD interface. The actual filesystem <code>diskio</code> transport has not been conclusively traced, and the lack of a dedicated SDMMC interrupt handler does not rule out a polled SDMMC path.</p>
+<h2>5. Internal memory and Array organization</h2>
+<h3>5.1 Working spectral buffers</h3>
+<table>
+<thead>
+<tr>
+  <th>RAM address</th>
+  <th>Interpretation</th>
+  <th>Evidence level</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>0x20002a40</code></td>
+  <td>Side A SAO working coefficients, 64 floats</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20002b40</code></td>
+  <td>Side A SAM amplitudes, adjacent 64-float bank</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20002c40</code></td>
+  <td>Side B SAO working coefficients</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20002d40</code></td>
+  <td>Side B SAM amplitudes</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20000d40</code></td>
+  <td>Side A SAO per-sample coefficient increments</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20000e40</code></td>
+  <td>Side A adjacent SAM increment bank, cleared by analyzer</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20000f40</code></td>
+  <td>Side B SAO increments</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20001040</code></td>
+  <td>Side B adjacent SAM increment bank</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20000a20</code></td>
+  <td>Side A Array descriptors</td>
+  <td>B/T</td>
+</tr>
+<tr>
+  <td><code>0x20000920</code></td>
+  <td>Side B Array descriptors</td>
+  <td>B/T</td>
+</tr>
+</tbody>
+</table>
+<p>The normal reader produces a target spectrum, then stores <code>(target-current)/64</code> in the increment bank. The sample loop adds those increments to working coefficients. SAM amplitude production writes its adjacent bank and clears corresponding increment entries rather than using an identical interpolation path.</p>
+<p>This memory layout explains why storage frame size and active oscillator count must be treated separately: vectors occupy 64 values even though the traced normal loops process at most 60 terms.</p>
+<h3>5.2 External-memory bases — keep the two sides separate</h3>
+<p>Main writes <strong>two distinct external-memory base pointers</strong>:</p>
+<pre><code class="language-text">0x20002f74 -&gt; 0x60c01000   [A base]
+0x20002f70 -&gt; 0x60001000   [B base]
+</code></pre>
+<p>It clears <code>0x00c00000</code> bytes at each base: two 12 MiB regions, or 24 MiB explicitly initialized. That proves the initialized extent, not the board's total installed SDRAM.</p>
+<p>A descriptor is 16 bytes. Its first word is an offset in <strong>floats</strong>, followed by two dimension words and a save-state marker. Side A slot offsets begin at <code>slot * 65536</code>; Side B offsets begin at <code>1048576 + slot * 65536</code>, relative to Side B's separate base. Thus the first B Array is around <code>0x60401000</code>, not immediately following the first A Array.</p>
+<p>There are 16 descriptors per side. Each reserved slot accommodates 65,536 float32 coefficients, or 1,024 frames of 64 values. The factory initializer copies a 16 KiB coefficient block and uses dimensions 8 × 8. The remaining reserved memory includes working/capture space not fully mapped in this pass.</p>
+<p><strong>Correction to the first reply:</strong> the earlier “64 MB SDRAM” statement was not justified by the evidence presented there. This report relies on the actual initialized ranges and does not promote them into a claim about installed board capacity.</p>
+<h2>6. SAM: what the analyzer actually computes</h2>
+<h3>6.1 Reference generation rather than a conventional FFT front end</h3>
+<p>The region around <code>0x0802f296–0x0802f4aa</code> generates harmonic quadrature references using an 8,192-entry sine table, interpolation, a quarter-cycle cosine offset and recurrence arithmetic. The analyzer then multiplies the input by those references and low-pass filters the results.</p>
+<p>Conceptually, each detector asks: <strong>how much of the current input is coherent with a particular harmonic of the analyzer's reference frequency?</strong> That is a different implementation from taking fixed FFT bins, grouping them and feeding a generic oscillator bank. No FFT stage is needed to explain the traced SAM path. This is a path-specific conclusion, not a proof that no FFT-related routine exists anywhere in the whole image.</p>
+<h3>6.2 Input conditioning and quadrature smoothing</h3>
+<p>Each side includes a DC-removing recurrence equivalent to:</p>
+<pre><code class="language-text">u[n] = 12 * input[n]
+y[n] = u[n] - u[n-1] + 0.995 * y[n-1]
+</code></pre>
+<p>For each active harmonic, in-phase and quadrature products each pass through two cascaded one-poles:</p>
+<pre><code class="language-text">v = y[n] * reference[n]
+s1 = v  + p * (s1 - v)
+s2 = s1 + p * (s2 - s1)
+</code></pre>
+<p>The two outputs are squared and summed. The result is converted to a magnitude-like value by a bit-level square-root approximation, not an ordinary library <code>sqrt()</code> call.</p>
+<p>The A analyzer is visible around <code>0x0802f716–0x0802f9bc</code>; the mirrored B analyzer precedes it. State arrays contain two values per harmonic for each quadrature. The bank loops are unrolled in groups of four.</p>
+<h3>6.3 Slide and Focus mapping</h3>
+<p>For normalized analyzer Slide <code>s</code>, a table-based exponential gives approximately:</p>
+<pre><code class="language-text">q = trunc(8191 * s)
+referenceIncrement = 2^(q / 2048) / 2400
+</code></pre>
+<p>This is implemented by a 2,048-entry fractional-octave lookup plus a power-of-two octave shift. At 48 kHz, normalized Slide 0–1 corresponds to approximately 20–319.892 Hz before harmonics are formed.</p>
+<p>With normalized Focus <code>f</code>, the recovered pole mapping is approximately:</p>
+<pre><code class="language-text">w = 1 - 0.98*f
+p = min(1 - 3.14*referenceIncrement*w*w, 0.9999799728393555)
+</code></pre>
+<p>The assembly mixes single and double precision, so the equation expresses its structure rather than promising identical rounding at every step. Increasing Focus moves the poles closer to one: narrower, slower detectors. Because two filters are cascaded, do not equate the total detector response to a single one-pole attack time.</p>
+<p>The upper pole cap corresponds to roughly a one-second single-pole time constant at 48 kHz. This makes response time and spectral selectivity strongly related. Replacing the analyzer with an FFT and an arbitrary envelope follower would miss that coupling unless it were deliberately reconstructed.</p>
+<h3>6.4 Magnitude approximation and the zero case</h3>
+<p>The recovered unsigned integer transformation is:</p>
+<pre><code class="language-c">uint32_t u = bits_of_float(energy);
+u = (u - 0x00800000u) &gt;&gt; 1;
+u += 0x20000000u;
+float magnitude = float_from_bits(u);
+</code></pre>
+<p>The approximation is coarse compared with a correctly rounded square root. It also has a non-obvious zero case: zero energy maps to bits <code>0x9fc00000</code>, a tiny negative value of approximately <code>-8.13e-20</code>, rather than exact positive zero. The supplied literal helper preserves this; it does not silently “repair” the firmware's arithmetic. Subnormal handling and the enabled flush-to-zero mode are further reasons not to claim host-level bit identity.</p>
+<p>A cleaner <code>sqrt</code> implementation might be preferable for a new product, but that would be an intentional redesign. Keep a compatibility path while determining whether the approximation contributes audible level or transient differences.</p>
+<h2>7. Standard synthesis and the actual role of Partials</h2>
+<h3>7.1 Do not model Partials as only a volume envelope</h3>
+<p>In the standard synthesis branches, Partials controls a radius-like parameter:</p>
+<pre><code class="language-text">r ≈ min(0.65*p + 0.35*p², 1)
+</code></pre>
+<p>Here <code>p</code> is the calibrated/smoothed internal Partials value, not a statement that panel voltage maps directly to a normalized floating-point number. The first product is single precision, followed by mixed-precision arithmetic.</p>
+<p>The carrier basis itself then depends on <code>r</code>. For an odd-bank phase, define:</p>
+<pre><code class="language-text">x = r*cos(thetaOdd)
+C0 = r²
+C1 = x
+Cn = 2*x*C(n-1) - C(n-2), for n &gt;= 2
+</code></pre>
+<p>For an even-bank phase:</p>
+<pre><code class="language-text">y = r*sin(thetaEven)
+z = r*cos(thetaEven)
+E0 = 0
+E1 = y
+En = 2*z*E(n-1) - E(n-2), for n &gt;= 2
+</code></pre>
+<p>The two accumulations use alternating signs over the odd/even coefficient positions. At <code>r=1</code>, the recurrences reduce to familiar trigonometric harmonic identities with a phase/sign convention. At smaller <code>r</code>, they do not simply equal <code>r^n</code> multiplied by the original nth harmonic. In particular, the odd recurrence uses <strong>C0 = r²</strong>, not the textbook Chebyshev seed of one.</p>
+<p>This is why a superficially plausible “60 sine oscillators with a harmonic cutoff knob” would not necessarily sound like this implementation. The Partials gesture changes the polynomial waveshaping basis as well as the aggregate level.</p>
+<p>The supplied <code>polynomial_synthesis()</code> is a mathematical probe of this branch. It intentionally takes independent odd/even phases and does not invent the unresolved surrounding phase/FM wiring.</p>
+<h3>7.2 Group admission and the 60-term ceiling</h3>
+<p>Both reference-bank processing and standard resynthesis are unrolled four terms at a time. The initial admission threshold is approximately <code>increment &lt; 0.1125</code>; subsequent groups are admitted against approximately <code>groupBoundary * increment &lt; 0.45</code>. The normal synthesis loop terminates at 60 processed terms.</p>
+<p>Consequently, high-frequency term removal is groupwise. It is not necessarily equivalent to individually dropping every harmonic above Nyquist. The precise <code>0.45</code> margin, floating-point comparison, and four-term grouping are part of the recovered behavior. The model helper only covers nonnegative increments; behavior during extreme signed FM needs further tracing.</p>
+<p>The last four values of the 64-value storage frame should not be deleted from imported files. They remain part of the serialized representation even though this normal branch does not accumulate them.</p>
+<h3>7.3 Compensation and clipping</h3>
+<p>A fitted gain-compensation polynomial follows the accumulation:</p>
+<pre><code class="language-text">g(r) = 9.508619308
+       - 27.75853920*r
+       + 32.67438126*r²
+       - 13.46592999*r³
+
+if r &lt;= 0.0399999991:
+    g(r) *= 25*r
+</code></pre>
+<p>The low-radius taper matters: it prevents the compensation fit from turning the bottom of the Partials control into an abrupt residual signal. At <code>r=1</code>, the fitted gain is approximately 0.95853, rather than exactly one.</p>
+<p>Several output-related joins use a cubic soft clip with an explicit input clamp:</p>
+<pre><code class="language-text">x = clamp(x, -1.5, 1.5)
+y = x * (1 - 0.1481481493*x²)
+</code></pre>
+<p>It maps the clamped endpoints close to ±1. This does not mean every jack passes through exactly one copy of this clipper. Individual output lanes, gains and clip sites need to be followed separately before a faithful final mixer is specified.</p>
+<h2>8. SAO: linear and planar spectral navigation</h2>
+<p>The two reader families are clearly separate. Their detailed addressing, interpolation and Focus equations are in <code>DSP_SPEC.md</code> and <code>ARRAY_FORMAT.md</code>.</p>
+<p>The linear reader treats a bank as a sequence of spectra. For <code>N</code> frames and integer clock offset <code>k</code>, its position is approximately <code>k + (N-1)*Slide</code>. It interpolates neighboring 64-value frames, then applies a Focus-dependent amplitude transformation. A table supplies an exponent-like value; a float-bit approximation implements the power operation. There is an exact comparison that bypasses the transform when the internal <code>0.75*Focus</code> equals <code>0.25</code>. Do not interpret this as a proof of the panel knob's physical center position.</p>
+<p>The planar reader constructs a grid extent from <code>ceil(sqrt(N))</code>, uses Focus and Slide as the two coordinates, and interpolates four spectra. Its wrap arithmetic is not a generic modulo torus. It subtracts the frame count only once at selected points and has a special row increment rule at the boundary. These details matter particularly for non-square Arrays and clock offsets. The supplied probe refuses an out-of-range address instead of reproducing an unsafe read.</p>
+<p>Both modes drive 64-sample coefficient ramps. The nominal block duration and coefficient-update interval therefore belong in the model; merely smoothing controls at the host's block size would not necessarily reproduce the same modulation behavior.</p>
+<p>Manufacturer documentation independently identifies linear and planar SAO and assigns Focus/Slide to their different roles <a class="source" href="#sources">[S3]</a>. The exact equations here are instruction-derived rather than inferred from those descriptions.</p>
+<h2>9. Arrays are coefficient files, not sampled sound files</h2>
+<p>The firmware discovers <code>spect*.wav</code>, <code>speca*.wav</code> and <code>specb*.wav</code>. Its per-side save routine generates slot names such as <code>speca000.wav</code> and <code>specb015.wav</code>. The lower layer resembles FatFs, including directory enumeration and short-filename handling. A generic RIFF/WAVE parser is present.</p>
+<p>The save path writes 64 coefficients per spectrum as 16-bit integer samples. The WAV's single channel is the serialization stream; it is not “audio side A” in a stereo recording, and its nominal duration is not the original capture duration. A full 1,024-frame bank occupies 131,072 payload bytes when saved as PCM16. The default 64-frame bank occupies 8,192 payload bytes.</p>
+<p>RAM stores float32 coefficients. Save conversion uses a scale of 32,767 and truncation. The PCM16 reader uses division by 32,768. This introduces a small predictable round-trip scaling/quantization difference. A peak-like state variable conditionally scales data upward when it lies strictly between zero and one; the save routine writes the scaled coefficients back into Array RAM. Thus saving is not necessarily a numerically passive operation.</p>
+<p>A notable static finding is a probable WAV header inconsistency: the PCM16 path appears to retain <code>byteRate=192000</code> and <code>blockAlign=4</code> while declaring one channel and 16 bits per sample at 48 kHz. The expected standard PCM16 values would be 96,000 and 2. The parser's bit-depth-driven sample conversion could explain why such files remain usable internally. <strong>This has not yet been checked against a WAV physically saved by a Spectraphon.</strong> It should be treated as a strong static finding awaiting a simple independent file check, not as a verified interoperability guarantee.</p>
+<p>The included WAV reader bounds-checks chunks, enforces a complete 64-value frame structure, reports header inconsistencies, and rejects nonfinite values. The optional writer defaults to a standards-correct header. An explicit experimental option produces the observed inconsistent header fields. No produced file is claimed hardware-tested.</p>
+<h2>10. Noise, Chaos and auxiliary modulation</h2>
+<h3>10.1 Noise: identifiable components, incomplete complete-equation translation</h3>
+<p>The SP67 application contains a dedicated Noise branch. One traced path begins around <code>0x08031038</code>. Its ingredients include:</p>
+<ul>
+<li>A 32-bit linear congruential generator with multiplier <code>0x0bb38435</code> and increment <code>0x3619636b</code>.</li>
+<li>Random-state conversion using a near-<code>1/2^32</code> scale and a <code>-0.5</code> offset.</li>
+<li>Smooth segment interpolation involving the sine table.</li>
+<li>A table of 256 geometrically spaced filter/rate coefficients, with 24 steps per octave.</li>
+<li>Multiple filter states, normalization logic, and modulation of sine-like carriers.</li>
+</ul>
+<p>This is enough to rule out a faithful implementation consisting only of independent white noise at the outputs. It is not enough to supply a fully validated Noise engine. Filter update ordering, exact state limits, LF behavior and all mode-dependent input offsets remain to be translated.</p>
+<h3>10.2 Chaos: a structured multi-oscillator branch, not an unspecified random generator</h3>
+<p>A separate branch around <code>0x0802fa04</code> uses phase state, modulation and feedback paths. Focus participates in a <code>1 + 21*Focus</code> mapping with interpolation between neighboring integer relationships; Partials and Slide enter modulation/feedback scaling. This supports a structured coupled-oscillator interpretation rather than “play random noise.” The complete coupled equations and their state-update ordering are still unresolved.</p>
+<p>It would be irresponsible to invent a Lorenz oscillator or generic cross-FM algorithm and label it a reconstruction of this branch. A creative approximation is possible, but should have a distinct compatibility status.</p>
+<h3>10.3 Sub/CV and envelope behavior</h3>
+<p>Four 1,024-sample periodic tables are extracted: ramp, sine, triangle-like and strongly shaped. Their numerical contents are known, but every table-to-output-mode association has not been traced. Sample-and-hold/smoothed-random logic reuses the pseudorandom generator family.</p>
+<p>A traced input-level follower uses approximately 0.1 attack weight and 0.001 release weight per sample. Its comparison-dependent behavior is equivalent to fast attack and slow release. Clock-related GPIO dispatch and counters are visible, but a complete clocked-LFO state machine, including timeout and restart rules, is not yet available.</p>
+<p>The manufacturer documents Sine/Sub behavior separately from the FM bus, and distinguishes sub-oscillator and clocked CV roles <a class="source" href="#sources">[S1]</a>. The binary exposes separate phase and output paths consistent with that description, without yet resolving every physical jack assignment.</p>
+<h2>11. Controls, pitch, FM and output routing</h2>
+<p>The firmware contains separate slow-control and audio-rate CV buffers. The clearest fast-CV trace uses four halfwords per sample frame at <code>0x30000040</code>: the alternating channels lead to the A/B Partials and pitch paths. Slow ADC slots 4 and 5 feed a steep fourth-power mapping <code>60*u^4</code>, strongly associated with the two FM-index controls. <strong>Those slow slots must not be mislabeled Partials.</strong></p>
+<p>A pitch conversion uses a 2,048-step fractional-octave table, an octave shift, a constant near 1.021974921 and division by 48,000. A useful internal-coordinate interpretation is approximately:</p>
+<pre><code class="language-text">frequency ≈ 1.021974921 * 2^(q/2048 + 4)
+</code></pre>
+<p>The constant times 16 is about 16.3516 Hz. A low-frequency branch divides the relevant rate by 256, an eight-octave change. This does not by itself establish the complete FREQ knob calibration, V/oct offset, accepted CV range or physical low-frequency switch behavior.</p>
+<p>The input stereo buffer is around <code>0x30000440</code>. Output stores reach four interleaved pairs around <code>0x30000840</code>, <code>0x30000c40</code>, <code>0x30001040</code> and <code>0x38000000</code>, establishing eight digital output lanes. Some lanes use Q30-like conversion; others use a different scale. The full lane-to-jack map is not sufficiently proven to print a falsely definitive output pin table.</p>
+<p><code>CONTROL_IO_MAP.md</code> therefore separates public panel roles, known buffer/field addresses, and unresolved calibration/routing. An implementation can expose the correct conceptual ports now, but should not claim voltage-accurate equivalence until the physical mapping and gains are checked.</p>
+<h2>12. Extracted tables and why they matter</h2>
+<p>Nine tables are exported as exact little-endian float32 binary and human-readable CSV, with addresses, element counts and SHA-256 hashes. The factory Array also has a frame-oriented CSV.</p>
+<p>The 8,192-entry sine and 2,048-entry exponential tables closely match their expected analytic functions. The triangle-like and strongly shaped tables deserve preservation rather than replacement by an ideal waveform: the sampled details and any phase conventions may be intentional or may reflect the method used to create them. The Focus exponent table captures an otherwise easy-to-miss nonlinear mapping.</p>
+<p>The factory data form 64 spectral frames of 64 values. Some coefficients exceed one. That alone disproves an importer rule that every internal float coefficient must already be clamped to <code>[0,1]</code>. The safe PCM16 writer deliberately rejects overflow instead of reproducing unchecked narrowing or silently changing the data. For analysis, retain the original floats.</p>
+<p>The recovered factory bank is a direct asset extraction from the uploaded firmware, not an independently authored recreation. Technical accessibility is not a statement of permission to redistribute firmware-derived tables in a commercial plugin.</p>
+<h2>13. What the included tests do — and do not — establish</h2>
+<p>The supplied 31 host tests pass. They check firmware identity, exact ELF payload preservation, table integrity, analytic table fits, the square-root zero case, Focus bypasses, Array interpolation, frame limits, PCM conversions, malformed RIFF rejection, and polynomial identities at unity radius.</p>
+<p>The unity-radius test is particularly useful: the translated recurrences reduce to their expected trigonometric identities. It catches several plausible sign and seed mistakes. It does <strong>not</strong> prove that the surrounding phase wiring, input normalization or hardware output path is correct.</p>
+<p>The tests do not execute the ARM binary. They do not compare generated audio with the real module. They do not prove save files are accepted by the updater or firmware. A passing test suite is evidence about the supplied reconstruction tools, not a substitute for a hardware comparison.</p>
+<h2>14. Limits and corrections worth carrying forward</h2>
+<p>The first-pass response correctly identified the image and many startup addresses, but was too confident about the ultimate completeness of recovery. The present analysis narrows that confidence into specific, reviewable claims.</p>
+<p>Important boundaries:</p>
+<ol>
+<li><strong>MCU family is stronger than exact part identification.</strong> H743/H753-class is supported; a precise package/revision is not.</li>
+<li><strong>No claim of 64 MB installed SDRAM is carried forward.</strong> Two 12 MiB initialization spans are directly established.</li>
+<li><strong>“No opaque wrapper” is not “no security anywhere.”</strong> The missing bootloader may have behavior unavailable in this file.</li>
+<li><strong>No FFT in the traced SAM algorithm is not a whole-program absence proof.</strong> It is enough to guide a model of this path.</li>
+<li><strong>64 stored coefficients are not 64 actively synthesized terms.</strong> The normal loops' ceiling is 60.</li>
+<li><strong>Noise/Chaos and the full UI are partially mapped, not finished.</strong> Their names and a few constants are not a complete model.</li>
+<li><strong>48 kHz is strongly supported as the DSP's assumed timebase, not externally measured.</strong></li>
+<li><strong>WAV header quirks and raw edge arithmetic need independent files or hardware traces.</strong> The tools fail safely when the recovered indexing would be unsafe.</li>
+</ol>
+<p>These qualifications are not cosmetic. They determine which parts Codex can implement as recovered behavior and which parts need separate experimental status.</p>
+<h2>15. Highest-value continuation and implementation order</h2>
+<p>For a Leviathan implementation, begin with the spectral representation, the two reader modes, and the standard Partials recurrence. Those have the strongest direct reconstruction and executable probes. Add the SAM detector bank with its actual Slide/Focus coupling, 64-frame cadence and numerical compatibility options. Keep exact lookup data behind an explicitly reviewable asset boundary.</p>
+<p>Next, trace the complete phase/FM and even-output offset path. That determines whether a model which looks spectrally correct also responds correctly to FM, Sync and input controls. Only then should a hardware-output gain comparison be treated as decisive.</p>
+<p>For further reverse engineering, the single most informative additional artifact is a hardware-saved Array WAV. It can immediately confirm or reject the header inconsistency, payload shape, file naming and save normalization assumptions. A small set of controlled captures can then expose spectrum timing and detector bandwidth. A second firmware revision would help isolate mode changes, but no genuine binary diff was performed here because only this snapshot was available.</p>
+<p>See <code>CODEX_HANDOFF.md</code> for implementation boundaries, acceptance tests and a prioritized experiment matrix.</p>
+</section><section id="dsp"><div class="section-kicker">DSP equations</div><h1>Recovered DSP equations and implementation boundaries</h1>
+<p>This document translates selected SP67 paths into implementation-oriented notation. It is not the original source and not a complete module emulator. All addresses apply only to the hash in <code>REPORT.md</code>. The Python probes in <code>reference/sp67_reference.py</code> implement the stated subset.</p>
+<h2>1. Numeric conventions</h2>
+<p>Use <code>f32</code> for an IEEE754 single-precision rounding step, <code>bits()</code> for reinterpretation as uint32, <code>float_bits()</code> for the inverse, and <code>FMA32(a,b,c)</code> for a single-rounded <code>a*b+c</code> operation. <code>trunc</code> is toward zero. Bit shifts and additions in the magnitude helper are unsigned modulo 2^32.</p>
+<p>The firmware uses both float32 and float64 operations and sets flush-to-zero. The mathematical oscillator/filter probes use host arithmetic in some places; only the explicitly bit-oriented helpers attempt to preserve the observed bit transforms. Native host <code>fmaf</code> supplies float32 FMA in those helpers. This is still not a full emulation of Cortex floating-point exception, default-NaN, signed-zero or flush-to-zero semantics.</p>
+<p><code>VFMA d,n,m</code> accumulates <code>d+n*m</code>; <code>VFMS d,n,m</code> gives <code>d-n*m</code>; <code>VFNMS d,n,m</code> gives <code>n*m-d</code>. Source S6 is the architecture-level check on these signs. The odd/even recurrence depends on reading them correctly.</p>
+<h2>2. Fundamental lookup tables</h2>
+<table>
+<thead>
+<tr>
+  <th>Name</th>
+  <th>Address</th>
+  <th style="text-align:right">Elements</th>
+  <th>Analytic relationship / use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>sine_8192</code></td>
+  <td><code>0x0803a674</code></td>
+  <td style="text-align:right">8192</td>
+  <td>approximately <code>sin(2*pi*i/8192)</code></td>
+</tr>
+<tr>
+  <td><code>exp2_2048</code></td>
+  <td><code>0x08043a74</code></td>
+  <td style="text-align:right">2048</td>
+  <td>approximately <code>2^(i/2048)</code></td>
+</tr>
+<tr>
+  <td><code>focus_exponent_1024</code></td>
+  <td><code>0x08042a74</code></td>
+  <td style="text-align:right">1024</td>
+  <td>approximately <code>1.25 * 0.4^(i/1023)</code></td>
+</tr>
+<tr>
+  <td><code>noise_rate_256</code></td>
+  <td><code>0x08042674</code></td>
+  <td style="text-align:right">256</td>
+  <td>geometric, approximately 24 indices/octave</td>
+</tr>
+</tbody>
+</table>
+<p>A positive-cycle phase <code>phase</code> is converted into table position <code>P = phase*8192</code>. The lower integer bits wrap through an <code>&amp;8191</code> index, while the fractional part interpolates neighboring entries. A 2048-index offset gives the cosine reference. Exact phase overflow handling must be taken from the particular call site, especially under negative FM.</p>
+<p>Do not generate new tables merely because the intended analytic function is recognizable when comparing against the firmware. Exact float32 table samples are already available. Conversely, a distributable independent implementation may deliberately generate its own analytic tables rather than ship extracted assets.</p>
+<h2>3. Sample cadence and coefficient updates</h2>
+<p>Nominal sample rate <code>Fs = 48000</code> is embedded in DSP rate calculations. Audio callbacks supply 64 stereo sample frames. The relevant loop uses an interleaved word index 0,2,...,126.</p>
+<p>For each coefficient <code>a_i</code>, the SAO reader writes:</p>
+<pre><code class="language-text">delta_i = (target_i - current_i) * 0.015625
+</code></pre>
+<p>The sample path advances the working coefficient by <code>delta_i</code>. In exact float32 arithmetic, 64 additions may not land bit-for-bit on the original target; do not silently snap to the target and call it exact. A redesigned Rack version may choose a final snap, but that is an implementation choice.</p>
+<p>The host's processing block should not define the synthetic hardware cadence. For a compatibility implementation, keep an internal 64-sample clock at a defined DSP rate. At arbitrary Rack rates, the simplest comparison architecture is a 48 kHz core with explicit resampling. A native-rate implementation instead needs time-constant and cutoff adaptation and will no longer be trivially identical.</p>
+<h2>4. SAM reference frequency and detector pole</h2>
+<p>Evidence: setup around <code>0x0802e998–0x0802ea0c</code> and mirrored setup; quadrature bank around <code>0x0802f296</code>; detector blocks around <code>0x0802f4ac</code> and <code>0x0802f716</code>.</p>
+<p>For normalized Slide <code>s</code>:</p>
+<pre><code class="language-text">q = trunc(f32(s*8191))
+fractionalOctave = exp2Table[q &amp; 2047]
+octaveMultiplier = 1 &lt;&lt; (q &gt;&gt; 11)
+inc = fractionalOctave * octaveMultiplier / 2400
+</code></pre>
+<p>For normalized Focus <code>f</code>:</p>
+<pre><code class="language-text">w = f32(1 - 0.98*f)
+p = min(f32(1 + double(inc)*(-3.14)*double(w)*double(w)),
+        0.9999799728393555)
+</code></pre>
+<p>The exact compiler sequence can differ in intermediate rounding from the compact expression. <code>analysis_parameters()</code> intentionally describes the mapping, not every Cortex instruction.</p>
+<p>Per side, use one input-conditioning history and a state vector for each quadrature/harmonic:</p>
+<pre><code class="language-text">u = 12 * input
+conditioned = u - previous_u + .995 * previous_conditioned
+previous_u = u
+previous_conditioned = conditioned
+
+for each active harmonic h:
+    vi = conditioned * cosineReference[h]
+    vq = conditioned * sineReference[h]
+    i1[h] = vi + p*(i1[h] - vi)
+    i2[h] = i1[h] + p*(i2[h] - i1[h])
+    q1[h] = vq + p*(q1[h] - vq)
+    q2[h] = q1[h] + p*(q2[h] - q1[h])
+    energy = i2[h]^2 + q2[h]^2
+    magnitude[h] = fast_sqrt_bits(energy)
+</code></pre>
+<p>Sine/cosine sign conventions may rotate the quadrature state without changing its ideal magnitude. To reproduce instruction-level transients, use the exact reference ordering and FMA sequence, not only the energy equivalence.</p>
+<p>At most 60 normal terms are processed in groups of four. The reference increment is distinct from oscillator pitch: SAM can listen to one harmonic grid while synthesizing the resulting amplitudes at another frequency. The exact panel/CV calibration into normalized <code>s</code> and <code>f</code> remains a separate task.</p>
+<h2>5. Literal fast square root</h2>
+<pre><code class="language-text">u = uint32(bits(energy))
+u = uint32(u - 0x00800000)
+u = u &gt;&gt; 1
+u = uint32(u + 0x20000000)
+magnitude = float_bits(u)
+</code></pre>
+<p>There is no visible Newton refinement in the traced detector loop. The transform creates a characteristic approximation error even for ordinary positive normalized inputs. At exactly zero it produces <code>0x9fc00000</code>. The helper rejects negative/nonfinite <em>input energy</em> as invalid caller input, but it deliberately retains this output quirk.</p>
+<p>For a future exactness test, feed explicitly represented float32 energies spanning exponent boundaries and denormals. Compare raw output bits to instruction emulation with the same FPSCR, not simply to a square root tolerance.</p>
+<h2>6. Standard Partials recurrence</h2>
+<p>Evidence: side A normal branch <code>0x08030cd4</code> onward; the seed computations at <code>0x08030d60</code>, <code>0x08030dd8</code>; unrolled loop <code>0x08030e42–0x08030f44</code>; compensation <code>0x08030f94–0x08030fd2</code>. Side B has a mirrored branch around <code>0x0803092c</code>.</p>
+<p>Let the internal smoothed Partials value be <code>p</code>. For nonnegative valid operation:</p>
+<pre><code class="language-text">r ≈ min(float32(float64(float32(0.65f*p)) + 0.35*float64(p)*float64(p)), 1)
+</code></pre>
+<p>Define separate phase arguments <code>thetaOdd</code> and <code>thetaEven</code>, because the exact phase-engine wiring is not fully reconstructed:</p>
+<pre><code class="language-text">x = r*cos(thetaOdd)
+C0 = r*r
+C1 = x
+Cn = 2*x*C(n-1) - C(n-2)
+
+z = r*cos(thetaEven)
+E0 = 0
+E1 = r*sin(thetaEven)
+En = 2*z*E(n-1) - E(n-2)
+</code></pre>
+<p>For amplitudes <code>a[0..63]</code>, with at most 60 terms admitted:</p>
+<pre><code class="language-text">oddSum  = a[0]*C1 - a[2]*C3 + a[4]*C5 - a[6]*C7 + ...
+evenSum = -a[1]*E2 + a[3]*E4 - a[5]*E6 + a[7]*E8 - ...
+</code></pre>
+<p>These signs come from the accumulation instructions, not from the public labels “Odd” and “Even.” At <code>r=1</code>, the expected trigonometric identities provide a useful independent algebraic check. Below unity radius, the recurrence generates polynomials of a scaled sinusoid and mixes lower harmonics of the corresponding parity. A simple per-harmonic amplitude weighting is not the same mapping.</p>
+<p>The odd seed deserves emphasis. A textbook recurrence initialized with <code>C0=1</code> is not this code when <code>r != 1</code>. Nor is inserting a factor of <code>r²</code> on the second recurrence term justified: the observed recurrence subtracts the preceding state without that factor.</p>
+<h3>Groupwise term selection</h3>
+<p>For a nonnegative increment <code>inc</code>, the recovered model is:</p>
+<pre><code class="language-text">if inc &gt;= float32(.1125): active = 0
+else:
+    active = 4
+    while active &lt; 60 and float32((active+4)*inc) &lt; float32(.45):
+        active += 4
+</code></pre>
+<p>This is a translation of the ordinary positive-rate path, not a promise about all extreme negative-FM states. For example, <code>inc=.01</code> yields 44 terms in the supplied helper. A generic “keep n where n*f &lt; Nyquist” implementation changes both the cutoff margin and grouping.</p>
+<h3>Gain compensation</h3>
+<pre><code class="language-text">g = 9.508619308 - 27.75853920*r + 32.67438126*r² - 13.46592999*r³
+if r &lt;= 0.03999999911: g *= 25*r
+oddSum *= g
+evenSum *= g
+</code></pre>
+<p>The assembly's FMA order is authoritative for exact rounding. The Python helper evaluates the mathematical polynomial; it is intended for unit tests and exploratory models.</p>
+<h2>7. Linear Array interpolation and Focus transform</h2>
+<p>Evidence: A <code>0x0802cd0c</code>; B <code>0x0802ce5c</code>.</p>
+<p>Let <code>N=dim1*dim2</code>, <code>k</code> be the current integer clock offset, and <code>s</code> normalized Slide:</p>
+<pre><code class="language-text">position = FMA32(float32(N-1), s, float32(k))
+i = trunc(position)
+t = position - trunc(position)
+j = i + 1
+if i &gt;= N: i -= N
+if j &gt;= N: j -= N
+for coefficient c in 0..63:
+    a = frame[i][c] + t*(frame[j][c] - frame[i][c])
+</code></pre>
+<p>Those are <strong>one-subtraction wrap rules</strong>, not arbitrary integer modulo. Upstream state normally constrains the indices. The reference helper throws an error if the translated addressing leaves the valid bank.</p>
+<p>For normalized Focus <code>f</code>, prepare:</p>
+<pre><code class="language-text">kFocus = float32(.75f*f)
+exponent = focusTable[min(trunc(f*1024),1023)]
+gain = float32(1.25f - kFocus)
+</code></pre>
+<p>Each interpolated amplitude is then transformed as follows:</p>
+<pre><code class="language-text">if a &lt;= 0 or kFocus == .25f:
+    target = a
+else:
+    tBits = signed32(uint32(bits(a) + 0xc0876c0b))
+    z = FMA32(exponent, float32(tBits), float32(1064866816))
+    reconstructed = float_bits(uint32(trunc_to_signed32(z)))
+    target = float32(gain*reconstructed)
+</code></pre>
+<p>This is a float-bit-domain approximation to a power family, not a standard <code>pow(a, exponent)</code>. The signed bit bias and the float32-rounded integer-like constant matter. A bypass is exact equality at a particular internal control value; it is not a broad neutral deadband. Nonpositive coefficients also bypass, and the gain multiplier is not applied on that bypass path.</p>
+<p>Finally compute the 64-sample increment vector. This makes Focus a spectral amplitude-distribution transform in linear SAO, not the analyzer bandwidth control used in SAM.</p>
+<h2>8. Planar reader: preserve the actual indexing rules</h2>
+<p>Evidence: A <code>0x0802cfac</code>; B <code>0x0802d0f8</code>.</p>
+<p>For a positive frame count <code>N</code>:</p>
+<pre><code class="language-text">g = ceil(sqrt(N))
+h = g - 1
+x = k + Focus*h
+y = Slide*h
+xi = trunc(x); tx = x - trunc(x)
+yi = trunc(y); ty = y - trunc(y)
+
+row0 = yi-h   if yi &gt;= g else yi
+row1 = yi+1-h if yi &gt;= h else yi+1
+
+indices = [row0*g+xi, row0*g+xi+1, row1*g+xi, row1*g+xi+1]
+for each index:
+    if index &gt;= N: index -= N
+</code></pre>
+<p>Interpolate along the Focus coordinate within the two selected rows, then interpolate those results along Slide. Apply no linear-reader Focus power transform in this branch. Store increments over 64 samples.</p>
+<p>The last-row rule can select row 1 rather than row 0. Fractional weights of zero hide some of this behavior at exact corners. Non-square banks and excessive clock offsets expose the edge arithmetic more clearly. The safe helper rejects out-of-bounds addresses instead of guessing an intended toroidal topology.</p>
+<p>A complete clone should recover the upstream constraints that make these rules safe in ordinary use. Replacing them with <code>%N</code> may be a sensible independent design, but should be identified as a deviation.</p>
+<h2>9. Input follower, FM-index curve and output saturation</h2>
+<p>A traced level follower is:</p>
+<pre><code class="language-text">v = abs(input)
+if v &gt; envelope:
+    envelope = .9*envelope + .1*v
+else:
+    envelope = .999*envelope + .001*v
+</code></pre>
+<p>Fast Partials paths include approximately .01 per-sample smoothing. The exact number and order of smoothing stages and panel calibrations should be taken from the corresponding path, not globally assumed identical for every control.</p>
+<p>Slow ADC slots 4 and 5 participate in:</p>
+<pre><code class="language-text">fmIndex = 60 * normalizedControl^4
+</code></pre>
+<p>This yields a strongly compressed lower part of the knob range. It is an FM-index mapping, not the Partials-radius curve. The external/internal FM source combination and signed phase increments remain incomplete.</p>
+<p>A repeatedly observed soft clip is:</p>
+<pre><code class="language-text">x = min(1.5, max(-1.5,x))
+y = x * (1 - 0.14814814925193787*x*x)
+</code></pre>
+<p>Output conversion includes different fixed-point scales on different digital lanes. Do not apply a universal voltage scale or identical clipping path to all eight outputs without completing the lane trace.</p>
+<h2>10. Explicitly absent from the reference model</h2>
+<p>The executable probes do not model: full audio callback state ordering; calibrated ADC conversion; complete carrier/sub/even phase relationships; through-zero or extreme FM; Sync and Follow; button debounce and long-press timing; capture start/stop and clock timeout; full Noise or Chaos equations; all Sub/CV modes; exact save-state persistence; analog gain, clipping or noise; converter clocking; bootloader/update behavior.</p>
+<p>These omissions should stay visible in any Codex handoff. The probes are useful building blocks and regression references, not an opaque package to be relabeled a finished emulator.</p>
+</section><section id="arrays"><div class="section-kicker">Array format</div><h1>Spectraphon Array persistence and WAV interchange</h1>
+<h2>1. Three different representations</h2>
+<p>Keep these distinct:</p>
+<table>
+<thead>
+<tr>
+  <th>Layer</th>
+  <th>Representation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Live/working spectrum</td>
+  <td>64 float32 values in internal RAM</td>
+</tr>
+<tr>
+  <td>Stored Array in external RAM</td>
+  <td>Multiple 64-float spectra, with a separate four-word descriptor</td>
+</tr>
+<tr>
+  <td>Saved Array file</td>
+  <td>RIFF/WAVE container; the observed save path emits 16-bit mono coefficient samples</td>
+</tr>
+</tbody>
+</table>
+<p>A spectrum is not an FFT complex vector and does not store a phase value alongside each magnitude. The observed normal Array reader consumes one real float per coefficient. File “samples” are serialized coefficient values, not the original incoming audio samples.</p>
+<p>Evidence: readers at <code>0x0802cd0c</code>, <code>0x0802ce5c</code>, <code>0x0802cfac</code>, <code>0x0802d0f8</code>; converter at <code>0x08033434</code>; saver at <code>0x08033af8</code>.</p>
+<h2>2. Slot descriptors and addresses</h2>
+<p>A four-word descriptor has the observed layout:</p>
+<pre><code class="language-text">offset +0:  float index offset relative to the side's external-memory base
+offset +4:  dimension 1
+offset +8:  dimension 2
+offset +12: save-state marker; zero enters the save path, nonzero skips it
+</code></pre>
+<p>The last field must not be simplistically called a “present” flag. In the save routine it behaves like dirty/unsaved state; the exact lifecycle across every UI transition is not fully reconstructed.</p>
+<p>A-side descriptor base is <code>0x20000a20</code>; B-side descriptor base is <code>0x20000920</code>. Each contains 16 entries. Main's initializer uses 65,536-float spacing per slot. A offsets start at zero; B offsets include 1,048,576 floats, but relative to a separate B memory base.</p>
+<pre><code class="language-text">A absolute spectrum address = *(0x20002f74) + 4*descriptorA.offset
+B absolute spectrum address = *(0x20002f70) + 4*descriptorB.offset
+
+A base pointer value = 0x60c01000
+B base pointer value = 0x60001000
+</code></pre>
+<p>At initialization, the default coefficient block is copied from <code>0x08045a98</code> and dimensions are set to 8 × 8. This source block contains 4,096 floats: 64 frames of 64 coefficients.</p>
+<p>Capacity arithmetic:</p>
+<pre><code class="language-text">1 RAM frame       = 64 * 4 = 256 bytes
+1 maximum slot    = 1024 * 256 = 262144 bytes
+1 PCM16 frame     = 64 * 2 = 128 bytes
+maximum WAV data  = 1024 * 128 = 131072 bytes
+factory WAV data  = 64 * 128 = 8192 bytes
+</code></pre>
+<p>The file adds RIFF headers/chunks to those payload sizes. Storage capacity does not establish capture duration; frame cadence depends on capture/clock state, which is incompletely translated.</p>
+<h2>3. Names and discovery</h2>
+<p>Embedded wildcard strings are:</p>
+<pre><code class="language-text">spect*.wav
+speca*.wav
+specb*.wav
+</code></pre>
+<p>The observed per-side save names follow <code>speca000.wav</code> through <code>speca015.wav</code>, and the B equivalent. The enumeration path and a filename character walk fit a short-filename FatFs configuration. Exact mount options, all case handling and the meaning of every generic <code>spect*</code> path remain incompletely identified.</p>
+<p>The inferred FatFs-like routines are labeled in the curated symbol CSV. Their names are analyst assignments, not symbols extracted from a linked library.</p>
+<h2>4. Saved WAV structure and the header anomaly</h2>
+<p>The save path selects internal sample-format code <code>0x73693136</code>, follows the signed-16 conversion path, and writes 128 payload bytes for every spectrum. The header builder/finalizer declares mono audio with nominal sample rate 48,000 and 16-bit samples.</p>
+<p>The significant apparent inconsistency is:</p>
+<table>
+<thead>
+<tr>
+  <th>Header field</th>
+  <th style="text-align:right">PCM16 save-path value inferred from instructions</th>
+  <th style="text-align:right">Standard mono PCM16 value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Format tag</td>
+  <td style="text-align:right">1</td>
+  <td style="text-align:right">1</td>
+</tr>
+<tr>
+  <td>Channels</td>
+  <td style="text-align:right">1</td>
+  <td style="text-align:right">1</td>
+</tr>
+<tr>
+  <td>Sample rate</td>
+  <td style="text-align:right">48000</td>
+  <td style="text-align:right">48000</td>
+</tr>
+<tr>
+  <td>Byte rate</td>
+  <td style="text-align:right"><strong>192000</strong></td>
+  <td style="text-align:right"><strong>96000</strong></td>
+</tr>
+<tr>
+  <td>Block align</td>
+  <td style="text-align:right"><strong>4</strong></td>
+  <td style="text-align:right"><strong>2</strong></td>
+</tr>
+<tr>
+  <td>Bits per sample</td>
+  <td style="text-align:right">16</td>
+  <td style="text-align:right">16</td>
+</tr>
+</tbody>
+</table>
+<p>The common finalization sequence around <code>0x080338f4–0x0803390a</code> writes 192,000 and 4; the PCM16 branch around <code>0x08033998</code> selects 16 bits. The sequence then writes the header. The static translation therefore points to stale 32-bit byte-rate/alignment fields, not a 32-bit coefficient payload.</p>
+<p><strong>Validation status:</strong> no hardware-saved WAV was supplied. This is an instruction-derived finding awaiting file confirmation. A parser should report the inconsistency and use the actual format/bit-depth fields to validate payload structure, rather than blindly trust block alignment. A standards-correct writer should not reproduce the quirk by accident.</p>
+<p>The optional <code>firmware_header_quirk=True</code> parameter in the reference encoder is deliberately explicit and experimental. It is not needed for ordinary coefficient inspection and is not a guarantee of hardware compatibility.</p>
+<h2>5. Quantization and save-time mutation</h2>
+<p>A per-side peak-like scalar controls conditional normalization:</p>
+<pre><code class="language-text">if 0 &lt; trackedPeak &lt; 1:
+    gain = 1 / trackedPeak
+else:
+    gain = 1
+</code></pre>
+<p>Each coefficient is multiplied by this gain; the scaled float is written back to the Array RAM. The integer save conversion is approximately:</p>
+<pre><code class="language-text">integerSample = trunc(double(scaledCoefficient) * 32767.0)
+</code></pre>
+<p>The complete floating conversion/narrowing behavior for invalid or overflowing inputs is not asserted here. No explicit saturating clamp is visible in the traced store sequence. The reference writer <strong>rejects</strong> out-of-int16 values rather than reproducing unchecked narrowing.</p>
+<p>The observed signed-16 read conversion uses a factor of <code>1/32768</code>, not <code>1/32767</code>. Thus, ignoring gain and float rounding, the round trip is approximately:</p>
+<pre><code class="language-text">loaded = trunc(savedFloat * 32767) / 32768
+</code></pre>
+<p>This is a real numerical distinction. The safe tool's encoder does not mutate the caller's data, while the firmware does update its stored floats. The API documentation makes that divergence explicit.</p>
+<p>Some factory coefficients are larger than one. Do not destroy them during extraction merely to make a generic audio encoder happy. Raw float32 exports are the lossless representation of the extracted bank.</p>
+<h2>6. Input formats: parser recognition is not complete support</h2>
+<p>The generic WAV machinery recognizes RIFF/WAVE, <code>fmt </code>, <code>data</code>, and an additional <code>clm </code> identifier, plus chunk walking/padding. It contains sample conversion branches for unsigned PCM8, signed PCM16/24/32 and IEEE float32. Other format tags seen in parsing are not enough to claim that compressed formats work as spectral Arrays.</p>
+<p>The included tool supports only mono PCM8/16/24/32 and mono IEEE float32. It intentionally rejects ADPCM, mu-law, WAVE_FORMAT_EXTENSIBLE, multiple data chunks, nonfinite float data and oversized/incomplete spectral payloads. This is a bounded inspection/interchange tool, not a claim to emulate every permissive firmware parser behavior.</p>
+<p>The tool normalizes integer PCM using standard divisors. The firmware's 24-/32-bit conversion uses a nearby float32 constant (<code>0x2ffffff6</code>) and intermediate integer-to-float rounding, so the tool is not an instruction-exact replacement for those conversion branches. PCM16's divisor agrees exactly with the observed 1/32768 scaling.</p>
+<h2>7. How file length becomes Array dimensions</h2>
+<p>Main's load path uses a special case for 4,096 scalar values:</p>
+<pre><code class="language-text">if sampleCount == 4096:
+    dim1 = 8
+    dim2 = 8
+else:
+    dim1 = sampleCount &gt;&gt; 6
+    dim2 = 1
+</code></pre>
+<p>This is visible around <code>0x08034fd6–0x080350c6</code>. The special case matches the 64-frame factory bank. No extra custom dimensional header is necessary to explain normal files in this path. The generic parser's handling of other chunks does not establish that every possible metadata field is ignored elsewhere.</p>
+<p>An importer should validate that the payload contains a whole number of 64-value frames and at most 1,024 frames. It should not infer stereo Arrays simply because a generic WAV library can open stereo files. The tool requires one channel because arbitrary multichannel Array semantics were not established.</p>
+<h2>8. Using the included tool</h2>
+<p>Run from the bundle root:</p>
+<pre><code class="language-bash">python reference/sp67_reference.py inspect-wav /path/to/speca000.wav
+python reference/sp67_reference.py inspect-wav /path/to/speca000.wav --frames-json frames.json
+python reference/sp67_reference.py extract-factory factory_frames.json
+python tests/test_reference.py
+</code></pre>
+<p>The factory extraction command writes the coefficients already recovered from this firmware; it does not synthesize or guess their values. The inspect command reports format fields, inferred dimensions and header inconsistencies.</p>
+<p>For programmatic use:</p>
+<pre><code class="language-python">from pathlib import Path
+from reference.sp67_reference import decode_array_wav, encode_pcm16
+
+info, frames = decode_array_wav(Path('speca000.wav').read_bytes())
+print(info.frame_count, info.inferred_dimensions, info.warnings)
+# Experimental output; not validated on a physical module.
+encoded = encode_pcm16(frames)
+Path('array_standard_header.wav').write_bytes(encoded)
+</code></pre>
+<p>Encoding can fail when coefficients exceed the representable int16 range. That failure is intentional: inspect or explicitly normalize the data rather than silently clipping it. Do not place experimental files on the only copy of a working SD card.</p>
+<h2>9. Independent checks that would most reduce uncertainty</h2>
+<p>The first comparison should use an untouched hardware-saved Array file, not a DAW-exported copy. Check the six format fields, actual data length, coefficient count and name. Compare the input file before and after a module load/save cycle to detect normalization or scaling.</p>
+<p>For capture timing, use a controlled input tone and record a small Array at a known external clock interval. That can establish whether each capture tick stores one spectrum, how start/end events are handled, and whether the final frame count differs from the simple number of ticks. Those timing semantics should not be invented from the file format alone.</p>
+</section><section id="controls"><div class="section-kicker">Controls &amp; I/O</div><h1>Controls, modes, I/O and confidence map</h1>
+<h2>1. Public module interface versus recovered internals</h2>
+<p>Make Noise describes two interacting spectral sides with eight outputs, two audio inputs, two gate inputs and ten CV inputs. SAM analyzes incoming sound; SAO uses stored spectra. Sine/Sub paths have a distinct relationship to the FM bus, and side B provides Follow/Sync interaction <a class="source" href="#sources">[S1]</a>. Those statements establish intended user-facing behavior, not a recovered electrical schematic.</p>
+<p>The compact mode map below follows the manufacturer's cheat sheet <a class="source" href="#sources">[S3]</a>. The subsequent addresses and implementation notes come from the uploaded binary.</p>
+<table>
+<thead>
+<tr>
+  <th>Mode</th>
+  <th>Partials role</th>
+  <th>Focus role</th>
+  <th>Slide role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>SAM</td>
+  <td>Harmonic activation/timbre</td>
+  <td>Analysis selectivity</td>
+  <td>Analysis reference frequency</td>
+</tr>
+<tr>
+  <td>Linear SAO</td>
+  <td>Harmonic activation/timbre</td>
+  <td>Coefficient compression/expansion</td>
+  <td>Position along the Array</td>
+</tr>
+<tr>
+  <td>Planar SAO</td>
+  <td>Harmonic activation/timbre</td>
+  <td>Fine grid coordinate</td>
+  <td>Coarse grid coordinate</td>
+</tr>
+<tr>
+  <td>Noise</td>
+  <td>Sideband width</td>
+  <td>Noise high-pass control</td>
+  <td>Noise low-pass control</td>
+</tr>
+<tr>
+  <td>Chaos</td>
+  <td>Cross-modulation depth</td>
+  <td>Oscillator ratio</td>
+  <td>Feedback</td>
+</tr>
+</tbody>
+</table>
+<p>This table is a semantic index. It is not a claim that the same ADC value has identical calibration or smoothing in every mode.</p>
+<h2>2. Pitch and FM controls</h2>
+<p>The recovered pitch math uses an octave table, integer/fractional splitting and a 48 kHz denominator. The internal coordinate can be expressed approximately as <code>1.021974921 * 2^(q/2048+4)</code> Hz. The path around <code>0x080305c4</code> interacts with Follow-like state but has not been translated enough to give a definitive Follow ratio or calibration equation.</p>
+<p>The fourth-power FM-index mapping is visible in setup around <code>0x0802e87e–0x0802e8e8</code>: <code>60*u^4</code>. Two slow ADC slots, 4 and 5, feed the relevant paths. The complete mix between FM bus, external FM and pitch-rate terms needs further tracing. No numeric CV voltage limits, attenuverter polarity or through-zero specification should be inferred merely from the normalized curve.</p>
+<p>The LF branch divides a rate by 256. That is a directly observed rate change, while exact mode-entry, state persistence and every alternate path remain separate questions.</p>
+<h2>3. Fast-CV acquisition</h2>
+<p>Fast samples use four halfwords per frame around <code>0x30000040</code>. Tracing the current paths gives:</p>
+<table>
+<thead>
+<tr>
+  <th style="text-align:right">Slot</th>
+  <th style="text-align:right">Calibration-index association</th>
+  <th>Destination interpretation</th>
+  <th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td style="text-align:right">0</td>
+  <td style="text-align:right">9</td>
+  <td>A Partials, smoothed field around <code>0x20000880</code></td>
+  <td>High path-level interpretation</td>
+</tr>
+<tr>
+  <td style="text-align:right">1</td>
+  <td style="text-align:right">8</td>
+  <td>A pitch-related path</td>
+  <td>High path-level interpretation</td>
+</tr>
+<tr>
+  <td style="text-align:right">2</td>
+  <td style="text-align:right">11</td>
+  <td>B Partials, smoothed field around <code>0x200023fc</code></td>
+  <td>High path-level interpretation</td>
+</tr>
+<tr>
+  <td style="text-align:right">3</td>
+  <td style="text-align:right">10</td>
+  <td>B pitch-related path</td>
+  <td>High path-level interpretation</td>
+</tr>
+</tbody>
+</table>
+<p>The table does not identify physical ADC pins or convert volts into these readings. The calibration object around <code>0x200144d4</code> is not fully reconstructed. Coarse/fine frequency-control summation, offsets, gain errors, polarity and clipping remain to be mapped into a voltage-accurate implementation.</p>
+<p>Slow ADC samples are based around <code>0x30000020</code>. The first four slots participate in Slide/Focus-related paths; slot order on side B should be rechecked before assigning physical pin labels. Slots 4–5 have the stronger FM-index interpretation described above.</p>
+<h2>4. Digital input and output buffers</h2>
+<p>Input audio is read as interleaved 32-bit words around <code>0x30000440</code>, with a conversion constant <code>0x2ffffff6</code> (approximately <code>4.656610098e-10</code>, near <code>1/2^31</code>). This is not a measured volts-per-code specification.</p>
+<p>Output writes reach four paired regions:</p>
+<table>
+<thead>
+<tr>
+  <th>Pair base</th>
+  <th>Observed stores in the sample path</th>
+  <th>Interpretation status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>0x30000840</code></td>
+  <td>Two soft-clipped signal lanes</td>
+  <td>Pair established; physical jack assignment not fully proven</td>
+</tr>
+<tr>
+  <td><code>0x30000c40</code></td>
+  <td>Two additional audio lanes</td>
+  <td>Pair established; trace final lane identity separately</td>
+</tr>
+<tr>
+  <td><code>0x30001040</code></td>
+  <td>Audio/auxiliary-related lane stores</td>
+  <td>Roles still require final mapping</td>
+</tr>
+<tr>
+  <td><code>0x38000000</code></td>
+  <td>Additional sine/CV-related stores</td>
+  <td>Roles still require final mapping</td>
+</tr>
+</tbody>
+</table>
+<p>The principal store block is around <code>0x080302b8–0x0803038c</code>, with pointer setup earlier around <code>0x0802ec94–0x0802ed12</code>. The eight-lane structure agrees with the public output count <a class="source" href="#sources">[S1]</a>, but agreement in count does not prove ordering.</p>
+<p>A voltage-faithful model still needs: final per-lane gains, signed conversion limits, physical jack correspondence, analog scaling, DAC/codec selection, and any reconstruction filtering. Preserve independent output paths rather than collapsing them into one stereo sum.</p>
+<h2>5. Buttons, clock and mode fields</h2>
+<p>The GPIO callback at <code>0x08032688</code> distinguishes arguments 64 and 128. The two branches update clock counters/flags around:</p>
+<pre><code class="language-text">A: counter 0x20002ee0; flag 0x20002edc
+B: counter 0x20002ee8; flag 0x20002ee4
+</code></pre>
+<p>Application UI/clock processing is concentrated around <code>0x0802d900</code>; control acquisition around <code>0x0802d464</code>; persistent-state interactions around <code>0x0802d280</code>. These are good entry points for continuing decompilation, but the complete state machine has not been reconstructed.</p>
+<p>Mode-related fields include A <code>0x20002e8c</code> combined with <code>0x20002e94</code>, and B <code>0x20002e88</code> combined with <code>0x20002e90</code>. Their branch results select standard, Noise and Chaos paths. Do not encode those raw storage fields directly as a stable public API; their initialization and transitions are part of the unresolved state machine.</p>
+<p>Current Array selection is associated with A <code>0x20002430</code> and B <code>0x20000b20</code>. Reader clock offsets are associated with A <code>0x20002438</code> and B <code>0x20002434</code>. The distinction between selection and offset matters: changing a slot and stepping a frame are separate operations.</p>
+<p>The manufacturer's cheat sheet documents button combinations and mode-dependent Clock/Shift behavior <a class="source" href="#sources">[S3]</a>. This bundle does not claim to recover every debounce threshold, long-press edge, menu priority, timeout, persistence flag or startup-button gesture. For implementation, keep a documented behavior state machine distinct from raw firmware-equivalence claims.</p>
+<h2>6. Missing I/O facts worth measuring</h2>
+<p>A pin-accurate or voltage-accurate port should wait for a schematic, board inspection or controlled measurements. In particular, the current evidence does not establish every jack's usable voltage range, output amplitude at each setting, impedance, calibration tolerance, negative-FM behavior, clock trigger threshold, or sample alignment between all output pairs.</p>
+<p>For a Rack prototype, expose normalized internal parameters and explicit output lanes first. Then implement a replaceable panel/CV calibration layer. This avoids baking uncertain analog assumptions into an otherwise well-grounded DSP core.</p>
+</section><section id="codex"><div class="section-kicker">Codex handoff</div><h1>Codex handoff — a staged, evidence-led Spectraphon-inspired implementation</h1>
+<h2>Objective</h2>
+<p>Use the SP67 analysis to build a modular spectral instrument with clearly identified compatibility boundaries. This is not a request to execute or modify the uploaded firmware. The first deliverable should be a tested independent DSP core and data model, not an untestable monolithic Rack module.</p>
+<p>Read <code>REPORT.md</code>, <code>DSP_SPEC.md</code>, <code>ARRAY_FORMAT.md</code>, <code>CONTROL_IO_MAP.md</code>, and the reference helper docstrings before implementation. Analyst names and equations are reconstructed, not original source. Where a behavior is unresolved, retain an explicit design decision rather than quietly pretending the gap is recovered.</p>
+<h2>Non-negotiable facts to preserve in the baseline</h2>
+<p>The storage unit is 64 coefficients per spectrum. The normal active synthesis bank reaches at most 60 terms in four-term groups. The DSP math assumes 48 kHz and uses 64-frame updates. SAM is a harmonic quadrature detector bank with cascaded one-poles. Linear and planar SAO are different readers. Partials changes a polynomial recurrence, with the odd seed <code>C0=r²</code>, and has a fitted compensation curve. The linear Focus function is a bit-domain power approximation with exact bypass behavior. Save/read use different 32767/32768 scaling.</p>
+<p>These are more important to a faithful core than copying panel cosmetics or using a fashionable generic FFT implementation.</p>
+<h2>Proposed architecture</h2>
+<pre><code class="language-text">SpectralFrame          std::array&lt;float, 64&gt;
+SpectralArray          bounded vector&lt;SpectralFrame&gt;, dimensions, provenance
+ArrayBank              16 slots per side; independent persistent metadata
+QuadratureAnalyzer     reference generator, DC blocker, 60 detector states
+ArrayReader            linear and planar modes, explicit edge policy
+SpectralInterpolator   64-value current and delta vectors, internal cadence
+PolynomialOscillator   odd/even basis, active-group guard, gain compensation
+PhaseEngine            independent phases; unresolved links explicit
+ModeEngine             standard / experimental Noise / experimental Chaos
+ControlCalibration     normalized controls and CV interpretation
+ClockUiState           documented transitions, independently testable
+OutputStage            separate per-lane gains/converters, not a single stereo mix
+ArrayFileCodec         bounded RIFF parsing and explicit normalization policy
+RackAdapter            parameters, ports, serialization, UI; no filesystem in audio thread
+</code></pre>
+<p>Do not allocate, parse files, acquire blocking mutexes or regenerate tables inside the real-time sample path. Build Array snapshots outside that path and publish them through a bounded handoff. The exact concurrency machinery should fit the existing Leviathan engine conventions; this report did not inspect the current plugin source and does not invent filenames or claim integration work already exists.</p>
+<h2>Phase A — data model and deterministic numerical probes</h2>
+<p>Implement the frame/bank model, table loader or independent table generator, safe WAV parser, linear reader and planar reader. Port the Python tests to C++ with explicit float32/FMA policy. Add a switch between recovered one-subtraction addressing and a redesigned safe wrap policy, and record that selection in patch state.</p>
+<p>Acceptance: complete 64-value frames; at most 1024 frames per slot; exact imported float preservation where possible; malformed RIFF rejection; explicit warnings for the observed header inconsistency; no silent clipping of factory coefficients; reproducible interpolation at boundaries; no out-of-range reads under malformed input.</p>
+<p>Treat the extracted factory spectra and lookup files as separately reviewable assets. Analysis possession does not settle redistribution rights. A production distribution may need independently generated waveforms and independently authored spectral presets. Do not ship the raw firmware merely because it is present in this research bundle.</p>
+<h2>Phase B — standard oscillator</h2>
+<p>Port the recurrence and compensation curve before adding complex modulation. Expose independent odd/even phases for tests. Match the unity-radius trigonometric identities, zero-Partials muting, 60-term ceiling, four-term admission and soft-clip equation. Use the assembly addresses in <code>DSP_SPEC.md</code> to audit sign and seed choices.</p>
+<p>Acceptance: deterministic reference vectors; no coefficient 60–63 contribution in the normal branch; correct polarity of odd/even sums; an explicit distinction between mathematical reference arithmetic and an instruction-close float32 implementation; stable output for zero input and all normalized parameters.</p>
+<p>Do not replace the recurrence with <code>amplitude[h]*r^h*sin(h*phase)</code> and call it equivalent. Do not use a conventional Chebyshev seed of one below full Partials.</p>
+<h2>Phase C — SAM analyzer</h2>
+<p>Implement the separate analysis reference frequency, input DC blocker and cascaded quadrature filters. Keep analyzer pitch independent of synthesis pitch. Preserve Slide/Focus coupling. Implement the literal magnitude approximation as a compatibility option and an ordinary square root as a clearly labeled alternative.</p>
+<p>Acceptance: known-tone selectivity sweeps, amplitude-step response, phase-insensitive steady magnitudes, absence of unsafe denormal/nonfinite propagation, correct table bounds, and repeatable behavior at the pole cap. Compare both magnitude options before assuming their differences are inaudible.</p>
+<p>For arbitrary Rack sample rates, choose and document either an internally resampled 48 kHz core or a native-rate adaptation. A native-rate adaptation needs pole/timebase conversion; merely replacing one sample-rate constant while retaining every smoothing coefficient changes behavior.</p>
+<h2>Phase D — phase/FM, clocks, capture and output mapping</h2>
+<p>This phase needs more evidence than the current numerical core. Trace complete external/internal FM source combination, the <code>60*u^4</code> index path, even-output offsets, signed phase behavior, Follow/Sync and Sine/Sub independence. Keep a separate confidence label on inferred routing.</p>
+<p>Capture should store spectral frames, not input waveform slices. Determine capture tick cadence, frame count, start/end semantics, wrap behavior and saturation from code or controlled hardware files. Until then, implement a declared independent capture policy instead of claiming a recovered one.</p>
+<p>Acceptance: explicit clock state tests, simultaneous side independence, deterministic reset/sync behavior, no audio-thread disk work, stable output-lane mapping, and documented unverified analog gains.</p>
+<h2>Phase E — Noise, Chaos and auxiliary CV</h2>
+<p>Only begin a faithful port after translating the corresponding branch completely. Current findings identify the LCG, coefficient table, filters and coupled-phase ingredients, but do not provide a verified full algorithm.</p>
+<p>A creative mode can be implemented earlier, but must be described as an independent Noise/Chaos design. It should not be used as evidence that the firmware branch has been reconstructed. Preserve all user patch-state distinctions between faithful and experimental modes.</p>
+<h2>Hardware/fixture experiment matrix</h2>
+<table>
+<thead>
+<tr>
+  <th>Experiment</th>
+  <th>Input and controls</th>
+  <th>What it discriminates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Untouched saved Array</td>
+  <td>One module-saved file, before any DAW rewrite</td>
+  <td>Header anomaly, bit depth, payload shape, file naming</td>
+</tr>
+<tr>
+  <td>Load/save round trip</td>
+  <td>Known coefficient bank, unchanged controls</td>
+  <td>32767/32768 scaling and save-time normalization</td>
+</tr>
+<tr>
+  <td>Single-tone SAM sweep</td>
+  <td>Fixed analyzer controls, slowly swept sine</td>
+  <td>Harmonic detector centers and bandwidth</td>
+</tr>
+<tr>
+  <td>Tone amplitude step</td>
+  <td>Fixed tone, two Focus settings</td>
+  <td>Cascaded filter response and magnitude approximation</td>
+</tr>
+<tr>
+  <td>Analysis/playback separation</td>
+  <td>Fixed input tone, sweep oscillator pitch separately</td>
+  <td>Independent analysis and synthesis reference paths</td>
+</tr>
+<tr>
+  <td>Sparse spectral bank</td>
+  <td>One nonzero coefficient at a time</td>
+  <td>Index order, active 60-term ceiling, odd/even signs</td>
+</tr>
+<tr>
+  <td>Partials sweep</td>
+  <td>Sparse coefficients 1, 3, 5, then mixed</td>
+  <td>Polynomial-basis behavior versus simple harmonic attenuation</td>
+</tr>
+<tr>
+  <td>Boundary Array</td>
+  <td>Distinct values in every frame</td>
+  <td>Linear/planar edge indexing and clock offsets</td>
+</tr>
+<tr>
+  <td>FM comparison</td>
+  <td>Internal bus then equivalent external signal</td>
+  <td>Source normalization, phase wiring, Sine/Sub independence</td>
+</tr>
+<tr>
+  <td>Capture at known clocks</td>
+  <td>Short sequence of distinct input spectra</td>
+  <td>Frame timing and capture termination</td>
+</tr>
+<tr>
+  <td>LF mode clocks</td>
+  <td>Known repeated clocks and missing clocks</td>
+  <td>Divider, timeout and CV-state behavior</td>
+</tr>
+<tr>
+  <td>Output level test</td>
+  <td>Low-level sine and near-clip spectra</td>
+  <td>Digital/analog gain, clip order and lane correspondence</td>
+</tr>
+</tbody>
+</table>
+<p>No fixture in this table is claimed to have been run. The 31 included tests are host-side mathematical/file checks, not these hardware experiments.</p>
+<h2>Definition of done for a first useful port</h2>
+<p>The first useful port can legitimately include standard SAM and both SAO readers while leaving Noise/Chaos and physical calibration incomplete. It should expose that status directly in developer documentation, retain a reproducible reference-test suite, and avoid describing itself as bit-exact. A polished UI is not a substitute for the unresolved routing and timing work.</p>
+</section><section id="tools"><div class="section-kicker">Tools &amp; reproduction</div><h1>Tools, artifact map and reproduction</h1>
+<h2>Quick start</h2>
+<p>From the extracted bundle root:</p>
+<pre><code class="language-bash">python scripts/export_assets.py
+python tests/test_reference.py
+python reference/sp67_reference.py extract-factory /tmp/factory_frames.json
+</code></pre>
+<p>These commands use Python 3.10+ and the standard library. Some numerical tests need a host C library providing <code>fmaf</code>, normally available through libm on Linux. They do not execute ARM instructions.</p>
+<p>For disassembly in an environment with LLVM's ARM target support:</p>
+<pre><code class="language-bash">python scripts/inspect_firmware.py 0x08030cd4 0x08030fd2
+python scripts/build_inventory.py
+</code></pre>
+<p>The script currently loads <code>/usr/lib/x86_64-linux-gnu/libLLVM-19.so</code>. Adjust that explicit path for another installation. No LLVM binary or font files are bundled. The renderer used for the HTML edition needs the separately installed Python <code>mistune</code> package; the Markdown reports remain directly readable without it.</p>
+<h2>Artifact map</h2>
+<table>
+<thead>
+<tr>
+  <th>Path</th>
+  <th>Contents / caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>README.md</code></td>
+  <td>Starting point and scope</td>
+</tr>
+<tr>
+  <td><code>docs/REPORT.md</code></td>
+  <td>Main integrated analysis</td>
+</tr>
+<tr>
+  <td><code>docs/DSP_SPEC.md</code></td>
+  <td>Instruction-derived equations</td>
+</tr>
+<tr>
+  <td><code>docs/ARRAY_FORMAT.md</code></td>
+  <td>Memory descriptors, RIFF format, save/read behavior</td>
+</tr>
+<tr>
+  <td><code>docs/CONTROL_IO_MAP.md</code></td>
+  <td>Interface semantics and partially recovered routing</td>
+</tr>
+<tr>
+  <td><code>docs/CODEX_HANDOFF.md</code></td>
+  <td>Staged implementation and validation plan</td>
+</tr>
+<tr>
+  <td><code>docs/SOURCES.md</code></td>
+  <td>External sources, provenance and limits</td>
+</tr>
+<tr>
+  <td><code>Spectraphon_SP67_Analysis.html</code></td>
+  <td>Combined report, readable offline</td>
+</tr>
+<tr>
+  <td><code>firmware/sp67.bin</code></td>
+  <td>Exact copy of uploaded bytes</td>
+</tr>
+<tr>
+  <td><code>firmware/sp67_analysis_mapped.elf</code></td>
+  <td>Synthetic address-mapped analysis wrapper</td>
+</tr>
+<tr>
+  <td><code>tables/*.bin</code></td>
+  <td>Exact extracted little-endian float32 arrays</td>
+</tr>
+<tr>
+  <td><code>tables/*.csv</code></td>
+  <td>Addressed values and raw float bits</td>
+</tr>
+<tr>
+  <td><code>tables/factory_spectra_frames.csv</code></td>
+  <td>Factory bank in 64-coefficient rows</td>
+</tr>
+<tr>
+  <td><code>analysis/identity.json</code></td>
+  <td>Size/hash/startup identity</td>
+</tr>
+<tr>
+  <td><code>analysis/symbols_curated.csv</code></td>
+  <td>Analyst-assigned names with confidence</td>
+</tr>
+<tr>
+  <td><code>analysis/dsp_regions.csv</code></td>
+  <td>Important blocks inside the large DSP function</td>
+</tr>
+<tr>
+  <td><code>analysis/memory_map_curated.csv</code></td>
+  <td>Working RAM and external-memory map</td>
+</tr>
+<tr>
+  <td><code>analysis/findings.json</code></td>
+  <td>Structured findings and confidence</td>
+</tr>
+<tr>
+  <td><code>analysis/open_questions.json</code></td>
+  <td>Unresolved questions, evidence needed</td>
+</tr>
+<tr>
+  <td><code>analysis/vector_table.csv</code></td>
+  <td>All 166 vector words</td>
+</tr>
+<tr>
+  <td><code>analysis/function_candidates.csv</code></td>
+  <td>Heuristic entry/size/FP-count inventory</td>
+</tr>
+<tr>
+  <td><code>analysis/call_graph.csv</code></td>
+  <td>Direct and boundary edges; not a complete indirect call graph</td>
+</tr>
+<tr>
+  <td><code>analysis/literal_xrefs.csv</code></td>
+  <td>PC-relative literal references</td>
+</tr>
+<tr>
+  <td><code>analysis/cfg_issues.csv</code></td>
+  <td>Unresolved branches/switches/decode concerns</td>
+</tr>
+<tr>
+  <td><code>analysis/strings.*</code></td>
+  <td>Raw printable strings, including false positives from code/data</td>
+</tr>
+<tr>
+  <td><code>analysis/entropy_4k.csv</code></td>
+  <td>Byte entropy and zero fraction in 4 KiB windows</td>
+</tr>
+<tr>
+  <td><code>analysis/numerical_metrics.json</code></td>
+  <td>Helper-derived curve/error measurements</td>
+</tr>
+<tr>
+  <td><code>analysis/test_results.json</code></td>
+  <td>Host-test results and explicit scope</td>
+</tr>
+<tr>
+  <td><code>disassembly/fn_*.asm</code></td>
+  <td>Candidate-function disassembly, not original source</td>
+</tr>
+<tr>
+  <td><code>disassembly/reachable_and_candidate_code.asm</code></td>
+  <td>Combined candidate code</td>
+</tr>
+<tr>
+  <td><code>disassembly/linear_sweep_UNVERIFIED.asm</code></td>
+  <td>Includes inline data misread as code; not authoritative</td>
+</tr>
+<tr>
+  <td><code>reference/sp67_reference.py</code></td>
+  <td>Bounded WAV tool and DSP probes</td>
+</tr>
+<tr>
+  <td><code>tests/test_reference.py</code></td>
+  <td>31 host-side consistency tests</td>
+</tr>
+<tr>
+  <td><code>SHA256SUMS.txt</code></td>
+  <td>Integrity manifest for delivered files</td>
+</tr>
+</tbody>
+</table>
+<h2>Importing into a reverse-engineering tool</h2>
+<p>The synthetic ELF is ELF32 little-endian ARM with a load segment at <code>0x08020000</code> and Thumb reset entry <code>0x08036431</code>. Its <code>.firmware</code> section contains every uploaded byte, including vector table, code, literal pools, numerical tables and terminal zeros. It is intentionally <strong>not split into authoritative original linker sections</strong>.</p>
+<p>Let the tool read the ELF mapping. Confirm little-endian ARM/Cortex-M interpretation and Thumb context at the actual executable entries. Use the reset handler and vector targets as trusted entry points; do not disassemble the entire unsplit section as though it were all code. Apply the table extents from the manifest as data definitions. Add RAM blocks separately where required for analysis; the ELF load segment is not a dump of runtime RAM.</p>
+<p>The ELF has analyst-created function/object symbols. They are useful hints, not recovered debug symbols. No Ghidra/IDA decompiler run was completed in this environment, so no original C output or validated Ghidra project is claimed. The ELF header and payload were checked with <code>readelf</code> and the host tests.</p>
+<p>Never flash the analysis ELF. It is a research wrapper, not a vendor update file.</p>
+<h2>Inventory limitations</h2>
+<p>The inventory combines vector roots, direct-call targets, pointer candidates and aligned prologue heuristics. Its control-flow walker follows common conditional branches and a subset of compiler switch-table patterns. Indirect branches, unusual entry points and function boundaries remain uncertain. The explicit issue CSV should guide subsequent decompiler work.</p>
+<p>A manual correction removes a false boundary at <code>0x080336f4</code>: the WAV initializer actually begins at <code>0x080336f0</code>, before its push instruction. This illustrates why the inventory's candidate count must not be mistaken for the original function count.</p>
+<h2>Reproduction scope</h2>
+<p>Table bytes, hashes, ELF payload mapping and script output can be reproduced directly from the upload. Mathematical translations can be reviewed against the listed addresses. Exact dynamic behavior, analog levels and physical file acceptance need evidence outside this bundle. Keep those two categories separate when evaluating test results.</p>
+</section><section id="sources"><div class="section-kicker">Sources &amp; provenance</div><h1>Sources and provenance</h1>
+<h2>Primary evidence: uploaded firmware</h2>
+<p>The user's <code>sp67.dat</code> is the primary source for the recovered addresses, constants, tables, memory organization and translated equations. Its SHA-256 is <code>b50a87b9bd4f6ad90007918a16e8a4d033e2236c863faec55f5585abe34927d9</code>. Every flash address in this bundle uses base <code>0x08020000</code>. The raw input is preserved unchanged as <code>firmware/sp67.bin</code>.</p>
+<p>The byte-level evidence is not supplied by the external pages below. Public documentation is used to constrain semantics and check architecture, not to manufacture exact DSP equations that the manual does not state.</p>
+<h2>External sources consulted</h2>
+<h3>S1 — Make Noise product page</h3>
+<p><a href="https://www.makenoisemusic.com/modules/spectraphon/">https://www.makenoisemusic.com/modules/spectraphon/</a></p>
+<p>Manufacturer source for module identity, dual SAM/SAO architecture, interface counts, and relationships between FM, Sine/Sub and Follow/Sync. Accessed 28 September 2026. No claim about current retail price is used.</p>
+<h3>S2 — Make Noise firmware listing</h3>
+<p><a href="https://www.makenoisemusic.com/firmware/">https://www.makenoisemusic.com/firmware/</a></p>
+<p>Manufacturer listing identifies SP67 as a Spectraphon firmware download at access time. This listing is not a hash verification of the uploaded image. The upload's identity is verified internally, not by claiming a downloaded vendor file was compared byte-for-byte.</p>
+<h3>S3 — Make Noise Spectraphon cheat sheet</h3>
+<p><a href="https://www.makenoise-manuals.com/spectraphon/spectraphon-cheat-sheet.pdf">https://www.makenoise-manuals.com/spectraphon/spectraphon-cheat-sheet.pdf</a></p>
+<p>Manufacturer's three-page reference for mode-dependent control roles and UI gestures. The mode matrix on page 3 was visually checked. This is a concise semantic cross-check, not an engineering specification. The full current manual PDF could not be reliably retrieved through the available web path; this bundle does not claim to have exhaustively checked it.</p>
+<h3>S4 — STMicroelectronics STM32H743/753 family description</h3>
+<p><a href="https://www.st.com/en/microcontrollers-microprocessors/stm32h743-753.html">https://www.st.com/en/microcontrollers-microprocessors/stm32h743-753.html</a></p>
+<p>Primary source for Cortex-M7 family features, including double-precision floating point. It supports the architecture-family interpretation, not the exact chip marking on the user's module.</p>
+<h3>S5 — STMicroelectronics official Cortex-M7 device startup source</h3>
+<p><a href="https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-h7/master/Source/Templates/gcc/startup_stm32h743xx.s">https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-h7/master/Source/Templates/gcc/startup_stm32h743xx.s</a></p>
+<p>Primary device source used to compare vector ordering and handler names. A current startup template need not have identical initialization ordering to this compiled firmware. No specific compiler/HAL version is inferred from superficial startup similarity.</p>
+<h3>S6 — ARMv7-M Architecture Reference Manual, DDI 0403E.b</h3>
+<p>ARM-authored document, hosted by an academic mirror:</p>
+<p><a href="https://www.profdong.com/elc4438_spring2016/DDI0403E_B_armv7m_arm.pdf">https://www.profdong.com/elc4438_spring2016/DDI0403E_B_armv7m_arm.pdf</a></p>
+<p>Section A7.7.231 (printed pages A7-517 onward) supplies fused multiply-add/subtract sign conventions relevant to the recurrence. In particular, VFNMS computes product minus the old destination. The document is used for instruction semantics, not to assert that the STM32H7 only implements the older minimum feature set described in that manual.</p>
+<h2>Negative provenance statements</h2>
+<p>No vendor source code, debug ELF, bootloader dump, board schematic, physical chip marking, hardware-generated Array file, hardware recording, second firmware revision or original compiler map was available for this pass. No successful Ghidra/IDA decompilation or ARM dynamic-emulation session is represented by the artifacts.</p>
+<p>The factory spectra and lookup tables are directly extracted vendor data from the user-provided firmware. The analysis scripts, reports and reference probes are newly authored reconstruction work. Inclusion in a research bundle is not an assertion of redistribution permission for vendor assets.</p>
+</section></main><footer>Read-only analysis of the user-provided firmware. Analyst labels and mathematical translations are not original source code. See Sources &amp; provenance for scope and attribution.</footer></body></html>

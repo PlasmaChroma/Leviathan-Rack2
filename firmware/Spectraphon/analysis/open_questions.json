@@ -1,0 +1,92 @@
+[
+  {
+    "priority": "P0",
+    "question": "Confirm real saved WAV header and payload",
+    "evidence_needed": "Untouched module-saved speca/specb WAV",
+    "reason": "Validates strongest persistence quirk without needing hardware emulation"
+  },
+  {
+    "priority": "P0",
+    "question": "Translate complete phase/FM and even-output offset routing",
+    "evidence_needed": "Trace 0x0802e750 and all standard-branch joins; controlled FM captures",
+    "reason": "Required before a faithful standard oscillator wrapper"
+  },
+  {
+    "priority": "P0",
+    "question": "Map eight output lanes to physical jacks and gains",
+    "evidence_needed": "Codec/DAC configuration, schematic or output measurements",
+    "reason": "Needed for voltage/polarity equivalence"
+  },
+  {
+    "priority": "P1",
+    "question": "Capture scheduling, frame count and clock timeout",
+    "evidence_needed": "Code around0x0802d900 plus short clocked captures",
+    "reason": "File capacity alone does not give capture time"
+  },
+  {
+    "priority": "P1",
+    "question": "Calibration object and full panel/CV mapping",
+    "evidence_needed": "0x200144d4 users, ADC configuration, known-voltage tests",
+    "reason": "Normalized curves are not full knob/jack calibration"
+  },
+  {
+    "priority": "P1",
+    "question": "Independent verification of recurrence and FMA rounding",
+    "evidence_needed": "ARM instruction emulation or hardware sparse-spectrum tests",
+    "reason": "Host algebra tests do not validate complete compiled behavior"
+  },
+  {
+    "priority": "P1",
+    "question": "Complete Noise equations and limits",
+    "evidence_needed": "0x08031038 and mirrored branch; state variable trace",
+    "reason": "LCG/filter ingredients are not a full model"
+  },
+  {
+    "priority": "P1",
+    "question": "Complete Chaos state-update ordering",
+    "evidence_needed": "0x0802fa04 and corresponding joins",
+    "reason": "Chaotic systems are particularly sensitive to ordering/rounding"
+  },
+  {
+    "priority": "P1",
+    "question": "Planar logical-edge constraints",
+    "evidence_needed": "Upstream clock/dimension bounds; non-square test banks",
+    "reason": "One-subtraction indexing may read reserved padding; not proven physical OOB"
+  },
+  {
+    "priority": "P2",
+    "question": "Complete button/long-press/persistence state machine",
+    "evidence_needed": "0x0802d900 and settings file call graph",
+    "reason": "Documentation roles are not all edge cases"
+  },
+  {
+    "priority": "P2",
+    "question": "SD transport and media failure handling",
+    "evidence_needed": "FatFs-like diskio call graph",
+    "reason": "SPI5 presence does not prove SD transport"
+  },
+  {
+    "priority": "P2",
+    "question": "Exact MCU, populated memory and converter hardware",
+    "evidence_needed": "Board photographs/markings/schematic",
+    "reason": "Vector family alone is insufficient"
+  },
+  {
+    "priority": "P2",
+    "question": "Bootloader update protocol/authentication",
+    "evidence_needed": "Separate lower-flash dump or bootloader source",
+    "reason": "Missing from uploaded image"
+  },
+  {
+    "priority": "P2",
+    "question": "Cross-version differential analysis",
+    "evidence_needed": "Another genuine Spectraphon firmware image",
+    "reason": "Only SP67 available in this pass"
+  },
+  {
+    "priority": "P2",
+    "question": "Meaning of0x2010 trailing zeros",
+    "evidence_needed": "Another version or original linker map",
+    "reason": "Padding explanation remains a hypothesis"
+  }
+]

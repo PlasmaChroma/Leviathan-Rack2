@@ -1,0 +1,46 @@
+address,known_bytes,name,evidence_level,note
+0x20000000,28,startup_initialized_data,B,Copied from 0x08049ac8
+0x20000020,512,A_quadrature_filter_state_1,T,Two float states per reserved harmonic; analyzer 0x0802f716
+0x20000220,512,A_quadrature_filter_state_2,T,Other quadrature; analyzer 0x0802f716
+0x20000420,512,B_quadrature_filter_state_1,T,Mirrored analyzer
+0x20000620,512,B_quadrature_filter_state_2,T,Mirrored analyzer
+0x20000880,4,A_smoothed_partials,T,Fast CV path
+0x20000920,256,B_array_descriptors,T,"16 descriptors, four words each"
+0x20000a20,256,A_array_descriptors,T,"16 descriptors, four words each"
+0x20000b20,4,B_array_selection,T,Read by B Array readers
+0x20000d40,256,A_SAO_delta,T,64 per-sample increments
+0x20000e40,256,A_SAM_adjacent_delta,T,Cleared by analyzer for active terms
+0x20000f40,256,B_SAO_delta,T,64 per-sample increments
+0x20001040,256,B_SAM_adjacent_delta,T,Mirrored analyzer
+0x20001140,4,A_fm_index_candidate,T,Fourth-power control mapping
+0x2000227c,4,dsp_timing_measurement_candidate,H,DWT cycle-count path
+0x200023fc,4,B_smoothed_partials,T,Fast CV path
+0x20002430,4,A_array_selection,T,Read by A Array readers
+0x20002434,4,B_array_clock_offset,T,B reader position term
+0x20002438,4,A_array_clock_offset,T,A reader position term
+0x20002a40,256,A_SAO_coefficients,T,A reader/current coefficient bank
+0x20002b40,256,A_SAM_amplitudes,T,Analyzer stores +256 relative to A SAO bank
+0x20002c40,256,B_SAO_coefficients,T,B reader/current coefficient bank
+0x20002d40,256,B_SAM_amplitudes,T,B analyzer result bank
+0x20002e50,4,B_fm_index_candidate,T,Mirrored fourth-power mapping
+0x20002e88,4,B_mode_related_field,T,Combined with B SAO flag in synthesis dispatch
+0x20002e8c,4,A_mode_related_field,T,Combined with A SAO flag in synthesis dispatch
+0x20002e90,4,B_SAO_related_flag,T,Mode dispatch
+0x20002e94,4,A_SAO_related_flag,T,Mode dispatch
+0x20002edc,4,A_clock_flag,T,GPIO callback
+0x20002ee0,4,A_clock_counter,T,GPIO callback
+0x20002ee4,4,B_clock_flag,T,GPIO callback
+0x20002ee8,4,B_clock_counter,T,GPIO callback
+0x20002eec,4,sample_counter,T,Incremented in audio loop
+0x20002f70,4,B_external_base_pointer,B,Initialized to 0x60001000
+0x20002f74,4,A_external_base_pointer,B,Initialized to 0x60c01000
+0x200144d4,0,calibration_object_candidate,H,Extent/field semantics not fully recovered
+0x30000020,12,slow_control_samples,T,Six halfword channels; total enclosing allocation unproven
+0x30000040,0,fast_CV_interleaved_buffer,T,Four halfword channels/frame; allocation extent not asserted
+0x30000440,0,audio_input_pair,T,32-bit stereo reads
+0x30000840,0,output_pair_0,T,Physical jack mapping incomplete
+0x30000c40,0,output_pair_1,T,Physical jack mapping incomplete
+0x30001040,0,output_pair_2,T,Physical jack mapping incomplete
+0x38000000,0,output_pair_3,T,Physical jack mapping incomplete
+0x60001000,12582912,B_initialized_external_region,B,12 MiB memset in main
+0x60c01000,12582912,A_initialized_external_region,B,12 MiB memset in main
