@@ -286,6 +286,24 @@ struct ChimeraReelsWidget final : TransparentWidget {
             haveTape = total != 0;
             progress = tapeProgress(position, total);
         }
+        // Draw the housing beneath the tape so it can visibly cross the rear rim.
+        for (unsigned i = 0; i < 2; ++i) {
+            if (radii[i] <= 0.f) continue;
+            const Vec p = intakePoints[i];
+            const Vec size = mm2px(Vec(3.2f, 1.1f));
+            const float x = p.x - size.x * 0.5f;
+            const float y = p.y - size.y * 0.5f;
+            nvgBeginPath(args.vg);
+            nvgRoundedRect(args.vg, x, y, size.x, size.y, size.y * 0.4f);
+            nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, y, x, y + size.y,
+                nvgRGB(140, 161, 166), nvgRGB(43, 61, 69)));
+            nvgFill(args.vg);
+            nvgBeginPath(args.vg);
+            nvgRoundedRect(args.vg, x + 1.f, y + 1.f, size.x - 2.f,
+                size.y - 2.f, 0.6f);
+            nvgFillColor(args.vg, nvgRGB(5, 12, 17));
+            nvgFill(args.vg);
+        }
         if (haveTape) {
             const float amounts[2] = {1.f - progress, progress};
             // Opaque shared color avoids double-alpha brightening at the tape/spool overlap.
@@ -310,23 +328,21 @@ struct ChimeraReelsWidget final : TransparentWidget {
                 nvgFill(args.vg);
             }
         }
-        // Fixed guides cover the tape endpoints, including when the reels are empty.
+        // The front lip hides the endpoint after the tape enters the slot center.
         for (unsigned i = 0; i < 2; ++i) {
             if (radii[i] <= 0.f) continue;
             const Vec p = intakePoints[i];
             const Vec size = mm2px(Vec(3.2f, 1.1f));
             const float x = p.x - size.x * 0.5f;
             const float y = p.y - size.y * 0.5f;
+            nvgSave(args.vg);
+            nvgIntersectScissor(args.vg, x, p.y, size.x, size.y * 0.5f + 1.f);
             nvgBeginPath(args.vg);
             nvgRoundedRect(args.vg, x, y, size.x, size.y, size.y * 0.4f);
-            nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, y, x, y + size.y,
-                nvgRGB(140, 161, 166), nvgRGB(43, 61, 69)));
+            nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, p.y, x, y + size.y,
+                nvgRGB(91, 114, 123), nvgRGB(43, 61, 69)));
             nvgFill(args.vg);
-            nvgBeginPath(args.vg);
-            nvgRoundedRect(args.vg, x + 1.f, y + 1.f, size.x - 2.f,
-                size.y - 2.f, 0.6f);
-            nvgFillColor(args.vg, nvgRGB(5, 12, 17));
-            nvgFill(args.vg);
+            nvgRestore(args.vg);
         }
         for (unsigned i = 0; i < 2; ++i) {
             if (radii[i] <= 0.f) continue;
@@ -363,10 +379,68 @@ struct ChimeraDisplayOverlay : Widget {
         return count > 120u ? 0.8f : (count > 48u ? 1.f : 1.35f);
     }
 
+    struct Layer : Widget {
+        ChimeraDisplayOverlay* display = nullptr;
+        int part = 0;
+        void draw(const DrawArgs& args) override { display->drawContents(args, part); }
+    };
+    widget::FramebufferWidget* markerCache = nullptr;
+    widget::FramebufferWidget* foregroundCache = nullptr;
+    Layer* layers[3] = {};
+    std::uint32_t renderFrames = 0;
+    unsigned renderCurrent = 0, renderRequested = 0;
+    Chimera* renderOwner = nullptr;
+    bool textChanged = false;
+
+    void initializeLayers() {
+        for (int part = 0; part < 3; ++part) {
+            layers[part] = new Layer;
+            layers[part]->display = this;
+            layers[part]->part = part;
+            if (part == 1) addChild(layers[part]);
+            else {
+                auto* cache = new widget::FramebufferWidget;
+                cache->oversample = 1.f;
+                cache->addChild(layers[part]);
+                addChild(cache);
+                if (part == 0) markerCache = cache;
+                else foregroundCache = cache;
+            }
+        }
+    }
+
     void step() override {
-        if (owner) owner->markerDisplay.consume(markers);
-        else markers = chimera::MarkerDisplay{};
+        textChanged = false;
+        const bool markerChange = owner ? owner->markerDisplay.consume(markers) : false;
+        updateState();
+        const auto frames = owner ? std::max(markers.frames,
+            owner->publishedValidFrames.load(std::memory_order_acquire)) : 0;
+        const unsigned current = owner ? owner->publishedRegion.load(std::memory_order_acquire) : 0;
+        const unsigned requested = owner ? owner->publishedRequestedRegion.load(std::memory_order_acquire) : 0;
+        const bool resized = layers[0] && (layers[0]->box.size.x != box.size.x ||
+            layers[0]->box.size.y != box.size.y);
+        if (markerCache && (markerChange || renderOwner != owner || frames != renderFrames ||
+            current != renderCurrent || requested != renderRequested || resized)) {
+            markerCache->setDirty();
+            foregroundCache->setDirty();
+        }
+        if (textChanged && foregroundCache)
+            foregroundCache->setDirty();
+        renderOwner = owner;
+        renderFrames = frames;
+        renderCurrent = current;
+        renderRequested = requested;
+        if (markerCache) {
+            markerCache->box.size = foregroundCache->box.size = box.size;
+            for (auto* layer : layers) layer->box.size = box.size;
+        }
+        Widget::step();
+    }
+
+    void updateState() {
+        if (!owner) markers = chimera::MarkerDisplay{};
         if (!owner) {
+            textChanged = stateText != "CHIMERA" || detailText != "REEL ENGINE" || !saveText.empty();
             stateText = "CHIMERA";
             detailText = "REEL ENGINE";
             saveText.clear();
@@ -395,9 +469,11 @@ struct ChimeraDisplayOverlay : Widget {
             !owner->hasSavedReel.load(std::memory_order_acquire);
         if (state == cachedState && preRecord == cachedPreRecord &&
             errorKind == cachedErrorKind && busy == cachedBusy &&
-            dirty == cachedDirty && frames / 48000 == cachedFrames / 48000 &&
+            dirty == cachedDirty && (frames == 0) == (cachedFrames == 0) &&
+            frames / 48000 == cachedFrames / 48000 &&
             count == cachedCount && current == cachedCurrent &&
-            requested == cachedRequested) return;
+            requested == cachedRequested && renderOwner == owner) return;
+        textChanged = true;
         cachedState = state;
         cachedPreRecord = preRecord;
         cachedErrorKind = errorKind;
@@ -428,10 +504,9 @@ struct ChimeraDisplayOverlay : Widget {
         if (preRecord == Chimera::PreRecordUnavailable) detailText = "NO PRE-REC CUT";
         else if (preRecord == Chimera::PreRecordFailed) detailText = "PRE-REC FAILED";
         else if (preRecord == Chimera::PreRecordPending) detailText = "PRE-REC SAVING";
-        Widget::step();
     }
 
-    void draw(const DrawArgs& args) override {
+    void drawContents(const DrawArgs& args, int part) {
         if (!APP || !APP->window || !APP->window->uiFont) return;
         NVGcontext* vg = args.vg;
         const float w = box.size.x, h = box.size.y;
@@ -439,68 +514,74 @@ struct ChimeraDisplayOverlay : Widget {
         const float traceTop = 4.f, traceBottom = h * 0.82f;
         // Marker metadata comes directly from the core, independently of the
         // slower waveform scan. The summary only supplies the waveform backdrop.
-        const std::uint32_t displayFrames = owner ? std::max(markers.frames,
-            owner->publishedValidFrames.load(std::memory_order_acquire)) : 0;
+        const std::uint32_t displayFrames = renderFrames;
         if (owner && displayFrames) {
             const auto xFor = [&](std::uint32_t frame) {
                 return left + width * float(std::min(frame, displayFrames)) /
                     float(displayFrames);
             };
-            const unsigned current = owner->publishedRegion.load(std::memory_order_acquire);
-            const unsigned requested = owner->publishedRequestedRegion.load(std::memory_order_acquire);
+            const unsigned current = renderCurrent;
+            const unsigned requested = renderRequested;
             const NVGcolor ordinaryColor = nvgRGBA(238, 177, 83, 225);
             const NVGcolor currentColor = nvgRGBA(166, 244, 96, 255);
             const NVGcolor requestedColor = nvgRGBA(196, 161, 246, 255);
 
-            // Stems retain precise timing at any density. Marker zero is now
-            // included, so the first Splice has a visible anchor at the left.
-            nvgBeginPath(vg);
-            for (unsigned i = 0; i < markers.count; ++i) {
-                if (i == current || (i == requested && requested != current)) continue;
-                const float x = xFor(markers.markers[i]);
-                nvgMoveTo(vg, x, traceTop);
-                nvgLineTo(vg, x, traceBottom);
-            }
-            nvgStrokeColor(vg, ordinaryColor);
-            nvgStrokeWidth(vg, markerStemWidth(markers.count));
-            nvgStroke(vg);
-
-            const int record = owner->publishedRecordState.load(std::memory_order_acquire);
-            if (record == 4 || record == 5 ||
-                owner->publishedAudioRevision.load(std::memory_order_acquire) >
-                    (summary ? summary->audioRevision : 0)) {
-                const float x1 = xFor(owner->publishedRecordStartFrame.load(std::memory_order_acquire));
-                const float x2 = xFor(owner->publishedRecordFrame.load(std::memory_order_acquire));
+            if (part == 0) {
+                // Stems retain precise timing at any density. Marker zero is now
+                // included, so the first Splice has a visible anchor at the left.
                 nvgBeginPath(vg);
-                nvgRect(vg, std::min(x1, x2), traceTop, std::max(1.f, std::fabs(x2 - x1)),
-                        traceBottom - traceTop);
-                nvgFillColor(vg, nvgRGBA(243, 113, 89, 52));
-                nvgFill(vg);
-            }
-            const float playX = xFor(owner->publishedPlayFrame.load(std::memory_order_acquire));
-            nvgBeginPath(vg);
-            nvgMoveTo(vg, playX, traceTop);
-            nvgLineTo(vg, playX, traceBottom);
-            nvgStrokeColor(vg, nvgRGB(246, 234, 168));
-            nvgStrokeWidth(vg, 1.5f);
-            nvgStroke(vg);
-
-            // Selected and queued markers retain distinct colors and thicker stems.
-            const auto drawEmphasizedAnchor = [&](unsigned index, NVGcolor color,
-                                                   float stemWidth) {
-                if (index >= markers.count) return;
-                const float x = xFor(markers.markers[index]);
-                nvgBeginPath(vg);
-                nvgMoveTo(vg, x, traceTop);
-                nvgLineTo(vg, x, traceBottom);
-                nvgStrokeColor(vg, color);
-                nvgStrokeWidth(vg, stemWidth);
+                for (unsigned i = 0; i < markers.count; ++i) {
+                    if (i == current || i == requested) continue;
+                    const float x = xFor(markers.markers[i]);
+                    nvgMoveTo(vg, x, traceTop);
+                    nvgLineTo(vg, x, traceBottom);
+                }
+                nvgStrokeColor(vg, ordinaryColor);
+                nvgStrokeWidth(vg, markerStemWidth(markers.count));
                 nvgStroke(vg);
-            };
-            if (requested != current)
-                drawEmphasizedAnchor(requested, requestedColor, 2.f);
-            drawEmphasizedAnchor(current, currentColor, 2.35f);
+            }
+            if (part == 1) {
+                const int record = owner->publishedRecordState.load(std::memory_order_acquire);
+                if (record == 4 || record == 5 ||
+                    owner->publishedAudioRevision.load(std::memory_order_acquire) >
+                        (summary ? summary->audioRevision : 0)) {
+                    const float x1 = xFor(owner->publishedRecordStartFrame.load(std::memory_order_acquire));
+                    const float x2 = xFor(owner->publishedRecordFrame.load(std::memory_order_acquire));
+                    nvgBeginPath(vg);
+                    nvgRect(vg, std::min(x1, x2), traceTop, std::max(1.f, std::fabs(x2 - x1)),
+                            traceBottom - traceTop);
+                    nvgFillColor(vg, nvgRGBA(243, 113, 89, 52));
+                    nvgFill(vg);
+                }
+                const float playX = xFor(owner->publishedPlayFrame.load(std::memory_order_acquire));
+                nvgBeginPath(vg);
+                nvgMoveTo(vg, playX, traceTop);
+                nvgLineTo(vg, playX, traceBottom);
+                nvgStrokeColor(vg, nvgRGB(246, 234, 168));
+                nvgStrokeWidth(vg, 1.5f);
+                nvgStroke(vg);
+
+            }
+            if (part == 2) {
+                // Requested is purple and Current is green. Organize and Shift
+                // both move Requested. When they coincide, purple remains visible.
+                const auto drawEmphasizedAnchor = [&](unsigned index, NVGcolor color,
+                                                       float stemWidth) {
+                    if (index >= markers.count) return;
+                    const float x = xFor(markers.markers[index]);
+                    nvgBeginPath(vg);
+                    nvgMoveTo(vg, x, traceTop);
+                    nvgLineTo(vg, x, traceBottom);
+                    nvgStrokeColor(vg, color);
+                    nvgStrokeWidth(vg, stemWidth);
+                    nvgStroke(vg);
+                };
+                drawEmphasizedAnchor(requested, requestedColor,
+                    requested == current ? 4.25f : 2.f);
+                drawEmphasizedAnchor(current, currentColor, 2.35f);
+            }
         }
+        if (part != 2) return;
         nvgFontFaceId(vg, APP->window->uiFont->handle);
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFontSize(vg, 9.f);

@@ -2284,6 +2284,7 @@ struct ChimeraWidget : ModuleWidget {
         waveformCache->addChild(waveformLayer);
         addChild(waveformCache);
         displayOverlay = new ChimeraDisplayOverlay;
+        displayOverlay->initializeLayers();
         displayOverlay->owner = module;
         displayOverlay->box.pos = displayOrigin;
         displayOverlay->box.size = waveformCache->box.size;

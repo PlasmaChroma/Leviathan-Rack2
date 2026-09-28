@@ -1458,6 +1458,7 @@ int main() {
         selectionModule.params[Chimera::SHIFT_PARAM].setValue(0.f);
         selectionModule.process(args);
         need(selectionModule.slice.requestedRegion() == 1 &&
+             selectionModule.publishedRequestedRegion.load() == 1 &&
              selectionModule.slice.currentRegion() == 0 &&
              selectionModule.lights[Chimera::PENDING_LIGHT].getBrightness() == 1.f,
              "SHIFT button release queues next Splice and lights pending state");
@@ -1476,6 +1477,16 @@ int main() {
         ChimeraDisplayOverlay markerOverlay;
         markerOverlay.owner = &selectionModule;
         markerOverlay.step();
+        markerOverlay.step();
+        need(!markerOverlay.textChanged,
+             "unchanged display status does not request text rerendering");
+        const auto previousPlayFrame = selectionModule.publishedPlayFrame.load();
+        selectionModule.publishedPlayFrame.store(previousPlayFrame + 1);
+        markerOverlay.step();
+        need(!markerOverlay.textChanged,
+             "playhead motion does not request text rerendering");
+        selectionModule.publishedPlayFrame.store(previousPlayFrame);
+
         need(std::fabs(ChimeraReelsWidget::angularVelocity(1.f) -
                  float(33.0 * 2.0 * M_PI / 60.0)) < 1e-6f &&
              ChimeraReelsWidget::angularVelocity(-1.f) < 0.f,
