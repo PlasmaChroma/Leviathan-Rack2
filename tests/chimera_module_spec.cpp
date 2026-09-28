@@ -1522,9 +1522,7 @@ int main() {
              ChimeraVuMeterWidget::needleAngleForLevel(1.f) <
                  ChimeraVuMeterWidget::needleAngleForLevel(1.41253754f),
              "VU needle maps silence, zero VU, and plus three in scale order");
-        need(ChimeraDisplayOverlay::markerPointRadius(380.f, 2) >= 3.f &&
-             ChimeraDisplayOverlay::markerPointRadius(380.f, chimera::kMaxSplices) <= 1.f &&
-             ChimeraDisplayOverlay::markerStemWidth(2) >
+        need(ChimeraDisplayOverlay::markerStemWidth(2) >
                  ChimeraDisplayOverlay::markerStemWidth(chimera::kMaxSplices),
              "waveform anchor size remains legible without obscuring dense Reels");
         need(markerOverlay.markers.count == 2 && !markerOverlay.summary,
