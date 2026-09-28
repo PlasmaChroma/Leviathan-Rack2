@@ -236,6 +236,22 @@ public:
         return true;
     }
 
+    // Interactive insertion preserves the previous table for marker Undo.
+    bool insertMarker(std::uint32_t frame, Marker (&previous)[kMaxSplices],
+                      std::uint16_t& previousCount) {
+        if (!frame || frame >= validFrames_ || markerCount_ >= kMaxSplices) return false;
+        std::uint16_t at = 0;
+        while (at < markerCount_ && markers_[at].frame < frame) ++at;
+        if (at < markerCount_ && markers_[at].frame == frame) return false;
+        previousCount = markerCount_;
+        for (std::uint16_t i = 0; i < markerCount_; ++i) previous[i] = markers_[i];
+        for (std::uint16_t i = markerCount_; i > at; --i) markers_[i] = markers_[i - 1];
+        markers_[at] = Marker{frame, nextMarkerId_++};
+        ++markerCount_;
+        ++documentRevision_;
+        return true;
+    }
+
     // Core-owned bounded metadata edits. Snapshot metadata is a separate cut.
     bool editMarker(std::uint16_t index, std::uint32_t frame, bool remove,
                     Marker (&previous)[kMaxSplices], std::uint16_t& previousCount) {

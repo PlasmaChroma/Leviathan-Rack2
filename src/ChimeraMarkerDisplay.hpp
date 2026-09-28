@@ -10,6 +10,7 @@ struct MarkerDisplay {
     std::array<std::uint32_t, kMaxSplices> markers{};
     std::uint32_t frames = 0;
     std::uint16_t count = 0;
+    std::uint64_t documentRevision = 0;
 };
 
 // Latest-value mailbox: one core owner publishes, one UI overlay consumes.
@@ -29,6 +30,7 @@ public:
         auto& next = slots_[writing_];
         next.frames = reel ? reel->validFrames() : 0;
         next.count = reel ? reel->markerCount() : 0;
+        next.documentRevision = revision;
         for (unsigned i = 0; i < next.count; ++i)
             next.markers[i] = reel->region(i).begin;
         writing_ = middle_.exchange(writing_ | kDirty, std::memory_order_acq_rel) & 3u;

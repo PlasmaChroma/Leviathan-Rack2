@@ -99,7 +99,8 @@ struct Chimera : Module {
     enum ParamIds {
         SOS_PARAM, GENE_SIZE_PARAM, VARISPEED_PARAM, MORPH_PARAM,
         SLIDE_PARAM, ORGANIZE_PARAM, GENE_ATT_PARAM, VARISPEED_ATT_PARAM,
-        SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, APPEND_PARAM, NUM_PARAMS
+        SLIDE_ATT_PARAM, REC_PARAM, SPLICE_PARAM, SHIFT_PARAM, APPEND_PARAM,
+        UNSPLICE_PARAM, NUM_PARAMS
     };
     enum InputIds {
         AUDIO_L_INPUT, AUDIO_R_INPUT, SOS_CV_INPUT, GENE_SIZE_CV_INPUT,
@@ -130,6 +131,7 @@ struct Chimera : Module {
     CHIMERA_ASSERT_ID(SPLICE_PARAM);
     CHIMERA_ASSERT_ID(SHIFT_PARAM);
     CHIMERA_ASSERT_ID(APPEND_PARAM);
+    CHIMERA_ASSERT_ID(UNSPLICE_PARAM);
     CHIMERA_ASSERT_ID(AUDIO_L_INPUT);
     CHIMERA_ASSERT_ID(AUDIO_R_INPUT);
     CHIMERA_ASSERT_ID(SOS_CV_INPUT);
@@ -199,7 +201,7 @@ struct Chimera : Module {
     chimera::AudioToService completions;
     struct MarkerCommand {
         std::uint64_t id, revision;
-        unsigned index, frame, kind; // 0 move, 1 remove, 2 undo, 3 redo.
+        unsigned index, frame, kind; // 0 move, 1 remove, 2 undo, 3 redo, 4 insert.
     };
     chimera::SpscRing<MarkerCommand, 8> markerCommands;
     std::uint64_t markerRequestId = 0; // Control dispatcher only.
@@ -382,12 +384,15 @@ struct Chimera : Module {
     bool lastRecJack = false;
     bool lastRecButton = false;
     bool lastAppendButton = false;
+    bool lastUnspliceButton = false;
+    bool unspliceButtonInitialized = false;
     bool lastClock = false;
     bool lastShiftJack = false;
     bool lastShiftButton = false;
     bool lastSpliceJack = false;
     bool lastSpliceButton = false;
     bool ignoreRecRelease = false, ignoreAppendRelease = false;
+    bool ignoreUnspliceRelease = false;
     bool ignoreShiftRelease = false, ignoreSpliceRelease = false;
     bool playInitialized = false, lastPlayLogical = true, transportPlay = true;
     bool stopAtPrimaryBoundary = false;
@@ -422,6 +427,7 @@ struct Chimera : Module {
         configParam(SLIDE_ATT_PARAM, -1.f, 1.f, 0.f, "Slide CV amount");
         configButton(REC_PARAM, "Record");
         configButton(APPEND_PARAM, "Append recording");
+        configButton(UNSPLICE_PARAM, "Unsplice");
         configButton(SPLICE_PARAM, "Splice");
         configButton(SHIFT_PARAM, "Shift");
         configInput(AUDIO_L_INPUT, "Audio left");
@@ -816,13 +822,8 @@ struct Chimera : Module {
         ioBusy.store(true, std::memory_order_release);
         return true;
     }
-    bool requestUnsplice(std::string& error) {
-        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        const unsigned next = publishedRegion.load(std::memory_order_acquire) + 1u;
-        if (next >= publishedMarkerCount.load(std::memory_order_acquire))
-            return true; // The final Splice has no following boundary to remove.
-        // Match Morphagene Shift+Splice: join the current Splice with the next.
-        return requestMarkerEdit(next, 0, 1u, error);
+    bool requestInsertMarker(unsigned frame, std::string& error) {
+        return requestMarkerEdit(0, frame, 4u, error);
     }
     bool requestEdit(const chimera::edit::Request& request, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
@@ -1121,7 +1122,8 @@ struct Chimera : Module {
             const bool accepted = reel && recordArm == NoArm &&
                 reel->documentRevision() == marker.revision &&
                 slice.editMarker(marker.index, marker.frame, marker.kind == 1,
-                    marker.kind >= 2 ? marker.kind - 1 : 0);
+                    marker.kind == 2 || marker.kind == 3 ? marker.kind - 1 : 0,
+                    marker.kind == 4);
             publishCoreState();
             const chimera::AudioCompletion ack{generation->value.load(std::memory_order_acquire),
                 marker.id, 8, 0, accepted ? 1u : 0u};
@@ -1734,7 +1736,7 @@ struct Chimera : Module {
         }
         bypassActive = true;
         const chimera::HostState host = captureHost();
-        baselineAppendButton(host);
+        baselineActionButtons(host);
         lastRecButton = host.params[REC_PARAM] > 0.5f;
         lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
         lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
@@ -1755,9 +1757,12 @@ struct Chimera : Module {
         if (measurePerf) debugMetrics.recordProcess(
             debug_terminal::elapsedNsSince(processStart));
     }
-    void baselineAppendButton(const chimera::HostState& host) {
+    void baselineActionButtons(const chimera::HostState& host) {
         lastAppendButton = host.params[APPEND_PARAM] > 0.5f;
         ignoreAppendRelease = lastAppendButton;
+        lastUnspliceButton = host.params[UNSPLICE_PARAM] > 0.5f;
+        ignoreUnspliceRelease = lastUnspliceButton;
+        unspliceButtonInitialized = true;
     }
     chimera::HostState captureHost() {
         chimera::HostState state;
@@ -1808,7 +1813,7 @@ struct Chimera : Module {
         const unsigned rate = supported ? static_cast<unsigned>(args.sampleRate) : 0u;
         requestedHostRate.store(rate, std::memory_order_release);
         if (!rate) {
-            baselineAppendButton(host);
+            baselineActionButtons(host);
             cancelRecording();
             // A resumed supported rate must adopt a freshly primed bridge.
             // Keep the old allocation for off-audio retirement below.
@@ -1836,7 +1841,7 @@ struct Chimera : Module {
             return;
         }
         if (rate != activeHostRate.load(std::memory_order_relaxed)) {
-            baselineAppendButton(host);
+            baselineActionButtons(host);
             cancelRecording();
             playInitialized = false;
             stopAtPrimaryBoundary = false;
@@ -1905,7 +1910,7 @@ struct Chimera : Module {
             lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
             lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
             activeHostRate.store(rate, std::memory_order_release);
-            baselineAppendButton(host);
+            baselineActionButtons(host);
             bridgeError.store(false, std::memory_order_release);
             lights[IO_BUSY_LIGHT].setBrightness(0.f);
         }
@@ -2002,6 +2007,12 @@ struct Chimera : Module {
         const bool spliceButton = host.params[SPLICE_PARAM] > 0.5f;
         const bool rec = host.params[REC_PARAM] > 0.5f;
         const bool appendButton = host.params[APPEND_PARAM] > 0.5f;
+        const bool unspliceButton = host.params[UNSPLICE_PARAM] > 0.5f;
+        if (!unspliceButtonInitialized) {
+            lastUnspliceButton = unspliceButton;
+            ignoreUnspliceRelease = unspliceButton;
+            unspliceButtonInitialized = true;
+        }
         slice.setInputGain(inputGainSetting.load(std::memory_order_relaxed));
         const unsigned selectionCommands = host.selectionCommands;
         const bool shiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ?
@@ -2026,6 +2037,18 @@ struct Chimera : Module {
         const bool appendButtonReleased = !appendButton && lastAppendButton && !ignoreAppendRelease;
         if (!appendButton) ignoreAppendRelease = false;
         lastAppendButton = appendButton;
+        const bool unspliceButtonReleased = !unspliceButton && lastUnspliceButton &&
+            !ignoreUnspliceRelease;
+        if (!unspliceButton) ignoreUnspliceRelease = false;
+        lastUnspliceButton = unspliceButton;
+        if (unspliceButtonReleased && reel && recordArm == NoArm &&
+            slice.recordState() == chimera::Slice::Idle &&
+            !ioBusy.load(std::memory_order_acquire)) {
+            const unsigned next = slice.currentRegion() + 1u;
+            // Bounded metadata edit with the same single-step marker Undo history.
+            if (next < reel->markerCount())
+                slice.editMarker(next, 0, true);
+        }
         const bool recJack = recGate.update(host.connected[REC_INPUT] ?
             host.volts[REC_INPUT] : 0.f);
         const bool clockConnected = host.connected[CLOCK_INPUT];
@@ -2187,23 +2210,15 @@ struct Chimera : Module {
 
 #include "ChimeraDisplay.hpp"
 
-// Keep mouse routing independent of the visual skin so headless tests exercise
-// the same press/release path as the gold panel button.
-template <typename ButtonBase>
-struct ChimeraUnspliceAction : ButtonBase {
-    Chimera* owner = nullptr;
-    ChimeraUnspliceAction() { this->momentary = false; }
-    void onButton(const event::Button& e) override {
-        // Rack dispatches DragDrop only to the consumer of the RELEASE event.
-        if (e.button == GLFW_MOUSE_BUTTON_LEFT)
-            e.consume(this);
+struct ChimeraUnspliceButton : SmallGoldButton {
+    ChimeraDisplayOverlay* previewDisplay = nullptr;
+    void onHover(const event::Hover& e) override {
+        if (previewDisplay) previewDisplay->unspliceHovered = true;
+        SmallGoldButton::onHover(e);
     }
-    void onDragDrop(const event::DragDrop& e) override {
-        if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.origin != this || !owner) return;
-        std::string error;
-        if (!owner->requestUnsplice(error))
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
-        e.consume(this);
+    void onLeave(const event::Leave& e) override {
+        if (previewDisplay) previewDisplay->unspliceHovered = false;
+        SmallGoldButton::onLeave(e);
     }
 };
 
@@ -2230,10 +2245,6 @@ struct ChimeraRatioField : ui::TextField {
         ui::TextField::onSelectKey(e);
     }
 };
-
-// A UI action, rather than a DSP parameter: reuse the control-thread marker
-// queue and its undo history without synthesizing simultaneous button presses.
-using ChimeraUnspliceButton = ChimeraUnspliceAction<SmallGoldButton>;
 
 struct ChimeraWidget : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
@@ -2333,10 +2344,10 @@ struct ChimeraWidget : ModuleWidget {
         auto* shift = createParamCentered<SmallGoldButton>(mm2px(point("SHIFT_PARAM", Vec(84, 103))), module, Chimera::SHIFT_PARAM);
         shift->setColor(nvgRGB(196, 161, 246));
         addParam(shift);
-        auto* unsplice = createWidgetCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))));
+        auto* unsplice = createParamCentered<ChimeraUnspliceButton>(mm2px(point("UNSPLICE_BUTTON", Vec(96, 103))), module, Chimera::UNSPLICE_PARAM);
         unsplice->setColor(nvgRGB(106, 221, 215));
-        unsplice->owner = module;
-        addChild(unsplice);
+        unsplice->previewDisplay = displayOverlay;
+        addParam(unsplice);
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("SOS_CV_INPUT", Vec(118.24, 69.5))), module, Chimera::SOS_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("GENE_SIZE_CV_INPUT", Vec(14, 69.5))), module, Chimera::GENE_SIZE_CV_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(mm2px(point("VARISPEED_CV_INPUT", Vec(61.12, 69.5))), module, Chimera::VARISPEED_CV_INPUT));

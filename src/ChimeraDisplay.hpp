@@ -51,7 +51,7 @@ struct ChimeraWaveformLayer : Widget {
             nvgStrokeWidth(vg, 1.f);
             nvgStroke(vg);
             drawLane(divider + 2.f, &summary->rightLow, &summary->rightHigh,
-                nvgRGB(177, 157, 239));
+                nvgRGB(142, 189, 227));
         }
     }
 };
@@ -386,18 +386,133 @@ struct ChimeraDisplayOverlay : Widget {
     };
     widget::FramebufferWidget* markerCache = nullptr;
     widget::FramebufferWidget* foregroundCache = nullptr;
-    Layer* layers[3] = {};
+    Layer* layers[4] = {};
     std::uint32_t renderFrames = 0;
     unsigned renderCurrent = 0, renderRequested = 0;
     Chimera* renderOwner = nullptr;
     bool textChanged = false;
+    struct MarkerTarget {
+        bool valid = false;
+        bool remove = false;
+        unsigned index = 0;
+        std::uint32_t frame = 0;
+        float x = 0.f;
+    };
+    MarkerTarget pendingTarget;
+    Chimera* pendingOwner = nullptr;
+    std::uint64_t pendingRevision = 0;
+    Vec hoverPosition;
+    Vec dragMovement;
+    bool hovered = false;
+    bool unspliceHovered = false;
+    bool dragCancelled = false;
+
+    static float xForFrame(std::uint32_t frame, std::uint32_t frames, float displayWidth) {
+        if (!frames || displayWidth <= 10.f) return 5.f;
+        return 5.f + (displayWidth - 10.f) *
+            float(std::min(frame, frames)) / float(frames);
+    }
+    static std::uint32_t frameForX(float x, std::uint32_t frames, float displayWidth) {
+        if (frames < 2 || displayWidth <= 10.f) return 0;
+        const double fraction = double(clamp(x, 5.f, displayWidth - 5.f) - 5.f) /
+            double(displayWidth - 10.f);
+        return std::uint32_t(std::max(1.0, std::min(double(frames - 1),
+            std::round(fraction * double(frames)))));
+    }
+    bool markerEditsReady() const {
+        const float w = box.size.x, h = box.size.y;
+        return owner && renderFrames >= 2 && w > 10.f && h > 5.f &&
+            !owner->recordingOrArmed.load(std::memory_order_acquire) &&
+            !owner->ioBusy.load(std::memory_order_acquire) &&
+            markers.documentRevision == owner->publishedDocumentRevision.load(std::memory_order_acquire);
+    }
+    MarkerTarget targetAt(Vec position, bool remove) const {
+        MarkerTarget target;
+        const float w = box.size.x, h = box.size.y;
+        if (!markerEditsReady() ||
+            position.x < 5.f || position.x > w - 5.f ||
+            position.y < 4.f || position.y > h * 0.82f) return target;
+        if (remove) {
+            float closest = 6.f;
+            for (unsigned i = 1; i < markers.count; ++i) {
+                const float markerX = xForFrame(markers.markers[i], renderFrames, w);
+                const float distance = std::fabs(markerX - position.x);
+                if (distance >= closest) continue;
+                closest = distance;
+                target.valid = true;
+                target.remove = true;
+                target.index = i;
+                target.frame = markers.markers[i];
+                target.x = markerX;
+            }
+            return target;
+        }
+        if (markers.count >= chimera::kMaxSplices) return target;
+        target.frame = frameForX(position.x, renderFrames, w);
+        for (unsigned i = 0; i < markers.count; ++i)
+            if (markers.markers[i] == target.frame) return MarkerTarget();
+        target.valid = true;
+        target.x = xForFrame(target.frame, renderFrames, w);
+        return target;
+    }
+    MarkerTarget unspliceButtonTarget() const {
+        MarkerTarget target;
+        if (!markerEditsReady()) return target;
+        const unsigned index = owner->publishedRegion.load(std::memory_order_acquire) + 1u;
+        if (index >= markers.count) return target;
+        target.valid = true;
+        target.remove = true;
+        target.index = index;
+        target.frame = markers.markers[index];
+        target.x = xForFrame(target.frame, renderFrames, box.size.x);
+        return target;
+    }
+    void onHover(const event::Hover& e) override {
+        hovered = true;
+        hoverPosition = e.pos;
+        e.consume(this);
+    }
+    void onLeave(const event::Leave& e) override {
+        hovered = false;
+        Widget::onLeave(e);
+    }
+    void onButton(const event::Button& e) override {
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT) return;
+        if (e.action == GLFW_PRESS) {
+            pendingTarget = targetAt(e.pos, (e.mods & GLFW_MOD_SHIFT) != 0);
+            pendingOwner = owner;
+            pendingRevision = owner ? owner->publishedDocumentRevision.load(std::memory_order_acquire) : 0;
+            dragMovement = Vec();
+            dragCancelled = false;
+        }
+        e.consume(this);
+    }
+    void onDragMove(const event::DragMove& e) override {
+        dragMovement = dragMovement.plus(e.mouseDelta);
+        if (std::fabs(dragMovement.x) > 4.f || std::fabs(dragMovement.y) > 4.f)
+            dragCancelled = true;
+    }
+    void onDragDrop(const event::DragDrop& e) override {
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.origin != this) return;
+        if (pendingTarget.valid && !dragCancelled && owner && owner == pendingOwner &&
+            owner->publishedDocumentRevision.load(std::memory_order_acquire) == pendingRevision) {
+            std::string error;
+            const bool accepted = pendingTarget.remove ?
+                owner->requestMarkerEdit(pendingTarget.index, 0, 1u, error) :
+                owner->requestInsertMarker(pendingTarget.frame, error);
+            if (!accepted && !error.empty())
+                osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+        }
+        pendingTarget = MarkerTarget();
+        e.consume(this);
+    }
 
     void initializeLayers() {
-        for (int part = 0; part < 3; ++part) {
+        for (int part = 0; part < 4; ++part) {
             layers[part] = new Layer;
             layers[part]->display = this;
             layers[part]->part = part;
-            if (part == 1) addChild(layers[part]);
+            if (part == 1 || part == 3) addChild(layers[part]);
             else {
                 auto* cache = new widget::FramebufferWidget;
                 cache->oversample = 1.f;
@@ -512,6 +627,26 @@ struct ChimeraDisplayOverlay : Widget {
         const float w = box.size.x, h = box.size.y;
         const float left = 5.f, width = w - 10.f;
         const float traceTop = 4.f, traceBottom = h * 0.82f;
+        if (part == 3) {
+            const bool removePreview = APP->window->getMods() & GLFW_MOD_SHIFT;
+            const MarkerTarget preview = hovered ? targetAt(hoverPosition, removePreview) :
+                (unspliceHovered ? unspliceButtonTarget() : MarkerTarget());
+            if (preview.valid) {
+                const NVGcolor color = preview.remove ?
+                    nvgRGBA(255, 100, 112, 230) : nvgRGBA(106, 221, 215, 210);
+                nvgBeginPath(vg);
+                nvgMoveTo(vg, preview.x, traceTop);
+                nvgLineTo(vg, preview.x, traceBottom);
+                nvgStrokeColor(vg, color);
+                nvgStrokeWidth(vg, preview.remove ? 3.f : 1.5f);
+                nvgStroke(vg);
+                nvgBeginPath(vg);
+                nvgCircle(vg, preview.x, traceTop + 2.5f, 2.5f);
+                nvgFillColor(vg, color);
+                nvgFill(vg);
+            }
+            return;
+        }
         // Marker metadata comes directly from the core, independently of the
         // slower waveform scan. The summary only supplies the waveform backdrop.
         const std::uint32_t displayFrames = renderFrames;

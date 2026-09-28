@@ -133,9 +133,9 @@
          rx="2" />
     </g>
     <rect
-       x="5.4000001"
+       x="2.9"
        y="18.30007"
-       width="131.44"
+       width="136.44"
        height="27"
        rx="1.6"
        fill="#091721"
@@ -170,13 +170,13 @@
            height="12.24054" />
         <circle
            id="DISPLAY_ORIGIN"
-           cx="6"
+           cx="3.5"
            cy="18.800072"
            r="1.5"
            style="fill:#ff5cd6;fill-opacity:0.45" />
         <circle
            id="DISPLAY_END"
-           cx="136"
+           cx="138.5"
            cy="44.800014"
            r="1.5"
            style="fill:#ff5cd6;fill-opacity:0.45" />

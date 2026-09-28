@@ -178,14 +178,16 @@ public:
     unsigned markerHistoryState() const {
         return reel_ && reel_->documentRevision() == markerHistoryRevision_ ? markerHistoryState_ : 0;
     }
-    bool editMarker(unsigned index, std::uint32_t frame, bool remove, unsigned history = 0) {
+    bool editMarker(unsigned index, std::uint32_t frame, bool remove, unsigned history = 0,
+                    bool insert = false) {
         if (!reel_ || state_ != Idle || (history && markerHistoryState() != history)) return false;
         const Region previousRegion = metadataRegionPending_ ? frozenRegion_ : reel_->region(currentRegion_);
         const auto currentId = reel_->markerId(currentRegion_);
         const auto requestedId = reel_->markerId(selection_.requested());
         if (history) reel_->swapMarkerHistory(markerHistory_, markerHistoryCount_);
-        else if (index >= kMaxSplices || !reel_->editMarker(std::uint16_t(index), frame, remove,
-                     markerHistory_, markerHistoryCount_)) return false;
+        else if (insert ? !reel_->insertMarker(frame, markerHistory_, markerHistoryCount_) :
+                 (index >= kMaxSplices || !reel_->editMarker(std::uint16_t(index), frame, remove,
+                     markerHistory_, markerHistoryCount_))) return false;
         markerHistoryState_ = history == 1 ? 2 : 1;
         markerHistoryRevision_ = reel_->documentRevision();
         remapMarkers(currentId, requestedId, previousRegion);

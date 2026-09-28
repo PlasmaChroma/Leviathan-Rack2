@@ -93,6 +93,13 @@ class ChimeraPanelContractTest(unittest.TestCase):
 
     def test_display_and_control_rows_do_not_overlap(self):
         anchors = keyed(MASTER)
+        self.assertAlmostEqual(float(anchors["DISPLAY_ORIGIN"]["cx"]), 3.5)
+        self.assertAlmostEqual(float(anchors["DISPLAY_END"]["cx"]), 138.5)
+        self.assertAlmostEqual(float(keyed(PANEL)["DISPLAY_ORIGIN"]["cx"]), 3.5)
+        self.assertAlmostEqual(float(keyed(PANEL)["DISPLAY_END"]["cx"]), 138.5)
+        bezel = element(MASTER, "rect5")
+        self.assertAlmostEqual(float(bezel.attrib["x"]), 2.9)
+        self.assertAlmostEqual(float(bezel.attrib["width"]), 136.44)
         display_end = float(anchors["DISPLAY_END"]["cy"])
         lights = float(anchors["REC_LIGHT"]["cy"])
         first_knobs = float(anchors["SOS_PARAM"]["cy"])

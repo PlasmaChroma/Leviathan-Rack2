@@ -176,6 +176,19 @@ static void markerEditRegression() {
     need(m.ioError.load() && m.reel->region(2).begin == 600,
          "core rejects marker edit if recording began after enqueue");
     m.slice.stopRecord();
+    m.publishCoreState();
+    const unsigned beforeInsert = m.reel->markerCount();
+    need(m.requestInsertMarker(800, error), "queue waveform marker insertion");
+    finish();
+    need(m.reel->markerCount() == beforeInsert + 1 && m.reel->region(3).begin == 800,
+         "audio core inserts a Splice at the requested frame");
+    need(m.requestUndo(false, error), "queue inserted marker Undo");
+    finish();
+    need(m.reel->markerCount() == beforeInsert, "inserted Splice can be undone");
+    need(m.requestUndo(true, error), "queue inserted marker Redo");
+    finish();
+    need(m.reel->markerCount() == beforeInsert + 1 && m.reel->region(3).begin == 800,
+         "inserted Splice can be redone");
     need(audioAllocations == 0 && audioDeallocations == 0,
          "metadata commands do not allocate or free on audio");
 }
@@ -876,6 +889,51 @@ static void auxiliaryGateDiscontinuityRegression() {
 }
 
 int main() {
+    for (float width : {360.f, 510.f, 660.f}) {
+        const float x = 5.f + (width - 10.f) * 0.37f;
+        const auto frame = ChimeraDisplayOverlay::frameForX(x, chimera::kMaxReelFrames, width);
+        need(std::fabs(ChimeraDisplayOverlay::xForFrame(frame,
+                 chimera::kMaxReelFrames, width) - x) < 0.001f,
+             "waveform click and preview share the resized display mapping");
+        need(ChimeraDisplayOverlay::frameForX(width - 5.f,
+                 chimera::kMaxReelFrames, width) == chimera::kMaxReelFrames - 1,
+             "waveform click never targets the end sentinel");
+    }
+    {
+        Chimera owner;
+        ChimeraDisplayOverlay overlay;
+        overlay.owner = &owner;
+        overlay.box.size = Vec(510.f, 100.f);
+        overlay.renderFrames = 48000;
+        overlay.markers.count = 2;
+        overlay.markers.markers[0] = 0;
+        overlay.markers.markers[1] = 12000;
+        const float markerX = ChimeraDisplayOverlay::xForFrame(12000, 48000, 510.f);
+        const auto insertion = overlay.targetAt(Vec(markerX + 10.f, 20.f), false);
+        const auto removal = overlay.targetAt(Vec(markerX + 2.f, 20.f), true);
+        need(insertion.valid && insertion.frame > 12000 &&
+             removal.valid && removal.index == 1 && removal.frame == 12000,
+             "waveform hover distinguishes insertion from nearest-marker removal");
+        const auto buttonPreview = overlay.unspliceButtonTarget();
+        need(buttonPreview.valid && buttonPreview.index == 1 &&
+             buttonPreview.frame == 12000 && buttonPreview.remove,
+             "Unsplice button previews the following Splice boundary");
+        need(!overlay.targetAt(Vec(5.f, 20.f), true).valid,
+             "waveform cannot remove the first Splice");
+        overlay.box.size.x = 660.f;
+        const float widerX = ChimeraDisplayOverlay::xForFrame(12000, 48000, 660.f);
+        need(overlay.targetAt(Vec(widerX, 20.f), true).index == 1,
+             "marker hit testing follows a wider display anchor span");
+        need(std::fabs(overlay.unspliceButtonTarget().x - widerX) < 0.001f,
+             "Unsplice button preview follows a wider display anchor span");
+        owner.publishedRegion.store(1);
+        need(!overlay.unspliceButtonTarget().valid,
+             "final Splice has no following Unsplice preview");
+        owner.publishedRegion.store(0);
+        owner.publishedDocumentRevision.store(1);
+        need(!overlay.targetAt(Vec(widerX, 20.f), true).valid,
+             "stale marker display cannot target an index from a newer Reel revision");
+    }
     {
         Chimera original, restored;
         need(original.primaryEosgSetting.load(), "new modules default to primary EOSG");
@@ -937,9 +995,11 @@ int main() {
         json_decref(traversal);
     }
     Chimera module;
-    need(module.getNumParams() == 13 && module.getNumInputs() == 13 &&
+    need(module.getNumParams() == 14 && module.getNumInputs() == 13 &&
          module.getNumOutputs() == 4 && module.getNumLights() == 9,
          "Rack-facing schema counts");
+    need(module.getParamQuantity(Chimera::UNSPLICE_PARAM)->name == "Unsplice",
+         "Unsplice exposes a named Rack button parameter");
     need(module.reel == nullptr && module.stores.chargedBytes() == 0 && !module.service,
          "browser-preview constructor allocates no Reel or worker");
     Module::ProcessArgs args{};
@@ -2253,6 +2313,37 @@ int main() {
         need(appendModule.slice.recordState() == chimera::Slice::Idle &&
              appendReel.markerCount() == 2 && appendReel.region(1).begin == 4,
              "APPEND stop creates a Splice at the take's starting frame");
+    }
+    {
+        chimera::Reel unspliceReel(4, 4);
+        for (std::uint32_t i = 0; i < 1000; ++i)
+            need(unspliceReel.write(i, chimera::StereoFrame{0.f, 0.f}, i),
+                 "prepare parameterized Unsplice fixture");
+        need(unspliceReel.addMarker(300) && unspliceReel.addMarker(700),
+             "prepare two removable Splices");
+        Chimera unspliceModule;
+        unspliceModule.reel = &unspliceReel;
+        unspliceModule.slice.setReel(&unspliceReel);
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(1.f);
+        unspliceModule.process(args);
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(0.f);
+        unspliceModule.process(args);
+        need(unspliceReel.markerCount() == 3,
+             "initially held Unsplice does not fire on rate initialization");
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(1.f);
+        unspliceModule.process(args);
+        need(unspliceReel.markerCount() == 3, "Unsplice press waits for release");
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(0.f);
+        unspliceModule.process(args);
+        need(unspliceReel.markerCount() == 2 && unspliceReel.region(1).begin == 700 &&
+             unspliceModule.slice.markerHistoryState() == 1,
+             "parameterized Unsplice removes the following boundary with Undo history");
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(1.f);
+        unspliceModule.process(args);
+        unspliceModule.params[Chimera::UNSPLICE_PARAM].setValue(0.f);
+        unspliceModule.process(args);
+        need(unspliceReel.markerCount() == 1,
+             "a subsequent parameter release removes the next following boundary");
     }
     {
         Chimera optionModule;

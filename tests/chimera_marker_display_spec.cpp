@@ -14,12 +14,14 @@ int main() {
     chimera::MarkerDisplayMailbox mailbox;
     chimera::MarkerDisplay view;
     mailbox.publish(&reel, 1);
-    need(mailbox.consume(view) && view.count == 1, "initial markers");
+    need(mailbox.consume(view) && view.count == 1 &&
+         view.documentRevision == reel.documentRevision(), "initial markers");
     need(reel.addMarker(100), "add marker");
     mailbox.publish(&reel, 1);
     need(reel.addMarker(200), "add another marker while UI is idle");
     mailbox.publish(&reel, 1);
-    need(mailbox.consume(view) && view.count == 3 && view.markers[2] == 200,
+    need(mailbox.consume(view) && view.count == 3 && view.markers[2] == 200 &&
+         view.documentRevision == reel.documentRevision(),
          "consumer receives latest table after skipping updates");
     chimera::MarkerDisplay reopened;
     need(!mailbox.consume(reopened) && reopened.count == 3,
