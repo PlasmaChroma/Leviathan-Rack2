@@ -694,6 +694,18 @@ struct ChimeraDisplayOverlay : Widget {
                 nvgStrokeWidth(vg, 1.5f);
                 nvgStroke(vg);
 
+                const float playbackRate = owner->publishedPlaybackRate.load(std::memory_order_acquire);
+                if (playbackRate != 0.f) {
+                    const float direction = playbackRate > 0.f ? 1.f : -1.f;
+                    nvgBeginPath(vg);
+                    nvgMoveTo(vg, playX, traceTop);
+                    nvgLineTo(vg, playX, traceTop + 6.f);
+                    nvgLineTo(vg, playX + direction * 5.f, traceTop + 3.f);
+                    nvgClosePath(vg);
+                    nvgFillColor(vg, nvgRGB(246, 234, 168));
+                    nvgFill(vg);
+                }
+
             }
             if (part == 2) {
                 // Requested is purple and Current is green. Organize and Shift
