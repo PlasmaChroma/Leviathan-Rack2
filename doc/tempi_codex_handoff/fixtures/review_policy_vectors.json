@@ -1,0 +1,40 @@
+{
+  "provenance": "Specification 1.1.0 software-policy examples only; not firmware or hardware traces.",
+  "policyVersion": "TempiPoliciesV1",
+  "rationalEdges": [
+    {"h": 8000, "r": 8, "offset": 0, "after": -1, "risingTicks": [0, 5334, 10667, 16000]},
+    {"h": 8000, "r": -5, "offset": 4000, "after": -1, "risingTicks": [4000, 40000, 76000]},
+    {"h": 8000, "r": 4, "offset": -4000, "after": 0, "risingTicks": [4000, 12000, 20000]}
+  ],
+  "safeCommit": [
+    {"h": 8000, "r": 4, "offset": 0, "commit": 8000, "nextRise": 16000},
+    {"h": 8000, "r": 4, "offset": 4000, "commit": 8000, "nextRise": 12000},
+    {"h": 8000, "r": 8, "offset": 0, "commit": 5334, "nextRise": 10667}
+  ],
+  "humanRatios": [
+    {"interval": "3/2", "resolution": 100, "code": 0},
+    {"interval": "3/2", "resolution": 50, "code": -2},
+    {"interval": "3/2", "resolution": 25, "code": -2},
+    {"interval": "9/4", "resolution": 100, "code": -4},
+    {"interval": "9/4", "resolution": 50, "code": -4},
+    {"interval": "9/4", "resolution": 25, "code": -5},
+    {"interval": "2/3", "resolution": 100, "code": 4},
+    {"interval": "2/3", "resolution": 50, "code": 2}
+  ],
+  "humanPhases": [
+    {"h": 8000, "r": -5, "masterTap": "7/8", "resolution": 50, "phase": 4},
+    {"h": 8000, "r": -5, "masterTap": "7/8", "resolution": 25, "phase": 3},
+    {"h": 8000, "r": -4, "masterTap": "1/2", "resolution": 100, "phase": 0}
+  ],
+  "runDisplacement": [
+    {"startMaster": "3/8", "oldBeta": "0", "newBeta": "1/4", "newN": 1, "newD": 2, "nowMaster": "1", "channelPosition": "3/16", "nextRiseMaster": "21/8"},
+    {"startMaster": "3/8", "oldBeta": "1/4", "newBeta": "0", "newN": 2, "newD": 1, "nowMaster": "1", "channelPosition": "7/4", "nextRiseMaster": "9/8"}
+  ],
+  "samplePlacement": [
+    {"sampleRate": 44100, "tick": 2667, "sample": 3676},
+    {"sampleRate": 44100, "tick": 8000, "sample": 11025},
+    {"sampleRate": 48000, "tick": 2667, "sample": 4001},
+    {"sampleRate": 96000, "tick": 2667, "sample": 8001},
+    {"sampleRate": 22050, "tick": 2667, "sample": 1838}
+  ]
+}

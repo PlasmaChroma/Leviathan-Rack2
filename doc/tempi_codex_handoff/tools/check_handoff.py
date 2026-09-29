@@ -211,6 +211,13 @@ def check() -> dict[str, Any]:
                 f'Spec factory phases differ: {number}')
     counts['spec_factory_rows_checked'] = 16
 
+    import check_review_contract
+    review = check_review_contract.check()
+    counts['review_policy_cases_checked'] = review['policy_cases']
+    counts['implementation_work_packets'] = review['work_packets']
+    counts['navigation_links_checked'] = review['navigation_links']
+    counts['spec_json_blocks_checked'] = review['json_blocks']
+
     return dict(status='PASS', scope='Handoff integrity and reference consistency only', counts=counts,
                 not_tested=['Future C++ implementation','Rack plugin build or UI',
                             'Full fresh original timing-harness run','Physical hardware'])

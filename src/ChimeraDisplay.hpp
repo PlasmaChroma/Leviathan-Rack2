@@ -636,17 +636,13 @@ struct ChimeraDisplayOverlay : Widget {
                 (unspliceHovered ? unspliceButtonTarget() : MarkerTarget());
             if (preview.valid) {
                 const NVGcolor color = preview.remove ?
-                    nvgRGBA(255, 100, 112, 230) : nvgRGBA(106, 221, 215, 210);
+                    nvgRGBA(255, 100, 112, 230) : nvgRGBA(240, 240, 240, 230);
                 nvgBeginPath(vg);
                 nvgMoveTo(vg, preview.x, traceTop);
                 nvgLineTo(vg, preview.x, traceBottom);
                 nvgStrokeColor(vg, color);
                 nvgStrokeWidth(vg, preview.remove ? 3.f : 1.5f);
                 nvgStroke(vg);
-                nvgBeginPath(vg);
-                nvgCircle(vg, preview.x, traceTop + 2.5f, 2.5f);
-                nvgFillColor(vg, color);
-                nvgFill(vg);
             }
             return;
         }

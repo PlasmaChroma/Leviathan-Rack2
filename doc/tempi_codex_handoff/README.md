@@ -2,12 +2,20 @@
 
 Start with **TEMPI_VCV_RACK_CODEX_SPEC.md**. It is the implementation contract. The `reference/` folder contains the earlier evidence, not an alternate set of implementation defaults.
 
+The implementation-readiness revision is **1.1.0, 2026-09-29**. Follow
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for thirteen bounded work
+packets, test targets to create, and a resumable progress record. The review
+fixed ownership and timing ambiguities; it did not implement a module or add
+new firmware evidence. See [REVIEW_NOTES.md](REVIEW_NOTES.md).
+
 ## Contents
 
 - `TEMPI_VCV_RACK_CODEX_SPEC.md`: full source architecture, arithmetic, timing, controls, memory, policies, Rack integration, acceptance tests, and staged implementation plan.
 - `reference/`: original consolidated analysis, evidence matrix, selected technical notes, and the supplied Python numerical models.
 - `fixtures/`: unchanged recovered analysis fixtures, a complete generated module-data example, and explicitly labeled software-policy examples.
 - `tools/check_handoff.py`: standard-library-only integrity and reference-consistency check.
+- `tools/check_review_contract.py`: added software-policy examples, links, JSON examples and work-packet checks; also called by the handoff checker.
+- `fixtures/review_policy_vectors.json`: 24 additional explicit P-policy cases; keep separate from recovered fixtures.
 - `provenance/original_harness_rerun.log`: the successful fresh source-harness rerun performed while preparing this handoff.
 - `PACKAGE_SHA256SUMS.txt`: packaged file checksums.
 - `VALIDATION_NOTES.md`: exactly what was and was not tested, plus an optional C++ arithmetic-snippet smoke check.

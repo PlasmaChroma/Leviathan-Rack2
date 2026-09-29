@@ -1,7 +1,7 @@
 # TEMPI → VCV Rack: Complete Codex Implementation Specification
 
-**Specification:** 1.0.0  
-**Date:** 2026-09-28  
+**Specification:** 1.1.0 (implementation-readiness review)<br>
+**Date:** 2026-09-29<br>
 **Reference target:** the supplied TEMPI 71 firmware-analysis archive and its behavioral dossier  
 **Implementation target:** a native VCV Rack 2 module, integrated into the existing Leviathan plugin checkout when available  
 **Working C++/model name:** `Tempi` / `modelTempi`; treat the eventual public-facing product name as a separate branding decision  
@@ -41,6 +41,19 @@ The supplied evidence is unusually strong for certain numerical routines and inc
 
 Work incrementally, keeping the headless tests and plugin build passing. The final implementation report must identify completed requirements, tests actually executed, remaining defects, and any intentional deviations from this contract. Do not report an unexecuted test as passed.
 
+**Read this as a contract, not a brainstorming brief.** This revision fixes
+serialization ownership, resolves tempo/Run and event-order contradictions,
+and adds concrete execution rules and smaller implementation steps. It does
+not claim additional firmware recovery. The module is not yet implemented;
+`TempiPoliciesV1` and schema 1 remain draft production identifiers. The supplied
+recovered fixtures and reference models must remain byte-for-byte unchanged.
+
+Begin with this file and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+Implement one plan step at a time; do not ask another model to design missing
+behavior or replace the named policies. Each step states its inputs, files,
+tests and completion gate. Cosmetic layout choices can follow repository
+conventions; musical behavior must follow this contract.
+
 ### 1.1 Required functionality
 
 The release described here includes all of the following:
@@ -72,7 +85,14 @@ Use these labels in code comments, tests, and the implementation report:
 | **P** | Deliberate Rack/software policy defined in this specification | A complete, testable fallback; never call it recovered behavior |
 | **U** | Remaining uncertainty about the original device | A reason to isolate a policy, not a reason to omit the feature |
 
-For conflicting sources, use this order: executable fixtures and directly decoded bytes; the corrected behavioral dossier; dedicated v71 behavior/changelog and dedicated manual sections; older summary prose and quick-reference tables. Record genuine conflicts rather than combining incompatible descriptions.
+For F claims, use this order: executable recovered fixtures and directly decoded
+bytes; corrected behavioral dossier; dedicated v71 behavior/changelog and
+manual sections; older summary prose. For P behavior, this version of the main
+specification is authoritative, including its explicit tie-breaking rules;
+an older reference model is not an alternate Rack policy. A conflict between
+an F fixture and this file must be reported with the exact case, not resolved
+by silently changing either. New policy fixtures are labeled P and never
+replace the original evidence.
 
 ### 2.2 Resolved source conflicts
 
@@ -148,9 +168,32 @@ Do not create a single multi-thousand-line module translation unit. Avoid generi
 
 The audio/engine thread owns all mutable musical state while the module runs. Widget code must not directly edit `workingStates`, permutations, clock fields, or globals. It sends typed, bounded commands. DSP publishes a coherent display snapshot; GUI rendering reads only that snapshot.
 
-Rack documents mutual exclusion among Module lifecycle/serialization methods; that does not license unsynchronized direct writes from arbitrary widget callbacks. A queue must be race-free under the actual producer topology. A double-buffer without reader ownership is not sufficient when one buffer can be reused while a reader still holds it.
+Do **not** assume serialization excludes audio processing. In the inspected
+Rack source, `Engine::moduleToJson()` and engine processing both use shared
+engine locks; `dataToJson()` can overlap `process()`. Engine-mediated
+`moduleFromJson`, Reset and Randomize take the exclusive lock. Verify these
+entry paths in the target SDK/source; arbitrary widget calls do not inherit
+that exclusion. Serialization reads a published persistence snapshot, never
+live `Memory` or `SelectorRuntime` fields. A double-buffer without reader
+ownership and a seqlock over ordinary struct fields are both insufficient.
 
 Use a proven SPSC mailbox for one UI producer and the engine consumer, plus a separately owned bus input path if necessary. For snapshots, use a safe triple-buffer/reader-ownership exchange, atomically published immutable storage, or an existing proven plugin helper. Do not use a C++ data-racing seqlock over ordinary struct fields.
+
+Use **two separate** `snapshot_transport::SpscLatestSnapshot<T>` exchanges
+from `src/SpscLatestSnapshot.hpp`: one small numeric display snapshot and one
+complete value-only persistence snapshot. Widget `step()` is the sole display
+consumer and shares a local copy with its child views. Serialize consumers are
+serialized by an adapter-side mutex used **only outside DSP**; they copy the
+persistence exchange before constructing JSON. No widget/inspector may also
+consume that exchange. Engine publication never takes that mutex.
+
+Publish persistence after every frame that changes a persisted field, including
+selection, H, PRNG, clipboards, Mesh and retained ADC state, not only on Store.
+Publish initialized data in the constructor and after exclusive load/reset.
+Saving reflects the latest completed engine transaction; commands not yet
+accepted are pending and must not appear as acknowledged edits. Saving does
+not drain the engine's command queue from a second consumer. With the engine
+stopped, save the last accepted state; show unaccepted UI edits as pending.
 
 ### 3.4 Bounded command interface
 
@@ -159,7 +202,7 @@ Expose commands as a tagged fixed-size value type. Required semantic commands in
 ```text
 SetRatio(destination, code)          SetPhase(destination, byte)
 SetEnabled(destination, bool)        SetModMember(destination, bool)
-HumanTap(destination, timestamp)     TapLeading(timestamp)
+HumanTap(destination, capturedTap)   TapLeading(capturedTap)
 MachineCoarse(destination, sign, n)  MachineFine(destination, signedSteps)
 PhaseCoarse(destination, signedCount) PhaseFine(destination, signedSteps)
 SelectState(globalIndex, origin)     SetBank(bank)
@@ -170,11 +213,65 @@ DefaultCurrentState                 FactoryReset
 MultiPaste(meshMask)                 BakeShift
 ReceiveSelectBusBytes(payload)       SetFollow(bool)
 ButtonEdge(button, pressed, timestamp) / ReleaseAllUiButtons
+EnterPage(page) / ExitPage            TempoBusInterval(interval, capturedState)
+BeginUiTransaction(id) / EndUiTransaction(id)
+ApplyHistoryRecord(record)            (exclusive restore path, not UI queue)
 ```
 
 Use enum fields, not arbitrary strings in the engine. Validate every command before use. Maximum UI commands admitted per sample: 64; queue capacity at least 256 commands. Reject overflow visibly through a diagnostic counter. Do not silently overwrite an unconsumed Store/Recall command. Coalescing is allowed only for an explicitly replaceable command, such as the latest numeric inspector value for the same field.
 
 Timestamps are engine-time timestamps, not wall clock. A UI event cannot be applied in the past: use its capture timestamp for tap measurement but apply its musical transaction no earlier than the next engine processing opportunity. Future scheduled commands must be bounded and sorted; the first implementation may reject timestamps beyond the current frame rather than introducing an unbounded event scheduler.
+
+---
+
+### 3.5 Concrete producer topology and core boundary [P]
+
+Implement the first release with one UI command producer (Rack's UI thread),
+one engine consumer, and no worker. Panel parameters are sampled by the
+adapter, not also echoed into the UI command queue. Keyboard held buttons use
+a separate UI-held bitmask command. The effective button level is the OR of
+panel and keyboard ownership; one source releasing must not release another
+source's hold. `ReleaseAllUiButtons` clears keyboard/UI ownership and pending
+classifications, not a physically/automation-held Rack parameter.
+
+Hex injection is a separate UI-to-engine packet queue: four fixed packet slots,
+each holding `length<=256` and 256 bytes. Publish a whole slot atomically only
+after validation. Consume at most 64 bytes/frame, retaining a packet cursor.
+That supplies 1024 bytes of bounded capacity and cannot partially enqueue a
+packet. This UI injection queue is the initial Select Bus transport. Do not
+let a second thread become a producer; a future transport gets its own queue
+and an explicit merge order. A rejected whole packet has not lost any accepted
+bytes, so it **does not** reset a partially received parser message. An actual
+transport-loss marker resets the parser immediately before the next accepted
+packet, never in the middle of already accepted bytes.
+
+Core entry points must provide these responsibilities (names may match these):
+
+```text
+initializeDefaults()                    fixed value initialization, no Rack calls
+processFrame(FrameInput, CommandSpan)    one audio sample; fixed-size FrameOutput
+applyCommand(ValidatedCommand)           the single musical mutation path
+capturePersistent()                     fixed value object, engine/exclusive owner only
+restorePersistent(ValidatedPersistent)   engine/exclusive owner only; deterministic restart
+displaySnapshot()                       numeric fixed value object
+```
+
+`FrameInput` includes sample rate, four sanitized channel-0 voltages and
+connection bits, nine Rack parameter values, bypass flag and keyboard-held
+mask. `CommandSpan` is an adapter-owned fixed array of at most 64 commands.
+`FrameOutput` has six voltages, lights/status and diagnostics. Commands carry
+`origin`, monotonic producer sequence, module-generation and optional history
+transaction ID. Reject stale generations after Reset/load; no raw widget or
+Module pointers occur in command payloads. Large validated imports/history
+records use a fixed owned slot ID, not a borrowed pointer to UI stack memory.
+
+Destination indices are `0..5`, bank `0..3`, slot `0..15`, global State `0..63`
+everywhere in C++ and JSON. Add one only for user-facing labels. Invalid
+command indices/enums reject the whole command and consume no PRNG draws.
+UI event timestamps supplied to the core are snapshots of engine time. A
+button first observed by `process()` captures that exact frame's master
+snapshot; the GUI must not attach a decimated display-phase estimate as an
+accurate tap time. Delayed classification retains the engine-captured snapshot.
 
 ---
 
@@ -526,6 +623,34 @@ Example: captured interval `32000`, `R=4000`, new `H=16000` gives current reload
 
 The exact helper returns its wrapped field even for pathological states. The live scheduler uses a separately named safety sanitizer, `LiveReloadSafetyV1`, restricting an active segment to `1..0x01FFFFFF` ticks and incrementing a diagnostic if it changes that field. Never modify the exact helper to hide a failing fixture.
 
+### 7.3.1 Capture producer and arbitration completion [P around F helper]
+
+The live physical capture producer mirrors the recovered sequence: on each
+eligible rising edge, latch `elapsed` (zero if measurement is not active),
+pre-event remaining countdown and level; then zero elapsed and set measuring.
+Only virtual ticks with measuring set increment elapsed. Service loss before
+consuming the new mailbox; an invalid <399 capture clears measuring, so the
+next edge starts a fresh pair rather than reusing that rejected interval.
+Do not implement a permanently rolling last-edge delta that bypasses this.
+
+Loss runs once per frame before candidate admission; capture state is updated
+even when a lower-priority candidate loses arbitration. Build candidates
+without mutating the master, choose the highest-priority **valid completed**
+candidate, then apply its correction once. An acquiring/invalid physical edge
+does not suppress a valid completed tap. A valid equal-H physical candidate
+wins arbitration but applies no replacement or correction. This prevents a
+losing tap from changing the fields against which the physical helper compares.
+
+For a direct BPM change: reject nonfinite/nonpositive BPM; compute
+`H=clamp(floor(960000/BPM + 0.5),200,0xFFFFFF)`. On a changed H, assign
+requested/current H and shorten remaining countdown as in §7.3, but apply no
+capture correction. Internal BPM candidates rank below tempo CV in §7.6;
+otherwise the last valid internal edit in UI FIFO order wins. For a completed
+Leading Tap pair, use its own interval and the second tap's engine-captured
+countdown/level without resetting the physical input's measurement history.
+An abstract Tempo Bus interval uses the same value contract in headless tests;
+no external Tempo Bus transport or new panel input is required for this release.
+
 ### 7.4 Clock loss and holdover [M/P]
 
 Accepted capture loss clears acquisition flags; it does not silence the module. Continue at the last accepted requested H with ongoing phase. Do not restore saved tempo just because a cable is unplugged or a timeout occurs.
@@ -567,7 +692,7 @@ With previous ADC 0 and H=8000: ADC 34 gives candidate 400000/H200000; 35 gives 
 
 There is one Leading clock. Select Bus State messages are not tempo messages; ignored MIDI `F8` bytes do not become clock pulses.
 
-At a processing instant, use this ordering:
+At a processing instant, the priority below increases from first to last. Compute candidates first, then apply only the winning valid candidate (§7.3.1):
 
 1. Admit a moved tempo-CV candidate only when Leading Tap is disabled and no external interval measurement is active.
 2. Admit an explicit completed Leading Tap pair, if enabled.
@@ -633,7 +758,7 @@ Evaluate the recovered period clamp. A lane is saturated when its unclamped rati
 
 For a saturated lane use `ClampedLaneV1`: a shared-tick-domain lattice with full period `2*clampedH`, the recovered phase offset normalized by that period, and a common module origin. This exception does not use a drifting floating oscillator. It uses integer tick deadlines and does not claim nominal-ratio realignment.
 
-A Run start records both a master-phase restart anchor and a virtual-tick restart anchor. Unsaturated mapped sources use the master displacement; saturated mapped sources use the tick anchor. This makes transitions into/out of saturation and Shift deterministic. A tempo/ratio edit clears the affected destination's temporary displacement, as specified in §15, before selecting the appropriate lattice.
+A Run start records both a master-phase restart anchor and a virtual-tick restart anchor. Unsaturated mapped sources use the master displacement; saturated mapped sources use the tick anchor. This makes transitions into/out of saturation and Shift deterministic. A ratio/phase edit clears the affected destination's temporary displacement **when that timing edit commits**. An H-only tempo change preserves both restart representations, including transitions into/out of saturation; see §15.5.
 
 ### 8.5 Edge enumeration and masks
 
@@ -662,6 +787,47 @@ A phase/ratio edit clears temporary Run displacement for the destination mapped 
 State activation is a six-lane transaction with a different rule: cancel old output pulses, clear transient mapping/displacement, switch all canonical programs together, keep the master continuous, and schedule each new lane's next canonical rising edge strictly after activation. This can intentionally truncate an outgoing State's high gate. It must not partially activate one State over six unrelated GUI frames.
 
 Global H changes update the master immediately through §7 and queue any needed lane phase/saturation rebuilds coherently. They do not clear Run displacement merely because tempo changed; a stored channel timing edit or State activation does.
+
+### 8.6.1 Implementation details that are not optional
+
+- A pending lane target is a value `{ratio, phase, HForPhase, N, D, nominalH,
+  saturated, version}`. `HForPhase` is the requested H captured when building
+  that target. Until commit, use the old committed beta/saturation values;
+  never recompute beta from new H on every sample behind the commit guard.
+- An H change advances the common master with the new segment rules immediately
+  and replaces all affected pending targets in one batch. Each lane still
+  commits at its own safe LOW point; “coherently” means one H generation, not
+  an undocumented reset or simultaneous truncation of all six gates.
+- Freeze the guard fallback deadline at `firstRequestTick + 2*HAtFirstRequest`.
+  New H/target values do not extend it. On admission while HIGH, remember the
+  required old fall and stop reevaluating the guard. Do not repeatedly defer
+  again when LOW is finally reached. The guard bound is not a bound on a long
+  divided HIGH finishing naturally.
+- Protect the old internal HIGH of both the canonical lane and its currently
+  mapped destination if Run displacement makes their levels differ. Keep their
+  old schedule until those falls; only then clear displacement and commit.
+  Store the old schedule as bounded value state, not a second persistent bank.
+- LOW-at-commit holds LOW until the **strictly next** new rising boundary.
+  No falling-edge search may turn the lane HIGH early. At constant H, rising
+  times are `origin + O + k*(2*H*D/N)`, integer k. Normalize O modulo the full
+  period (not the half period), preserving rise/fall parity even for negative O.
+  Compute the first k whose deadline is strictly greater than commit time,
+  then ceil that rational deadline to a virtual tick.
+- Example: H=8000, old unity HIGH, edit to x2/p0 at tick1000, guard admitted
+  at tick3000. Retain the old fall at8000; commit there; next rise is16000,
+  **not**8000. With new p2 (O4000), next rise is12000 instead.
+- Equality is field equality. Reissuing the already pending/committed ratio
+  and phase is a no-op: do not clear Run displacement, restart deadlines or
+  create history. Explicit Recall/Default are activation operations even if
+  their resulting data happen to match; ordinary identical self-copy is not.
+
+Use integer quotient/remainder for repeated constant-H deadlines. For variable
+H, keep whole master cycles separate from a bounded fractional segment. Before
+multiplying by N, reduce whole cycles modulo D (and handle signed Run-relative
+cycle differences explicitly). Never multiply a 64-bit lifetime counter by
+N, by Q32, or by H. Use checked wider intermediates or factor cancellation
+for phase/comparator products; the C++11 Windows build must not depend on a
+compiler's signed-overflow behavior or an unavailable platform integer type.
 
 ### 8.7 Reference-versus-runtime separation
 
@@ -843,6 +1009,37 @@ Continue sampling every input Schmitt detector while frozen. Keep the most recen
 
 An explicit program-edit command, such as Paste into the selected State or Recall State, is not forbidden by the State-selection freeze; it is the purpose of that page. A Bank Edit `SetBank` action is likewise an explicit page operation. These transaction commands bypass automatic selector freeze in a controlled way and clear stale pending selections if their destination would conflict.
 
+### 11.4.1 Selection records and reconciliation [P]
+
+Maintain `observedQuantizedSlot` separately from `absoluteBase`: a bus/direct
+selection changes the latter, never fabricates a knob movement. Initialize
+the observation from the actual first-frame combo voltage while retaining the
+restored base. On a control scan, compare the newly quantized slot against that
+observation, update it even while frozen, and propose an absolute request only
+on change. Hold one pending request `{bank, slot, timestamp, source}`; newer
+timestamp wins, and local absolute beats Follow for an equal timestamp.
+
+While frozen, update observation/lastBusState normally, replace that one
+pending request, and drop Gate increments. Leaving freeze applies it once;
+if its target is already active it just clears the offset as requested and
+does not reactivate timing. Freeze predicates are recomputed after gesture/page
+actions and before automatic selection. Thus a Human press coincident with
+State Gate freezes selection soon enough to consume that Gate without stepping.
+
+Direct UI `SelectState` and `SetBank` are explicit transactions, bypass automatic
+freeze, clear pending selection/Human history, and exit an active held timing
+gesture without generating its deferred Human action. `SetBank(b)` retains
+the **effective slot** `(absoluteBase+gateOffset)&15` as its new base and clears
+offset; it must not unexpectedly jump back to the pre-Gate base. Bus State
+requests are automatic and obey Follow/freeze; a bus copy/store is an explicit
+memory transaction. An unchanged automatic target is not a fresh activation.
+
+Define membership/global/mode reconciliation as level-only: stops clear pulses
+and displacement; newly permitted destinations hold LOW until the next
+canonical rise, without an immediate synthetic trigger. Shift routing itself
+retains §9.2's immediate square-level behavior. This same rule applies on
+freeze exit, MOD reconnect/unplug, Run mode/member changes and state activation.
+
 ### 11.5 Leading Tap disabled
 
 When Leading Tap is disabled, the combo knob/CV controls tempo and must not produce absolute State changes. Hold the last State base. State Gate, explicit selection, Bank Edit, and Follow remain functional. On re-enabling Leading Tap, evaluate the current knob/CV as a new absolute State request once, using ordinary freeze/priority rules.
@@ -890,6 +1087,12 @@ p = EuclideanModulo(c * C(r), W(r))
 
 Each channel press changes `c` by the selected direction. This moves in master-cycle terms; an integer multiplier can consequently show no audible coarse phase change. Keep the count bounded by reducing modulo the number of distinct reachable phase positions. Do not overflow an 8-bit phase counter before applying Euclidean modulo.
 
+The reachable-count modulus is `W/gcd(C,W)`. The opposite PGM during an
+established Phase coarse gesture doubles each participating signed count,
+then reduces and recomputes p; it is consumed exactly like ratio doubling.
+Resetting the gesture's count on modifier press does not edit a program until
+its channel participates.
+
 On the Phase page, a channel-first gesture followed by PGM A/B performs the Fine phase operation instead of changing ratio. Ratio never changes as a side effect of a phase edit. Exiting Phase clears its transient coarse counts.
 
 ### 12.4 Direct editor
@@ -923,10 +1126,21 @@ For an unmodified short channel action in Normal mode, submit the captured press
 
 Keep two separate lifetimes:
 
-- A tap history remains eligible for up to twice the slowest currently attainable channel period, with a minimum of 2 seconds. This allows slow divisions to be learned.
+- At each accepted tap set history expiry to that tap time plus
+  `max(2 seconds, 4*ratioHalfPeriod(-124,H_at_tap)/32000 seconds)`.
+  A later tempo change does not silently extend that existing deadline.
+  Expire when `now > expiry`, not at equality. A tap arriving after expiry
+  becomes a new first tap. This allows slow divisions to be learned.
 - The **active programming window** freezes the State selector while a relevant button is held and for 750 ms after the last eligible Human press. Long inter-tap gaps do not freeze automatic State changes indefinitely. A State change clears the history.
 
 That 750 ms window is `HumanActivityWindowV1`, not a recovered hardware timeout. Directly exposing an explicit “arm Human programming” action is allowed, but it must display its armed/frozen status and provide Cancel.
+
+History eligibility uses the captured press timestamp, not delayed release.
+While a potential Human press awaits classification, retain that destination's
+prior history and its original expiry. On release, compare the captured press
+against that expiry; a long hold cannot retroactively invalidate an interval
+that was eligible when pressed. A consumed Machine press discards that pending
+Human capture instead.
 
 ### 13.3 Ratio quantization
 
@@ -957,6 +1171,13 @@ Candidate phase codes are:
 | 25% | Every integer `0..W(r)-1` | `0,1,2,3` |
 
 Break equal phase-distance ties with the smaller unsigned code. Use the same constant-H local mapping as the scheduler's new-program commit calculation. Commit the ratio/phase pair as one transaction after the second valid tap and refine it with later taps.
+
+For saturation, use the chosen candidate's clamped tick lattice and the last
+tap's captured relative virtual tick for circular distance; ratio selection
+still uses elapsed master cycles. For unsaturated phase, use the most recent
+tap's captured master position and H at classification/commit-request time.
+This is the same H recorded in the pending target; do not consult a future H
+when evaluating those candidates.
 
 The policy's displayed confidence is informational: first tap = waiting; two taps = learned; later taps = refined. It must not randomly discard a valid pair or silently refuse fractional ratios in 25% mode.
 
@@ -998,6 +1219,43 @@ Classify press order before page shortcuts:
 5. Otherwise, completed PGM click/chord sequences select pages below.
 
 Once a sequence is consumed, its releases do not emit additional page changes or Human taps. Releasing one component of a chord does not retroactively turn it into a single click. Focus loss emits `ReleaseAllUiButtons`, cancels pending clicks, and leaves outputs/program memory intact.
+
+### 14.2.1 Gesture classifier completion [P]
+
+Use press timestamps for the chord window (inclusive <=40 ms); measure hold
+from the later press of the both-held pair. A click requires release strictly
+before 350 ms with no consumed channel/modifier action. A single PGM held
+350 ms without an edit produces no page click on release. Both-held at350 ms
+enters State Edit once. A both-held channel action enters State Edit immediately
+and executes that channel command once; channel release cannot repeat it.
+
+Double-click interval is from the first sequence's release to the second
+sequence's first press, inclusive <=250 ms. The second completed short release
+emits the double action immediately; cancel the single action. A both-click
+finishes when both PGM are released. If neither double nor hold occurs, emit
+the deferred single action at release+250 ms. Input events at a deadline are
+classified before its timeout, so a press exactly at250 ms counts as double.
+An opposite PGM arriving outside40 ms is not a short both-click, but both-held
+350 ms still enters State Edit unless a Fine/Coarse gesture already owns it.
+
+Same-frame ties use channel edges before PGM edges; simultaneous PGM A+B with
+a fresh channel edge selects State Edit, not Fine. A previously held channel
+continues to give Fine priority. Page-local channel operations in State, Bank,
+Program and Clock Edit outrank Fine/Coarse; modifiers cannot accidentally edit
+ratios on those pages. Mute/MOD modifier gestures consume the bare toggle.
+
+A potential Human press freezes selection immediately and stores an engine
+timestamp/master snapshot, but commits its tap only on unconsumed release.
+A later modifier/focus loss discards it before any Human edit occurs. There
+is no maximum Human hold: a long bare channel hold becomes one tap on release,
+dated at its original press; debounce compares captured press times. Once a
+press is consumed by Machine programming, its Human active window is canceled
+for that destination. Timeout/history arithmetic uses elapsed engine time,
+not UI frame arrival or operating-system key repeat.
+
+Context-menu page entry is explicit and does not simulate fake held buttons.
+State Edit entered this way remains until Done/Escape; the “release both” exit
+only applies to a State Edit entered through a physical/keyboard chord.
 
 ### 14.3 Page entry and exit
 
@@ -1115,9 +1373,16 @@ A State activation resets the mapping to identity. Editing membership or mute do
 
 ### 15.3 Logical MOD gate
 
-Momentary uses the debounced physical Schmitt level. Toggled flips a persistent runtime logical level on each eligible MOD rising edge. Falling edges do not flip it. Switching Momentary/Toggled samples/reconciles the current run truth table without treating the mode change as a new off-grid start event.
+Momentary uses the physical Schmitt level (no extra millisecond debounce). Toggled flips a persistent runtime logical level on each eligible MOD rising edge while Run is enabled, MOD is patched, and Run input is not frozen. Falling edges do not flip it. Switching Momentary/Toggled samples/reconciles the current run truth table without treating the mode change as a new off-grid start event.
 
 The logical toggle latch is runtime session state, not part of each State's fourteen bytes. State changes retain its logical level but reset channel offsets/mapping. Patch load resets it to false under the deterministic restart policy.
+
+On Momentary -> Toggled, seed the latch from the current physical level,
+without treating it as an edge. On Toggled -> Momentary use the current
+physical level. Unpatching MOD clears the latch and displacement; reconnect
+while Toggled leaves the latch false even if high, waiting for a real rise.
+These are mode/connection reconciliations, not synthetic Starts. Membership
+and mute edits consume no PRNG values and do not themselves toggle the latch.
 
 ### 15.4 Run truth table
 
@@ -1142,9 +1407,18 @@ On a genuine logical run transition from stopped to running:
 - **All:** members restart immediately with temporary displacement. Nonmembers rejoin their canonical Leading grid, waiting for their next canonical rising boundary rather than acquiring an off-grid start.
 - **Alternate:** whichever group starts now restarts immediately and establishes its own temporary displacement; the other group stops and clears its audible pulses.
 
-For an unsaturated source, choose displacement so its phase is zero at the restart's master position, then continue at its source ratio on the shared timeline. Retain this destination-owned displacement through later Shift operations. For the saturated fallback, record the corresponding virtual-tick restart origin.
+For an unsaturated source, choose displacement so its phase is zero at the restart's master position, then continue at its source ratio on the shared timeline. Retain this destination-owned displacement through later Shift operations. Store a master displacement `deltaM = Mstart - betaAtStart`, so a mapped
+source subsequently uses `(M - betaNew - deltaM) * Nnew/Dnew`. Retaining only
+`Mstart` and ignoring beta is wrong after Shift to a phased source. For the
+saturated fallback, also store `deltaT = Tstart - normalizedOffsetAtStart`;
+use `(T - normalizedOffsetNew - deltaT)` modulo the new clamped full period.
+Compute both representations at every genuine Start, even if only one is
+currently used. Keep signed differences in bounded/rebased representation.
+For an unsaturated source, the tick representation uses its recovered nominal
+full period to normalize the offset at Start; for a saturated source, the
+master representation uses its nominal requested N/D lattice and beta.
 
-Stopping clears that destination's temporary displacement and trigger pulse. A later start creates a new displacement. A State activation and an edit to that destination's mapped canonical ratio/phase also clear its displacement. A Shift by itself does not. An H-only tempo update preserves the master-relative displacement; this specific tempo-change representation is a software policy.
+Stopping clears that destination's temporary displacement and trigger pulse. A later start creates a new displacement. A State activation and a committed edit to that destination's mapped canonical ratio/phase also clear its displacement. A Shift by itself does not. An H-only tempo update preserves the master-relative displacement; this specific tempo-change representation is a software policy.
 
 On State activation under an already-HIGH logical gate, reconcile run permissions without pretending a fresh MOD transition occurred. On reconnect/mode change/programming-freeze exit, reconcile momentary permission but only a real eligible run-start event gets the documented immediate off-grid restart. A resume caused only by unpatching MOD rejoins the canonical grid.
 
@@ -1310,17 +1584,51 @@ If adding an adjacent Rack expander transport, validate the neighboring model, u
 
 ### 18.1 Engine frame contract
 
-The adapter invokes the core with current sample duration, current port values/connection flags, and bounded queued commands. Within a frame:
+The adapter invokes the core with current sample duration, current port values/connection flags, and bounded queued commands. Sample n observes inputs and writes outputs at timestamp `t[n]`; it must not
+emit an edge from `(t[n],t[n+1]]` early. `t[0]=0`. Advance to a new sample using
+the duration of the preceding sample; a rate change supplies the duration for
+the next interval. Keep whole virtual ticks and a bounded fractional remainder.
+For an integer-rate accumulator, rescale its remainder when the denominator
+changes; preserve its fraction of a virtual tick, not its raw numerator.
 
-1. Sanitize input values and detect connection changes/Schmitt transitions.
-2. Timestamp input and button edges against the current master/tick snapshot.
-3. Decode the admitted bus bytes into semantic commands in byte order.
-4. Validate and resolve memory/global transactions, page changes, and automatic State requests using the priority rules below.
-5. Service Leading loss/captures and applicable tempo-CV updates.
-6. Apply eligible Shift routing, then Run permission/restart actions.
-7. Advance virtual timing to the end of the sample in chronological order; apply admitted lane commits, generate internal edges, and shape pulses.
-8. Apply final output masks and write all six output voltages.
-9. Update light envelopes and publish a snapshot only at its chosen decimated display rate, without delaying musical events.
+Within a frame:
+
+1. Advance the old timing state through deadlines strictly before `t[n]`, in
+   order, using the previously accepted controls. This includes virtual master
+   ticks and pulse expirations. No new input is backdated into that interval.
+2. Sanitize current inputs, prime connection changes, and capture Schmitt/
+   button edges at `t[n]` against the pre-event master state. A capture interval
+   uses the difference of whole virtual ticks (floor, never nearest rounding).
+3. Decode up to64 bus bytes; process their semantic commands in byte order,
+   then sampled panel/keyboard gesture actions, then up to64 UI commands in
+   producer FIFO order. Resolve selectors using §18.2. Classify gestures before
+   automatic selection so the freeze matrix is already current.
+4. Service Leading loss and candidate arbitration once, then eligible Shift,
+   then Run permission/Start/Stop. A scheduled virtual boundary exactly at
+   `t[n]` has not fired yet, so these controls precede its output effects.
+5. Process timing/commit deadlines equal to `t[n]`, coalescing duplicate rises,
+   and apply output masks. Write the level at `t[n]` to all six Rack outputs.
+6. Publish changed persistence, update lights, and optionally publish the
+   decimated display snapshot. Do not advance to `t[n+1]` before returning.
+
+The first frame after initialization/load primes controls and writes LOW.
+The second frame establishes the shared rising origin and emits phase-zero
+rises permitted by masks/Run. Express replay tick deadlines relative to this
+origin. A State activation later in life uses strictly-next-rise behavior,
+not the initialization exception. Use a half-open pulse interval `[rise,end)`;
+exactly at its end the pulse is LOW unless a genuine new rise extends it.
+
+At supported rates at most two virtual ticks elapse between frames. Bound
+fallback advancement to64 virtual ticks/frame for unsupported low rates; on
+excess, skip to the correct final master/lane phase, clear audible triggers,
+output LOW for that frame and count an overrun (no burst of replayed edges).
+Reject nonfinite/nonpositive sample rates with LOW output and a diagnostic,
+retaining musical memory. No catch-up on the next valid frame. The 128-crossing
+limit in §8.5 is **total across six canonical lanes and six displaced views**
+per virtual tick, not 128 per lane. UI deadlines are serviced every frame.
+ControlScanV1 scans at frame0 and the first sample at/after each successive
+32-tick boundary; when a Gate edge arrives between scans, use the previously
+observed base rather than an extra opportunistic ADC scan.
 
 If an event lies exactly on a virtual boundary, apply the relevant control transaction before emitting that boundary's scheduled output event. An edge capture observes the pre-event master state at that instant; source replacement then acts on it.
 
@@ -1338,7 +1646,34 @@ Factory Reset / explicit Revert
     > Run start / scheduled rising edge
 ```
 
-This ordering means higher-priority **conflicting** actions cancel lower-priority actions targeting the replaced runtime State. It does not mean unrelated Stores or parser bytes disappear. Process memory commands in their supplied FIFO order unless a defined reset invalidates subsequent commands in the same transaction batch.
+This is precedence over **automatic selection and output actions**, not a
+sort that reverses FIFO memory commands. Explicit memory commands execute in
+the bus -> gesture -> UI order above. Within each source keep FIFO; apply
+edits/copies to the logical selected State at that point. C0 in Follow changes
+that logical index immediately unless frozen, so `C0 05 F4 06` copies working
+State5 into working State6. Coalesce resulting audible State activations to
+the final index/content once at this timestamp. In Free the same bytes copy
+the original active State because C0 only remembers a request.
+
+Recall/Paste/Revert/Default affecting the active program mark a replacement
+barrier: suppress this timestamp's automatic local/Follow/Gate selection and
+Shift/Start, not later explicit FIFO operations. A Store neither replaces the
+active program nor suppresses selection. Therefore `StoreState; RecallState`
+stores the edited program then recalls it; `RecallState; StoreState` recalls
+the saved one then stores that value. Factory Reset is the exception: execute
+it once and invalidate all remaining commands/partial parser/queues from the
+old generation; keep outputs LOW for the initialization frame.
+
+Without such a barrier, the latest valid direct UI State selection wins over
+automatic local CV; changed local CV wins over Follow; Follow wins over Gate.
+A losing Follow request still updates `lastBusState`, but its final Bank
+change is discarded. Local CV uses the latest explicit Bank selection in this
+frame, or otherwise the frame-entry Bank. Earlier FIFO copy/store commands
+still read the provisional logical State at their point in the stream; their
+effects are not retroactively redirected by later selection arbitration. Multiple requests from one source use its last valid value. Use
+explicit proposal records to resolve this; do not let incidental array-loop
+order choose a Bank. A same-target automatic proposal consumes its priority
+but does not truncate gates or clear runtime mapping.
 
 A higher-level State activation cancels same-timestamp Shift and off-grid Run restart, then reconciles the current run truth table. Stop dominates a same-timestamp scheduled rise. If both a true Run start and a canonical rise are eligible, emit only one physical rising event/trigger.
 
@@ -1350,7 +1685,15 @@ Two independent same-time edits to different channels both apply. Two edits to t
 
 The headless test harness must accept a timestamped event stream containing input voltage/connection changes and typed commands, then output timestamped internal and physical rising/falling events, active State changes, and relevant diagnostics. Replaying the same initial patch, seed, and event stream at the same sample rate must produce identical event traces.
 
-Cross-sample-rate comparison uses musical deadlines and the permitted quantization bound, not a demand that 44100 Hz and 48000 Hz have identical sample indices. PRNG draws, State contents, command results, and final persistent memory must be bit-identical across those rates.
+Cross-sample-rate comparison uses musical deadlines and the permitted
+quantization bound, not identical sample indices. For traces whose input
+ordering/classification is preserved at every tested rate, PRNG draws, State
+contents, command results and final memory must be bit-identical. Use events
+safely separated from debounce/scan/gesture boundaries for that test. Events
+that quantize to the same sample at one rate but distinct samples at another
+can legitimately take different simultaneous-event branches; test those
+against each rate's explicit oracle, not an impossible blanket equality rule.
+The adapter cannot detect voltage edges that occur wholly between samples.
 
 
 ## 19. Rack lifecycle, threading, undo, and resource handling
@@ -1407,11 +1750,71 @@ Rack Randomize is the active-State twelve-draw mutation in §16.4. Do not call a
 
 Provide Rack history for discrete user-originated musical edits: Machine gestures, direct numeric edits, mute/MOD toggles, global settings, Paste/Mutation, Recall/Revert, Store, and factory reset. Coalesce one physical held gesture into one history action while allowing its preview edits to take effect live.
 
-A history transaction carries an ID. The engine captures a bounded before/after value snapshot of the affected memory, globals, selector state as needed, and PRNG for random operations. It publishes the completed transaction to the UI; the UI creates the Rack history action. Undo/redo enqueue a typed restore transaction, rather than directly writing engine fields from `history::Action` callbacks.
+A history transaction carries an ID. The engine captures bounded before/after
+values for affected memory, globals, selector fields and PRNG where needed.
+It publishes completion to the UI, which creates a Rack history action.
+Undo/redo use the synchronous exclusive adapter route below, then call the
+same typed core restore operation. They must not write live core state before
+acquiring engine exclusion or enqueue a restore that Rack can silently lose.
 
 History restore reactivates affected programs using normal activation/commit rules; it does not attempt to rewind wall-clock time. Undoing Mutation restores its pre-mutation PRNG state, so repeating the same Mutation from that state is deterministic. Undoing Store restores the previous saved memory as well as dirty status.
 
 Do not create a history entry for each clock edge, CV State step, received bus byte, or LED update. If the fixed completion queue is full, defer/reject a new undoable UI transaction visibly rather than committing a change with silently missing history. Bus-origin operations are not added to Rack history by default, but their effects remain serialized.
+
+### 19.6.1 Bounded history ownership
+
+Reserve completion capacity **before** an undoable edit begins. Use at least
+16 fixed history records and a 16-entry completion queue; a record contains
+generation, transaction ID, affected-field/State bitsets and before/after
+values. A gesture reserves one record on its first actual mutation, updates
+its after value, and completes on gesture end/cancellation. Focus loss closes
+history for already applied Machine edits; it does not silently roll them back.
+An unconsumed Human gesture has no edit/history. Completed Human learning is
+also undoable (one tap-release learning transaction).
+
+Only capture/restore affected fields: undoing a ratio must not overwrite a
+later unrelated stored Bank or external H. Full-memory before/after is allowed
+as storage, but its write mask controls restore. Random operations include
+PRNG; Store includes its saved fields. Completion records transfer to the UI,
+which copies them into an allocated Rack history action and acknowledges slot
+release. DSP never frees that action. History actions resolve the current
+module by engine ID and verifies `modelTempi`, not by retaining its pointer.
+A missing module makes restore a no-op. Rack Undo of module removal may recreate
+the same engine ID; older history actions must work on that restored module.
+Generation checks invalidate queued commands, not otherwise valid stored Rack
+history actions. Stamp the current generation when executing a history action.
+Rack's own Reset/Randomize history must not be duplicated by a second custom
+history entry for the same lifecycle callback.
+
+Rack `history::Action::undo/redo()` return void and cannot defer stack movement.
+Therefore implement this concrete synchronous bridge on the UI thread:
+
+1. Resolve the module ID and verify its model. A scoped **thread-local** guard
+   holds the target pointer and a pointer to the action-owned validated masked
+   restore record only for the duration of this call (never in the Action's
+   persistent fields or an engine queue).
+2. Call `APP->engine->moduleFromJson(module, emptyJsonObject)`; that public API
+   acquires exclusive engine ownership, including while audio is stopped.
+3. Override `Tempi::fromJson()`. When the thread-local guard targets this exact
+   object, apply the masked restore, invalidate stale queued commands, publish
+   persistence/display, and return **without** base JSON parsing/resetting
+   parameters. For all ordinary calls invoke `Module::fromJson(root)` normally.
+4. Clear the guard with RAII and release the temporary JSON outside DSP.
+
+The guard is an in-process capability, never a JSON key or serialized command.
+An imported patch cannot request a history operation. Do not send a stale full
+snapshot through normal `dataFromJson` and overwrite unrelated recent fields.
+Do not call any engine-locking API recursively inside the exclusive callback.
+This narrowly justified `fromJson` override is the only extra adapter override
+needed beyond §19.1; include a test proving the normal load path calls the base.
+
+If Undo occurs during an unfinished live gesture, cancel that preview by
+restoring its captured affected fields and releasing its reserved record
+before applying the requested completed history action. Do not push a new
+history entry from inside Undo. Keep detector levels primed so held buttons
+cannot reappear as fresh presses. The headless harness provides a deterministic
+completion sink; clocks and bus/automation-origin edits do not require a
+widget or generate UI history.
 
 ### 19.7 Removal, duplication, and headless use
 
@@ -1530,6 +1933,9 @@ The companion `fixtures/default_patch_v1.json` is a complete example with all si
 Restore both memory layers, both globals layers, current and saved H, selector selection, PRNG, clipboard values, last bus State, and Mesh. Recompute all dirty bits; never trust a serialized dirty mask.
 
 Do not restore the following runtime details: absolute engine timestamps, fractional master origin, trigger pulses, held buttons, programming page, unfinished tap histories, pending parser partial frame, transient Shift permutation, or temporary Run displacement. Reset those deterministically and restart LOW then at the master origin as in §4.
+Reset/load also invalidates UI/bus partial input and old pending command
+generations; UI-owned completion records are retired off audio through their
+acknowledgment path, never freed by process().
 
 This is `PatchRestartV1`: patches preserve musical programs and edits but **do not resume at the exact hardware playback sample**. The inspector must not falsely imply that an old unsaved Shift permutation was Stored merely because the patch was saved.
 
@@ -1539,9 +1945,25 @@ On the first engine frame after loading, prime input detectors and the current S
 
 Parse into a temporary validated value object before replacing live memory. Check JSON types before reading numbers. Missing `data` initializes factory defaults. Unknown fields are ignored, with no attempt to execute them or treat them as commands.
 
-For schema 1 with missing fields, fill from defaults and preserve every valid independent field. Missing working States are copied from the corresponding saved State; missing saved States use factory defaults. A malformed Program array is repaired element-by-element to its relevant baseline, with explicit diagnostics. Clamp integral ratio and phase values to their supported ranges; reject nonintegers rather than silently truncating JSON floating values. Mask enable/MOD fields to six bits after validating integer type.
+For schema 1 with missing fields, fill from defaults and preserve every valid
+independent field. Validate booleans strictly (do not treat arbitrary numbers
+as booleans), enum strings by exact spelling, indices by integer range, and
+hex values as exactly16 ASCII hexadecimal digits (upper/lowercase accepted;
+write lowercase). Missing/invalid PRNG defaults to seed1; Mesh defaults to0.
+Invalid clipboard cardinality/type invalidates that entire clipboard, not
+sixteen independent partial paste sources. More than64 States are ignored
+after the64th; short State arrays repair their missing elements from baseline. Missing working States are copied from the corresponding saved State; missing saved States use factory defaults. A malformed Program array is repaired element-by-element to its relevant baseline, with explicit diagnostics. Clamp integral ratio and phase values to their supported ranges; reject nonintegers rather than silently truncating JSON floating values. Mask enable/MOD fields to six bits after validating integer type.
 
-For an unknown future `schemaVersion` or unknown incompatible `policyVersion`, do not guess how to interpret timing fields. Initialize a safe factory core, retain the original JSON as non-executed adapter-side data for a warning/recovery workflow if repository conventions permit, and notify the user. Do not overwrite that source blob until the user explicitly edits/saves through a compatible version.
+For unknown/floating/missing-nonlegacy `schemaVersion`, incompatible
+`policyVersion`, or `virtualTickHz` other than32000, do not reinterpret timing.
+Initialize safe factory runtime and retain a deep copy of the original data
+off audio. `dataToJson()` returns that original blob unchanged, including on
+autosave, until the user chooses a confirmed **Replace unsupported data with
+defaults** inspector action. Reject musical edits while that recovery state is
+active; display a clear warning. Missing entire module `data` is normal factory
+initialization. A schema1 object with absent policy/timebase uses the schema1
+defaults; it is not a fictitious pre-v1 migration. Unknown additional keys in
+an otherwise supported object remain ignorable.
 
 Introduce a real migrator when a second schema exists. Do not add a pretend migration for an imaginary older released Tempi format.
 
@@ -1578,7 +2000,7 @@ Use deterministic seeds, machine-readable reports, and named test IDs. Fail on a
 | ID | Test | Required result |
 |---|---|---|
 | MATH-01 | All 1,743 supplied ratio rows | Exact integer match |
-| MATH-02 | Six-lane phase fixture rows | Exact signed result for every channel |
+| MATH-02 | All 42 bundled scalar phase rows | Exact signed result; separately exercise six-lane wiring (the historical harness also ran six-lane cases) |
 | MATH-03 | H8000, r-8, p1 | Offset 4000, not 12000 |
 | MATH-04 | H8000, r8 | Nominal half-period 2666 |
 | MATH-05 | Signed wrap/division boundaries | Match reference; no UBSan overflow |
@@ -1586,7 +2008,7 @@ Use deterministic seeds, machine-readable reports, and named test IDs. Fail on a
 | MATH-07 | Mixed large denominator LCMs | No 16-bit overflow or unbounded allocation |
 | MATH-08 | PRNG fixture stream, seed1 first result | First byte 0x28; all rows match |
 | MATH-09 | Full valid ratio/phase ranges | Bounded outputs; negative wrapped phase handled |
-| ADC-01 | Recovered State hysteresis fixtures | Match all 4,096 original cases |
+| ADC-01 | Threshold and hysteresis boundary vectors | Exact helper match at every T[j] and margin endpoint; the original 4,096 harness cases are not bundled |
 | ADC-02 | All previous slots × all 1024 ADC values | Independent reference agreement |
 | ADC-03 | Unpatched knob 0/1 | ADC 0/1023 |
 | ADC-04 | Patched 5 V with knob 0.5 | ADC 512; attenuator, not addition |
@@ -1725,6 +2147,38 @@ Use deterministic seeds, machine-readable reports, and named test IDs. Fail on a
 | RACK-07 | Dense GUI edits + TSAN-supported harness | No data races in commands/snapshots/history |
 | RACK-08 | Existing plugin build and unrelated-module tests | No regressions |
 
+### 22.5.1 Added implementation-boundary gates
+
+| ID | Test | Required result |
+|---|---|---|
+| FRAME-01 | Control and virtual rise exactly on sample timestamp | Control first; no one-sample-early output |
+| FRAME-02 | Initialization and later same-program State activation | One LOW startup frame; origin rise next frame; ordinary activation strictly next rise |
+| FRAME-03 | Rate change with fractional tick remainder | Preserve physical fraction and pulse end; no duplicated/skipped origin |
+| FRAME-04 | Invalid rate / excessive tick catch-up | Bounded LOW/diagnostic path; memory retained |
+| COMMIT-01 | Replaced pending edits plus H changes | First-request fallback deadline never moves |
+| COMMIT-02 | Guard admitted while canonical or displaced destination HIGH | Wait retained falls once; strict next new rise |
+| COMMIT-03 | H-only transition across saturation | Preserve both Run displacement representations |
+| ORDER-01 | Follow versus Free: C0 05 F4 06 | Copy correct logical source in byte order |
+| ORDER-02 | Store;Recall versus Recall;Store | FIFO explicit transactions, no priority sorting reversal |
+| ORDER-03 | Follow bank request and local movement same frame | Local target wins without adopting losing bus Bank |
+| ORDER-04 | Human press and State Gate same frame | Freeze first; Gate dropped |
+| GEST-08 | Exactly40/250/350 ms and one frame either side | Defined inclusive chord/double and hold precedence |
+| GEST-09 | Context-menu State Edit | Stays open without fake held PGM; Done/Escape exits |
+| GEST-10 | Panel and keyboard hold same button | OR ownership; release one does not release the other |
+| SNAP-01 | Save repeatedly during audio edits/Store/bus activity | Coherent persistence, TSAN clean, no DSP mutex |
+| SNAP-02 | Widget and serializer concurrently consume | Separate exchanges; no stolen reader slot |
+| HIST-01 | Completion queue full, active gesture, focus loss | Reserved record prevents untracked mutation; one completion |
+| HIST-02 | Undo ratio after unrelated change | Restore write mask only, no unrelated Bank/H rewind |
+| HIST-03 | Removal/load/reset and synchronous history restore | Generation-safe queues; normal JSON remains normal; undo works after undoing module removal |
+| PATCH-07 | Unsupported policy/timebase then autosave | Preserve original blob until explicit replacement |
+| BUS-11 | Reject whole packet during partial accepted frame | Existing parser state/data retained, no false loss reset |
+
+`fixtures/review_policy_vectors.json` supplies additional **P-only** rational
+edge/commit/Run/Human examples. `tools/check_review_contract.py` checks those
+examples and document structure; it is not a substitute for production C++
+tests implementing the IDs above. `validation.json` and `timing_validation.json`
+are historical aggregate reports, not thousands of executable input rows.
+
 ### 22.6 Duration, sample rate, robustness, and performance gates
 
 Run the audio-frame engine for at least 60 simulated seconds for representative mixed ratios at each supported sample rate. Run a 24-hour-equivalent scheduler alignment test using an event-driven test driver that advances between meaningful deadlines; compare against an independent rational oracle. Do not imply that an event-driven scheduler test exercised every Rack audio frame for 24 hours.
@@ -1785,8 +2239,8 @@ Provide changed-file list, build/test commands, test counts and failures, actual
 
 ```text
 manual/Tempi.md
-docs/tempi/architecture.md
-docs/tempi/fidelity-and-policies.md
+doc/tempi/architecture.md
+doc/tempi/fidelity-and-policies.md
 tests/tempi/README.md
 tests/tempi/fixtures/...
 tests/tempi/replays/...
@@ -1856,7 +2310,41 @@ These references were consulted for the implementation contract on 2026-09-28. T
 - **R5 — Official TEMPI product page:** <https://www.makenoisemusic.com/modules/tempi/>. Product/manual provenance.
 - **R6 — Official TEMPI manual:** <https://www.makenoisemusic.com/wp-content/uploads/2024/03/tempimanual.pdf>. Dedicated control descriptions, combo attenuator behavior, programming pages, Clock Edit, Follow, and the v71 changelog. In the inspected PDF, page indices 6–7 show the panel/control roles, 27 covers Clock Edit, and 33 contains the relevant later changelog; these are zero-based PDF indices, not printed page numbers. Prefer dedicated sections and updated behavior over inconsistent older quick-reference entries.
 
-No current Leviathan checkout was inspected while preparing this specification. Repository-specific widget class names, build flags, MCP APIs, and registration file locations are intentionally not invented. The implementing Codex agent must resolve them from its actual workspace in Phase 0.
+The initial1.0 handoff did not inspect Leviathan. The1.1 review inspected this
+checkout on2026-09-29. Reverify on another branch; these are integration facts,
+not permission to replace infrastructure:
+
+- `src/plugin.hpp` declares models; `src/plugin.cpp` registers them;
+  `plugin.json` supplies module browser metadata. No `modelTempi` exists yet.
+- `Makefile` includes `src/*.cpp` and selected subdirectories, **not** arbitrary
+  recursive sources. Add `SOURCES += $(wildcard src/tempi/*.cpp)` explicitly.
+  The installed SDK compiles production as C++11; use C++11-compatible source
+  and compile headless production tests with the same standard.
+- SDK flags include unsafe floating math. Add target-specific
+  `-fno-fast-math -fno-unsafe-math-optimizations` for Tempi adapter/math/scheduler
+  objects where NaN checks, rounding and deterministic timing require it,
+  following the existing Chimera/Mandelwake pattern.
+- Use `src/SpscLatestSnapshot.hpp` under its single-consumer contract (§3.3),
+  `src/PanelSvgUtils.hpp`, the existing theme controls, and the root AGENTS.md.
+  If the panel is split, edit only master `res/Tempi.svg`; regenerate through
+  `tools/split_svg_labels.py` and `make generate-panel-anchor-atlas`.
+- New basic performance stats must follow the repository's explicit Process,
+  Step, Draw and DrawLayer contract (`DL (us)` label). Gate collection through
+  `isDragonKingDebugEnabled`; keep worker/component work out of these totals.
+- This workspace validates with native MSYS2 MINGW64 and `../Rack-SDK`;
+  Rack-linked tests need `RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"`.
+  Full `plugin.dll` linking is required here. Do not claim macOS/Linux plugin
+  builds without those actual toolchains. No staging or commits are authorized.
+- The broad `test-fast` baseline currently fails Sibyl P5/P6 companion/source
+  fixtures. Record fresh baseline output in Phase0, distinguish unchanged
+  failures from regressions, and do not modify unrelated Sibyl to green Tempi.
+
+
+The local Rack source check used `../Rack/src/engine/Engine.cpp`:
+`Engine::moduleToJson`/`Engine::toJson` and processing use shared locking,
+while `Engine::moduleFromJson`/Reset/Randomize use exclusive locking.
+`../Rack-SDK/include/engine/Module.hpp` alone does not establish that saving
+has exclusive ownership. This is why §3.3 requires a persistence exchange.
 
 ### 25.3 Input hashes
 
