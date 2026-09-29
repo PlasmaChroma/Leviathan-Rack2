@@ -13,6 +13,7 @@ namespace chimera {
 // inputs change; stereo crossmix and pitch choices are latched at launch.
 class Grains {
 public:
+    enum { kTransitionFrames = 250 };
     struct ClockDrive {
         int mode; // 0 free, 1 Gene Shift, 2 Stretch
         bool edge, waiting;
@@ -81,7 +82,8 @@ public:
         resetTrajectory();
         lastDirection_ = 1;
         for (int i = 0; i < 4; ++i) {
-            slots_[i] = Voice(); tails_[i] = Voice(); tailAge_[i] = 0; scalarAge_[i] = 48;
+            slots_[i] = Voice(); tails_[i] = Voice(); tailAge_[i] = 0;
+            tailGainScale_[i] = 1.f; scalarAge_[i] = 48;
             tailLast_[i] = scalar_[i] = StereoFrame{0.f, 0.f};
             tailWeightLast_[i] = scalarWeight_[i] = 0;
         }
@@ -259,11 +261,13 @@ public:
         }
 
         double sumL = 0, sumR = 0, weightSum = 0;
-        const double transitionFraction = double(transitionRemaining_) / 48.0;
+        const bool forcedTransition = transitionRemaining_ != 0;
+        const double transitionFraction = double(transitionRemaining_) / kTransitionFrames;
         for (int i = 0; i < 4; ++i) {
             Voice& v = slots_[i];
             Voice& tail = tails_[i];
-            const double tailFraction = tail.active ? (48.0 - tailAge_[i]) / 48.0 : 0.0;
+            const double tailFraction = tail.active ? tailGainScale_[i] *
+                (forcedTransition ? transitionFraction : (48.0 - tailAge_[i]) / 48.0) : 0.0;
             if (v.active) {
                 const double w = voiceWeight(v) * (transitionRemaining_ ?
                     (1.0 - transitionFraction) : (1.0 - tailFraction));
@@ -301,7 +305,8 @@ public:
                 tail.travel += std::fabs(increment);
                 if (!tail.full) ++tail.age;
                 if ((tail.full ? tail.travel >= tail.length : tail.age >= tail.length) ||
-                    ++tailAge_[i] >= 48) tail.active = false;
+                    ++tailAge_[i] >= (forcedTransition ? kTransitionFrames : 48))
+                    tail.active = false;
             }
             if (scalarAge_[i] < 48) {
                 const double fade = (48.0 - scalarAge_[i]) / 48.0;
@@ -371,6 +376,8 @@ private:
     };
     void forceTransition() {
         bool hadOutgoing = false;
+        const float outgoingScale = transitionRemaining_ ?
+            float(1.0 - double(transitionRemaining_) / kTransitionFrames) : 1.f;
         for (int i = 0; i < 4; ++i) {
             hadOutgoing = hadOutgoing || slots_[i].active || tails_[i].active;
             if (immediate_) {
@@ -385,6 +392,7 @@ private:
                 }
                 tails_[i] = slots_[i];
                 tailAge_[i] = 0;
+                tailGainScale_[i] = outgoingScale;
             }
             slots_[i] = Voice();
         }
@@ -393,7 +401,7 @@ private:
         primaryTravel_ = 0;
         pendingResidual_ = false;
         residualLength_ = 0;
-        transitionRemaining_ = !immediate_ && hadOutgoing ? 48 : 0;
+        transitionRemaining_ = !immediate_ && hadOutgoing ? kTransitionFrames : 0;
     }
     float edgeGain(double phase) const {
         const double x = profile1::clamp01(phase) * 2048.0;
@@ -439,6 +447,7 @@ private:
             }
             tails_[slot] = v;
             tailAge_[slot] = 0;
+            tailGainScale_[slot] = 1.f;
         }
         else if (immediate_) { tails_[slot].active = false; scalarAge_[slot] = 48; }
         const profile1::OnsetChoice choice = profile1::chooseOnset(random_, slot, continuousMorph_.value, ratios_);
@@ -477,7 +486,8 @@ private:
     bool bandlimited_ = false, havePmOffset_ = false;
     double qualityBlend_ = 0, lastPmOffset_ = 0;
     Voice slots_[4], tails_[4];
-    std::uint8_t tailAge_[4];
+    std::uint16_t tailAge_[4];
+    float tailGainScale_[4];
     StereoFrame tailLast_[4], scalar_[4];
     double tailWeightLast_[4], scalarWeight_[4];
     std::uint8_t scalarAge_[4];
@@ -509,7 +519,7 @@ private:
     bool startAtCurrent_;
     double modeStartPosition_;
     Region activeRegion_;
-    std::uint8_t transitionRemaining_;
+    std::uint16_t transitionRemaining_;
     int clockMode_;
     double trajectoryOffset_, stretchAnchor_, stretchStep_, stretchVelocity_;
     int lastDirection_;

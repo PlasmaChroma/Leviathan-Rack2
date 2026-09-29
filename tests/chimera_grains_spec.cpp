@@ -305,15 +305,15 @@ int main() {
         retriggered.step(reel, region, transitionControl, true);
     need(retriggerStart.readers == 2 && !retriggerStart.completions &&
          std::fabs(retriggerStart.audio.l - 1.f) < 1e-5f,
-         "forced Play retrigger retains the old reader during its 48-frame tail");
-    for (int frame = 1; frame < 48; ++frame) {
+         "forced Play retrigger retains the old reader during its 250-frame tail");
+    for (int frame = 1; frame < chimera::Grains::kTransitionFrames; ++frame) {
         const chimera::Grains::Result out = retriggered.step(reel, region, transitionControl);
         need(out.readers == 2 && !out.completions &&
              std::fabs(out.audio.l - 1.f) < 1e-5f,
              "forced tail crossfades without artificial completions or gain swell");
     }
     need(retriggered.step(reel, region, transitionControl).readers == 1,
-         "forced transition reader retires after 48 frames");
+         "forced transition reader retires after 250 frames");
     for (int frame = 0; frame < 120; ++frame) {
         const chimera::Grains::Result out = retriggered.step(reel, region, transitionControl, true);
         need(out.readers <= 8 && !out.completions &&
@@ -368,10 +368,10 @@ int main() {
     need(selectionStart.readers == 2 && selectionStart.audio.l > 0.99f &&
          !selectionStart.completions,
          "selection fade retains the outgoing voice's original source region");
-    for (int frame = 1; frame < 48; ++frame)
+    for (int frame = 1; frame < chimera::Grains::kTransitionFrames; ++frame)
         selected.step(twoRegions, chimera::Region{4800, 9600}, transitionControl);
     need(selected.step(twoRegions, chimera::Region{4800, 9600}, transitionControl).audio.l < -0.99f,
-         "selection fade reaches the new region on frame 49");
+         "selection fade reaches the new region after 250 frames");
     chimera::Grains immediateSelection;
     immediateSelection.setImmediateTransitions(true);
     for (int frame = 0; frame < 100; ++frame)
