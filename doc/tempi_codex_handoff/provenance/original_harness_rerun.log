@@ -1,0 +1,25 @@
+{
+  "c_runtime_instructions": 10331,
+  "eeprom_state_cases": 64,
+  "factory_state_cases": 64,
+  "factory_write_operations": 1101,
+  "factory_unique_written_bytes": 908,
+  "ratio_cases": 1743,
+  "phase_six_lane_cases": 42,
+  "alignment_factor_cases": 249,
+  "lcm_cases": 7,
+  "gpio_output_patterns": 64,
+  "lcg_cases": 64,
+  "adc_hysteresis_cases": 4096,
+  "select_bus_scenarios": 7,
+  "all_assertions_passed": true,
+  "limitations": [
+    "Custom decoder and harness share an instruction definition; not independent third-party validation.",
+    "No cycle-accurate MCU, analog front end, asynchronous interrupts, or physical module was simulated.",
+    "EEPROM operations complete instantly in the harness.",
+    "ADC tests substitute the ADC wrapper result; calibration values are synthetic.",
+    "Select Bus F4 tests verify dispatcher calls via hooks, not persistent-store timing.",
+    "Factory EEPROM is reconstructed without interactive calibration; unobserved bytes are FF fill."
+  ]
+}
+

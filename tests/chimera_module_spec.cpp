@@ -1957,7 +1957,7 @@ int main() {
          "audio adopts full worker-prepared Reel without replaying early REC");
     module.serviceStep();
     need(module.readyForPrepare && module.awaitingHandle == 0 &&
-         module.stores.chargedBytes() == 176060801ull,
+         module.stores.chargedBytes() == 177104801ull,
          "audio accepted registry-owned handle through bounded command queue");
     need(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() > 4.9f &&
          std::fabs(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() -
@@ -2265,13 +2265,13 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 176060801ull + 8987ull,
+    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 177104801ull + 9019ull,
          "worker result charged and queued without touching audio");
     trapAllocations = true;
     module.process(args);
     trapAllocations = false;
     need(audioAllocations == 0, "store adoption callback allocates no heap");
-    need(module.stores.chargedBytes() == 176060801ull + 8987ull,
+    need(module.stores.chargedBytes() == 177104801ull + 9019ull,
          "retired store stays charged before off-audio acknowledgment handling");
     module.serviceStep();
     need(module.awaitingHandle == 0 && module.reel->capacityFrames() == 256,
@@ -2281,7 +2281,7 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 8987ull,
+    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 9019ull,
          "worker retirement releases old payload credit off audio");
     chimera::Reel optionReel(1, 1);
     for (std::uint32_t i = 0; i < 4; ++i)
@@ -2505,7 +2505,7 @@ int main() {
         module.ioBusy.store(false);
         display.step();
         need(display.stateText == "ARM APPEND" &&
-             display.detailText.find(">2") != std::string::npos &&
+             display.detailText.find(u8"\u2192 2") != std::string::npos &&
              display.saveText == "UNSAVED",
              "panel text distinguishes an armed Append and unsaved marker edit");
         module.publishedRecordState.store(0);

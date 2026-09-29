@@ -10,6 +10,7 @@
 #include "ChimeraEdit.hpp"
 #include "ChimeraCheckpointSession.hpp"
 #include "ChimeraWaveform.hpp"
+#include "ChimeraWaveformService.hpp"
 #include "ChimeraMarkerDisplay.hpp"
 #include "DebugTerminalMetrics.hpp"
 #include "ChimeraRenderMetrics.hpp"
@@ -339,11 +340,16 @@ struct Chimera : Module {
     std::uint64_t lastRecoveryNs = 0; // Control dispatcher only.
     int recoveryPurpose = 0; // 0 none, 1 pre-record, 2 latest, 3 display refresh.
     std::uint64_t lastDisplayAttemptNs = 0;
+    std::shared_ptr<chimera::WaveformPageCache> waveformPageCache =
+        std::make_shared<chimera::WaveformPageCache>();
+    std::shared_ptr<chimera::WaveformService> waveformService;
+    bool displaySuppressed = false; // Control owner, e.g. while an edit drains a cut.
     struct RecoveryTicket {
         std::atomic<bool> done{false};
         std::shared_ptr<chimera::Reel> teardownReel; // Worker captures this ticket.
         chimera::recovery::CommitResult result;
         std::shared_ptr<const chimera::WaveformSummary> waveform;
+        std::shared_ptr<chimera::WaveformJob> displayJob;
         bool displayOnly = false;
         std::uint64_t preRecordState = 0;
     };
@@ -472,7 +478,13 @@ struct Chimera : Module {
             if (loadTicket && loadTicket->usesSnapshot) {
                 loadTicket->teardownReel = retained;
             }
-            if (recoveryTicket) recoveryTicket->teardownReel = retained;
+            if (recoveryTicket) {
+                recoveryTicket->teardownReel = retained;
+                if (recoveryTicket->displayJob) {
+                    recoveryTicket->displayJob->teardownReel = retained;
+                    recoveryTicket->displayJob->cancelled.store(true, std::memory_order_release);
+                }
+            }
             if (pendingSave) pendingSave->teardownReel = retained;
             for (auto& cut : overlapControl)
                 if (cut.ticket) cut.ticket->teardownReel = retained;
@@ -517,10 +529,7 @@ struct Chimera : Module {
             nextRequestId++, [ticket, root, manifest] {
                 try { ticket->result = chimera::bundle::load(root, manifest); }
                 catch (...) { ticket->result.error = "patch_load_exception"; }
-                if (ticket->result.reel) {
-                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
-                    catch (...) {} // Audio loading must not depend on display allocation.
-                }
+                // The dedicated display worker builds peaks after adoption.
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -699,10 +708,6 @@ struct Chimera : Module {
                     }
                 }
                 catch (...) { ticket->result.error = "wav_import_exception"; }
-                if (ticket->result.reel) {
-                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
-                    catch (...) {}
-                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -733,10 +738,6 @@ struct Chimera : Module {
             nextRequestId++, [ticket, root, entry] {
                 try { ticket->result = chimera::recovery::load(root, entry); }
                 catch (...) { ticket->result.error = "recovery_load_exception"; }
-                if (ticket->result.reel) {
-                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
-                    catch (...) {}
-                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -772,9 +773,12 @@ struct Chimera : Module {
     }
     bool requestHeavyEdit(const chimera::edit::Request& request, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        displaySuppressed = true;
+        struct DisplayScope { bool& flag; ~DisplayScope() { flag = false; } } displayScope{displaySuppressed};
+        cancelDisplayRefresh();
         const std::uint64_t deadline = steadyNs() + controlWaitNs;
         if (!recordingOrArmed.load(std::memory_order_acquire) &&
-            (recoveryPurpose || recoveryTicket || recoveryPostPending.load())) {
+            (recoveryPurpose || recoveryTicket || recoveryPostPending.load() || snapshotRequestId)) {
             while ((recoveryPurpose || recoveryTicket || recoveryPostPending.load() ||
                     snapshotRequestId) && steadyNs() < deadline) {
                 serviceStep();
@@ -810,10 +814,6 @@ struct Chimera : Module {
                     else ticket->result.error = edited.error;
                 }
                 catch (...) { ticket->result.error = "edit_worker_exception"; }
-                if (ticket->result.reel) {
-                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
-                    catch (...) {}
-                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -1008,9 +1008,33 @@ struct Chimera : Module {
             finishPreRecord(cut.token, false); cut.ready = false; cut.releasePending = true;
         } // A busy queue retains the exact cut and retries, never recaptures later.
     }
+    void cancelDisplayRefresh() {
+        if (recoveryPurpose != 3) return;
+        if (recoveryTicket && recoveryTicket->displayJob)
+            recoveryTicket->displayJob->cancelled.store(true, std::memory_order_release);
+        else {
+            recoveryPurpose = 0;
+            abandonSnapshot();
+        }
+    }
     void recoveryStep() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        if (recoveryTicket && recoveryTicket->done.load(std::memory_order_acquire)) {
+        const std::uint64_t now = steadyNs();
+        const std::uint64_t displayDraw = displayHeartbeatNs.load(std::memory_order_acquire);
+        const bool displayRecentlyDrawn = displayDraw && now >= displayDraw &&
+            now - displayDraw < UINT64_C(500000000);
+        // Optional display readers yield to persistence/adoption and release
+        // long-lived cuts. Cancellation is acknowledged before core reclaim.
+        if (saveInProgress.load(std::memory_order_acquire) || displaySuppressed ||
+            loadTicket || pendingRequestId || recoveryPostPending.load(std::memory_order_acquire) ||
+            !displayRecentlyDrawn || (recoveryPurpose == 3 &&
+                now - lastDisplayAttemptNs > UINT64_C(250000000)))
+            cancelDisplayRefresh();
+        if (recoveryTicket && (recoveryTicket->displayJob ?
+            recoveryTicket->displayJob->done.load(std::memory_order_acquire) :
+            recoveryTicket->done.load(std::memory_order_acquire))) {
+            if (recoveryTicket->displayJob)
+                recoveryTicket->waveform = recoveryTicket->displayJob->result;
             finishPreRecord(recoveryTicket->preRecordState, bool(recoveryTicket->result));
             if (recoveryTicket->waveform)
                 std::atomic_store_explicit(&waveform, recoveryTicket->waveform,
@@ -1038,10 +1062,20 @@ struct Chimera : Module {
             ticket->displayOnly = displayOnly;
             if (recoveryPurpose == 1)
                 ticket->preRecordState = snapshotPreRecordState.load(std::memory_order_acquire);
+            if (displayOnly) {
+                if (!waveformService) waveformService = chimera::chimeraWaveformService();
+                ticket->displayJob = std::make_shared<chimera::WaveformJob>(frozen, waveformPageCache);
+                if (waveformService && waveformService->submit(ticket->displayJob))
+                    recoveryTicket = ticket;
+                else {
+                    recoveryPurpose = 0;
+                    finishSnapshotReader();
+                }
+                return;
+            }
             const chimera::IoService::Status queued = service->execute(generation,
                 nextRequestId++, [ticket, root, id, frozen, role, wallMs, displayOnly] {
                     try {
-                        ticket->waveform = chimera::WaveformSummary::fromSnapshot(*frozen);
                         if (!displayOnly) ticket->result = chimera::recovery::commit(
                             root, id, *frozen, role, wallMs);
                     }
@@ -1060,21 +1094,17 @@ struct Chimera : Module {
         if (recoveryPurpose || recoveryTicket || snapshotRequestId ||
             saveInProgress.load(std::memory_order_acquire) || !controlActiveHandle ||
             loadTicket || awaitingHandle || pendingRequestId || retiringHandle) return;
-        const std::uint64_t now = steadyNs();
         const bool stopped = recoveryPostPending.load(std::memory_order_acquire);
         const std::uint64_t start = recordStartNs.load(std::memory_order_acquire);
         const std::uint64_t since = lastRecoveryNs > start ? lastRecoveryNs : start;
         const bool periodic = recordingActive.load(std::memory_order_acquire) &&
             since && now - since >= UINT64_C(10000000000);
-        const std::uint64_t displayDraw = displayHeartbeatNs.load(std::memory_order_acquire);
-        const bool displayRecentlyDrawn = displayDraw && now >= displayDraw &&
-            now - displayDraw < UINT64_C(500000000);
         if ((stopped || periodic) && requestSnapshot()) {
             recoveryPurpose = 2;
             lastRecoveryNs = now;
             if (stopped) recoveryPostPending.store(false, std::memory_order_release);
         }
-        else if (!stopped && displayRecentlyDrawn &&
+        else if (!stopped && !displaySuppressed && displayRecentlyDrawn &&
                  now - lastDisplayAttemptNs >= UINT64_C(1000000000)) {
             const auto cached = std::atomic_load_explicit(&waveform,
                 std::memory_order_acquire);

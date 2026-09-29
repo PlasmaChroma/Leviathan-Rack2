@@ -1,5 +1,6 @@
 #include "ChimeraService.hpp"
 #include "ChimeraRateBridge.hpp"
+#include "ChimeraWaveformService.hpp"
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -11,6 +12,7 @@ namespace chimera {
 namespace {
 std::mutex serviceMutex;
 std::shared_ptr<IoService> service;
+std::shared_ptr<WaveformService> waveformService;
 bool closing = false;
 #ifdef CHIMERA_RATE_SERVICE_TEST_HOOKS
 std::atomic<void (*)(unsigned)> ratePreparationHook{nullptr};
@@ -135,16 +137,26 @@ std::shared_ptr<IoService> chimeraIoService() {
     return service;
 }
 
+std::shared_ptr<WaveformService> chimeraWaveformService() {
+    std::lock_guard<std::mutex> lock(serviceMutex);
+    if (closing) return {};
+    if (!waveformService) waveformService.reset(new WaveformService);
+    return waveformService;
+}
+
 void shutdownChimeraIoService() {
     ratePreparationService.shutdown();
     ScratchPageService::instance().shutdown();
     std::shared_ptr<IoService> local;
+    std::shared_ptr<WaveformService> localWaveform;
     {
         std::lock_guard<std::mutex> lock(serviceMutex);
         closing = true;
         local.swap(service);
+        localWaveform.swap(waveformService);
     }
     if (local) local->shutdown(); // Join off audio and outside the global lock.
+    if (localWaveform) localWaveform->shutdown();
 }
 
 } // namespace chimera

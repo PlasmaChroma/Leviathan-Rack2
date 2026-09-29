@@ -9,11 +9,14 @@ int main() {
     std::shared_ptr<chimera::IoService> first = chimera::chimeraIoService();
     std::shared_ptr<chimera::IoService> second = chimera::chimeraIoService();
     need(first && first == second, "one lazy plugin-scoped service");
+    auto waveform = chimera::chimeraWaveformService();
+    need(waveform && waveform == chimera::chimeraWaveformService(), "one dedicated waveform service");
     std::shared_ptr<chimera::JobGeneration> token(new chimera::JobGeneration);
     need(first->prepare(token, 1, 1, 1) == chimera::IoService::Accepted,
          "service accepts prepare before shutdown");
     chimera::shutdownChimeraIoService();
     need(!chimera::chimeraIoService(), "shutdown closes lazy entry point");
+    need(!chimera::chimeraWaveformService(), "shutdown closes waveform entry point");
     chimera::IoService::Result result;
     need(first->poll(result) && result.status == chimera::IoService::Ready &&
          result.prepared && first->outstanding() == 0,

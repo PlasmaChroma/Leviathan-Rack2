@@ -6,6 +6,7 @@
 namespace chimera {
 
 class RateBridge;
+class WaveformService;
 struct RateBridgeSlot {
     std::atomic<unsigned>* requested;
     std::atomic<unsigned>* active;
@@ -23,6 +24,7 @@ void unregisterRateBridge(std::atomic<RateBridge*>* prepared);
 
 // Non-realtime callers only. No workers are started until first use.
 std::shared_ptr<IoService> chimeraIoService();
+std::shared_ptr<WaveformService> chimeraWaveformService();
 void shutdownChimeraIoService();
 
 } // namespace chimera

@@ -1,0 +1,2616 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "TempiPoliciesV1",
+  "virtualTickHz": 32000,
+  "savedStates": [
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        -4,
+        -12,
+        -28,
+        -60,
+        -124
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -8,
+        -16,
+        -24,
+        -40,
+        -48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        -4,
+        -8,
+        -12,
+        -16,
+        -20
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -12,
+        -20,
+        -28,
+        -36,
+        -44
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -8,
+        -16,
+        -24,
+        -32,
+        -40,
+        -48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -8,
+        -16,
+        -28,
+        -48,
+        -80
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        4,
+        12,
+        28,
+        60,
+        124
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        16,
+        24,
+        40,
+        48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        4,
+        8,
+        12,
+        16,
+        20
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        12,
+        20,
+        28,
+        36,
+        44
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        16,
+        28,
+        48,
+        80
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        12,
+        -4,
+        -8,
+        -12
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2
+      ],
+      "phase": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -5,
+        -6,
+        -7,
+        -8,
+        -9
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    }
+  ],
+  "workingStates": [
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        -4,
+        -12,
+        -28,
+        -60,
+        -124
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -8,
+        -16,
+        -24,
+        -40,
+        -48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        -4,
+        -8,
+        -12,
+        -16,
+        -20
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -12,
+        -20,
+        -28,
+        -36,
+        -44
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -8,
+        -16,
+        -24,
+        -32,
+        -40,
+        -48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -8,
+        -16,
+        -28,
+        -48,
+        -80
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        4,
+        12,
+        28,
+        60,
+        124
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        16,
+        24,
+        40,
+        48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        4,
+        8,
+        12,
+        16,
+        20
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        12,
+        20,
+        28,
+        36,
+        44
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        16,
+        28,
+        48,
+        80
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        4,
+        8,
+        12,
+        -4,
+        -8,
+        -12
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2
+      ],
+      "phase": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        -4,
+        -5,
+        -6,
+        -7,
+        -8,
+        -9
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    },
+    {
+      "ratio": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "phase": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "enableMask": 63,
+      "modMask": 0
+    }
+  ],
+  "savedGlobals": {
+    "humanResolution": "100",
+    "shiftMode": "off",
+    "runMode": "off",
+    "modGateMode": "momentary",
+    "follow": false,
+    "leadingTap": true,
+    "outputModes": [
+      "clock",
+      "clock",
+      "clock",
+      "clock",
+      "clock",
+      "clock"
+    ]
+  },
+  "workingGlobals": {
+    "humanResolution": "100",
+    "shiftMode": "off",
+    "runMode": "off",
+    "modGateMode": "momentary",
+    "follow": false,
+    "leadingTap": true,
+    "outputModes": [
+      "clock",
+      "clock",
+      "clock",
+      "clock",
+      "clock",
+      "clock"
+    ]
+  },
+  "savedLeadingH": 8000,
+  "session": {
+    "activeState": 0,
+    "bank": 0,
+    "baseSlot": 0,
+    "gateOffset": 0,
+    "currentLeadingH": 8000,
+    "rngStateHex": "0000000000000001",
+    "lastBusState": null,
+    "meshHex": "0000000000000000",
+    "lastStateQuantizedSlot": 0,
+    "lastTempoAdc": 0
+  },
+  "stateClipboard": null,
+  "bankClipboard": null
+}

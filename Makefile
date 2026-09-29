@@ -515,7 +515,7 @@ test-chimera-wav: | build/tests
 
 .PHONY: test-chimera-edit
 .PHONY: test-chimera-playback-reader test-chimera-checkpoints test-chimera-repairs
-test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch test-chimera-marker-display test-chimera-render
+test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch test-chimera-marker-display test-chimera-render test-chimera-waveform
 
 .PHONY: test-chimera-marker-display
 .PHONY: test-chimera-render
@@ -553,6 +553,8 @@ test-chimera-recovery: | build/tests
 test-chimera-waveform: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_waveform_spec.cpp -o build/tests/chimera_waveform_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_waveform_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_waveform_service_spec.cpp -o build/tests/chimera_waveform_service_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_waveform_service_spec$(if $(ARCH_WIN),.exe,)
 
 .PHONY: test-chimera-panel
 test-chimera-panel:

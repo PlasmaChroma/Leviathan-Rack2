@@ -1,0 +1,102 @@
+{
+  "provenance": "Generated examples of explicitly chosen software policies; not hardware traces.",
+  "policyVersion": "TempiPoliciesV1",
+  "rationalHalfEdges": {
+    "masterH": 8000,
+    "ratioCode": 8,
+    "phaseByte": 0,
+    "ticks": [
+      0,
+      2667,
+      5334,
+      8000,
+      10667,
+      13334,
+      16000
+    ]
+  },
+  "clockwiseAllEligible": {
+    "destinationsOneBased": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "sourceOneBased": [
+      4,
+      1,
+      2,
+      5,
+      6,
+      3
+    ]
+  },
+  "phaseFineEarlier": {
+    "ratioCode": -5,
+    "phaseByteBefore": 0,
+    "phaseByteAfter": 8
+  },
+  "mutationFromUnity": {
+    "seedHex": "0000000000000001",
+    "channels": [
+      {
+        "channel": 0,
+        "ratioDraw": 40,
+        "phaseDraw": 88,
+        "ratio": 2,
+        "phase": 1
+      },
+      {
+        "channel": 1,
+        "ratioDraw": 218,
+        "phaseDraw": 129,
+        "ratio": -2,
+        "phase": 2
+      },
+      {
+        "channel": 2,
+        "ratioDraw": 56,
+        "phaseDraw": 126,
+        "ratio": -3,
+        "phase": 6
+      },
+      {
+        "channel": 3,
+        "ratioDraw": 69,
+        "phaseDraw": 20,
+        "ratio": 3,
+        "phase": 2
+      },
+      {
+        "channel": 4,
+        "ratioDraw": 196,
+        "phaseDraw": 1,
+        "ratio": -3,
+        "phase": 6
+      },
+      {
+        "channel": 5,
+        "ratioDraw": 102,
+        "phaseDraw": 59,
+        "ratio": 1,
+        "phase": 2
+      }
+    ],
+    "drawCount": 12,
+    "finalSeedHex": "b477d43f85f67595"
+  },
+  "patchRestore": {
+    "runtimeMapping": "identity",
+    "runtimeRunOffsets": "zero",
+    "workingEdits": "preserved",
+    "savedEdits": "preservedSeparately"
+  },
+  "stateCombo": {
+    "connected": true,
+    "volts": 5.0,
+    "knob": 0.5,
+    "adc": 512
+  }
+}

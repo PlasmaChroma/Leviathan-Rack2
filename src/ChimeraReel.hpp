@@ -36,6 +36,7 @@ public:
 private:
     struct Snapshot {
         std::unique_ptr<std::uint32_t[]> frozen;
+        std::unique_ptr<std::uint64_t[]> revisions;
         std::unique_ptr<std::uint8_t[]> captured;
         SnapshotMetadata metadata{};
         SnapshotState state = Idle;
@@ -43,6 +44,7 @@ private:
         unsigned scan = 0, reclaim = 0;
         void prepare(unsigned pages) {
             frozen.reset(new std::uint32_t[pages]);
+            revisions.reset(new std::uint64_t[pages]);
             captured.reset(new std::uint8_t[pages]{});
             for (unsigned i = 0; i < pages; ++i) frozen[i] = kInvalidPage;
         }
@@ -54,6 +56,7 @@ public:
         : pages_(checkedPages(pages, reservePages)), reservePages_(reservePages),
           capacityFrames_(pages_ * kPageFrames), moments_(capacityFrames_),
           pool_(new Page[pages_ + reservePages_]), active_(new std::uint32_t[pages_]),
+          pageRevisions_(new std::uint64_t[pages_]{}),
           free_(new std::uint32_t[pages_ + reservePages_]),
           references_(new std::uint8_t[pages_ + reservePages_]{}),
           freeCount_(reservePages), validFrames_(0), markerCount_(0), nextMarkerId_(1),
@@ -105,12 +108,13 @@ public:
         const unsigned slots = scratch_ ? kSnapshotSlots : 1;
         return rawAudioBytes() + moments_.bytes() + std::uint64_t(extra) * sizeof(Page) +
             std::uint64_t(pages_ + reservePages_ + extra) * 5 +
-            std::uint64_t(pages_) * (4 + slots * 5);
+            std::uint64_t(pages_) * (12 + slots * 13);
     }
     Reel(const Reel&) = delete;
     Reel& operator=(const Reel&) = delete;
 
     std::uint32_t capacityFrames() const { return capacityFrames_; }
+    std::uint64_t waveformIdentity() const { return waveformIdentity_; }
     std::uint32_t validFrames() const { return validFrames_; }
     std::uint16_t markerCount() const { return markerCount_; }
     std::uint64_t documentRevision() const { return documentRevision_; } // Core owner only.
@@ -214,6 +218,7 @@ private:
         }
         if (frame >= validFrames_) validFrames_ = frame + 1;
         ++audioRevision_; // Phase 3 will coalesce 256-frame write blocks.
+        ++pageRevisions_[logical];
         capturedThroughFrame_ = coreFrame;
         return true;
     }
@@ -383,6 +388,14 @@ public:
         if (!readyForWorker(slot) || frame >= cut.metadata.validFrames) return StereoFrame{0.f, 0.f};
         return page(cut.frozen[frame / kPageFrames]).frames[frame % kPageFrames];
     }
+    // Ready leased cut only. Versions are captured alongside the page BEFORE
+    // any subsequent core write; workers never read the live revision table.
+    std::uint64_t snapshotPageRevision(unsigned logical, unsigned slot = 0) const {
+        return snapshots_[slot].revisions[logical];
+    }
+    const StereoFrame* snapshotPage(unsigned logical, unsigned slot = 0) const {
+        return page(snapshots_[slot].frozen[logical]).frames;
+    }
 
 private:
     static bool channelsDiffer(StereoFrame value) {
@@ -407,6 +420,7 @@ private:
     void capturePage(Snapshot& cut, unsigned logical) {
         if (!cut.captured[logical]) {
             cut.frozen[logical] = active_[logical];
+            cut.revisions[logical] = pageRevisions_[logical];
             ++references_[active_[logical]];
             cut.captured[logical] = 1;
         }
@@ -418,9 +432,16 @@ private:
     }
 
     const std::uint32_t pages_, reservePages_, capacityFrames_;
+    static std::uint64_t nextWaveformIdentity() {
+        static std::atomic<std::uint64_t> next{1};
+        return next.fetch_add(1, std::memory_order_relaxed);
+    }
+    const std::uint64_t waveformIdentity_ = nextWaveformIdentity();
     BlockMoments moments_;
     std::unique_ptr<Page[]> pool_;
-    std::unique_ptr<std::uint32_t[]> active_, free_;
+    std::unique_ptr<std::uint32_t[]> active_;
+    std::unique_ptr<std::uint64_t[]> pageRevisions_;
+    std::unique_ptr<std::uint32_t[]> free_;
     std::unique_ptr<std::uint8_t[]> references_;
     Snapshot snapshots_[kSnapshotSlots];
     std::shared_ptr<ScratchPages> scratch_;

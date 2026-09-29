@@ -127,7 +127,7 @@ int main() {
         StoreRegistry registry;
         need(registry.accept(101, result.prepared, StoreBudget::Prepared) &&
              !result.prepared && registry.lookup(101) &&
-             registry.chargedBytes() == 17974ull,
+             registry.chargedBytes() == registry.lookup(101)->budgetBytes(),
              "prepared store adopted by service-owned handle registry");
         need(registry.transition(101, StoreBudget::Active) &&
              !registry.releaseOffAudio(101), "active borrowed audio store cannot be destroyed");

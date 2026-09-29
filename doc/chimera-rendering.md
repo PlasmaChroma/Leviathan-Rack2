@@ -22,6 +22,70 @@ When the host patch path, autosave path, module ID, or widget owner changes, the
 
 Optional waveform snapshots require a recent actual display draw, with a 500 ms visibility grace period and the existing one-second attempt throttle. Widget stepping alone does not advertise visibility. Framebuffer previews do not advertise it either. Required post-record and periodic recovery remain independent of visibility.
 
+## Asynchronous incremental waveform summaries
+
+Display summaries use one plugin-wide `WaveformService` thread, separate from
+the two I/O workers. Loads, edits and recovery commits no longer scan waveforms
+on their I/O jobs. After adoption, a visible display requests its own summary;
+hidden modules do not build display data. Rendering uses the last completed
+immutable summary, or an empty waveform after a different Reel is adopted,
+until a complete replacement is published.
+
+The queue admits at most 64 jobs, with one job per module cache. Each turn
+processes at most 32 pages (8,192 source frames), then rejoins the tail. New
+arrivals join the tail too. This prevents an admitted busy module from
+monopolizing the worker; it is not a wall-clock deadline guarantee. Newer
+revisions coalesce behind the active job rather than cancelling it on every
+recorded sample. The next eligible refresh captures the newest state. A full
+queue drops optional attempts and releases their cut; retries use the existing
+one-second throttle.
+
+Each Reel maintains a core-owned version per logical page. Capture freezes the
+version before subsequent writes, alongside the immutable page reference.
+The worker caches each page's extrema, valid length and version. Unchanged
+pages reuse their extrema. Pages crossing a display-bin boundary are reread
+for exact placement (at most 511 pages), so all 512 bins, peak, stereo flag and
+nonfinite handling match the original full scan even as recording grows the
+Reel. Unique Reel identity invalidates the cache after load/edit or address
+reuse. Audio writes add one non-atomic page-version increment; scanning,
+allocation and reduction stay off audio and UI callbacks.
+
+Snapshots still use the existing leased ordinary cut. Save, edit, pending
+adoption, required post-record recovery, and loss of visibility cancel optional
+work. The dispatcher also cancels a display attempt older than 250 ms; this is
+a best-effort lease-age limit, not a realtime bound. Cancellation is checked
+between turns. Core reclaim starts only after worker acknowledgment. Completed
+cache pages survive cancellation so later refreshes can reuse that progress.
+Teardown transfers the source Reel to the cancelled job until its last reader
+is gone. Existing recording scratch limits still apply.
+
+Version tables add 32 bytes per logical page to a production Reel with three
+snapshot slots (1,044,000 bytes at full capacity), charged to the existing
+store budget. A module's off-audio peak cache is separately bounded by the Reel
+page count (about 1 MiB at full capacity on the native build).
+
+`make test-chimera-waveform` checks exact equivalence, append/overwrite/COW,
+marker changes, restored revisions, Reel replacement, invalid samples, fair
+turns, duplicate admission, capacity, cancellation, and completion while both
+I/O workers are blocked. It prints cold/incremental timings for 12 distinct
+ten-second Reels. `test-chimera-render` also checks module coalescing,
+save-driven cancellation, acknowledged release and teardown retention. Offline
+worker timings do not establish live audio-device deadlines or sustained
+host-level many-instance performance.
+
+Validation on 2026-09-29: native `plugin.dll`, waveform, phase-2 snapshot/job/
+service, module, render, dispatcher, patch, checkpoint, playback-reader and
+full-save checks passed. The waveform-service fixture passed WSL GCC TSAN
+with `setarch x86_64 -R`, and ASan/UBSan. A native 12-Reel run measured 51.97 ms
+cold versus 27.21 ms after one second of overdubbing per Reel; source reads
+fell from 5,760,000 to 1,987,584 (65.5% fewer). Incremental turn p99 was 81.50 us
+and maximum 128.60 us in that run. These compare cold and warm cache workloads,
+not an end-to-end host speedup against the previous implementation.
+
+The broad native `test-fast` run still failed at the unrelated Sibyl P5
+companion and P6 combined-source fixtures. Logs are in
+`test-results/chimera-waveform-{validation,final,module,plugin,tsan,asan,test-fast}.log`.
+
 ## Performance telemetry
 
 Dragon King debug mode retains `Process`, `Step`, and `Draw` as the first three metrics and adds `DrawLayer` fourth.

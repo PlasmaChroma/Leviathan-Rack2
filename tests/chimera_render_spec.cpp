@@ -113,11 +113,59 @@ static void visibilityRegression(bool recording, bool recovery) {
     }
 }
 
+static void waveformLeaseRegression() {
+    auto scheduler = std::make_shared<chimera::WaveformService>(false);
+    std::unique_ptr<Chimera> module(new Chimera);
+    module->service.reset(new chimera::IoService(0));
+    module->waveformService = scheduler;
+    std::unique_ptr<chimera::Reel> source(new chimera::Reel(100, 100));
+    for (unsigned i = 0; i < source->capacityFrames(); ++i) source->appendImported({0.25f, -0.25f});
+    need(module->stores.accept(1, source, chimera::StoreBudget::Active), "register waveform lease source");
+    module->audioActiveHandle = module->controlActiveHandle = 1;
+    module->reel = module->stores.lookup(1);
+    module->slice.setReel(module->reel);
+    module->displayHeartbeatNs.store(Chimera::steadyNs());
+    for (unsigned i = 0; i < 20 && !module->recoveryTicket; ++i) module->serviceStep(false);
+    need(module->recoveryTicket && module->recoveryTicket->displayJob,
+         "optional refresh uses the dedicated worker even with no I/O worker available");
+    auto job = module->recoveryTicket->displayJob;
+    scheduler->runOneTurn();
+    need(!job->done.load() && module->snapshotReaders.count() == 1, "partial job retains its cut");
+    // New revisions coalesce behind the current job; they must not restart it.
+    module->reel->write(7, {0.5f, 0.5f}, 0);
+    module->publishedAudioRevision.store(module->reel->audioRevision());
+    module->recoveryStep();
+    need(module->recoveryTicket->displayJob == job && !job->cancelled.load(),
+         "recording changes neither restart nor enqueue duplicate waveform jobs");
+    module->saveInProgress.store(true);
+    module->recoveryStep();
+    need(job->cancelled.load() && module->snapshotReaders.count() == 1,
+         "save cancels display work without reclaiming pages while a worker may read");
+    scheduler->runOneTurn();
+    for (unsigned i = 0; i < 20 && module->snapshotRequestId; ++i) module->serviceStep(false);
+    need(!module->snapshotRequestId && !module->recoveryTicket && !module->reel->hasSnapshots(),
+         "save can claim the slot after cancellation acknowledgment and core reclaim");
+    module->saveInProgress.store(false);
+    module->lastDisplayAttemptNs = 0;
+    module->displayHeartbeatNs.store(Chimera::steadyNs());
+    for (unsigned i = 0; i < 20 && !module->recoveryTicket; ++i) module->serviceStep(false);
+    need(module->recoveryTicket && module->recoveryTicket->displayJob, "retry after cancellation");
+    job = module->recoveryTicket->displayJob;
+    module.reset();
+    need(job->cancelled.load() && job->teardownReel, "module teardown transfers its leased Reel to the job");
+    std::weak_ptr<chimera::Reel> retained = job->teardownReel;
+    scheduler->runOneTurn();
+    need(job->done.load() && !job->result, "teardown cancellation drains safely");
+    job.reset();
+    need(retained.expired(), "last job releases the retired Reel off audio");
+}
+
 int main() {
     rack::Context context;
     context.event = new rack::widget::EventState;
     rack::contextSet(&context);
     displayCacheRegression();
+    waveformLeaseRegression();
     serviceHandoffRegression();
     visibilityRegression(false, false);
     visibilityRegression(true, false);

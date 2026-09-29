@@ -1,0 +1,28 @@
+# Validation performed for this handoff
+
+Date: 2026-09-28.
+
+## Completed
+
+The original archive's `validate_and_extract.py` was rerun successfully. Its captured report is `provenance/original_harness_rerun.log`. This is shared offline PIC-harness validation, not physical-device validation.
+
+The handoff checker passed: 1,743 ratio fixture rows, 42 phase rows, 249 alignment rows, 64 PRNG rows, 64 factory States, 64 EEPROM-addressing cases, ten bundled Leading examples, fourteen bundled tempo-control examples, ADC range/sentinel checks, both 64-State default JSON layers, and the explicitly chosen policy examples. It also checked the main specification's factory table, JSON examples, and packaging.
+
+The main Markdown parsed successfully with 19 tables and 54 fenced code blocks. All three fenced JSON examples parsed. Its 26 navigation links resolve to document headings. Its 132 acceptance-test IDs are unique. These are required future implementation tests, not a claim that 132 tests of a Rack module have been executed.
+
+The C++ arithmetic snippets extracted from the specification were compiled with g++ using `-std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all`. The executable matched all 1,743 ratio, 42 phase, and 64 PRNG fixture rows without an UndefinedBehaviorSanitizer failure. The source of this narrow smoke check is `tools/spec_kernel_smoke.cpp`.
+
+## Not completed or not applicable
+
+No Rack module was implemented or built during this specification task. No Rack panel was visually tested. No physical TEMPI was measured. The complete original timing harness was not freshly rerun to completion; `fixtures/timing_validation.json` is the bundled earlier report. The handoff's policy examples are software decisions, not newly recovered hardware facts.
+
+## Optional C++ snippet check
+
+From this folder, with a suitable g++ toolchain:
+
+```bash
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all tools/spec_kernel_smoke.cpp -o /tmp/tempi_spec_kernel_smoke
+/tmp/tempi_spec_kernel_smoke fixtures
+```
+
+This only tests the extracted arithmetic snippets. The future project's tests must call the actual production C++ core and must not substitute this standalone snippet test for that requirement.
