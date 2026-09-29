@@ -254,13 +254,27 @@ struct RasterMipmapEntry {
 };
 
 struct RasterMipmapCache {
-	std::unordered_map<std::string, RasterMipmapEntry> entries;
-	NVGcontext* activeVg = nullptr;
-	unsigned long long useCounter = 0ull;
+	// Rack's main and framebuffer NanoVG contexts are alive concurrently.
+	// A change of drawing target is not a context destruction event.
+	struct ContextCache {
+		NVGcontext* lifetimeOwner = nullptr;
+		std::unordered_map<std::string, RasterMipmapEntry> entries;
+	};
+	std::unordered_map<NVGcontext*, ContextCache> contexts;
+
+	void forgetLifetime(NVGcontext* owner) {
+		for (auto it = contexts.begin(); it != contexts.end();) {
+			if (it->first == owner || it->second.lifetimeOwner == owner)
+				it = contexts.erase(it);
+			else ++it;
+		}
+	}
 };
 
 RasterMipmapCache& rasterMipmapCache() {
-	static RasterMipmapCache cache;
+	// Each host UI thread renders its current contexts; no global lock or
+	// cross-window data race is needed in this hot path.
+	static thread_local RasterMipmapCache cache;
 	return cache;
 }
 
@@ -304,12 +318,17 @@ int loadRasterMipmapHandle(
 	if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
 		return -1;
 	}
-	if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
-		cache.entries.clear();
+	// Window-owned Images identify the lifetime of both draw targets. Rack
+	// broadcasts lifecycle events for the main context, including to FB children.
+	auto& context = cache.contexts[vg];
+	if (context.lifetimeOwner != lifecycleImage->vg) {
+		context.entries.clear(); // A draw-target address was reused by another window.
+		context.lifetimeOwner = lifecycleImage->vg;
 	}
+	auto& entries = context.entries;
 
-	auto it = cache.entries.find(fullPath);
-	if (it != cache.entries.end()) {
+	auto it = entries.find(fullPath);
+	if (it != entries.end()) {
 		std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
 		const bool dimensionsMatch = nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
 			vg, it->second.handle, it->second.width, it->second.height);
@@ -320,7 +339,7 @@ int loadRasterMipmapHandle(
 		}
 		// Do not delete a rejected numeric handle: after host context recreation
 		// it may have been reassigned to a different image.
-		cache.entries.erase(it);
+		entries.erase(it);
 	}
 
 	int handle = createContextOwnedRasterMipmapHandle(vg, fullPath);
@@ -334,10 +353,11 @@ int loadRasterMipmapHandle(
 	entry.lifecycleHandle = lifecycleImage->handle;
 	nvgImageSize(vg, handle, &entry.width, &entry.height);
 	if (entry.width <= 0 || entry.height <= 0) {
+		nvgDeleteImage(vg, handle); // Freshly created in the current context.
 		return -1;
 	}
 	entry.lifecycleImage = lifecycleImage;
-	cache.entries[fullPath] = entry;
+	entries[fullPath] = entry;
 	return handle;
 }
 
@@ -353,26 +373,21 @@ int createContextOwnedRasterMipmapHandle(
 		handle = nvgCreateImage(
 			vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
 	}
-	return handle;
+	return handle > 0 ? handle : -1;
 }
 
 void onRasterContextCreate(NVGcontext* vg) {
 	RasterMipmapCache& cache = rasterMipmapCache();
 	// ContextCreateEvent is authoritative even if the host reused the same
 	// NVGcontext address and never exposed an observable pointer transition.
-	cache.entries.clear();
-	cache.activeVg = vg;
-	cache.useCounter = 0ull;
+	cache.forgetLifetime(vg);
 }
 
 void onRasterContextDestroy(NVGcontext* vg) {
 	RasterMipmapCache& cache = rasterMipmapCache();
-	if (cache.activeVg != vg) return;
 	// Context destruction releases the textures. Forget the numeric handles so
 	// an allocator-reused NVGcontext address cannot make them appear current.
-	cache.entries.clear();
-	cache.activeVg = nullptr;
-	cache.useCounter = 0ull;
+	cache.forgetLifetime(vg);
 }
 
 Widget* createAspectFitRasterImageWidget(

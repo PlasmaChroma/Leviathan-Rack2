@@ -515,9 +515,14 @@ test-chimera-wav: | build/tests
 
 .PHONY: test-chimera-edit
 .PHONY: test-chimera-playback-reader test-chimera-checkpoints test-chimera-repairs
-test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch test-chimera-marker-display
+test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch test-chimera-marker-display test-chimera-render
 
 .PHONY: test-chimera-marker-display
+.PHONY: test-chimera-render
+test-chimera-render: test-raster-mipmap-cache | build/tests
+	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_render_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/DebugTerminalTransport.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_render_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_render_spec$(if $(ARCH_WIN),.exe,))
+
 test-chimera-marker-display: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_marker_display_spec.cpp -o build/tests/chimera_marker_display_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_marker_display_spec$(if $(ARCH_WIN),.exe,)
@@ -616,7 +621,7 @@ test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
 test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
-test-fast: test-build-fast
+test-fast: test-build-fast test-raster-mipmap-cache
 	$(call run_test_bin,build/tests/octavia_presence_spec)
 	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)
 	$(call run_test_bin,build/tests/debug_terminal_timing_spec)
@@ -828,6 +833,11 @@ build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp 
 
 build/tests/shared_svg_cache_spec: tests/shared_svg_cache_spec.cpp src/visual/SharedSvgCacheState.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
+
+.PHONY: test-raster-mipmap-cache
+test-raster-mipmap-cache: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-unused-parameter -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/raster_mipmap_cache_spec.cpp src/NvgGraphicsLifecycle.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -o build/tests/raster_mipmap_cache_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/raster_mipmap_cache_spec$(if $(ARCH_WIN),.exe,))
 
 build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/NvgGraphicsLifecycle.cpp src/NvgGraphicsLifecycle.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@

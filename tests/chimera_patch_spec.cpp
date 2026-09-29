@@ -291,46 +291,35 @@ int main() {
          "explicit pre-record recovery adopts the old audio off thread");
     const auto oldMarkerCount = clone.reel->markerCount();
     need(oldMarkerCount > 1, "marker save fixture has multiple splices");
-    clone.publishedRegion.store(oldMarkerCount - 1);
-    need(clone.requestUnsplice(error) && !clone.markerRequestId,
-         "Unsplice on final splice is a no-op");
-    clone.publishedRegion.store(0);
-    clone.recordingOrArmed.store(true);
-    need(!clone.requestUnsplice(error) && !clone.markerRequestId,
-         "Unsplice is blocked while recording or armed");
-    clone.recordingOrArmed.store(false);
+    // The current Unsplice button is a Rack parameter consumed by the core
+    // on release. Exercise that path rather than the removed UI action queue.
+    const auto unspliceClick = [&] {
+        clone.params[Chimera::UNSPLICE_PARAM].setValue(1.f); clone.process(args);
+        clone.params[Chimera::UNSPLICE_PARAM].setValue(0.f); clone.process(args);
+    };
+    clone.params[Chimera::ORGANIZE_PARAM].setValue(1.f);
+    clone.slice.selectRegion(oldMarkerCount - 1);
+    clone.params[Chimera::UNSPLICE_PARAM].setValue(0.f); clone.process(args);
+    unspliceClick();
+    need(clone.reel->markerCount() == oldMarkerCount, "Unsplice on final splice is a no-op");
+    clone.params[Chimera::ORGANIZE_PARAM].setValue(0.f);
+    clone.slice.selectRegion(0);
+    clone.inputs[Chimera::CLOCK_INPUT].channels = 1;
+    clone.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+    clone.recordArm = Chimera::ArmCurrent;
+    unspliceClick();
+    need(clone.reel->markerCount() == oldMarkerCount, "Unsplice is blocked while armed");
+    clone.recordArm = Chimera::NoArm;
+    clone.inputs[Chimera::CLOCK_INPUT].channels = 0;
     const auto framesBeforeUnsplice = clone.reel->validFrames();
     std::vector<chimera::StereoFrame> audioBeforeUnsplice;
     for (unsigned frame = 0; frame < framesBeforeUnsplice; ++frame)
         audioBeforeUnsplice.push_back(clone.reel->readActive(frame));
-    // Exercise the button's real handlers using Rack's release-target contract.
-    // EventState::handleButton needs a native window, unavailable in this harness.
-    {
-        ChimeraUnspliceAction<app::Switch> button;
-        button.owner = &clone;
-        widget::EventContext pressContext;
-        event::Button press;
-        press.context = &pressContext;
-        press.button = GLFW_MOUSE_BUTTON_LEFT;
-        press.action = GLFW_PRESS;
-        button.onButton(press);
-        need(press.getTarget() == &button, "Unsplice captures the mouse press");
-        need(!clone.markerRequestId, "Unsplice waits for mouse release");
-        widget::EventContext releaseContext;
-        event::Button release;
-        release.context = &releaseContext;
-        release.button = GLFW_MOUSE_BUTTON_LEFT;
-        release.action = GLFW_RELEASE;
-        button.onButton(release);
-        need(release.getTarget() == &button,
-             "Unsplice captures release so Rack can dispatch DragDrop");
-        event::DragDrop drop;
-        drop.button = GLFW_MOUSE_BUTTON_LEFT;
-        drop.origin = press.getTarget();
-        release.getTarget()->onDragDrop(drop);
-        need(clone.markerRequestId != 0,
-             "mouse release routes Unsplice into the marker-edit queue");
-    }
+    clone.params[Chimera::UNSPLICE_PARAM].setValue(1.f); clone.process(args);
+    need(clone.reel->markerCount() == oldMarkerCount, "Unsplice waits for parameter release");
+    clone.params[Chimera::UNSPLICE_PARAM].setValue(0.f); clone.process(args);
+    need(clone.reel->markerCount() == oldMarkerCount - 1,
+         "parameter release commits Unsplice through the core");
     engine.prepareSaveModule(&clone);
     auto markerSave = chimera::bundle::load(cloneStorage, clone.committedManifest, 2);
     need(!clone.markerRequestId && !clone.saveFailure.load() && bool(markerSave) &&
@@ -338,7 +327,7 @@ int main() {
          clone.publishedMarkerCount.load() == oldMarkerCount - 1 &&
          markerSave.reel->validFrames() == framesBeforeUnsplice &&
          markerSave.reel->readActive(0).l == 42.f,
-         "Save drains metadata handoff without audio callbacks and persists updated markers");
+         "Save persists the core metadata edit without further audio callbacks");
     ChimeraDisplayOverlay markerOverlay;
     markerOverlay.owner = &clone;
     markerOverlay.step();

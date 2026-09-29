@@ -20,6 +20,9 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
 int createContextOwnedRasterMipmapHandle(
 	NVGcontext* vg,
 	const std::string& fullPath);
+// Borrowed shared texture, cached separately for each live NanoVG context on
+// the UI thread. Window-owned lifecycleImage identifies the context lifetime;
+// callers forward context events and never delete this handle themselves.
 int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,

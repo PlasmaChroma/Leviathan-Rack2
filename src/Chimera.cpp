@@ -12,6 +12,7 @@
 #include "ChimeraWaveform.hpp"
 #include "ChimeraMarkerDisplay.hpp"
 #include "DebugTerminalMetrics.hpp"
+#include "ChimeraRenderMetrics.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
@@ -274,7 +275,7 @@ struct Chimera : Module {
     std::atomic<bool> saveFailure{false};
     std::atomic<bool> unsavedImport{false}, recordingOrArmed{false};
     std::atomic<bool> recordingActive{false}, recoveryPostPending{false};
-    std::atomic<std::uint64_t> displayHeartbeatNs{0}; // UI widget step; no Reel access.
+    std::atomic<std::uint64_t> displayHeartbeatNs{0}; // Actual display draw; no Reel access.
     std::atomic<std::uint64_t> recordStartNs{0};
     enum PreRecordStatus { PreRecordNone, PreRecordPending, PreRecordSaved,
                            PreRecordUnavailable, PreRecordFailed };
@@ -530,6 +531,7 @@ struct Chimera : Module {
     }
     void onSave(const SaveEvent&) override {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        cachedRecoveryRoot = recoveryRoot();
         saveInProgress.store(true, std::memory_order_release);
         struct SaveScope {
             std::atomic<bool>& flag;
@@ -936,6 +938,14 @@ struct Chimera : Module {
         return rack::system::join(leviathanPluginUserRootPath(),
             "Chimera/recovery/" + std::to_string(hash));
     }
+    // UI may publish a changed host identity, but must never wait for disk/control
+    // work. The widget retries next frame if the dispatcher owns the lock.
+    bool refreshRecoveryRootFromUi() {
+        std::unique_lock<std::recursive_mutex> lock(controlMutex, std::try_to_lock);
+        if (!lock.owns_lock()) return false;
+        cachedRecoveryRoot = recoveryRoot();
+        return true;
+    }
     static std::string checkpointTime(const chimera::recovery::Entry& entry) {
         const std::time_t seconds = static_cast<std::time_t>(entry.capturedAtMs / 1000);
         std::tm utc{};
@@ -1056,17 +1066,16 @@ struct Chimera : Module {
         const std::uint64_t since = lastRecoveryNs > start ? lastRecoveryNs : start;
         const bool periodic = recordingActive.load(std::memory_order_acquire) &&
             since && now - since >= UINT64_C(10000000000);
-        const std::uint64_t displayStep = displayHeartbeatNs.load(std::memory_order_acquire);
-        const bool displayRecentlyStepped = displayStep && now >= displayStep &&
-            now - displayStep < UINT64_C(500000000);
+        const std::uint64_t displayDraw = displayHeartbeatNs.load(std::memory_order_acquire);
+        const bool displayRecentlyDrawn = displayDraw && now >= displayDraw &&
+            now - displayDraw < UINT64_C(500000000);
         if ((stopped || periodic) && requestSnapshot()) {
             recoveryPurpose = 2;
             lastRecoveryNs = now;
             if (stopped) recoveryPostPending.store(false, std::memory_order_release);
         }
-        else if (!stopped && now - lastDisplayAttemptNs >= UINT64_C(1000000000) &&
-                 (!recordingActive.load(std::memory_order_acquire) ||
-                  displayRecentlyStepped)) {
+        else if (!stopped && displayRecentlyDrawn &&
+                 now - lastDisplayAttemptNs >= UINT64_C(1000000000)) {
             const auto cached = std::atomic_load_explicit(&waveform,
                 std::memory_order_acquire);
             const std::uint64_t document = publishedDocumentRevision.load(std::memory_order_acquire);
@@ -2248,6 +2257,12 @@ struct ChimeraRatioField : ui::TextField {
 
 struct ChimeraWidget : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+    chimera::RenderFrameMetrics renderMetrics;
+    debug_terminal::UiTimingRangeAccumulator cacheRange, liveRange, lightRange, glStepRange;
+    unsigned cacheRenders = 0;
+    Chimera* identityOwner = nullptr;
+    int64_t identityModuleId = -1;
+    std::string identityPatchPath, identityAutosavePath;
     widget::FramebufferWidget* waveformCache = nullptr;
     ChimeraWaveformLayer* waveformLayer = nullptr;
     ChimeraDisplayOverlay* displayOverlay = nullptr;
@@ -2285,6 +2300,7 @@ struct ChimeraWidget : ModuleWidget {
         };
         reels = new ChimeraReelsWidget;
         reels->owner = module;
+        reels->metrics = &renderMetrics;
         reels->box.size = box.size;
         circleAnchor("REEL_LEFT", Vec(17.12f, 10.52f), 8.63f,
             &reels->centers[0], &reels->radii[0]);
@@ -2299,6 +2315,7 @@ struct ChimeraWidget : ModuleWidget {
             circleAnchor(vuIds[channel], vuFallbacks[channel], 8.63f, &center, &radius);
             vuMeters[channel] = new ChimeraVuMeterWidget;
             vuMeters[channel]->owner = module;
+            vuMeters[channel]->metrics = &renderMetrics;
             vuMeters[channel]->channel = channel;
             vuMeters[channel]->box.pos = center.minus(Vec(radius, radius));
             vuMeters[channel]->box.size = Vec(2.f * radius, 2.f * radius);
@@ -2316,10 +2333,12 @@ struct ChimeraWidget : ModuleWidget {
         waveformCache->box.size = displayEnd.minus(displayOrigin);
         waveformCache->oversample = 1.f;
         waveformLayer = new ChimeraWaveformLayer;
+        waveformLayer->metrics = &renderMetrics;
         waveformLayer->box.size = waveformCache->box.size;
         waveformCache->addChild(waveformLayer);
         addChild(waveformCache);
         displayOverlay = new ChimeraDisplayOverlay;
+        displayOverlay->metrics = &renderMetrics;
         displayOverlay->initializeLayers();
         displayOverlay->owner = module;
         displayOverlay->box.pos = displayOrigin;
@@ -2377,14 +2396,43 @@ struct ChimeraWidget : ModuleWidget {
     }
     void step() override {
         const bool measurePerf = isDragonKingDebugEnabled();
-        const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
         Chimera* m = dynamic_cast<Chimera*>(module);
+        if (measurePerf && renderMetrics.enabled && renderMetrics.drew) {
+            debugWidgetMetrics.recordDraw(renderMetrics.totalDrawUs());
+            cacheRange.add(renderMetrics.cacheUs);
+            liveRange.add(renderMetrics.liveUs);
+            lightRange.add(renderMetrics.lightUs);
+            glStepRange.add(renderMetrics.glStepUs);
+            cacheRenders += renderMetrics.cacheRenders;
+            if (m && debug_terminal::baselineSubmitDue("Chimera", m->debugMetrics.instanceId,
+                    system::getTime())) {
+                debug_terminal::submitChimeraUiMetrics(m->debugMetrics.instanceId,
+                    m->debugMetrics.consumeProcessRange(), debugWidgetMetrics.consumeStepRange(),
+                    debugWidgetMetrics.consumeDrawRange(), cacheRange.consume(), liveRange.consume(),
+                    lightRange.consume(), glStepRange.consume(), cacheRenders);
+                cacheRenders = 0;
+            }
+        }
+        renderMetrics = chimera::RenderFrameMetrics{};
+        renderMetrics.enabled = measurePerf && m;
+        const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
         displayOverlay->owner = m;
         reels->owner = m;
         vuMeters[0]->owner = vuMeters[1]->owner = m;
         if (m) {
-            m->displayHeartbeatNs.store(Chimera::steadyNs(), std::memory_order_release);
-            m->serviceStep();
+            // The dispatcher owns routine control/maintenance work. Publish host
+            // identity changes only, without waiting for its mutex or doing I/O.
+            static const std::string empty;
+            const auto& patchPath = APP && APP->patch ? APP->patch->path : empty;
+            const auto& autosavePath = APP && APP->patch ? APP->patch->autosavePath : empty;
+            if ((identityOwner != m || identityModuleId != m->getId() ||
+                 identityPatchPath != patchPath || identityAutosavePath != autosavePath) &&
+                m->refreshRecoveryRootFromUi()) {
+                identityOwner = m;
+                identityModuleId = m->getId();
+                identityPatchPath = patchPath;
+                identityAutosavePath = autosavePath;
+            }
             auto next = std::atomic_load_explicit(&m->waveform,
                 std::memory_order_acquire);
             if (next != displayedWaveform) {
@@ -2400,7 +2448,12 @@ struct ChimeraWidget : ModuleWidget {
             displayOverlay->summary.reset();
             waveformCache->setDirty();
         }
-        ModuleWidget::step();
+        visual_assets::HaloKnob2DrawMetrics haloMetrics;
+        {
+            visual_assets::ScopedHaloKnob2Metrics scope(haloMetrics);
+            ModuleWidget::step();
+        }
+        renderMetrics.glStepUs = float(haloMetrics.stepSurfaceNs) * 0.001f;
         if (measurePerf)
             debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
     }
@@ -2411,13 +2464,13 @@ struct ChimeraWidget : ModuleWidget {
         Chimera* m = dynamic_cast<Chimera*>(module);
         if (!m || !measurePerf) return;
         debug_terminal::drawDebugInstanceId(args.vg, box.size, m->debugMetrics.instanceId);
-        debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
-        if (debug_terminal::baselineSubmitDue("Chimera", m->debugMetrics.instanceId,
-                system::getTime()))
-            debug_terminal::submitBaselineMetrics("Chimera", m->debugMetrics.instanceId,
-                m->debugMetrics.consumeProcessRange(),
-                debugWidgetMetrics.consumeStepRange(),
-                debugWidgetMetrics.consumeDrawRange());
+        renderMetrics.addDraw(debug_terminal::elapsedUsSince(drawStart));
+    }
+    void drawLayer(const DrawArgs& args, int layer) override {
+        const bool measurePerf = renderMetrics.enabled;
+        const auto start = debug_terminal::debugTimerStart(measurePerf);
+        ModuleWidget::drawLayer(args, layer);
+        if (measurePerf) renderMetrics.addDraw(debug_terminal::elapsedUsSince(start), layer);
     }
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);

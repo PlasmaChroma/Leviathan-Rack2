@@ -216,6 +216,11 @@ void submitBaselineMetrics(const char* moduleName,
                            TimingRangeUs stepUs,
                            TimingRangeUs drawUs);
 
+void submitChimeraUiMetrics(uint32_t instanceId,
+                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs,
+                            TimingRangeUs cacheUs, TimingRangeUs liveUs, TimingRangeUs lightUs,
+                            TimingRangeUs glStepUs, unsigned cacheRenders);
+
 void submitSibylMetrics(uint32_t instanceId,
                         int64_t rackModuleId,
                         TimingRangeUs processUs,

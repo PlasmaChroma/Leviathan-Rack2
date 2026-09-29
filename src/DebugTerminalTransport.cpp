@@ -663,6 +663,26 @@ void submitBaselineMetrics(const char* moduleName,
   transport().submit(safeModuleName, instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitChimeraUiMetrics(uint32_t instanceId,
+                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs,
+                            TimingRangeUs cacheUs, TimingRangeUs liveUs, TimingRangeUs lightUs,
+                            TimingRangeUs glStepUs, unsigned cacheRenders) {
+  submitUiMetricSchema("Chimera",
+      "[{\"key\":\"process_us\",\"label\":\"Process (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},"
+      "{\"key\":\"cache_us\",\"label\":\"Display cache (us)\"},{\"key\":\"live_us\",\"label\":\"Live UI (us)\"},{\"key\":\"light_us\",\"label\":\"Light pass (us)\"},"
+      "{\"key\":\"gl_step_us\",\"label\":\"GL in step (us)\"},{\"key\":\"cache_renders\",\"label\":\"Cache renders\"}]");
+  char dataBuf[4096] = "{";
+  const char* keys[] = {"process_us", "step_us", "draw_us", "cache_us", "live_us", "light_us", "gl_step_us"};
+  const TimingRangeUs ranges[] = {processUs, stepUs, drawUs, cacheUs, liveUs, lightUs, glStepUs};
+  for (unsigned i = 0; i < 7; ++i) {
+    if (i) std::strcat(dataBuf, ",");
+    appendRange(dataBuf, sizeof(dataBuf), keys[i], ranges[i]);
+  }
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf),
+      ",\"cache_renders\":%u}", cacheRenders);
+  transport().submit("Chimera", instanceId, "ui", "metric", dataBuf, system::getTime());
+}
+
 void submitSibylMetrics(uint32_t instanceId,
                         int64_t rackModuleId,
                         TimingRangeUs processUs,

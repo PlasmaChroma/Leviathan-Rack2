@@ -26,6 +26,10 @@ int main() {
     chimera::MarkerDisplay reopened;
     need(!mailbox.consume(reopened) && reopened.count == 3,
          "reopened overlay receives retained markers without a new edit");
+    chimera::MarkerDisplay sentinel;
+    sentinel.count = 77;
+    need(!mailbox.consume(sentinel, false) && sentinel.count == 77,
+         "unchanged consumer can skip the full marker table copy");
 
     std::atomic<bool> done{false};
     std::thread writer([&] {

@@ -3,9 +3,11 @@
 // Included by Chimera.cpp after Chimera is complete. The waveform layer is
 // cached by Rack's FramebufferWidget; only the small overlay redraws per frame.
 struct ChimeraWaveformLayer : Widget {
+    chimera::RenderFrameMetrics* metrics = nullptr;
     std::shared_ptr<const chimera::WaveformSummary> summary;
 
     void draw(const DrawArgs& args) override {
+        chimera::RenderComponentTimer timer(metrics, true);
         NVGcontext* vg = args.vg;
         const float w = box.size.x, h = box.size.y;
         nvgBeginPath(vg);
@@ -57,6 +59,7 @@ struct ChimeraWaveformLayer : Widget {
 };
 
 struct ChimeraVuMeterWidget final : TransparentWidget {
+    chimera::RenderFrameMetrics* metrics = nullptr;
     Chimera* owner = nullptr;
     unsigned channel = 0;
     float level = 0.f;
@@ -77,6 +80,7 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     }
 
     void onContextDestroy(const ContextDestroyEvent& e) override {
+        visual_assets::onRasterContextDestroy(e.vg);
         faceImage.reset();
         overlayImage.reset();
         facePath.clear();
@@ -85,6 +89,7 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     }
 
     void onContextCreate(const ContextCreateEvent& e) override {
+        visual_assets::onRasterContextCreate(e.vg);
         faceImage.reset();
         overlayImage.reset();
         facePath.clear();
@@ -103,15 +108,13 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
     int imageHandle(NVGcontext* vg, std::shared_ptr<window::Image>& image,
                     std::string& path, const char* relativePath) {
         if (!vg || !APP || !APP->window) return -1;
-        const std::string desired = asset::plugin(pluginInstance, relativePath);
-        if (!image || path != desired) {
-            image = APP->window->loadImage(desired);
-            path = desired;
-        }
-        return visual_assets::loadRasterMipmapHandle(vg, image, desired);
+        if (path.empty()) path = asset::plugin(pluginInstance, relativePath);
+        if (!image) image = APP->window->loadImage(path);
+        return visual_assets::loadRasterMipmapHandle(vg, image, path);
     }
 
     void draw(const DrawArgs& args) override {
+        chimera::RenderComponentTimer timer(metrics, false);
         const int image = imageHandle(args.vg, faceImage, facePath, "res/icon/LeviathanVU-256.png");
         if (image < 0 || box.size.x <= 0.f || box.size.y <= 0.f) return;
         const float diameter = std::min(box.size.x, box.size.y);
@@ -157,6 +160,7 @@ struct ChimeraVuMeterWidget final : TransparentWidget {
 };
 
 struct ChimeraReelsWidget final : TransparentWidget {
+    chimera::RenderFrameMetrics* metrics = nullptr;
     static constexpr float kNormalRpm = 33.f;
     static constexpr float kTapeHubRatio = 0.36f;
     static constexpr float kTapeOuterRatio = 0.91f;
@@ -166,9 +170,8 @@ struct ChimeraReelsWidget final : TransparentWidget {
     float radii[2] = {0.f, 0.f};
     float angle = 0.f;
     double lastStepTime = 0.0;
-    NVGcontext* ownerVg = nullptr;
-    int imageHandle = -1;
-    int imageWidth = 0, imageHeight = 0;
+    std::shared_ptr<window::Image> reelImage;
+    int imageHandle = -1; // Borrowed from the shared per-context raster cache.
     std::string loadedPath;
 
     static float angularVelocity(float playbackRate) {
@@ -212,50 +215,36 @@ struct ChimeraReelsWidget final : TransparentWidget {
             reelCenter.y + std::fabs(spacing) * 0.5f);
     }
 
-    ~ChimeraReelsWidget() override {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+    Rect drawBounds(unsigned i) const {
+        const Vec pad = mm2px(Vec(1.6f, 0.55f)).plus(Vec(1.f, 1.f));
+        const Vec lo(std::min(centers[i].x - radii[i], intakePoints[i].x - pad.x),
+                     std::min(centers[i].y - radii[i], intakePoints[i].y - pad.y));
+        const Vec hi(std::max(centers[i].x + radii[i], intakePoints[i].x + pad.x),
+                     std::max(centers[i].y + radii[i], intakePoints[i].y + pad.y));
+        return Rect(lo, hi.minus(lo));
     }
 
     void onContextDestroy(const ContextDestroyEvent& e) override {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
-        loadedPath.clear();
+        visual_assets::onRasterContextDestroy(e.vg);
+        reelImage.reset();
+        imageHandle = -1;
         TransparentWidget::onContextDestroy(e);
     }
 
     void onContextCreate(const ContextCreateEvent& e) override {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-            ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
-        loadedPath.clear();
+        visual_assets::onRasterContextCreate(e.vg);
+        reelImage.reset();
+        imageHandle = -1;
         TransparentWidget::onContextCreate(e);
     }
 
     bool ensureImage(NVGcontext* vg) {
-        if (!vg) return false;
-        const std::string path = asset::plugin(pluginInstance, "res/icon/Reel4-256px.png");
-        if (ownerVg == vg && loadedPath == path && imageHandle > 0 &&
-            imageWidth > 0 && imageHeight > 0 &&
-            nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
-                vg, imageHandle, imageWidth, imageHeight)) return true;
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-            ownerVg, imageHandle, imageWidth, imageHeight, vg, ownerVg == vg);
-        loadedPath.clear();
-        imageHandle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-        if (imageHandle <= 0) {
-            imageHandle = -1;
-            return false;
-        }
-        ownerVg = vg;
-        loadedPath = path;
-        nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
-        if (imageWidth <= 0 || imageHeight <= 0) {
-            nvg_gfx_lifecycle::resetOwnedNvgImage(
-                ownerVg, imageHandle, imageWidth, imageHeight, vg, true);
-            loadedPath.clear();
-            return false;
-        }
-        return true;
+        if (!vg || !APP || !APP->window) return false;
+        if (loadedPath.empty())
+            loadedPath = asset::plugin(pluginInstance, "res/icon/Reel4-256px.png");
+        if (!reelImage) reelImage = APP->window->loadImage(loadedPath);
+        imageHandle = visual_assets::loadRasterMipmapHandle(vg, reelImage, loadedPath);
+        return imageHandle > 0;
     }
 
     void step() override {
@@ -272,6 +261,10 @@ struct ChimeraReelsWidget final : TransparentWidget {
     }
 
     void draw(const DrawArgs& args) override {
+        chimera::RenderComponentTimer timer(metrics, false);
+        const bool visible[2] = {args.clipBox.intersects(drawBounds(0)),
+                                 args.clipBox.intersects(drawBounds(1))};
+        if (!visible[0] && !visible[1]) return;
         if (!ensureImage(args.vg)) return;
         float progress = 0.f;
         bool haveTape = false;
@@ -288,7 +281,7 @@ struct ChimeraReelsWidget final : TransparentWidget {
         }
         // Draw the housing beneath the tape so it can visibly cross the rear rim.
         for (unsigned i = 0; i < 2; ++i) {
-            if (radii[i] <= 0.f) continue;
+            if (!visible[i] || radii[i] <= 0.f) continue;
             const Vec p = intakePoints[i];
             const Vec size = mm2px(Vec(3.2f, 1.1f));
             const float x = p.x - size.x * 0.5f;
@@ -309,7 +302,7 @@ struct ChimeraReelsWidget final : TransparentWidget {
             // Opaque shared color avoids double-alpha brightening at the tape/spool overlap.
             const NVGcolor tapeColor = nvgRGB(106, 221, 215);
             for (unsigned i = 0; i < 2; ++i) {
-                if (radii[i] <= 0.f) continue;
+                if (!visible[i] || radii[i] <= 0.f) continue;
                 const float tape = tapeRadius(radii[i], amounts[i]);
                 const float tapeWidth = std::max(1.f, radii[i] * 0.055f);
                 // Inset the stroke centerline so its outer edge meets the wound tape.
@@ -330,7 +323,7 @@ struct ChimeraReelsWidget final : TransparentWidget {
         }
         // The front lip hides the endpoint after the tape enters the slot center.
         for (unsigned i = 0; i < 2; ++i) {
-            if (radii[i] <= 0.f) continue;
+            if (!visible[i] || radii[i] <= 0.f) continue;
             const Vec p = intakePoints[i];
             const Vec size = mm2px(Vec(3.2f, 1.1f));
             const float x = p.x - size.x * 0.5f;
@@ -345,7 +338,7 @@ struct ChimeraReelsWidget final : TransparentWidget {
             nvgRestore(args.vg);
         }
         for (unsigned i = 0; i < 2; ++i) {
-            if (radii[i] <= 0.f) continue;
+            if (!visible[i] || radii[i] <= 0.f) continue;
             nvgSave(args.vg);
             nvgTranslate(args.vg, centers[i].x, centers[i].y);
             nvgRotate(args.vg, angle);
@@ -361,6 +354,7 @@ struct ChimeraReelsWidget final : TransparentWidget {
 };
 
 struct ChimeraDisplayOverlay : Widget {
+    chimera::RenderFrameMetrics* metrics = nullptr;
     Chimera* owner = nullptr;
     chimera::MarkerDisplay markers;
     std::shared_ptr<const chimera::WaveformSummary> summary;
@@ -386,7 +380,7 @@ struct ChimeraDisplayOverlay : Widget {
     };
     widget::FramebufferWidget* markerCache = nullptr;
     widget::FramebufferWidget* foregroundCache = nullptr;
-    Layer* layers[4] = {};
+    Layer* layers[5] = {};
     std::uint32_t renderFrames = 0;
     unsigned renderCurrent = 0, renderRequested = 0;
     Chimera* renderOwner = nullptr;
@@ -508,11 +502,11 @@ struct ChimeraDisplayOverlay : Widget {
     }
 
     void initializeLayers() {
-        for (int part = 0; part < 4; ++part) {
+        for (int part = 0; part < 5; ++part) {
             layers[part] = new Layer;
             layers[part]->display = this;
             layers[part]->part = part;
-            if (part == 1 || part == 3) addChild(layers[part]);
+            if (part == 1 || part == 2 || part == 3) addChild(layers[part]);
             else {
                 auto* cache = new widget::FramebufferWidget;
                 cache->oversample = 1.f;
@@ -526,7 +520,7 @@ struct ChimeraDisplayOverlay : Widget {
 
     void step() override {
         textChanged = false;
-        const bool markerChange = owner ? owner->markerDisplay.consume(markers) : false;
+        const bool markerChange = owner ? owner->markerDisplay.consume(markers, renderOwner != owner) : false;
         updateState();
         const auto frames = owner ? std::max(markers.frames,
             owner->publishedValidFrames.load(std::memory_order_acquire)) : 0;
@@ -534,22 +528,30 @@ struct ChimeraDisplayOverlay : Widget {
         const unsigned requested = owner ? owner->publishedRequestedRegion.load(std::memory_order_acquire) : 0;
         const bool resized = layers[0] && (layers[0]->box.size.x != box.size.x ||
             layers[0]->box.size.y != box.size.y);
-        if (markerCache && (markerChange || renderOwner != owner || frames != renderFrames ||
-            current != renderCurrent || requested != renderRequested || resized)) {
+        if (markerCache && (markerChange || renderOwner != owner || frames != renderFrames || resized))
             markerCache->setDirty();
-            foregroundCache->setDirty();
-        }
-        if (textChanged && foregroundCache)
+        if ((textChanged || resized || renderOwner != owner) && foregroundCache)
             foregroundCache->setDirty();
         renderOwner = owner;
         renderFrames = frames;
         renderCurrent = current;
         renderRequested = requested;
         if (markerCache) {
-            markerCache->box.size = foregroundCache->box.size = box.size;
+            markerCache->box.size = box.size;
             for (auto* layer : layers) layer->box.size = box.size;
+            // The footer cache only covers text; selection highlights stay live.
+            const float footerY = std::floor(box.size.y * 0.82f);
+            foregroundCache->box.pos = Vec(0.f, footerY);
+            foregroundCache->box.size = Vec(box.size.x, box.size.y - footerY);
+            layers[4]->box.size = foregroundCache->box.size;
         }
         Widget::step();
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (owner && !args.fb)
+            owner->displayHeartbeatNs.store(Chimera::steadyNs(), std::memory_order_release);
+        Widget::draw(args);
     }
 
     void updateState() {
@@ -622,6 +624,7 @@ struct ChimeraDisplayOverlay : Widget {
     }
 
     void drawContents(const DrawArgs& args, int part) {
+        chimera::RenderComponentTimer timer(metrics, part == 0 || part == 4);
         if (!APP || !APP->window || !APP->window->uiFont) return;
         NVGcontext* vg = args.vg;
         const float w = box.size.x, h = box.size.y;
@@ -666,7 +669,6 @@ struct ChimeraDisplayOverlay : Widget {
                 // included, so the first Splice has a visible anchor at the left.
                 nvgBeginPath(vg);
                 for (unsigned i = 0; i < markers.count; ++i) {
-                    if (i == current || i == requested) continue;
                     const float x = xFor(markers.markers[i]);
                     nvgMoveTo(vg, x, traceTop);
                     nvgLineTo(vg, x, traceBottom);
@@ -716,17 +718,18 @@ struct ChimeraDisplayOverlay : Widget {
                 drawEmphasizedAnchor(current, currentColor, 2.35f);
             }
         }
-        if (part != 2) return;
+        if (part != 4) return;
+        const float textY = h * 0.92f - std::floor(h * 0.82f);
         nvgFontFaceId(vg, APP->window->uiFont->handle);
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFontSize(vg, 9.f);
         nvgFillColor(vg, nvgRGB(246, 231, 193));
-        nvgText(vg, 6.f, h * 0.92f, stateText.c_str(), nullptr);
+        nvgText(vg, 6.f, textY, stateText.c_str(), nullptr);
         nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgText(vg, w - 6.f, h * 0.92f, saveText.c_str(), nullptr);
+        nvgText(vg, w - 6.f, textY, saveText.c_str(), nullptr);
         nvgFontSize(vg, 8.5f);
         nvgFillColor(vg, nvgRGB(166, 209, 212));
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgText(vg, w * 0.5f, h * 0.92f, detailText.c_str(), nullptr);
+        nvgText(vg, w * 0.5f, textY, detailText.c_str(), nullptr);
     }
 };

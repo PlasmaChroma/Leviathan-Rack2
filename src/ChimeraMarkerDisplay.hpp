@@ -37,11 +37,11 @@ public:
         lastHandle_ = handle;
         lastRevision_ = revision;
     }
-    bool consume(MarkerDisplay& result) {
+    bool consume(MarkerDisplay& result, bool copyUnchanged = true) {
         const bool changed = middle_.load(std::memory_order_acquire) & kDirty;
         if (changed)
             reading_ = middle_.exchange(reading_, std::memory_order_acq_rel) & 3u;
-        result = slots_[reading_];
+        if (changed || copyUnchanged) result = slots_[reading_];
         return changed;
     }
 };
