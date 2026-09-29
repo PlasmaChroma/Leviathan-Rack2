@@ -11,8 +11,9 @@
 
 Plugin* pluginInstance = nullptr;
 
+bool testDragonKingDebugEnabled = false;
 bool isDragonKingDebugEnabled() {
-	return false;
+	return testDragonKingDebugEnabled;
 }
 
 static bool previewOptionsEnabled = true;
@@ -509,7 +510,13 @@ TestResult uiDiagnosticsStayPerInstance() {
 
 } // namespace
 
+#include "full_process_timing.hpp"
+
 int main() {
+	{
+		IntegralFlux timedModule;
+		if (!verifyFullProcessTiming(timedModule, timedModule.perfAudioProcessAverage, testDragonKingDebugEnabled)) return 1;
+	}
 	const std::vector<TestResult> results {
 		releasedSchemaIsStable(),
 		uiDiagnosticsStayPerInstance(),

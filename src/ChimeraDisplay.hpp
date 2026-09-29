@@ -614,7 +614,7 @@ struct ChimeraDisplayOverlay : Widget {
             detailText = std::to_string(frames / 48000) + "s  SPL " +
                 std::to_string(current + 1) + "/" + std::to_string(count);
             if (requested != current)
-                detailText += " >" + std::to_string(requested + 1);
+                detailText += u8" \u2192 " + std::to_string(requested + 1);
         }
         // Keep transport and patch-save status visible at the sides. A missed
         // safeguard remains visible after stop, until the next take or Reel.

@@ -124,10 +124,10 @@ int main() {
     visibilityRegression(false, true);
     chimera::RenderFrameMetrics frame;
     frame.glStepUs = 3.f;
-    frame.addDraw(2.f, -1); frame.addDraw(10.f); frame.addDraw(5.f, 1);
+    frame.addLayer(2.f, -1); frame.addDraw(10.f); frame.addLayer(5.f, 1);
     frame.cacheUs = 7.f; // Component subsets must not be counted again.
-    need(frame.drew && frame.totalDrawUs() == 20.f && frame.lightUs == 5.f,
-         "one Draw sample sums step rendering, shadow, normal, and light passes once");
+    need(frame.drew && frame.drawUs == 10.f && frame.lightUs == 5.f && frame.glStepUs == 3.f,
+         "Draw contains only normal calls; layer and step work stay separate");
     { chimera::RenderComponentTimer disabled(&frame, true); }
     need(frame.cacheRenders == 0, "disabled debug mode does not collect component timings");
     ChimeraReelsWidget reels;

@@ -1,3 +1,4 @@
+#include "DebugTerminalMetrics.hpp"
 #include "Bifurx.hpp"
 #include "BifurxSpectrumNanoVG.hpp"
 #include "BifurxLicense.hpp"
@@ -267,6 +268,7 @@ struct BifurxWidget final : ModuleWidget {
 	int lastRenderMode = -1;
 	debug_terminal::UiTimingRangeAccumulator moduleStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator moduleDrawUsRange;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	float lastConduitDrawUs = 0.f;
 
 	void applySpectrumRect(const math::Rect& rectMm) {
@@ -503,6 +505,7 @@ struct BifurxWidget final : ModuleWidget {
 	}
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		using PerfClock = std::chrono::steady_clock;
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		const bool measurePerf = bifurx && isDragonKingDebugEnabled();
@@ -573,13 +576,20 @@ struct BifurxWidget final : ModuleWidget {
 			bifurx->debugInstanceId,
 			processRange,
 			stepRange,
-			drawRange,
+			drawRange, drawLayerTiming.consume(),
 			showGL,
 			activeSpectrum ? activeSpectrum->lastCurvePrepUs : 0.f,
 			activeSpectrum ? activeSpectrum->lastOverlayPrepUs : 0.f,
 			fixedSurfaceActive && activeSpectrum ? activeSpectrum->lastSurfaceRenderUs : 0.f,
 			activeSpectrum ? activeSpectrum->renderClient.lastSubmitUs() : 0.f,
 			lastConduitDrawUs);
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {

@@ -285,7 +285,6 @@ struct Wyrm : Module {
 	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
 	std::array<WyrmRockStateSnapshot, 2> activeRockState {};
 	std::atomic<int> activeRockStateIndex {0};
-	dsp::ClockDivider perfMeasureDivider;
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
 	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
@@ -297,18 +296,8 @@ struct Wyrm : Module {
 	std::atomic<bool> perfSlitherActive {false};
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
-	std::atomic<uint64_t> perfModuleStepMinNs {std::numeric_limits<uint64_t>::max()};
-	debug_terminal::AtomicTimingAverage perfModuleStepAverage;
-	std::atomic<uint64_t> perfModuleStepMaxNs {0};
-	std::atomic<uint64_t> perfExpandedStepMinNs {std::numeric_limits<uint64_t>::max()};
-	debug_terminal::AtomicTimingAverage perfExpandedStepAverage;
-	std::atomic<uint64_t> perfExpandedStepMaxNs {0};
-	std::atomic<uint64_t> perfModuleDrawMinNs {std::numeric_limits<uint64_t>::max()};
-	debug_terminal::AtomicTimingAverage perfModuleDrawAverage;
-	std::atomic<uint64_t> perfModuleDrawMaxNs {0};
-	std::atomic<uint64_t> perfExpandedDrawMinNs {std::numeric_limits<uint64_t>::max()};
-	debug_terminal::AtomicTimingAverage perfExpandedDrawAverage;
-	std::atomic<uint64_t> perfExpandedDrawMaxNs {0};
+	// UI thread only; sum module and detached editor work per cycle.
+	debug_terminal::UiCycleTimingAccumulator stepTiming, drawTiming, drawLayerTiming;
 	std::atomic<uint64_t> perfEditorCacheDrawMinNs {std::numeric_limits<uint64_t>::max()};
 	debug_terminal::AtomicTimingAverage perfEditorCacheDrawAverage;
 	std::atomic<uint64_t> perfEditorCacheDrawMaxNs {0};

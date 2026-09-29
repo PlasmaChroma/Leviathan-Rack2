@@ -25,7 +25,7 @@ Bifurx::Bifurx() {
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
 	outputs[OUT_OUTPUT].setChannels(1);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
-	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(controlUpdateDivision); perfMeasureDivider.setDivision(kPerfMeasureDivision);
+	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(controlUpdateDivision);
 }
 
 Bifurx::~Bifurx() {
@@ -116,7 +116,6 @@ void Bifurx::resetCircuitStates() {
 	previewPublishDivider.reset();
 	previewPublishSlowDivider.reset();
 	controlUpdateDivider.reset();
-	perfMeasureDivider.reset();
 	resetAnalysisCapture();
 }
 

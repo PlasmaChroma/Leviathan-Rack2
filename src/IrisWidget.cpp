@@ -1067,6 +1067,7 @@ struct IrisImageChannelButton final : SmallGoldButton {
 
 struct IrisWidget final : ModuleWidget {
   debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+  debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 
   explicit IrisWidget(Iris* module) {
     setModule(module);
@@ -1222,12 +1223,20 @@ struct IrisWidget final : ModuleWidget {
   }
 
   void step() override {
+    drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
     const bool measurePerf = isDragonKingDebugEnabled();
     const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
     ModuleWidget::step();
     if (measurePerf) {
       debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
     }
+  }
+
+  void drawLayer(const DrawArgs& args, int layer) override {
+    const bool measurePerf = drawLayerTiming.enabled;
+    const auto start = debug_terminal::debugTimerStart(measurePerf);
+    ModuleWidget::drawLayer(args, layer);
+    if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
   }
 
   void draw(const DrawArgs& args) override {
@@ -1251,7 +1260,7 @@ struct IrisWidget final : ModuleWidget {
           irisModule->debugMetrics.instanceId,
           irisModule->debugMetrics.consumeProcessRange(),
           debugWidgetMetrics.consumeStepRange(),
-          debugWidgetMetrics.consumeDrawRange());
+          debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume());
       }
     }
   }

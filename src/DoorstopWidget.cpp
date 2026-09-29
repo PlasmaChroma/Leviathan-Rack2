@@ -765,6 +765,7 @@ struct DoorstopWidget final : ModuleWidget {
 	};
 
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	std::shared_ptr<DoorstopOverlayLink> overlayLink;
 	std::shared_ptr<DoorstopV4TuningOverlayLink> tuningOverlayLink;
 	widget::FramebufferWidget* springFramebuffer = nullptr;
@@ -1042,6 +1043,7 @@ struct DoorstopWidget final : ModuleWidget {
 	}
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
@@ -1133,6 +1135,13 @@ struct DoorstopWidget final : ModuleWidget {
 		}
 	}
 
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
+	}
+
 	void draw(const DrawArgs& args) override {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
@@ -1154,7 +1163,7 @@ struct DoorstopWidget final : ModuleWidget {
 					doorstop->debugMetrics.instanceId,
 					doorstop->debugMetrics.consumeProcessRange(),
 					debugWidgetMetrics.consumeStepRange(),
-					debugWidgetMetrics.consumeDrawRange(),
+					debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume(),
 					overlayLink->debugRenderMetrics.geometryIdleUs.consume(),
 					overlayLink->debugRenderMetrics.geometryTrailUs.consume(),
 					overlayLink->debugRenderMetrics.panelIdleUs.consume(),
@@ -1350,10 +1359,14 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 }
 
 void DoorstopOverflowWidget::drawLayer(const DrawArgs& args, int layer) {
+	auto* timing = link && link->owner ? &link->owner->drawLayerTiming : nullptr;
+	const bool measurePerf = timing && timing->enabled;
+	const auto start = debug_terminal::debugTimerStart(measurePerf);
 	if (layer == 1) {
 		drawOverflowScene(args);
 	}
 	TransparentWidget::drawLayer(args, layer);
+	if (measurePerf) timing->add(debug_terminal::elapsedUsSince(start));
 }
 
 void DoorstopOverflowWidget::drawOverflowScene(const DrawArgs& args) {

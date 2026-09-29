@@ -1,3 +1,4 @@
+#include "DebugTerminalMetrics.hpp"
 #include "IntegralFlux.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
@@ -1565,6 +1566,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	float eclipseDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
 	std::ofstream drawLogFile;
 	std::string drawLogPath;
@@ -1789,6 +1791,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	visual_assets::HaloKnob2DrawMetrics pendingHaloStepMetrics;
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -2154,6 +2157,13 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(centralTooltip);
 	}
 
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
+	}
+
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
@@ -2199,7 +2209,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		if (measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				afterModuleDraw - perfStart).count() + haloMetrics.stepSurfaceNs) * 1e-6f;
+				afterModuleDraw - perfStart).count()) * 1e-6f;
 			uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
 			uiDrawUsRange.add(drawMs * 1000.f);
 			const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
@@ -2224,7 +2234,7 @@ struct IntegralFluxWidget : ModuleWidget {
 					debugInstanceId,
 					flux->consumeAudioProcessTimingForUi(),
 					uiStepUsRange.consume(),
-					uiDrawUsRange.consume(),
+					uiDrawUsRange.consume(), drawLayerTiming.consume(),
 					apertureDrawUsRange.consume(),
 					gearDrawUsEma,
 					eclipseDrawUsEma);

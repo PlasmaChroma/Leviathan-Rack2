@@ -1,3 +1,4 @@
+#include "DebugTerminalMetrics.hpp"
 #include "TemporalDeck.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "TemporalDeckEngine.hpp"
@@ -3581,6 +3582,7 @@ struct TemporalDeckWidget : ModuleWidget {
   float uiDrawUsEma = 0.f;
   debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
   debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+  debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 
   void spawnTDScopeRight();
   void startScopeDragTraceCapture();
@@ -3797,6 +3799,13 @@ struct TemporalDeckWidget : ModuleWidget {
     addParam(scopeSpawn);
   }
 
+  void drawLayer(const DrawArgs& args, int layer) override {
+    const bool measurePerf = drawLayerTiming.enabled;
+    const auto start = debug_terminal::debugTimerStart(measurePerf);
+    ModuleWidget::drawLayer(args, layer);
+    if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
+  }
+
   void draw(const DrawArgs &args) override {
     const bool measurePerf = isDragonKingDebugEnabled();
     auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
@@ -3832,7 +3841,7 @@ struct TemporalDeckWidget : ModuleWidget {
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
                                                       deckModule->consumeAudioProcessUs(),
                                                       uiStepUsRange.consume(),
-                                                      uiDrawUsRange.consume(),
+                                                      uiDrawUsRange.consume(), drawLayerTiming.consume(),
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);
@@ -3857,6 +3866,7 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void step() override {
+    drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
     const bool measurePerf = isDragonKingDebugEnabled();
     auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);

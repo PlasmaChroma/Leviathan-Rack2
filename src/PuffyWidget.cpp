@@ -719,6 +719,7 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 }
 
 struct PuffyRoamingOverlay final : TransparentWidget {
+	WeakPtr<PuffyWidget> timingOwner;
 	static constexpr float kBaseSize = 80.f;
 	static constexpr float kBaseShadowPad = 16.f;
 	static constexpr float kMaximumRackZoom = 8.f;
@@ -920,7 +921,17 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			fishWidget->box.size.mult(0.5f));
 	}
 
+	void drawLayer(const DrawArgs& args, int layer) override {
+		auto* owner = timingOwner.get();
+		const bool measurePerf = owner && owner->drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		TransparentWidget::drawLayer(args, layer);
+		if (measurePerf) owner->drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
+	}
+
 	void draw(const DrawArgs& args) override {
+		auto* owner = timingOwner.get();
+		debug_terminal::ScopedUiCycleTimer timer(owner ? &owner->drawTiming : nullptr);
 		if (fishWidget) {
 			nvgSave(args.vg);
 			nvgTranslate(
@@ -932,6 +943,8 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	}
 
 	void step() override {
+		auto* owner = timingOwner.get();
+		debug_terminal::ScopedUiCycleTimer timer(owner ? &owner->stepTiming : nullptr);
 		TransparentWidget::step();
 		if (!module || !APP || !APP->scene || !APP->scene->rack) return;
 		
@@ -1174,6 +1187,25 @@ void PuffyWidget::onContextDestroy(const ContextDestroyEvent& e) {
 }
 
 void PuffyWidget::step() {
+	const bool collect = module && isDragonKingDebugEnabled();
+	stepTiming.beginCycle(collect);
+	drawTiming.beginCycle(collect);
+	drawLayerTiming.beginCycle(collect);
+	// Publish completed cycles even when the panel is offscreen but its avatar
+	// is visible. Do not depend on the main widget receiving draw().
+	if (collect) {
+		auto* timingModule = static_cast<Puffy*>(module);
+		const double nowSec = system::getTime();
+		if (debug_terminal::baselineSubmitDue(
+				"Puffy", timingModule->debugMetrics.instanceId, nowSec)) {
+			debug_terminal::submitBaselineMetrics(
+				"Puffy",
+				timingModule->debugMetrics.instanceId,
+				timingModule->debugMetrics.consumeProcessRange(),
+				stepTiming.consume(),
+				drawTiming.consume(), drawLayerTiming.consume());
+		}
+	}
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 	ModuleWidget::step();
@@ -1215,6 +1247,7 @@ void PuffyWidget::step() {
 			if (++roamingAttachStableFrames >= 3u) {
 				auto* overlay = new PuffyRoamingOverlay(
 					puffyModule, panelFishWidget.get());
+				overlay->timingOwner.set(this);
 				overlay->setRackZoom(getRelativeZoom(scene));
 				overlay->anchorPos = getRelativeOffset(
 					box.size.mult(0.5f), scene);
@@ -1268,9 +1301,16 @@ void PuffyWidget::step() {
 	}
 	
 	if (measurePerf) {
-		debugWidgetMetrics.recordStep(
+		stepTiming.add(
 			debug_terminal::elapsedUsSince(stepStart));
 	}
+}
+
+void PuffyWidget::drawLayer(const DrawArgs& args, int layer) {
+	const bool measurePerf = drawLayerTiming.enabled;
+	const auto start = debug_terminal::debugTimerStart(measurePerf);
+	ModuleWidget::drawLayer(args, layer);
+	if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 }
 
 void PuffyWidget::draw(const DrawArgs& args) {
@@ -1295,18 +1335,9 @@ void PuffyWidget::draw(const DrawArgs& args) {
 	if (measurePerf) {
 		debug_terminal::drawDebugInstanceId(
 			args.vg, box.size, puffyModule->debugMetrics.instanceId);
-		debugWidgetMetrics.recordDraw(
+		drawTiming.add(
 			debug_terminal::elapsedUsSince(drawStart));
-		const double nowSec = system::getTime();
-		if (debug_terminal::baselineSubmitDue(
-				"Puffy", puffyModule->debugMetrics.instanceId, nowSec)) {
-			debug_terminal::submitBaselineMetrics(
-				"Puffy",
-				puffyModule->debugMetrics.instanceId,
-				puffyModule->debugMetrics.consumeProcessRange(),
-				debugWidgetMetrics.consumeStepRange(),
-				debugWidgetMetrics.consumeDrawRange());
-		}
+
 	}
 	if (logDraw && drawLogActive && drawLogFile.is_open()) {
 		const PuffyDrawMetrics metrics = consumePuffyDrawMetrics();

@@ -985,7 +985,7 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 void IntegralFlux::process(const ProcessArgs& args) {
 	using PerfClock = std::chrono::steady_clock;
 	const bool debugEnabled = isDragonKingDebugEnabled();
-	const bool measurePerf = debugEnabled && ((perfAudioSampleCounter++ & 63u) == 0u);
+	const bool measurePerf = debugEnabled;
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	const bool bandlimitedSignalEnabled = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
 	const bool bandlimitedGateEnabled = bandlimitedGateOutputs.load(std::memory_order_relaxed);

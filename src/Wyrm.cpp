@@ -5,7 +5,6 @@
 
 namespace {
 static std::atomic<uint32_t> gWyrmDebugInstanceCounter {1u};
-constexpr int kWyrmPerfMeasureDivision = 17;
 constexpr float kWyrmRockFoldReturn = 0.78f;
 
 inline float finiteOr(float x, float fallback = 0.f) {
@@ -67,7 +66,6 @@ const char* const kWyrmEnvelopeShapeLabels[ENVELOPE_SHAPE_COUNT] = {
 Wyrm::Wyrm() {
 	debugInstanceId = gWyrmDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	createdUnixTimeSec = system::getUnixTime();
-	perfMeasureDivider.setDivision(kWyrmPerfMeasureDivision);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	const float defaultFreqKnob = wyrmKnobValueForFrequency(261.63f, false);
 	configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, defaultFreqKnob, "Frequency");
@@ -1155,7 +1153,7 @@ void Wyrm::dataFromJson(json_t* root) {
 
 void Wyrm::process(const ProcessArgs& args) {
 	using PerfClock = std::chrono::steady_clock;
-	const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
+	const bool measurePerf = isDragonKingDebugEnabled();
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	bool wavetableRebuilt = false;
 	const uint32_t v = waveVersion.load(std::memory_order_acquire);

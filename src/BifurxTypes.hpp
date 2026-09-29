@@ -23,7 +23,6 @@ constexpr int kSnapshotSlotCount = 3;
 constexpr int kAnalysisFrameSlotCount = 4;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
-constexpr int kPerfMeasureDivision = 17;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;

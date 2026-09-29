@@ -2827,7 +2827,13 @@ TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
 
 }  // namespace
 
+#include "full_process_timing.hpp"
+
 int main() {
+	{
+		Bifurx timedModule;
+		if (!verifyFullProcessTiming(timedModule, timedModule.perfAudioProcessRangeAverage, testDragonKingDebugEnabled)) return 1;
+	}
   const std::vector<TestResult> tests = {
     testIirBoundaryIntegration(),
     testPremiumBoundarySwitchContinuity(),

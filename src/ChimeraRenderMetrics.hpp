@@ -10,12 +10,15 @@ struct RenderFrameMetrics {
     float drawUs = 0.f, cacheUs = 0.f, liveUs = 0.f, lightUs = 0.f, glStepUs = 0.f;
     unsigned cacheRenders = 0;
 
-    void addDraw(float us, int layer = 0) {
+    void addDraw(float us) {
         drew = true;
         drawUs += us;
+    }
+    void addLayer(float us, int layer) {
         if (layer == 1) lightUs += us;
     }
-    float totalDrawUs() const { return drawUs + glStepUs; }
+    // Only normal draw() call durations contribute to drawUs.
+    // Layer calls and GL work in step are reported separately.
 };
 
 struct RenderComponentTimer {

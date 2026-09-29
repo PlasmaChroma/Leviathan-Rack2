@@ -227,7 +227,6 @@ struct IntegralFlux : Module {
 	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
 	debug_terminal::AtomicTimingAverage perfAudioProcessAverage;
 	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
-	uint32_t perfAudioSampleCounter = 0u;
 	std::array<std::atomic<uint64_t>, 2> debugCurvePointsReducedTotal {};
 	std::array<std::atomic<uint64_t>, 2> debugCurveReductionSamples {};
 	std::array<std::atomic<uint64_t>, 2> debugTracerExtraPointsReducedTotal {};

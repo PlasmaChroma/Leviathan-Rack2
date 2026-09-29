@@ -59,6 +59,32 @@ struct UiTimingRangeAccumulator {
   }
 };
 
+// Sum all calls in one UI cycle before contributing a range/mean sample.
+// beginCycle() runs at module step entry. consume() never flushes a partial
+// cycle: reporting from draw() must not split shadow and light passes.
+struct UiCycleTimingAccumulator {
+  UiTimingRangeAccumulator completed;
+  bool enabled = false;
+  bool hasCalls = false;
+  float cycleUs = 0.f;
+
+  void beginCycle(bool collect) {
+    if (enabled && collect && hasCalls) completed.add(cycleUs);
+    if (!collect) completed = {};
+    enabled = collect;
+    hasCalls = false;
+    cycleUs = 0.f;
+  }
+
+  void add(float elapsedUs) {
+    if (!enabled || !std::isfinite(elapsedUs) || elapsedUs < 0.f) return;
+    cycleUs += elapsedUs;
+    hasCalls = true;
+  }
+
+  TimingRangeUs consume() { return completed.consume(); }
+};
+
 // One timing producer, one UI consumer. Publish cumulative totals atomically,
 // so consuming a mean never splits a sample's duration from its sample count.
 // The producer never waits; the consumer gives up after four bounded attempts.
@@ -128,7 +154,7 @@ inline TimingRangeUs consumeAudioProcessTiming(std::atomic<uint64_t>& minNs,
 void submitTDScopeUiMetrics(uint32_t instanceId,
                             TimingRangeUs processUs,
                             TimingRangeUs stepUs,
-                            TimingRangeUs drawUs,
+                            TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -140,7 +166,7 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  TimingRangeUs processUs,
                                  TimingRangeUs stepUs,
-                                 TimingRangeUs drawUs,
+                                 TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid);
@@ -148,7 +174,7 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs,
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                            bool renderOpengl,
                            float curvePrepUs,
                            float overlayPrepUs,
@@ -159,7 +185,7 @@ void submitBifurxUiMetrics(uint32_t instanceId,
 void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs,
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                        TimingRangeUs editorStepUs,
                        TimingRangeUs cachedEditorUs,
                        TimingRangeUs overlayUs,
@@ -176,7 +202,7 @@ void submitWyrmMetrics(uint32_t instanceId,
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
                                TimingRangeUs stepUs,
-                               TimingRangeUs drawUs,
+                               TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                                TimingRangeUs apertureUs,
                                float gearUs,
                                float eclipseUs);
@@ -184,22 +210,22 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
 void submitProcMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs);
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs);
 
 void submitUndertowMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs);
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs);
 
 void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs);
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs);
 
 void submitDoorstopMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs,
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                            TimingRangeUs geometryIdleUs,
                            TimingRangeUs geometryTrailUs,
                            TimingRangeUs panelIdleUs,
@@ -214,10 +240,10 @@ void submitBaselineMetrics(const char* moduleName,
                            uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs);
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs);
 
 void submitChimeraUiMetrics(uint32_t instanceId,
-                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs,
+                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                             TimingRangeUs cacheUs, TimingRangeUs liveUs, TimingRangeUs lightUs,
                             TimingRangeUs glStepUs, unsigned cacheRenders);
 
@@ -227,7 +253,7 @@ void submitSibylMetrics(uint32_t instanceId,
                         float processMeanUs,
                         uint64_t processSamples,
                         TimingRangeUs stepUs,
-                        TimingRangeUs drawUs,
+                        TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                         TimingRangeUs snapshotUs,
                         TimingRangeUs oracleUs,
                         int nvgPathOps);

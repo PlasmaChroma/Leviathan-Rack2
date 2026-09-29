@@ -24,13 +24,14 @@ Optional waveform snapshots require a recent actual display draw, with a 500 ms 
 
 ## Performance telemetry
 
-Dragon King debug mode retains the first three metrics: `Process`, `Step`, and `Draw`.
+Dragon King debug mode retains `Process`, `Step`, and `Draw` as the first three metrics and adds `DrawLayer` fourth.
 
 - `Process` measures module audio processing.
-- `Step` measures UI stepping, including any child GL surface rendering.
-- `Draw` sums the module's normal, shadow, and light passes plus GL surface rendering performed during stepping. The sample is finalized at the next step, after all draw passes have contributed.
+- `Step` measures the full module widget `step()` call, including any child GL surface rendering and telemetry bookkeeping.
+- `Draw` sums only normal module widget `draw()` calls.
+- `DrawLayer` separately sums every module `drawLayer()` call per UI cycle (including shadow/light passes). Completed cycles provide min, max, and arithmetic mean; the terminal's A key selects Range or Average. Samples are finalized at the next step, so reporting never splits a cycle.
 
-Additional fields report display-cache CPU time, live custom UI CPU time, light-pass CPU time, GL surface work in step, and cache-render count per reporting interval. Component timings are subsets, not extra work to add to the macro metrics. GL-in-step work belongs to both Step and Draw; do not sum those two columns to derive total thread utilization. These CPU timings do not measure asynchronous GPU completion.
+Additional fields report display-cache CPU time, live custom UI CPU time, light-pass CPU time, GL surface work in step, and cache-render count per reporting interval. Component timings are subsets, not extra work to add to the macro metrics. GL-in-step work is included only in Step; it is never added to Draw or DrawLayer. These CPU timings do not measure asynchronous GPU completion.
 
 ## Regression checks
 

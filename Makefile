@@ -621,7 +621,7 @@ test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
 test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
-test-fast: test-build-fast test-raster-mipmap-cache
+test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/octavia_presence_spec)
 	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)
 	$(call run_test_bin,build/tests/debug_terminal_timing_spec)
@@ -1138,6 +1138,24 @@ test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
 build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/gl_surface_lifecycle_spec.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
+
+build/tests/proc_runtime_spec build/tests/integral_flux_runtime_spec build/tests/wyrm_envelope_spec build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,): tests/full_process_timing.hpp
+
+.PHONY: test-performance-accounting
+test-performance-accounting: test-debug-terminal build/tests/proc_runtime_spec build/tests/integral_flux_runtime_spec build/tests/wyrm_envelope_spec build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/proc_runtime_spec)
+	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
+	$(call run_rack_test_bin,build/tests/wyrm_envelope_spec)
+	$(call run_rack_test_bin,build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,))
+
+.PHONY: test-debug-terminal
+test-debug-terminal: build/tests/debug_terminal_timing_spec build/tests/debug_terminal_transport_spec
+	$(call run_test_bin,build/tests/debug_terminal_timing_spec)
+	$(call run_rack_test_bin,build/tests/debug_terminal_transport_spec)
+	python3 -m unittest discover -s tools/debug_terminal -p 'test_*.py'
+
+build/tests/debug_terminal_transport_spec: tests/debug_terminal_transport_spec.cpp src/DebugTerminalTransport.cpp src/DebugTerminalTransport.hpp | build/tests
+	$(CXX) -std=c++11 -O2 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lws2_32) -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/debug_terminal_timing_spec: tests/debug_terminal_timing_spec.cpp src/DebugTerminalTransport.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -pthread -o $@

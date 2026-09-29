@@ -12,6 +12,42 @@ int main() {
   assert(std::isnan(ui.consume().average));
   ui.add(0);
   assert(ui.consume().average == 0);
+  UiCycleTimingAccumulator layers;
+  layers.add(100); // Disabled collectors ignore work.
+  layers.beginCycle(true);
+  layers.add(2); // Shadow.
+  assert(std::isnan(layers.consume().average)); // Mid-frame report must not flush.
+  layers.add(5); // Light.
+  layers.add(3); // Additional pass.
+  layers.beginCycle(true); // First completed cycle is 10, not three samples.
+  layers.add(4); // A cycle with only one call.
+  layers.beginCycle(true);
+  layers.beginCycle(true); // No calls: offscreen, no manufactured zero sample.
+  r = layers.consume();
+  assert(r.min == 4 && r.max == 10 && r.average == 7);
+  assert(std::isnan(layers.consume().average));
+  layers.add(0);
+  layers.beginCycle(true);
+  assert(layers.consume().average == 0); // A measured zero is still a sample.
+  layers.add(99);
+  layers.beginCycle(false); // Drop partial data when disabling debug.
+  layers.add(200);
+  layers.beginCycle(true);
+  assert(std::isnan(layers.consume().average));
+  layers.add(6);
+  layers.beginCycle(true);
+  assert(layers.consume().average == 6);
+  // Main widget + detached editor/avatar costs must be paired by cycle.
+  UiCycleTimingAccumulator combined;
+  combined.beginCycle(true);
+  combined.add(10); combined.add(2);
+  combined.beginCycle(true);
+  combined.add(2); combined.add(10);
+  combined.beginCycle(true);
+  combined.add(12); // Docked again: editor already included in the parent call.
+  combined.beginCycle(true);
+  r = combined.consume();
+  assert(r.min == 12 && r.max == 12 && r.average == 12);
   AtomicTimingAverage average;
   std::atomic<uint64_t> lo {UINT64_MAX}, hi {0};
   recordAudioProcessTiming(lo, hi, 1000, &average);

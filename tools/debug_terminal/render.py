@@ -309,7 +309,9 @@ def _plain_module_lines(module_name, rows, average=False):
         for i, value in enumerate(values):
             widths[i] = max(widths[i], len(str(value)))
 
-    max_widths = [14] + [10 for _ in columns] + [8]
+    # Keep timing names and complete min/max values readable in the plain view.
+    max_widths = [14] + [widths[i + 1] if key.endswith("_us") else 10
+                         for i, (key, _) in enumerate(columns)] + [8]
     widths = [min(widths[i], max_widths[i]) for i in range(len(widths))]
 
     align_right = [False] + [True for _ in columns] + [True]

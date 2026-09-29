@@ -608,7 +608,7 @@ void Bifurx::process(const ProcessArgs& args) {
 #endif
 	using PerfClock = std::chrono::steady_clock;
 	const bool debugEnabled = isDragonKingDebugEnabled();
-	const bool measurePerf = debugEnabled && perfMeasureDivider.process();
+	const bool measurePerf = debugEnabled;
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 
 	if (visualWatchdogEnabled.load(std::memory_order_relaxed)) {

@@ -1,3 +1,4 @@
+#include "DebugTerminalMetrics.hpp"
 #include "theme/ThemedTextWidget.hpp"
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
@@ -902,9 +903,16 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		if (measurePerf) {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
-			debug_terminal::recordAudioProcessTiming(
-				module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, elapsedNs, &module->perfExpandedStepAverage);
+			module->stepTiming.add(float(elapsedNs) * 0.001f);
 		}
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		auto* wyrm = editorSurface ? editorSurface->module : nullptr;
+		const bool measurePerf = wyrm && wyrm->drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		widget::OpaqueWidget::drawLayer(args, layer);
+		if (measurePerf) wyrm->drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -942,8 +950,7 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		if (measurePerf) {
 			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
-			debug_terminal::recordAudioProcessTiming(
-				module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, elapsedNs, &module->perfExpandedDrawAverage);
+			module->drawTiming.add(float(elapsedNs) * 0.001f);
 		}
 		if (logCsv && link && link->drawCsvRecorder) {
 			link->drawCsvRecorder->write(
@@ -1277,6 +1284,11 @@ struct WyrmWidget : ModuleWidget {
 		const PerfClock::time_point perfStart = measurePerf
 			? PerfClock::now()
 			: PerfClock::time_point();
+		if (wyrm) {
+			wyrm->stepTiming.beginCycle(measurePerf);
+			wyrm->drawTiming.beginCycle(measurePerf);
+			wyrm->drawLayerTiming.beginCycle(measurePerf);
+		}
 		ModuleWidget::step();
 		if (wyrm && !ageSigilUnlocked) {
 			const double createdUnixTimeSec = wyrm->createdUnixTimeSec;
@@ -1287,9 +1299,16 @@ struct WyrmWidget : ModuleWidget {
 		if (measurePerf) {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
-			debug_terminal::recordAudioProcessTiming(
-				wyrm->perfModuleStepMinNs, wyrm->perfModuleStepMaxNs, elapsedNs, &wyrm->perfModuleStepAverage);
+			wyrm->stepTiming.add(float(elapsedNs) * 0.001f);
 		}
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		auto* wyrm = static_cast<Wyrm*>(module);
+		const bool measurePerf = wyrm && wyrm->drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) wyrm->drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1347,8 +1366,7 @@ struct WyrmWidget : ModuleWidget {
 		if (measurePerf) {
 			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
-			debug_terminal::recordAudioProcessTiming(
-				wyrm->perfModuleDrawMinNs, wyrm->perfModuleDrawMaxNs, elapsedNs, &wyrm->perfModuleDrawAverage);
+			wyrm->drawTiming.add(float(elapsedNs) * 0.001f);
 		}
 		if (logCsv && drawCsvRecorder) {
 			drawCsvRecorder->write(

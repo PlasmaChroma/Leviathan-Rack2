@@ -74,6 +74,19 @@ inline float elapsedUsSince(std::chrono::steady_clock::time_point startedAt) {
     std::chrono::steady_clock::now() - startedAt).count()) * 0.001f;
 }
 
+struct ScopedUiCycleTimer {
+  UiCycleTimingAccumulator* accumulator;
+  std::chrono::steady_clock::time_point start;
+  explicit ScopedUiCycleTimer(UiCycleTimingAccumulator* target)
+    : accumulator(target && target->enabled ? target : nullptr),
+      start(debugTimerStart(accumulator != nullptr)) {}
+  ~ScopedUiCycleTimer() {
+    if (accumulator) accumulator->add(elapsedUsSince(start));
+  }
+  ScopedUiCycleTimer(const ScopedUiCycleTimer&) = delete;
+  ScopedUiCycleTimer& operator=(const ScopedUiCycleTimer&) = delete;
+};
+
 inline uint64_t elapsedNsSince(std::chrono::steady_clock::time_point startedAt) {
   return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::steady_clock::now() - startedAt).count());

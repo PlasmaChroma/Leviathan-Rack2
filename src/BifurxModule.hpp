@@ -108,7 +108,6 @@ struct Bifurx : Module {
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
-	dsp::ClockDivider perfMeasureDivider;
 	BifurxPreviewState lastPreviewState;
 	bool hasLastPreviewState = false;
 	BifurxPreviewState previewStates[kSnapshotSlotCount];

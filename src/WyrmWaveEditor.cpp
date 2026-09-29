@@ -586,33 +586,16 @@ struct WyrmWaveEditor : TransparentWidget {
 					module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
-					auto addTimingRanges = [](debug_terminal::TimingRangeUs a,
-					                          debug_terminal::TimingRangeUs b) {
-						if (b.max <= 0.f) return a;
-						if (a.max <= 0.f) return b;
-						a.min += b.min;
-						a.max += b.max;
-						a.average += b.average;
-						return a;
-					};
-					debug_terminal::TimingRangeUs moduleStepUs =
-						debug_terminal::consumeAudioProcessTiming(
-							module->perfModuleStepMinNs, module->perfModuleStepMaxNs, &module->perfModuleStepAverage);
-					moduleStepUs = addTimingRanges(moduleStepUs,
-						debug_terminal::consumeAudioProcessTiming(
-							module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, &module->perfExpandedStepAverage));
-					debug_terminal::TimingRangeUs moduleDrawUs =
-						debug_terminal::consumeAudioProcessTiming(
-							module->perfModuleDrawMinNs, module->perfModuleDrawMaxNs, &module->perfModuleDrawAverage);
-					moduleDrawUs = addTimingRanges(moduleDrawUs,
-						debug_terminal::consumeAudioProcessTiming(
-							module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, &module->perfExpandedDrawAverage));
+					// Consume complete cycle totals, including the sole editor in
+					// whichever parent currently owns it. Never add separate extrema.
+					const auto moduleStepUs = module->stepTiming.consume();
+					const auto moduleDrawUs = module->drawTiming.consume();
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
 						debugId,
 						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs, &module->perfAudioProcessAverage),
 						moduleStepUs,
-						moduleDrawUs,
+						moduleDrawUs, module->drawLayerTiming.consume(),
 						stepUsRange.consume(),
 						debug_terminal::consumeAudioProcessTiming(
 							module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs, &module->perfEditorCacheDrawAverage),

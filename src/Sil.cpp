@@ -23,14 +23,12 @@
 namespace {
 
 std::atomic<uint32_t> gSilDebugInstanceCounter {1u};
-constexpr int kSilPerfMeasureDivision = 17;
 
 } // namespace
 
 struct Sil : Module {
 	ModuleTeardownTimer teardownTimer {"Sil"};
 	debug_terminal::BaselineModuleMetrics debugMetrics;
-	dsp::ClockDivider perfMeasureDivider;
 	std::atomic<uint64_t> perfLatestProcessNs {0u};
 	struct Biquad {
 		float b0 = 1.f;
@@ -1120,7 +1118,6 @@ struct Sil : Module {
 
 	Sil() {
 		debugMetrics.assignInstanceId(gSilDebugInstanceCounter);
-		perfMeasureDivider.setDivision(kSilPerfMeasureDivision);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
 		configSwitch(REPAIR_ENABLED_PARAM, 0.f, 1.f, 1.f, "Repair", {"Disabled", "Enabled"});
@@ -1477,7 +1474,7 @@ struct Sil : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
+		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > 0.5f;
 		repairEnabled = params[REPAIR_ENABLED_PARAM].getValue() > 0.5f;
@@ -2901,6 +2898,7 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	SilRenderDebugMetrics renderDebugMetrics;
 	SilUiRefreshCoordinator refreshCoordinator;
 	std::ofstream timingLogFile;
@@ -3237,6 +3235,7 @@ struct SilWidget : ModuleWidget {
 	}
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		const bool measurePerf = isDragonKingDebugEnabled();
 		if (!measurePerf && timingLogActive) {
 			stopTimingLog();
@@ -3252,6 +3251,13 @@ struct SilWidget : ModuleWidget {
 			latestStepUs = debug_terminal::elapsedUsSince(stepStart);
 			debugWidgetMetrics.recordStep(latestStepUs);
 		}
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -3278,7 +3284,7 @@ struct SilWidget : ModuleWidget {
 				sil->debugMetrics.instanceId,
 				sil->debugMetrics.consumeProcessRange(),
 				debugWidgetMetrics.consumeStepRange(),
-				debugWidgetMetrics.consumeDrawRange());
+				debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume());
 		}
 	}
 

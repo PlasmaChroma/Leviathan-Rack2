@@ -11,8 +11,9 @@
 
 Plugin* pluginInstance = nullptr;
 
+bool testDragonKingDebugEnabled = false;
 bool isDragonKingDebugEnabled() {
-	return false;
+	return testDragonKingDebugEnabled;
 }
 
 static bool previewOptionsEnabled = true;
@@ -478,7 +479,13 @@ TestResult bandlimitedMultiRateTraceSatisfiesContract() {
 
 } // namespace
 
+#include "full_process_timing.hpp"
+
 int main() {
+	{
+		Proc timedModule;
+		if (!verifyFullProcessTiming(timedModule, timedModule.debugMetrics.processAverage, testDragonKingDebugEnabled)) return 1;
+	}
 	const std::vector<TestResult> results {
 		releasedSchemaIsStable(),
 		persistedSettingsRoundTrip(),

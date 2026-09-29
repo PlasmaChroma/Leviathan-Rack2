@@ -37,6 +37,33 @@ class TimingDisplayTests(unittest.TestCase):
                 self.assertIn("Timing = " + mode, output.getvalue())
             view.handle_key(render.KEY_AVERAGE)
 
+    def test_separate_draw_layer_column_in_range_and_average_views(self):
+        state = DebugState()
+        event = dict(plugin="Leviathan", module="Chimera", instance="1", stream="ui", ts=0)
+        keys = ("process_us", "step_us", "draw_us", "draw_layer_us")
+        labels = ("Process", "Step", "Draw", "DL")
+        state.ingest_event(dict(event, kind="schema", data={"columns": [
+            {"key": key, "label": label + " (us)"} for key, label in zip(keys, labels)]}))
+        data = {"process_us": "1.00-2.00", "process_us_avg": 1.5,
+                "step_us": "3.00-4.00", "step_us_avg": 3.5,
+                "draw_us": "11.00-19.00", "draw_us_avg": 14.0,
+                "draw_layer_us": "4.00-10.00", "draw_layer_us_avg": 7.0}
+        state.ingest_event(dict(event, kind="metric", data=data))
+        view = render.ModuleViewState()
+        for expected in (("11.00-19.00", "4.00-10.00"), ("14.00", "7.00")):
+            plain = render.build_plain_text(state.snapshot(), "localhost", 8765, view)
+            self.assertIn("DL", plain)
+            for value in expected:
+                self.assertIn(value, plain)
+            if render.Console is not None:
+                output = io.StringIO()
+                render.Console(file=output, width=180).print(
+                    render.build_table(state.snapshot(), "localhost", 8765, view))
+                self.assertIn("DL", output.getvalue())
+                for value in expected:
+                    self.assertIn(value, output.getvalue())
+            view.handle_key(render.KEY_AVERAGE)
+
     def test_windows_keys(self):
         keyboard = Mock()
         keyboard.kbhit.return_value = True

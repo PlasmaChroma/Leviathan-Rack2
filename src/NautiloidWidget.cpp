@@ -2218,6 +2218,7 @@ struct NautiloidLocationValidLight final : SmallAperture<GreenApertureLight> {
 
 struct NautiloidWidget final : ModuleWidget {
   debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+  debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 
   explicit NautiloidWidget(Nautiloid* module) {
     setModule(module);
@@ -2377,6 +2378,7 @@ struct NautiloidWidget final : ModuleWidget {
   }
 
   void step() override {
+    drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
     const bool measurePerf = isDragonKingDebugEnabled();
     const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
     if (Nautiloid* naut = static_cast<Nautiloid*>(module)) {
@@ -2387,6 +2389,13 @@ struct NautiloidWidget final : ModuleWidget {
     if (measurePerf) {
       debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
     }
+  }
+
+  void drawLayer(const DrawArgs& args, int layer) override {
+    const bool measurePerf = drawLayerTiming.enabled;
+    const auto start = debug_terminal::debugTimerStart(measurePerf);
+    ModuleWidget::drawLayer(args, layer);
+    if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
   }
 
   void draw(const DrawArgs& args) override {
@@ -2406,7 +2415,7 @@ struct NautiloidWidget final : ModuleWidget {
           naut->debugMetrics.instanceId,
           naut->debugMetrics.consumeProcessRange(),
           debugWidgetMetrics.consumeStepRange(),
-          debugWidgetMetrics.consumeDrawRange());
+          debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume());
       }
     }
   }

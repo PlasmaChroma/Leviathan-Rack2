@@ -2691,9 +2691,11 @@ struct SibylVoicingMenuButton final : TL1105 {
 
 struct SibylWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	SibylOracleDisplay* oracleDisplay = nullptr;
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
@@ -2703,6 +2705,13 @@ struct SibylWidget : ModuleWidget {
 #endif
 		if (measurePerf)
 			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -2727,7 +2736,7 @@ struct SibylWidget : ModuleWidget {
 				processStats.meanUs,
 				processStats.samples,
 				debugWidgetMetrics.consumeStepRange(),
-				debugWidgetMetrics.consumeDrawRange(),
+				debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume(),
 				oracleDisplay ? oracleDisplay->snapshotUsRange.consume() : debug_terminal::TimingRangeUs(),
 				oracleDisplay ? oracleDisplay->oracleUsRange.consume() : debug_terminal::TimingRangeUs(),
 				oracleDisplay ? oracleDisplay->latestNvgPathOps : 0);

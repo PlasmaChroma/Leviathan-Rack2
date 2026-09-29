@@ -4,8 +4,9 @@
 #include <cmath>
 #include <iostream>
 
+bool testDragonKingDebugEnabled = false;
 bool isDragonKingDebugEnabled() {
-	return false;
+	return testDragonKingDebugEnabled;
 }
 
 bool isModuleTeardownLoggingEnabled() {
@@ -252,7 +253,13 @@ bool hotPathSineLutPreservesFoldAndSlither() {
 
 } // namespace
 
+#include "full_process_timing.hpp"
+
 int main() {
+	{
+		Wyrm timedModule;
+		if (!verifyFullProcessTiming(timedModule, timedModule.perfAudioProcessAverage, testDragonKingDebugEnabled)) return 1;
+	}
 	const bool oneShot = oneShotTraversesAndReturnsToZero();
 	const bool retrigger = fallingThenRisingEdgeRetriggers();
 	const bool polyphony = polyphonicTriggersRemainIndependent();

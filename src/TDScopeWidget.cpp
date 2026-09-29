@@ -1,3 +1,4 @@
+#include "DebugTerminalMetrics.hpp"
 #include "TDScope.hpp"
 #include "visual/VisualAssets.hpp"
 
@@ -153,6 +154,7 @@ struct TDScopeWidget : ModuleWidget {
   math::Rect scopeRectPx;
   debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
   debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+  debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 
   bool isPairedToTemporalDeck() const {
     TDScope *scopeModule = static_cast<TDScope *>(module);
@@ -233,6 +235,7 @@ struct TDScopeWidget : ModuleWidget {
   }
 
   void step() override {
+    drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
     using PerfClock = std::chrono::steady_clock;
     const bool measurePerf = isDragonKingDebugEnabled();
     const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -273,6 +276,13 @@ struct TDScopeWidget : ModuleWidget {
       scopeModule->uiDebugModuleUiStepUsEma.store(std::max(0.f, emaStepUs), std::memory_order_relaxed);
       uiStepUsRange.add(stepUs);
     }
+  }
+
+  void drawLayer(const DrawArgs& args, int layer) override {
+    const bool measurePerf = drawLayerTiming.enabled;
+    const auto start = debug_terminal::debugTimerStart(measurePerf);
+    ModuleWidget::drawLayer(args, layer);
+    if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
   }
 
   void draw(const DrawArgs &args) override {
@@ -330,7 +340,7 @@ struct TDScopeWidget : ModuleWidget {
                                                debug_terminal::consumeAudioProcessTiming(scopeModule->perfAudioProcessMinNs,
                                                                                          scopeModule->perfAudioProcessMaxNs, &scopeModule->perfAudioProcessAverage),
                                                uiStepUsRange.consume(),
-                                               uiDrawUsRange.consume(),
+                                               uiDrawUsRange.consume(), drawLayerTiming.consume(),
                                                densityRows,
                                                densityPct,
                                                rackZoom,

@@ -199,7 +199,6 @@ struct Proc : Module {
 	std::atomic<int> previewPhosphorStrength {1};
 	std::atomic<bool> previewPhosphorAdditive {true};
 	debug_terminal::BaselineModuleMetrics debugMetrics;
-	uint32_t perfAudioSampleCounter = 0u;
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -1077,7 +1076,7 @@ struct Proc : Module {
 
 	void process(const ProcessArgs& args) override {
 		const bool debugEnabled = isDragonKingDebugEnabled();
-		const bool measurePerf = debugEnabled && ((perfAudioSampleCounter++ & 63u) == 0u);
+		const bool measurePerf = debugEnabled;
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
@@ -1768,15 +1767,24 @@ struct ProcEdgeHalo2Knob : LeviathanHaloKnob2 {
 
 struct ProcWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
 	ProcPreviewEdgeInteraction previewEdgeInteraction;
 
 	void step() override {
+		drawLayerTiming.beginCycle(module && isDragonKingDebugEnabled());
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
 		if (measurePerf) {
 			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
 		}
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		const bool measurePerf = drawLayerTiming.enabled;
+		const auto start = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::drawLayer(args, layer);
+		if (measurePerf) drawLayerTiming.add(debug_terminal::elapsedUsSince(start));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1804,7 +1812,7 @@ struct ProcWidget : ModuleWidget {
 					proc->debugMetrics.instanceId,
 					proc->debugMetrics.consumeProcessRange(),
 					debugWidgetMetrics.consumeStepRange(),
-					debugWidgetMetrics.consumeDrawRange()
+					debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume()
 				);
 			}
 		}

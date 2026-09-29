@@ -418,7 +418,7 @@ static void appendRange(char *buf, size_t size, const char *key, TimingRangeUs r
 void submitTDScopeUiMetrics(uint32_t instanceId,
                             TimingRangeUs processUs,
                             TimingRangeUs stepUs,
-                            TimingRangeUs drawUs,
+                            TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -427,7 +427,7 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             uint64_t drawSeq,
                             uint64_t drawCalls) {
   submitUiMetricSchema("TDScope",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw Seq\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw Seq\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -441,6 +441,8 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
@@ -458,12 +460,12 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  TimingRangeUs processUs,
                                  TimingRangeUs stepUs,
-                                 TimingRangeUs drawUs,
+                                 TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
   submitUiMetricSchema("TemporalDeck",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -477,6 +479,8 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
@@ -506,7 +510,7 @@ void submitCrownstepAiMetrics(uint32_t instanceId, int aiThinkMs) {
 void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs,
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                            bool renderOpengl,
                            float curvePrepUs,
                            float overlayPrepUs,
@@ -514,7 +518,7 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float workerSubmitUs,
                            float conduitDrawUs) {
   submitUiMetricSchema("Bifurx",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"},{\"key\":\"conduit_draw_us\",\"label\":\"Conduit (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"},{\"key\":\"conduit_draw_us\",\"label\":\"Conduit (us)\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -528,6 +532,8 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"surface_render_us\":%.3f,\"worker_submit_us\":%.3f,\"conduit_draw_us\":%.3f}",
@@ -544,7 +550,7 @@ void submitBifurxUiMetrics(uint32_t instanceId,
 void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs,
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                        TimingRangeUs editorStepUs,
                        TimingRangeUs cachedEditorUs,
                        TimingRangeUs overlayUs,
@@ -558,7 +564,7 @@ void submitWyrmMetrics(uint32_t instanceId,
                        int fixedSurfaceHeight,
                        uint64_t fixedSurfaceGeneration) {
   submitUiMetricSchema("Wyrm",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"editor_step_us\",\"label\":\"Ed Step (us)\"},{\"key\":\"cached_editor_us\",\"label\":\"Cache (us)\"},{\"key\":\"overlay_us\",\"label\":\"Overlay (us)\"},{\"key\":\"ed_us\",\"label\":\"CL.us\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"},{\"key\":\"fixed_surface\",\"label\":\"Fixed\"},{\"key\":\"surface_w\",\"label\":\"Surf W\"},{\"key\":\"surface_h\",\"label\":\"Surf H\"},{\"key\":\"surface_gen\",\"label\":\"Gen\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"editor_step_us\",\"label\":\"Ed Step (us)\"},{\"key\":\"cached_editor_us\",\"label\":\"Cache (us)\"},{\"key\":\"overlay_us\",\"label\":\"Overlay (us)\"},{\"key\":\"ed_us\",\"label\":\"CL.us\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"},{\"key\":\"fixed_surface\",\"label\":\"Fixed\"},{\"key\":\"surface_w\",\"label\":\"Surf W\"},{\"key\":\"surface_h\",\"label\":\"Surf H\"},{\"key\":\"surface_gen\",\"label\":\"Gen\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -572,6 +578,8 @@ void submitWyrmMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
@@ -603,12 +611,12 @@ void submitWyrmMetrics(uint32_t instanceId,
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
                                TimingRangeUs stepUs,
-                               TimingRangeUs drawUs,
+                               TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                                TimingRangeUs apertureUs,
                                float gearUs,
                                float eclipseUs) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -622,6 +630,8 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
@@ -639,10 +649,10 @@ void submitBaselineMetrics(const char* moduleName,
                            uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs) {
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs) {
   const char* safeModuleName = moduleName ? moduleName : "";
   submitUiMetricSchema(safeModuleName,
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -656,6 +666,8 @@ void submitBaselineMetrics(const char* moduleName,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 "}");
@@ -664,17 +676,17 @@ void submitBaselineMetrics(const char* moduleName,
 }
 
 void submitChimeraUiMetrics(uint32_t instanceId,
-                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs,
+                            TimingRangeUs processUs, TimingRangeUs stepUs, TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                             TimingRangeUs cacheUs, TimingRangeUs liveUs, TimingRangeUs lightUs,
                             TimingRangeUs glStepUs, unsigned cacheRenders) {
   submitUiMetricSchema("Chimera",
-      "[{\"key\":\"process_us\",\"label\":\"Process (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},"
+      "[{\"key\":\"process_us\",\"label\":\"Process (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},"
       "{\"key\":\"cache_us\",\"label\":\"Display cache (us)\"},{\"key\":\"live_us\",\"label\":\"Live UI (us)\"},{\"key\":\"light_us\",\"label\":\"Light pass (us)\"},"
       "{\"key\":\"gl_step_us\",\"label\":\"GL in step (us)\"},{\"key\":\"cache_renders\",\"label\":\"Cache renders\"}]");
   char dataBuf[4096] = "{";
-  const char* keys[] = {"process_us", "step_us", "draw_us", "cache_us", "live_us", "light_us", "gl_step_us"};
-  const TimingRangeUs ranges[] = {processUs, stepUs, drawUs, cacheUs, liveUs, lightUs, glStepUs};
-  for (unsigned i = 0; i < 7; ++i) {
+  const char* keys[] = {"process_us", "step_us", "draw_us", "draw_layer_us", "cache_us", "live_us", "light_us", "gl_step_us"};
+  const TimingRangeUs ranges[] = {processUs, stepUs, drawUs, drawLayerUs, cacheUs, liveUs, lightUs, glStepUs};
+  for (unsigned i = 0; i < sizeof(ranges) / sizeof(ranges[0]); ++i) {
     if (i) std::strcat(dataBuf, ",");
     appendRange(dataBuf, sizeof(dataBuf), keys[i], ranges[i]);
   }
@@ -689,12 +701,12 @@ void submitSibylMetrics(uint32_t instanceId,
                         float processMeanUs,
                         uint64_t processSamples,
                         TimingRangeUs stepUs,
-                        TimingRangeUs drawUs,
+                        TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                         TimingRangeUs snapshotUs,
                         TimingRangeUs oracleUs,
                         int nvgPathOps) {
   submitUiMetricSchema("Sibyl",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"snapshot_us\",\"label\":\"Snap (us)\"},{\"key\":\"oracle_us\",\"label\":\"Oracle (us)\"},{\"key\":\"nvg_path_ops\",\"label\":\"NVG Paths\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"snapshot_us\",\"label\":\"Snap (us)\"},{\"key\":\"oracle_us\",\"label\":\"Oracle (us)\"},{\"key\":\"nvg_path_ops\",\"label\":\"NVG Paths\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf, sizeof(dataBuf), "{");
   appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
@@ -702,6 +714,8 @@ void submitSibylMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
   appendRange(dataBuf, sizeof(dataBuf), "snapshot_us", snapshotUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
@@ -721,28 +735,28 @@ std::string latestMetricsJson(int64_t rackModuleId) {
 void submitProcMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs) {
-  submitBaselineMetrics("Proc", instanceId, processUs, stepUs, drawUs);
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs) {
+  submitBaselineMetrics("Proc", instanceId, processUs, stepUs, drawUs, drawLayerUs);
 }
 
 void submitUndertowMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs) {
-  submitBaselineMetrics("Undertow", instanceId, processUs, stepUs, drawUs);
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs) {
+  submitBaselineMetrics("Undertow", instanceId, processUs, stepUs, drawUs, drawLayerUs);
 }
 
 void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
-                       TimingRangeUs drawUs) {
-  submitBaselineMetrics("Iris", instanceId, processUs, stepUs, drawUs);
+                       TimingRangeUs drawUs, TimingRangeUs drawLayerUs) {
+  submitBaselineMetrics("Iris", instanceId, processUs, stepUs, drawUs, drawLayerUs);
 }
 
 void submitDoorstopMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
-                           TimingRangeUs drawUs,
+                           TimingRangeUs drawUs, TimingRangeUs drawLayerUs,
                            TimingRangeUs geometryIdleUs,
                            TimingRangeUs geometryTrailUs,
                            TimingRangeUs panelIdleUs,
@@ -751,7 +765,7 @@ void submitDoorstopMetrics(uint32_t instanceId,
                            TimingRangeUs overflowTrailUs,
                            bool trailsActive) {
   submitUiMetricSchema("Doorstop",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"geometry_idle_us\",\"label\":\"Geo I (us)\"},{\"key\":\"geometry_trail_us\",\"label\":\"Geo T (us)\"},{\"key\":\"panel_idle_us\",\"label\":\"Panel I (us)\"},{\"key\":\"panel_trail_us\",\"label\":\"Panel T (us)\"},{\"key\":\"overflow_idle_us\",\"label\":\"Over I (us)\"},{\"key\":\"overflow_trail_us\",\"label\":\"Over T (us)\"},{\"key\":\"trails_active\",\"label\":\"Trails\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"draw_layer_us\",\"label\":\"DL (us)\"},{\"key\":\"geometry_idle_us\",\"label\":\"Geo I (us)\"},{\"key\":\"geometry_trail_us\",\"label\":\"Geo T (us)\"},{\"key\":\"panel_idle_us\",\"label\":\"Panel I (us)\"},{\"key\":\"panel_trail_us\",\"label\":\"Panel T (us)\"},{\"key\":\"overflow_idle_us\",\"label\":\"Over I (us)\"},{\"key\":\"overflow_trail_us\",\"label\":\"Over T (us)\"},{\"key\":\"trails_active\",\"label\":\"Trails\"}]");
   char dataBuf[2048];
   std::snprintf(dataBuf, sizeof(dataBuf), "{");
   appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
@@ -759,6 +773,8 @@ void submitDoorstopMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::strcat(dataBuf, ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_layer_us", drawLayerUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
   appendRange(dataBuf, sizeof(dataBuf), "geometry_idle_us", geometryIdleUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");

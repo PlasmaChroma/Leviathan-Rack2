@@ -2257,6 +2257,7 @@ struct ChimeraRatioField : ui::TextField {
 
 struct ChimeraWidget : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+    debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
     chimera::RenderFrameMetrics renderMetrics;
     debug_terminal::UiTimingRangeAccumulator cacheRange, liveRange, lightRange, glStepRange;
     unsigned cacheRenders = 0;
@@ -2396,9 +2397,12 @@ struct ChimeraWidget : ModuleWidget {
     }
     void step() override {
         const bool measurePerf = isDragonKingDebugEnabled();
+        const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+        drawLayerTiming.beginCycle(module && measurePerf);
         Chimera* m = dynamic_cast<Chimera*>(module);
+        // Finalize the preceding frame using only normal draw() timings.
         if (measurePerf && renderMetrics.enabled && renderMetrics.drew) {
-            debugWidgetMetrics.recordDraw(renderMetrics.totalDrawUs());
+            debugWidgetMetrics.recordDraw(renderMetrics.drawUs);
             cacheRange.add(renderMetrics.cacheUs);
             liveRange.add(renderMetrics.liveUs);
             lightRange.add(renderMetrics.lightUs);
@@ -2408,14 +2412,13 @@ struct ChimeraWidget : ModuleWidget {
                     system::getTime())) {
                 debug_terminal::submitChimeraUiMetrics(m->debugMetrics.instanceId,
                     m->debugMetrics.consumeProcessRange(), debugWidgetMetrics.consumeStepRange(),
-                    debugWidgetMetrics.consumeDrawRange(), cacheRange.consume(), liveRange.consume(),
+                    debugWidgetMetrics.consumeDrawRange(), drawLayerTiming.consume(), cacheRange.consume(), liveRange.consume(),
                     lightRange.consume(), glStepRange.consume(), cacheRenders);
                 cacheRenders = 0;
             }
         }
         renderMetrics = chimera::RenderFrameMetrics{};
         renderMetrics.enabled = measurePerf && m;
-        const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
         displayOverlay->owner = m;
         reels->owner = m;
         vuMeters[0]->owner = vuMeters[1]->owner = m;
@@ -2453,6 +2456,7 @@ struct ChimeraWidget : ModuleWidget {
             visual_assets::ScopedHaloKnob2Metrics scope(haloMetrics);
             ModuleWidget::step();
         }
+        // Child GL work executes inside step(): report its subset separately.
         renderMetrics.glStepUs = float(haloMetrics.stepSurfaceNs) * 0.001f;
         if (measurePerf)
             debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
@@ -2470,7 +2474,11 @@ struct ChimeraWidget : ModuleWidget {
         const bool measurePerf = renderMetrics.enabled;
         const auto start = debug_terminal::debugTimerStart(measurePerf);
         ModuleWidget::drawLayer(args, layer);
-        if (measurePerf) renderMetrics.addDraw(debug_terminal::elapsedUsSince(start), layer);
+        if (measurePerf) {
+            const float elapsedUs = debug_terminal::elapsedUsSince(start);
+            drawLayerTiming.add(elapsedUs);
+            renderMetrics.addLayer(elapsedUs, layer);
+        }
     }
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);
