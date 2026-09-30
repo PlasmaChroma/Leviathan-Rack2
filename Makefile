@@ -15,6 +15,7 @@ SOURCES += $(wildcard src/*.cpp)
 SOURCES += $(wildcard src/visual/*.cpp)
 SOURCES += src/render/HostStrokeBridge.cpp
 SOURCES += $(wildcard src/theme/*.cpp)
+SOURCES += $(wildcard src/vessel/*.cpp)
 SOURCES += $(wildcard src/doom/*.c)
 
 
@@ -67,8 +68,11 @@ FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
 # its deterministic boundary calculations.
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/src/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+# Vessel's reference mechanics rely on finite checks and the energy ledger.
+build/src/vessel/ModalBank.cpp.o build/src/vessel/StrikeContact.cpp.o build/src/vessel/VesselEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/vessel_engine_spec \
 	build/tests/debug_terminal_timing_spec \
 	build/tests/review_state_handoff_spec \
 	build/tests/halo_metrics_scope_spec \
@@ -438,6 +442,21 @@ CROWNSTEP_MODULE_SOURCES := \
 
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
 .PHONY: test-spsc-snapshot-tsan
+
+VESSEL_SOURCES := src/vessel/ModalBank.cpp src/vessel/StrikeContact.cpp src/vessel/VesselEngine.cpp
+VESSEL_HEADERS := $(wildcard src/vessel/*.hpp)
+.PHONY: test-vessel generate-vessel-profiles check-vessel-profiles
+generate-vessel-profiles:
+	python3 tools/vessel/generate_profiles.py
+check-vessel-profiles:
+	python3 tools/vessel/generate_profiles.py --check
+build/tests/vessel_engine_spec: tests/vessel_engine_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+test-vessel: check-vessel-profiles build/tests/vessel_engine_spec
+	$(call run_test_bin,build/tests/vessel_engine_spec)
+build/tools/vessel_render: tools/vessel/render.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 test-build: $(TEST_BINS)
 test-build-fast: $(TEST_BINS_NON_RACK) build/tests/adaptive_visual_update_spec
 test-build-rack: $(TEST_BINS_RACK)
@@ -624,6 +643,7 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
+	$(call run_test_bin,build/tests/vessel_engine_spec)
 	$(call run_test_bin,build/tests/octavia_presence_spec)
 	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)
 	$(call run_test_bin,build/tests/debug_terminal_timing_spec)

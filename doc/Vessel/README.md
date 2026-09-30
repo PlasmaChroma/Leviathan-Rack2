@@ -4,6 +4,8 @@ Start with **Vessel_DSP_and_Module_Specification.md**.
 
 The specification defines the proposed physical model, numerical contact loop, Rack interface, stereo and optional binaural behavior, energy display, and implementation/test phases.
 
+The first C++ implementation milestone is now available: modal mechanics, finite-mass strikes, energy accounting, and an offline renderer. See `Implementation_Status.md` for files, native validation, listening commands, and the next friction/Rack gate.
+
 ## Files
 
 - `Vessel_DSP_and_Module_Specification.md`: main handoff, with evidence/provenance distinctions and open calibration work.
@@ -13,6 +15,7 @@ The specification defines the proposed physical model, numerical contact loop, R
 - `Physical_Model_Review.md`: in-depth review, corrections incorporated into draft 0.2, and unresolved physical validation gates.
 - `vessel_review_checks.py`: additional mechanical-response, local-onset, and passive-trajectory diagnostics.
 - `review_check_results.json`: reproducible review diagnostic results; not a singing/audio certification.
+- `Implementation_Status.md`: current C++ implementation progress, validation evidence, and render commands.
 
 ## Run the checks
 
@@ -26,4 +29,4 @@ The checker writes its result JSON next to the script. Small floating-point diff
 
 ## Implementation boundary
 
-This package is a specification and numerical design check, not a finished VCV Rack module. It has not been auditioned as an instrument, fitted to crystal recordings, or benchmarked for real-time use. Implement the standalone DSP harness before panel artwork or optional binaural work.
+The standalone strike engine and render harness are implemented. Complete the moving friction/coupled-contact validation before the Rack panel or optional binaural work. Bowl/mallet calibration and production real-time/aliasing measurements remain open; the crystal seed is still synthetic.

@@ -29,6 +29,8 @@ Unless explicitly identified as R or V, specifications below are **D**. Numerica
 
 **Do not replace missing calibration with fabricated measurements.** Preserve provenance at the individual descriptor-field level.
 
+**Implementation progress (2026-09-30):** the standalone C++ modal bank, finite-mass strike engine, impact/event ledger, and offline renderer are now implemented. `Implementation_Status.md` records native test/build evidence and the remaining friction, calibration, and Rack-integration gates. These results supplement the design oracles; they do not upgrade the synthetic descriptors to measured data.
+
 ---
 
 ## 1. Instrument contract
