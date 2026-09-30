@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#if defined(__SSE2__) && !defined(VESSEL_SCALAR_FIR)
+#include <emmintrin.h>
+#endif
 
 namespace vessel {
 StereoDecimator::StereoDecimator() noexcept {
@@ -35,20 +38,34 @@ double StereoDecimator::coefficient(unsigned tap) const noexcept {
 }
 bool StereoDecimator::pushStage(Stage& stage, const StereoSample& input, StereoSample& output) noexcept {
     stage.history[stage.position] = input;
+    stage.history[stage.position+taps] = input;
     const unsigned newest = stage.position;
     if (++stage.position == taps) stage.position = 0;
     stage.phase ^= 1;
     if (stage.phase) return false;
-    output = {};
-    unsigned a = newest, b = stage.position;
+    const StereoSample* newer = stage.history.data()+newest+taps;
+    const StereoSample* older = stage.history.data()+newest+1;
+#if defined(__SSE2__) && !defined(VESSEL_SCALAR_FIR)
+    static_assert(sizeof(StereoSample) == 2*sizeof(double)
+        && offsetof(StereoSample, right) == sizeof(double), "packed stereo FIR lanes");
+    __m128d sum = _mm_setzero_pd();
     for (unsigned i = 0; i < (taps-1)/2; ++i) {
-        output.left += coefficients_[i]*(stage.history[a].left+stage.history[b].left);
-        output.right += coefficients_[i]*(stage.history[a].right+stage.history[b].right);
-        a = a == 0 ? taps-1 : a-1;
-        if (++b == taps) b = 0;
+        const __m128d pair = _mm_add_pd(_mm_loadu_pd(&newer->left), _mm_loadu_pd(&older->left));
+        sum = _mm_add_pd(sum, _mm_mul_pd(_mm_set1_pd(coefficients_[i]), pair));
+        --newer; ++older;
     }
-    output.left += coefficients_.back()*stage.history[a].left;
-    output.right += coefficients_.back()*stage.history[a].right;
+    sum = _mm_add_pd(sum, _mm_mul_pd(_mm_set1_pd(coefficients_.back()), _mm_loadu_pd(&newer->left)));
+    _mm_storeu_pd(&output.left, sum);
+#else
+    output = {};
+    for (unsigned i = 0; i < (taps-1)/2; ++i) {
+        output.left += coefficients_[i]*(newer->left+older->left);
+        output.right += coefficients_[i]*(newer->right+older->right);
+        --newer; ++older;
+    }
+    output.left += coefficients_.back()*newer->left;
+    output.right += coefficients_.back()*newer->right;
+#endif
     return true;
 }
 bool StereoDecimator::push(const StereoSample& input, StereoSample& output) noexcept {
@@ -70,16 +87,26 @@ unsigned HostRateAdapter::factorForRate(double rate) noexcept {
 }
 bool HostRateAdapter::configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
                                 const EngineSettings& settings, double rate) noexcept {
-    const unsigned factor = factorForRate(rate);
-    if (!factor || !engine_.configure(bowl, mallet, settings, rate*factor)) return false;
+    PreparedConfiguration next;
+    if (!prepareConfiguration(bowl, mallet, settings, rate, next)) return false;
+    applyConfiguration(bowl, mallet, settings, rate, next);
+    return true;
+}
+bool HostRateAdapter::prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+    const EngineSettings& settings, double rate, PreparedConfiguration& next) const noexcept {
+    next.factor = factorForRate(rate);
+    return next.factor && engine_.prepareConfiguration(bowl, mallet, settings, rate*next.factor, next.engine);
+}
+void HostRateAdapter::applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+    const EngineSettings& settings, double rate, const PreparedConfiguration& next) noexcept {
+    engine_.applyConfiguration(bowl, mallet, settings, next.engine);
     if (rate != hostRate_) {
-        decimator_.configure(factor);
+        decimator_.configure(next.factor);
         transitionGain_ = hostRate_ > 0.0 ? 0.0 : 1.0;
         transitionFrom_ = lastOutput_;
         transitionIncrement_ = 1.0/(0.005*rate);
         hostRate_ = rate;
     }
-    return true;
 }
 void HostRateAdapter::reset() noexcept {
     engine_.reset();

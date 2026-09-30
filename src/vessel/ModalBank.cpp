@@ -57,6 +57,13 @@ bool ModalBank::configure(const BowlDescriptor& bowl, double frequency, double d
         }
     }
     coefficients_ = next;
+    for (std::size_t j = 0; j < bowl.pairCount*2; ++j) {
+        hotA_[j] = next[j].a;
+        hotInverseD_[j] = next[j].inverseD;
+        hotWeight_[j] = next[j].admittanceWeight;
+        hotOmega_[j] = next[j].omega;
+        hotSigma_[j] = next[j].sigma;
+    }
     pairs_ = bowl.pairs;
     count_ = 2*bowl.pairCount;
     h_ = h;
@@ -79,47 +86,6 @@ bool ModalBank::finite() const noexcept {
     for (std::size_t j = 0; j < count_; ++j)
         if (!std::isfinite(states_[j].x) || !std::isfinite(states_[j].y)) return false;
     return true;
-}
-ModalVector ModalBank::freeMidpoint() const noexcept {
-    ModalVector free {};
-    for (std::size_t j = 0; j < count_; ++j)
-        free[j] = (states_[j].y - coefficients_[j].a*states_[j].x)*coefficients_[j].inverseD;
-    return free;
-}
-double ModalBank::velocity(const ModalVector& port) const noexcept {
-    double v = 0.0;
-    for (std::size_t j = 0; j < count_; ++j) v += port[j]*states_[j].y;
-    return v;
-}
-double ModalBank::midpointVelocity(const ModalVector& port, const ModalVector& free) const noexcept {
-    double v = 0.0;
-    for (std::size_t j = 0; j < count_; ++j) v += port[j]*free[j];
-    return v;
-}
-double ModalBank::admittance(const ModalVector& a, const ModalVector& b) const noexcept {
-    double y = 0.0;
-    for (std::size_t j = 0; j < count_; ++j) y += a[j]*b[j]*coefficients_[j].admittanceWeight;
-    return y;
-}
-ModalStepAudit ModalBank::commit(const ModalVector& free, const ModalVector& force, bool audit) noexcept {
-    ModalStepAudit result;
-    if (audit) result.energyBefore = energy();
-    for (std::size_t j = 0; j < count_; ++j) {
-        const auto& c = coefficients_[j];
-        auto& s = states_[j];
-        const double mid = free[j] + c.admittanceWeight*force[j];
-        s.x += h_*c.omega*mid;
-        s.y = 2.0*mid - s.y;
-        if (audit) {
-            result.work += h_*force[j]*mid;
-            result.dampingLoss += 2.0*h_*c.sigma*mid*mid;
-        }
-    }
-    if (audit) {
-        result.energyAfter = energy();
-        result.residual = result.energyAfter-result.energyBefore-result.work+result.dampingLoss;
-    }
-    return result;
 }
 ModalVector ModalBank::radialPort(double angle, double width, bool inward) const noexcept {
     ModalVector b {};

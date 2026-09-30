@@ -22,7 +22,9 @@ public:
     double coefficient(unsigned tap) const noexcept;
 private:
     struct Stage {
-        std::array<StereoSample, taps> history {};
+        // Mirrored ring gives contiguous symmetric reads without inner-loop
+        // wrap branches. Extra fixed storage trades memory for callback time.
+        std::array<StereoSample, 2*taps> history {};
         unsigned position = 0, phase = 0;
     };
     std::array<double, (taps+1)/2> coefficients_ {};
@@ -60,6 +62,15 @@ public:
     double latencySeconds() const noexcept { return hostRate_ > 0 ? decimator_.latencyHostSamples()/hostRate_ : 0.0; }
     static unsigned factorForRate(double hostRate) noexcept;
 private:
+    friend class DualBowlAdapter;
+    struct PreparedConfiguration {
+        VesselEngine::PreparedConfiguration engine;
+        unsigned factor = 0;
+    };
+    bool prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+        const EngineSettings& settings, double rate, PreparedConfiguration& next) const noexcept;
+    void applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+        const EngineSettings& settings, double rate, const PreparedConfiguration& next) noexcept;
     VesselEngine engine_;
     StereoDecimator decimator_;
     double hostRate_ = 0.0;

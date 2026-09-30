@@ -29,7 +29,7 @@ Unless explicitly identified as R or V, specifications below are **D**. Numerica
 
 **Do not replace missing calibration with fabricated measurements.** Preserve provenance at the individual descriptor-field level.
 
-**Implementation progress (2026-09-30):** the standalone C++ modal bank, finite-mass strikes, moving friction, coupled strike/rub solver, event/drive/loss ledger, optional prescribed radial-load experiment, and offline render/characterization tools are now implemented. `Implementation_Status.md` records native Windows strike evidence, thirteen passing Linux test groups, 51 limited contact-characterization runs, and the remaining calibration, mechanical convergence and Rack-integration gates. Default Metal/Suede starts from rest and develops a bounded several-rotation response; other profiles have materially different onset behavior. These results supplement the design oracles; they do not upgrade the synthetic descriptors to measured data.
+**Implementation progress (2026-09-30):** the standalone C++ modal bank, finite-mass strikes, moving friction, coupled strike/rub solver, event/drive/loss ledger, optional prescribed radial-load experiment, and offline render/characterization tools are now implemented. `Implementation_Status.md` records native Windows strike evidence, 26 passing Linux test groups, 51 limited contact-characterization runs, and a registered 16 HP Rack prototype with tuning/CV, controls, mean-energy display, settings serialization and the scalar dual-bowl tuning reference. The remaining calibration, mechanical convergence, live Rack/Windows integration and performance gates are recorded there. Default Metal/Suede starts from rest and develops a bounded several-rotation response; other profiles have materially different onset behavior. These results supplement the design oracles; they do not upgrade the synthetic descriptors to measured data.
 
 ---
 
@@ -802,39 +802,21 @@ Do not multiply the observation shapes by the mallet patch factor. Radiation is 
 
 Set observer center to 20° and maximum separation initially to 30°. WIDTH moves symmetrically between coincident and separated observers. Keep the default strike angle at 22.5° relative to the nominal bowl orientation so it does not intentionally excite only one member of the lowest pair.
 
-At WIDTH=0, L and R must null after subtraction to numerical tolerance. Stereo does not use independent per-ear modal detuning, separate friction noise, or reverb. Width changes only observation coefficients.
+For a single bowl, WIDTH=0 makes both observer readouts identical. While both bowls are active, output subtraction nulls only when the mechanical states are also identical. Once zero separation has folded to one bowl, WIDTH=0 again nulls both outputs regardless of the discarded bowl history. WIDTH changes only observation coefficients; it does not mix, detune or resynchronize the two bowls.
 
 When only L is connected, provide a documented L/MONO result. Initial policy: `(L+R)/2` after the selected stereo renderer. Preserve the normal stereo signals when both are connected. Cancellation in a spatial or binaural sum is possible and is not “fixed” by energy normalization. Meter physical energy independently.
 
-### 13.2 Binaural beats: explicit post-processing, default off
+### 13.2 Binaural tuning: two independent physical bowls
 
-For this draft, “binaural” means an optional controlled interaural frequency difference, not a spatialized room simulation. Put true HRTF rendering in a separate future feature.
+The user-selected reference architecture supersedes the earlier analytic frequency-shifter proposal. BINAURAL is a **0–33 Hz difference between the lowest modal-pair centers**, default zero. For center frequency `f_c` and requested difference `Δ`, configure two complete independent bowl/contact simulations at `f_L = f_c − Δ/2` and `f_R = f_c + Δ/2`. Both receive the same strike events, velocity, rotation, pressure, specimen, mallet, decay and imperfection controls. Each interaction responds to its own bowl; there is no shared prescribed force or pitch/frequency-shifted readout.
 
-Do **not** simply detune two resonator readout banks driven by the same sustained force. In a driven linear system, those banks can still respond at the common driving frequency; different natural frequencies do not guarantee the intended interaural offset during continuous rubbing.
+Each bowl retains independent normalized modal state, striker compression/velocity, friction/contact state, energy ledger and causal output-filter history. Equal tuning from identical rest states and identical inputs gives identical mechanics. At settled zero difference, the optimized path crossfades the right output over 50 ms to the surviving lower bowl’s right pickup, then stops the second simulation. Both states run during the fade; the second independent history is discarded after it finishes. On a later nonzero request, copy the surviving bowl’s complete mechanical/contact and stereo filter history, retune the two states independently, and fade the right output back over 50 ms. Interrupted fades reverse continuously without replacing a still-active state. Pass `false` to `DualBowlAdapter` to retain the always-dual scalar reference. The left output takes the left observer of the lower bowl; the right takes the right observer of the upper bowl. WIDTH continues to set observer placement independently of tuning.
 
-Instead construct an analytic signal from a mono observation of the physical bowl:
+Keep both pair centers in the validated 20–2000 Hz engine range by constraining the effective center to `[20 + Δ/2, 2000 − Δ/2]`. This preserves the requested separation at tuning boundaries. The Rack display reports the two actual pair centers. Separation changes use a 10 ms one-pole smoother at the existing approximately 1 kHz coefficient boundary; PITCH keeps its 1.5 ms log smoother.
 
-\[
-z(t)=a(t)+i\,\mathcal H\{a(t)\}.
-\]
+This control specifies structural tuning, not a guaranteed exact difference between dominant sustained spectral peaks: pair imperfection, nonlinear contact response and which split mode dominates can change the measured audible difference. Shared settings do not imply equal instantaneous energy. At full dual mix, display the arithmetic mean of the two physical bowl energies using the existing reference scale. During transitions, use `E_left + 0.5 m (E_right − E_left)`, with `m` the dual-output fade fraction; at single mode this becomes the surviving bowl energy. Separate effective channel energy telemetry remains available for diagnostics. LEVEL and WIDTH remain independent of the mechanics.
 
-For desired ear-to-ear difference `Δ` Hz:
-
-\[
-\dot\psi=\pi\Delta,
-\quad L=\Re\{z e^{-i\psi}\},
-\quad R=\Re\{z e^{+i\psi}\}.
-\]
-
-Each positive-frequency component is translated by `−Δ/2` and `+Δ/2`. This intentionally shifts the spectrum in Hz, rather than scaling all ratios as pitch transposition would. Mechanical motion and its natural beating remain those of the original bowl.
-
-Initial BEAT range is 0–20 Hz, default 4 Hz when enabled. Integrate phase continuously under modulation. Avoid restarting phase at every strike. Limit the allowed shift so significant source components do not cross DC; suppress irrelevant DC/very-low-frequency content before the analytic transform.
-
-Require a verified Hilbert/analytic implementation with matched I/Q delay and at least 60 dB unwanted-sideband rejection over a declared useful passband, initially 40 Hz to `min(18 kHz, 0.40 Fs)`. Choose IIR allpass or FIR implementation only after measuring rejection, transient behavior, latency, and CPU. Do not assume a short, arbitrary Hilbert FIR meets that low-frequency requirement.
-
-Binaural mode uses separated ear signals, with no default crossfeed or unshifted common carrier. Its input is the mono observer; native WIDTH is therefore bypassed explicitly while this mode is selected. Compensate latency before crossfading native and binaural paths. At zero shift, bypass to the latency-matched mono path so approximate quadrature does not change the sound unnecessarily.
-
-This is an optional synthesis effect for headphones. Do not attach claims about health outcomes, entrainment efficacy, or a guaranteed subjective experience. It does not replace the core bowl physics and is not required for the first implementation milestone.
+`DualBowlAdapter` retains a scalar reference built from two complete causal adapters, including transactional pair configuration, and now defaults to the zero-separation single-path optimization. Measure cost and response before SIMD/shared-coefficient optimization; retain independent nonlinear solver state. True HRTF/room rendering remains separate future work. This feature makes no health or entrainment claim.
 
 ---
 
@@ -857,10 +839,11 @@ The following interface is a starting contract. Physical panel width and artwork
 | IMPERFECTION | Pair splitting multiplier 0…2; default 1. |
 | WIDTH | Native stereo observer separation; default 0.7. |
 | LEVEL | Output gain only; no effect on contact or energy. |
-| L/MONO, R | Two audio outputs; one bowl, no automatic polyphony. |
+| BINAURAL ΔHz | Two physical bowl pair centers separated by 0–33 Hz, default 0; symmetric around effective PITCH. |
+| L/MONO, R | Lower-bowl left observer and upper-bowl right observer; no automatic polyphony. The reference preserves these signals regardless of cable state. |
 | ENERGY display | Physical bowl-state energy, not output RMS. |
 
-Context-menu settings may include strike angle, observer azimuth, quality, optional damping, and later binaural enable/rate. Keep material selection on the panel, not only in a menu.
+Context-menu settings may include strike angle, observer azimuth, quality and optional damping. Keep material selection on the panel, not only in a menu.
 
 Use Schmitt behavior with approximately 0.1 V low / 1 V high thresholds for gates (V2). A held strike gate causes one event. Rotation remains active while its gate is high. Negative gate voltages are low; nonfinite values are sanitized.
 
@@ -881,6 +864,8 @@ E_{bowl}=\tfrac12\sum_j(x_j^2+y_j^2),
 \qquad
 E_{dB}=10\log_{10}\left(\frac{E_{bowl}+E_{floor}}{E_{ref}}\right).
 \]
+
+At full dual mix, apply this equation to `E_display = (E_left + E_right)/2`; each energy is computed from its own normalized modal state. During the single/dual fade, use the weighting in §13.2; in single mode report the surviving bowl energy. This preserves the single-bowl scale at unison. The physical pair total while both exist is the sum, not the mean.
 
 Map an initial −60…0 dB range to 0…1, with modest display smoothing, approximately 5 ms attack and 150 ms release. `Eref` is a fixed calibration value per descriptor version, not an auto-normalizer that chases recent maxima. Determine it from reference test renders; no acoustic-loudness equivalence is implied.
 
@@ -926,7 +911,7 @@ Converge **modal bandwidth and time step independently**. More oversampling does
 
 Use a measured anti-alias decimator with declared passband, stopband, and latency. Compare complete nonlinear renders against a higher-rate reference. Stable time integration alone does not guarantee low aliasing.
 
-**Prototype progress (2026-09-30):** `HostRateAdapter` implements the stated factor policy for 32–192 kHz host rates and causal stereo decimation. Its thirteen mechanical plus three host-adapter test groups pass on Linux; output-filter response and fractional host-tagged latency are measured in `Implementation_Status.md`. Rack control smoothing, module/UI lifecycle, performance and complete nonlinear aliasing characterization remain open. User acceptance of the dry auditions supports continuing prototype integration; Crystal remains uncalibrated.
+**Prototype progress (2026-09-30):** `HostRateAdapter` implements the stated factor policy for 32–192 kHz host rates and causal stereo decimation. Its thirteen mechanical plus three host-adapter test groups pass on Linux; output-filter response and fractional host-tagged latency are measured in `Implementation_Status.md`. The first Rack control smoothing, module/UI and settings lifecycle are implemented and covered by five Rack-linked test groups. Live Rack/window-reopen and Windows checks, performance and complete nonlinear aliasing characterization remain open. User acceptance of the dry auditions supports continuing prototype integration; Crystal remains uncalibrated.
 
 ### 16.2 Event and control timing
 
@@ -1034,9 +1019,9 @@ Extend the ledger to launch, cap, retirement, coefficient/contact changes, and a
 
 ### E. Stereo and binaural
 
-At WIDTH=0, subtract L from R and require numerical silence before unequal external routing. Changing observer position/width must leave the mechanical state bit-identical in a deterministic run. Check mono summing explicitly.
+At zero separation from identical rest states and WIDTH=0, subtract L from R and require numerical silence before unequal external routing. Changing observer position/width must leave both mechanical states bit-identical in a deterministic run. Check mono summing explicitly.
 
-For the optional binaural renderer, verify measured `Δ` during both a free tail and steady rubbing. Measure unwanted sidebands, transient artifacts, transition latency, and drift under beat-rate CV. Enabling binaural must leave bowl energy and mechanical state unchanged.
+For dual-bowl tuning, verify exact pair-center separation and compare each output against an independently tuned complete simulation. Measure dominant spectral offsets during free tails and steady rubbing separately from the requested pair-center offset. Exercise smooth retuning, zero crossings, both energy ledgers, material/rate transitions and boundary clamping. Different tuning may change contact trajectories and energy; observer/output changes must not.
 
 ### F. Rates, aliasing, and performance
 
@@ -1068,7 +1053,7 @@ Test patch save/load, randomization, reset, engine bypass, output cable changes,
 | 4. Rack instrument | Controls, stereo, energy bar, serialization, rate adaptation, telemetry, performance work. | Lifecycle, long-tail, stereo-invariance, and real-time tests. |
 | 5. Physical calibration | Measured crystal descriptor; improved metal losses/radiation; calibrated material-pair contacts. Continue calibration begun in phases 2–3. | Documented reference comparisons and provenance; no invented measurement claims; validated descriptor normalization. |
 | 6. Normal-contact fidelity | Radial normal-contact model and contact loss; necessary to claim these behaviors, optional for a labelled playable proxy. | Extended energy/geometry audit, normal-force comparison, contact-loss acceptance, and reference trajectories. |
-| 7. Optional binaural | Verified analytic transform, ear-frequency shifting, smooth transitions. | Steady-rub and free-tail frequency-offset tests; no mechanical changes. |
+| 7. Dual-bowl reference | Independent bowl/contact state, shared controls, 0–33 Hz structural tuning difference, smooth transitions. | Independent reference equivalence, two energy ledgers, state continuity, output spectra and measured scalar cost. |
 
 Do not spend early development effort on a large animated bowl or binaural controls before Phase 3 demonstrates convincing dry strike and rubbed audio. The key uncertainty is the playable nonlinear interaction and calibration, not panel artwork.
 
@@ -1088,7 +1073,7 @@ Do not spend early development effort on a large animated bowl or binaural contr
 
 **Numerical versus physical accuracy:** the integrator is energy-consistent and has the selected free poles. Prewarped stiffness, contact stiffness, regularization, and truncated mobility still affect contact trajectories. Root uniqueness, passivity, self-excitation, bounded saturation, and physical fidelity are separate requirements.
 
-**Optional binaural cost:** low-frequency analytic-signal quality, latency, and CPU have not been chosen or measured. Keep the interface optional until this is resolved.
+**Dual-bowl cost:** the scalar two-simulation reference has been measured in limited offline Linux runs (see `Implementation_Status.md`). SIMD/shared-coefficient optimization and the Rack 32-instance budget remain open. No analytic-signal or pitch-shifter path is used.
 
 **Project integration:** this draft does not assert that the proposed file names or helper classes already exist in Leviathan. Inspect and reuse appropriate live repository conventions without transplanting unrelated Doorstop dynamics.
 

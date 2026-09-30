@@ -87,6 +87,17 @@ public:
     double maxFrictionUniqueness() const noexcept { return frictionCertificate_; }
 
 private:
+    friend class HostRateAdapter;
+    // Synchronous preparation on the audio owner. The small modal bank carries
+    // its current state; contact state, ledgers and filter histories stay live.
+    struct PreparedConfiguration {
+        ModalBank bank;
+        double certificate = 0.0;
+    };
+    bool prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+        const EngineSettings& settings, double rate, PreparedConfiguration& next) const noexcept;
+    void applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+        const EngineSettings& settings, const PreparedConfiguration& next) noexcept;
     ModalBank bank_;
     EngineSettings settings_;
     MalletDescriptor mallet_ {};

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <random>
 
 namespace {
 using namespace vessel;
@@ -14,7 +15,39 @@ void require(bool condition, const char* message) {
 }
 bool close(double a, double b, double eps = 1e-10) { return std::abs(a-b) <= eps; }
 
+// Original branch-wrapped scalar kernel, independent of mirrored storage/SIMD.
+void originalFirEquivalence() {
+    struct Stage { std::array<StereoSample,129> samples {}; unsigned pos=0,phase=0; };
+    std::mt19937 rng(71241); std::uniform_real_distribution<double> values(-10,10);
+    for (unsigned factor : {1u,2u,4u,8u}) {
+        StereoDecimator fast; require(fast.configure(factor), "optimized FIR setup");
+        std::array<Stage,3> stages {};
+        const unsigned count=factor==8?3:factor==4?2:factor==2?1:0;
+        for (unsigned sample=0;sample<10000;++sample) {
+            StereoSample input,actual;input.left=values(rng);input.right=values(rng);
+            bool ready=true;auto expected=input;
+            for (unsigned stage=0;stage<count;++stage) {
+                auto& s=stages[stage];s.samples[s.pos]=expected;const unsigned newest=s.pos;
+                if(++s.pos==129)s.pos=0;
+                s.phase^=1;
+                if(s.phase) {ready=false;break;}
+                expected={};unsigned a=newest,b=s.pos;
+                for (unsigned i=0;i<64;++i) {
+                    expected.left+=fast.coefficient(i)*(s.samples[a].left+s.samples[b].left);
+                    expected.right+=fast.coefficient(i)*(s.samples[a].right+s.samples[b].right);
+                    a=a==0?128:a-1;if(++b==129)b=0;
+                }
+                expected.left+=fast.coefficient(64)*s.samples[a].left;
+                expected.right+=fast.coefficient(64)*s.samples[a].right;
+            }
+            require(fast.push(input,actual)==ready, "optimized FIR cadence differs");
+            if(ready)require(actual.left==expected.left && actual.right==expected.right, "optimized FIR differs from original scalar kernel");
+        }
+    }
+}
+
 void frequencyResponseAndLatency() {
+    originalFirEquivalence();
     StereoDecimator d;
     double passMin = 1e100, passMax = 0, stopMax = 0;
     for (int k = 0; k <= 20000; ++k) {

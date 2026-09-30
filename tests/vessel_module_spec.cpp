@@ -1,0 +1,177 @@
+#include <context.hpp>
+#include <engine/Engine.hpp>
+#undef PRIVATE
+#include "../src/Vessel.hpp"
+#include "../src/vessel/SeedProfiles.hpp"
+#include <cmath>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <cstdlib>
+#include <new>
+
+static thread_local bool trapAllocations = false;
+static thread_local std::size_t heapOperations = 0;
+void* operator new(std::size_t size) {
+    if (trapAllocations) ++heapOperations;
+    if (void* p = std::malloc(size ? size : 1)) return p;
+    throw std::bad_alloc();
+}
+void* operator new[](std::size_t size) { return ::operator new(size); }
+void operator delete(void* p) noexcept { if (trapAllocations && p) ++heapOperations; std::free(p); }
+void operator delete[](void* p) noexcept { ::operator delete(p); }
+void operator delete(void* p, std::size_t) noexcept { ::operator delete(p); }
+void operator delete[](void* p, std::size_t) noexcept { ::operator delete(p); }
+
+bool isDragonKingDebugEnabled() { return false; }
+// Stack-owned headless fixture; omit private application teardown.
+namespace rack { Context::~Context() {} }
+namespace {
+void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
+void run(Vessel& m, int samples = 1, float rate = 48000) {
+    Module::ProcessArgs a; a.sampleRate = rate; a.sampleTime = 1/rate;
+    for (int i = 0; i < samples; ++i) { a.frame = i; m.process(a); }
+}
+void cable(Vessel& m, int input, float volts, int channels = 1) { m.inputs[input].channels = channels; m.inputs[input].setVoltage(volts); }
+
+void gatesAndControls() {
+    Vessel m;
+    m.outputs[Vessel::LEFT_OUTPUT].channels = 16; m.outputs[Vessel::RIGHT_OUTPUT].channels = 16;
+    cable(m, Vessel::STRIKE_INPUT, 10, 16); m.params[Vessel::STRIKE_PARAM].setValue(1);
+    run(m, 1000);
+    require(m.audio.engine().ledger().strikes == 1, "initial high/manual gate must coalesce and fire once");
+    require(m.outputs[Vessel::LEFT_OUTPUT].getChannels() == 1 && m.outputs[Vessel::RIGHT_OUTPUT].getChannels() == 1, "Vessel must stay monophonic");
+    cable(m, Vessel::STRIKE_INPUT, 0); m.params[Vessel::STRIKE_PARAM].setValue(0); run(m);
+    cable(m, Vessel::STRIKE_INPUT, 2); run(m);
+    require(m.audio.engine().ledger().strikes == 2, "rising retrigger missing");
+    cable(m, Vessel::STRIKE_INPUT, std::numeric_limits<float>::quiet_NaN()); run(m);
+    cable(m, Vessel::VELOCITY_INPUT, 0); cable(m, Vessel::STRIKE_INPUT, 10); run(m);
+    require(m.audio.engine().ledger().strikes == 2, "zero patched velocity must replace knob and skip strike");
+    cable(m, Vessel::ROTATE_INPUT, 10); run(m, 1200);
+    require(m.audio.engine().contactEngagement() == 1, "rotation gate does not engage contact");
+    cable(m, Vessel::ROTATE_INPUT, 0); run(m, 1000);
+    require(m.audio.engine().contactEngagement() == 0, "gate release does not lift contact");
+    m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 1000);
+    require(m.audio.engine().contactEngagement() == 1, "rotation latch not OR'd with input gate");
+    require(m.audio.engine().ledger().solverFaults == 0, "normal controls fault");
+    std::cout << "[PASS] Initial/held/retrigger gates, manual coalescing, velocity replacement, rotate gate/latch and mono outputs\n";
+}
+
+void tuningAndMorph() {
+    Vessel m; m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 2000);
+    const double previous = m.audio.engine().settings().frequency;
+    cable(m, Vessel::VOCT_INPUT, 1); run(m);
+    require(m.audio.engine().settings().frequency < 2*previous, "pitch CV change is not smoothed");
+    run(m, 2000);
+    require(std::abs(m.audio.engine().settings().frequency-2*261.625565) < .001, "1 V/oct tuning");
+    m.params[Vessel::FINE_PARAM].setValue(100); run(m, 2000);
+    require(std::abs(m.audio.engine().settings().frequency-2*261.625565*std::exp2(100.0/1200)) < .001, "fine tuning");
+    m.params[Vessel::BOWL_PARAM].setValue(1); m.params[Vessel::MALLET_PARAM].setValue(2); run(m, 48);
+    const double earlyRatio = m.audio.engine().bowl().coefficients(2).frequency/m.audio.engine().settings().frequency;
+    require(earlyRatio > 2.66 && earlyRatio < 2.83, "material switch is not a continuous descriptor morph");
+    run(m, 6000);
+    require(m.audio.engine().ledger().solverFaults == 0 && m.audio.engine().contactEngagement() == 1, "material morph clears/faults ongoing contact");
+    const double energy = m.audio.engine().totalEnergy();
+    run(m, 1, 44100);
+    require(m.audio.hostRate() == 44100 && m.audio.engine().totalEnergy() > 0 && energy > 0, "live sample-rate change clears mechanics");
+    cable(m, Vessel::VOCT_INPUT, std::numeric_limits<float>::infinity());
+    cable(m, Vessel::SPEED_INPUT, std::numeric_limits<float>::quiet_NaN());
+    cable(m, Vessel::PRESSURE_INPUT, std::numeric_limits<float>::infinity()); run(m, 1000, 44100);
+    require(std::isfinite(m.outputs[Vessel::LEFT_OUTPUT].getVoltage()) && m.audio.engine().ledger().solverFaults == 0, "nonfinite CV safety");
+    std::cout << "[PASS] Smoothed octave/fine tuning, live material morph, rate continuity and nonfinite CV\n";
+}
+
+void independentOutputAndEnergy() {
+    Vessel audible, silent;
+    audible.params[Vessel::ROTATE_PARAM].setValue(1); silent.params[Vessel::ROTATE_PARAM].setValue(1);
+    silent.params[Vessel::LEVEL_PARAM].setValue(0); silent.params[Vessel::WIDTH_PARAM].setValue(0);
+    for (int i = 0; i < 96000; ++i) {
+        run(audible); run(silent);
+        require(audible.audio.engine().bowl().energy() == silent.audio.engine().bowl().energy(), "level/width changes mechanics");
+    }
+    require(silent.rawEnergy.load() > 0 && silent.visualEnergy.load() > 0 && silent.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0,
+        "energy bar follows output level instead of mechanics");
+    silent.params[Vessel::LEVEL_PARAM].setValue(1); run(silent, 1000);
+    require(silent.outputs[Vessel::LEFT_OUTPUT].getVoltage() == silent.outputs[Vessel::RIGHT_OUTPUT].getVoltage(), "zero-width outputs do not null");
+    Module::ProcessArgs a; a.sampleRate = 48000; a.sampleTime = 1.f/48000;
+    const double before = silent.audio.engine().bowl().energy(); silent.processBypass(a);
+    require(silent.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0 && silent.outputs[Vessel::RIGHT_OUTPUT].getVoltage() == 0
+        && silent.audio.engine().bowl().energy() > 0 && before > 0, "bypass must mute while retaining active mechanics");
+    std::cout << "[PASS] Mechanical energy is independent of width/level/cables; zero-width null and bypass mute\n";
+}
+
+void patchAndReset() {
+    Vessel source; source.params[Vessel::BOWL_PARAM].setValue(1); source.params[Vessel::MALLET_PARAM].setValue(2);
+    source.params[Vessel::PITCH_PARAM].setValue(-1); source.params[Vessel::ROTATE_PARAM].setValue(1);
+    source.params[Vessel::BINAURAL_PARAM].setValue(33);
+    source.params[Vessel::STRIKE_PARAM].setValue(1); run(source, 100);
+    json_t* params = source.paramsToJson(); json_t* data = source.dataToJson();
+    Vessel loaded; loaded.paramsFromJson(params); loaded.dataFromJson(data); run(loaded);
+    require(loaded.params[Vessel::STRIKE_PARAM].getValue() == 0 && loaded.audio.engine().ledger().strikes == 0, "held manual strike restored from patch");
+    require(loaded.params[Vessel::BOWL_PARAM].getValue() == 1 && loaded.params[Vessel::MALLET_PARAM].getValue() == 2
+        && loaded.params[Vessel::ROTATE_PARAM].getValue() == 1, "stable profiles or rotation latch not restored");
+    require(std::abs(loaded.audio.centerFrequency()-130.8127825) < .001
+        && loaded.audio.separationHz()==33 && loaded.params[Vessel::BINAURAL_PARAM].getValue()==33, "saved center/separation not restored");
+    require(loaded.audio.engine().bowl().energy() < source.audio.engine().bowl().energy(), "patch load resumes old mechanical state");
+    json_decref(params); json_decref(data);
+    json_t* future = json_pack("{s:i,s:s}", "schema", 999, "bowlId", vessel::seedBowls[0].stableId);
+    loaded.dataFromJson(future); json_decref(future);
+    require(loaded.params[Vessel::BOWL_PARAM].getValue() == 1, "future schema partially applied");
+    Module::ResetEvent e; loaded.onReset(e); run(loaded, 6000);
+    require(loaded.rawEnergy.load() == 0 && loaded.visualSleeping.load() && loaded.params[Vessel::ROTATE_PARAM].getValue() == 0
+        && loaded.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0, "reset does not return to quiet defaults");
+    cable(loaded, Vessel::STRIKE_INPUT, 5); run(loaded);
+    require(!loaded.visualSleeping.load() && loaded.audio.engine().ledger().strikes == 1, "strike does not immediately wake module");
+    std::cout << "[PASS] Stable profile/tuning/latch serialization, no held manual event or mechanical resume, schema safety, reset and sleep wake\n";
+}
+void audioHeapSafety() {
+    Vessel m;
+    trapAllocations = true;
+    run(m, 100);
+    m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 2000);
+    cable(m, Vessel::STRIKE_INPUT, 10); run(m, 1000);
+    m.params[Vessel::BOWL_PARAM].setValue(1); m.params[Vessel::MALLET_PARAM].setValue(2);
+    m.params[Vessel::BINAURAL_PARAM].setValue(33);
+    cable(m, Vessel::VOCT_INPUT, 1); run(m, 6000);
+    run(m, 1000, 44100);
+    m.params[Vessel::BINAURAL_PARAM].setValue(0); run(m, 12000, 44100);
+    m.params[Vessel::BINAURAL_PARAM].setValue(33); run(m, 1000, 44100);
+    m.pendingReset.store(true); run(m, 100);
+    trapAllocations = false;
+    require(heapOperations == 0, "audio callback allocates or frees heap storage");
+    require(m.audio.engine().ledger().solverFaults == 0, "heap-safety trajectory faults");
+    std::cout << "[PASS] No C++ heap operations in initial, rubbing, strike, morph, pitch, rate-change and reset callbacks\n";
+}
+void dualControls() {
+    Vessel m; m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 6000);
+    m.params[Vessel::BINAURAL_PARAM].setValue(33); run(m, 48);
+    require(m.audio.separationHz()>0 && m.audio.separationHz()<33, "separation not smoothed");
+    run(m, 12000);
+    require(m.audio.separationHz()==33 && m.audio.rightEngine().settings().frequency-m.audio.engine().settings().frequency==33,
+        "33 Hz separation not reached");
+    m.params[Vessel::LEVEL_PARAM].setValue(0); m.params[Vessel::WIDTH_PARAM].setValue(0); run(m, 12000);
+    require(m.rawEnergy.load()>0 && m.visualEnergy.load()>0 && m.leftEnergy.load()>0 && m.rightEnergy.load()>0
+        && std::abs(m.rawEnergy.load()-.5f*(m.leftEnergy.load()+m.rightEnergy.load()))<1e-8,
+        "dual telemetry is not mean mechanical energy");
+    require(m.outputs[Vessel::LEFT_OUTPUT].getVoltage()==0 && m.outputs[Vessel::RIGHT_OUTPUT].getVoltage()==0, "dual output mute");
+    const double le=m.audio.engine().totalEnergy(), re=m.audio.rightEngine().totalEnergy();
+    m.params[Vessel::BINAURAL_PARAM].setValue(0); run(m, 12000);
+    require(m.audio.separationHz()==0 && le>0 && re>0 && m.audio.engine().totalEnergy()>0 && m.audio.rightEngine().totalEnergy()>0,
+        "zero crossing clears dual state");
+    require(!m.audio.secondBowlActive() && m.audio.dualMix()==0, "settled Rack zero does not stop second bowl");
+    require(m.audio.engine().ledger().solverFaults==0 && m.audio.rightEngine().ledger().solverFaults==0, "dual controls fault");
+    std::cout << "[PASS] Rack separation smoothing/range, two-bowl energy telemetry, muted mechanics and live return to zero\n";
+}
+}
+int main() {
+    rack::Context context; rack::contextSet(&context);
+    int result = 0;
+    {
+        rack::engine::Engine engine; context.engine = &engine;
+        try { gatesAndControls(); tuningAndMorph(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls();
+            std::cout << "Vessel Rack adapter: 6 groups PASS\n";
+        } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
+        context.engine = nullptr;
+    }
+    rack::contextSet(nullptr); return result;
+}

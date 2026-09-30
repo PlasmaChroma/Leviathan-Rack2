@@ -63,6 +63,7 @@ void ContactOrbit::configure(const BowlDescriptor& bowl, const ModalBank& bank,
                              double width, double angle) noexcept {
     pairs_ = bowl.pairCount;
     ticks_ = 0;
+    incrementCached_ = false;
     for (std::size_t n = 0; n < pairs_; ++n) {
         const auto& p = bowl.pairs[n];
         orders_[n] = p.order;
@@ -73,6 +74,8 @@ void ContactOrbit::configure(const BowlDescriptor& bowl, const ModalBank& bank,
         const double patch = std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
         gains_[2*n] = patch*bank.coefficients(2*n).inverseRootMass;
         gains_[2*n+1] = patch*bank.coefficients(2*n+1).inverseRootMass;
+        tangentGains_[2*n] = gains_[2*n]/p.order;
+        tangentGains_[2*n+1] = gains_[2*n+1]/p.order;
     }
 }
 void ContactOrbit::rotate() noexcept {
@@ -82,23 +85,28 @@ void ContactOrbit::rotate() noexcept {
         sine_[n] = s*dc_[n]+c*ds_[n];
     }
 }
-void ContactOrbit::midpoint(double increment, ModalVector& tangent, ModalVector& inward) noexcept {
+void ContactOrbit::midpoint(double increment, ModalVector& tangent, ModalVector& inward, bool includeNormal) noexcept {
     tangent = {}; inward = {};
-    for (std::size_t n = 0; n < pairs_; ++n) {
-        const double d = 0.5*orders_[n]*increment, d2 = d*d;
-        if (std::abs(d) < 0.01) {
-            ds_[n] = d*(1.0-d2/6.0+d2*d2/120.0);
-            dc_[n] = 1.0-d2/2.0+d2*d2/24.0-d2*d2*d2/720.0;
-        } else {
-            ds_[n] = std::sin(d); dc_[n] = std::cos(d);
+    if (!incrementCached_ || increment != cachedIncrement_) {
+        cachedIncrement_ = increment; incrementCached_ = true;
+        for (std::size_t n = 0; n < pairs_; ++n) {
+            const double d = 0.5*orders_[n]*increment, d2 = d*d;
+            if (std::abs(d) < 0.01) {
+                ds_[n] = d*(1.0-d2/6.0+d2*d2/120.0);
+                dc_[n] = 1.0-d2/2.0+d2*d2/24.0-d2*d2*d2/720.0;
+            } else {
+                ds_[n] = std::sin(d); dc_[n] = std::cos(d);
+            }
         }
     }
     rotate();
     for (std::size_t n = 0; n < pairs_; ++n) {
-        tangent[2*n] = -gains_[2*n]*sine_[n]/orders_[n];
-        tangent[2*n+1] = gains_[2*n+1]*cosine_[n]/orders_[n];
-        inward[2*n] = -gains_[2*n]*cosine_[n];
-        inward[2*n+1] = -gains_[2*n+1]*sine_[n];
+        tangent[2*n] = -tangentGains_[2*n]*sine_[n];
+        tangent[2*n+1] = tangentGains_[2*n+1]*cosine_[n];
+        if (includeNormal) {
+            inward[2*n] = -gains_[2*n]*cosine_[n];
+            inward[2*n+1] = -gains_[2*n+1]*sine_[n];
+        }
     }
 }
 void ContactOrbit::finish() noexcept {

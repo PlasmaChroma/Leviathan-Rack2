@@ -11,12 +11,20 @@ VesselEngine::VesselEngine() {
 }
 bool VesselEngine::configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
                               const EngineSettings& settings, double rate) noexcept {
+    PreparedConfiguration next;
+    if (!prepareConfiguration(bowl, mallet, settings, rate, next)) return false;
+    applyConfiguration(bowl, mallet, settings, next);
+    return true;
+}
+bool VesselEngine::prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+    const EngineSettings& settings, double rate, PreparedConfiguration& prepared) const noexcept {
     if (!validMallet(mallet) || !std::isfinite(settings.strikeAngle)
         || !std::isfinite(settings.observerCenter) || !std::isfinite(settings.observerSeparation)
         || settings.observerSeparation < 0.0 || settings.observerSeparation > pi
         || settings.frequency < 20.0 || settings.frequency > 2000.0
         || settings.decayMultiplier < 0.25 || settings.decayMultiplier > 4.0) return false;
-    ModalBank next = bank_;
+    auto& next = prepared.bank;
+    next = bank_;
     if (!next.configure(bowl, settings.frequency, settings.decayMultiplier, settings.imperfection, rate)) return false;
     // A conservative angle-independent upper bound; each pair contributes
     // max(weightA/mA, weightB/mB)*patch^2/n^2, not the sum of both maxima.
@@ -31,9 +39,14 @@ bool VesselEngine::configure(const BowlDescriptor& bowl, const MalletDescriptor&
     }
     const double certificate = maxYtt*frictionNegativeSlopeBound(15.0, mallet);
     if (!std::isfinite(certificate) || certificate > 0.9) return false;
-    bank_ = next;
+    prepared.certificate = certificate;
+    return true;
+}
+void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
+    const EngineSettings& settings, const PreparedConfiguration& prepared) noexcept {
+    bank_ = prepared.bank;
     descriptor_ = bowl;
-    frictionCertificate_ = certificate;
+    frictionCertificate_ = prepared.certificate;
     controlAlpha_ = -std::expm1(-bank_.timeStep()/0.01);
     orbit_.configure(bowl, bank_, mallet.patchWidth, rotationAngle_);
     settings_ = settings;
@@ -43,7 +56,6 @@ bool VesselEngine::configure(const BowlDescriptor& bowl, const MalletDescriptor&
     // Mass changes alter the bowl port, while angle/footprint/contact potential
     // belong to the latched active striker. Compression remains continuous.
     if (active_) strikePort_ = bank_.radialPort(activeAngle_, activeMallet_.patchWidth, true);
-    return true;
 }
 void VesselEngine::reset() noexcept {
     bank_.clear();
@@ -114,16 +126,16 @@ EngineFrame VesselEngine::step() noexcept {
     const bool orbitActive = midEngagement > 0.0;
     const double increment = orbitActive ? 2.0*pi*0.5*(oldSpeed+speed_)*h : 0.0;
     if (orbitActive) {
-        orbit_.midpoint(increment, tangent, normal);
+        orbit_.midpoint(increment, tangent, normal, settings_.prescribedRadialLoad);
         if (settings_.prescribedRadialLoad)
             for (std::size_t j = 0; j < bank_.size(); ++j) force[j] = normal[j]*load;
     }
     // Known normal forcing shifts both free port velocities before solving.
-    const double vs0 = bank_.midpointVelocity(strikePort_, free)
-        + (settings_.prescribedRadialLoad ? load*bank_.admittance(strikePort_, normal) : 0.0);
-    const double vt0 = bank_.midpointVelocity(tangent, free)
-        + (settings_.prescribedRadialLoad ? load*bank_.admittance(tangent, normal) : 0.0);
-    const double Ytt = bank_.admittance(tangent, tangent);
+    const double vs0 = active_ ? bank_.midpointVelocity(strikePort_, free)
+        + (settings_.prescribedRadialLoad ? load*bank_.admittance(strikePort_, normal) : 0.0) : 0.0;
+    const double vt0 = load > 0.0 ? bank_.midpointVelocity(tangent, free)
+        + (settings_.prescribedRadialLoad ? load*bank_.admittance(tangent, normal) : 0.0) : 0.0;
+    const double Ytt = load > 0.0 ? bank_.admittance(tangent, tangent) : 0.0;
     frame.normalLoad = load;
     frame.handSpeed = orbitActive ? U : 0.0;
     frame.uniquenessNumber = Ytt*frictionNegativeSlopeBound(load, mallet_);
@@ -182,7 +194,10 @@ EngineFrame VesselEngine::step() noexcept {
     const auto modalAudit = bank_.commit(free, force, audit_);
     if (orbitActive) {
         orbit_.finish();
-        rotationAngle_ = std::remainder(rotationAngle_+increment, 2.0*pi);
+        // Supported speed/rate bounds advance less than one turn per step.
+        rotationAngle_ += increment;
+        if (rotationAngle_ > pi) rotationAngle_ -= 2.0*pi;
+        else if (rotationAngle_ < -pi) rotationAngle_ += 2.0*pi;
     }
     if (active_) {
         compression_ = solution.compression;

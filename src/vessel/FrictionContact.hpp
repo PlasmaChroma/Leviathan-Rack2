@@ -31,7 +31,8 @@ class ContactOrbit {
 public:
     void configure(const BowlDescriptor& bowl, const ModalBank& bank,
                    double patchWidth, double angle) noexcept;
-    void midpoint(double angleIncrement, ModalVector& tangent, ModalVector& inward) noexcept;
+    void midpoint(double angleIncrement, ModalVector& tangent, ModalVector& inward,
+                  bool includeNormal = true) noexcept;
     void finish() noexcept;
 private:
     std::size_t pairs_ = 0;
@@ -39,6 +40,9 @@ private:
     std::array<int, maxPairs> orders_ {};
     std::array<double, maxPairs> cosine_ {}, sine_ {}, dc_ {}, ds_ {};
     ModalVector gains_ {};
+    ModalVector tangentGains_ {};
+    double cachedIncrement_ = 0.0;
+    bool incrementCached_ = false;
     void rotate() noexcept;
 };
 

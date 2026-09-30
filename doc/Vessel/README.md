@@ -4,7 +4,7 @@ Start with **Vessel_DSP_and_Module_Specification.md**.
 
 The specification defines the proposed physical model, numerical contact loop, Rack interface, stereo and optional binaural behavior, energy display, and implementation/test phases.
 
-The C++ reference engine includes modal mechanics, finite-mass strikes, moving friction, simultaneous strike/rub solving, full energy accounting, causal host-rate adaptation, and offline render/characterization tools. See `Implementation_Status.md` for native Windows strike validation, Linux contact/host-rate validation, listening commands, and the remaining physical/Rack gates.
+The C++ reference engine includes modal mechanics, finite-mass strikes, moving friction, simultaneous strike/rub solving, full energy accounting, causal host-rate adaptation, a registered Rack prototype with a 16 HP control panel and 0–33 Hz dual-bowl tuning with a crossfade to one simulation at zero, and offline render/characterization tools. See `Implementation_Status.md` for native Windows strike validation, Linux contact/host-rate/module validation, listening commands, and the remaining physical/Rack gates.
 
 ## Files
 
@@ -31,4 +31,4 @@ The checker writes its result JSON next to the script. Small floating-point diff
 
 ## Implementation boundary
 
-The standalone strike/rub reference, render harness and causal host-rate foundation are implemented; default singing, coupled energy accounting, stopped-contact damping, limited rate/regularization sweeps and output-filter measurements pass. Complete the broader physical convergence and calibration gates before calling the reference DSP complete. The Rack module/UI, production performance/nonlinear aliasing measurements, normal-contact fidelity and optional binaural work remain open; the crystal seed is still synthetic.
+The standalone strike/rub reference, render harness and causal host-rate foundation are implemented; default singing, coupled energy accounting, stopped-contact damping, limited rate/regularization sweeps and output-filter measurements pass. Complete the broader physical convergence and calibration gates before calling the reference DSP complete. The first Rack module/UI is implemented. Live Rack and native Windows integration checks, production performance/nonlinear aliasing measurements, normal-contact fidelity and optional binaural work remain open; the crystal seed is still synthetic.

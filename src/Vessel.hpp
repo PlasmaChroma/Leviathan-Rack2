@@ -1,0 +1,52 @@
+#pragma once
+
+#include "plugin.hpp"
+#include "DebugTerminalMetrics.hpp"
+#include "vessel/DualBowlAdapter.hpp"
+#include <atomic>
+
+struct Vessel final : Module {
+    // Stable IDs: additions append, even while the module is a prototype.
+    enum ParamId { PITCH_PARAM, FINE_PARAM, VELOCITY_PARAM, STRIKE_PARAM,
+        ROTATE_PARAM, SPEED_PARAM, PRESSURE_PARAM, BOWL_PARAM, MALLET_PARAM,
+        DECAY_PARAM, IMPERFECTION_PARAM, WIDTH_PARAM, LEVEL_PARAM, BINAURAL_PARAM, PARAMS_LEN };
+    enum InputId { VOCT_INPUT, STRIKE_INPUT, VELOCITY_INPUT, ROTATE_INPUT,
+        SPEED_INPUT, PRESSURE_INPUT, INPUTS_LEN };
+    enum OutputId { LEFT_OUTPUT, RIGHT_OUTPUT, OUTPUTS_LEN };
+    enum LightId { STRIKE_LIGHT, ROTATE_LIGHT, FAULT_LIGHT, LIGHTS_LEN };
+
+    vessel::DualBowlAdapter audio;
+    debug_terminal::BaselineModuleMetrics debugMetrics;
+    std::atomic<float> visualEnergy {0.f}, visualFrequency {261.625565f};
+    std::atomic<float> rawEnergy {0.f};
+    std::atomic<float> visualSeparation {0.f}, leftEnergy {0.f}, rightEnergy {0.f};
+    std::atomic<bool> visualFault {false}, visualSleeping {true};
+    std::atomic<bool> pendingReset {true};
+
+    Vessel();
+    void process(const ProcessArgs& args) override;
+    void onReset(const ResetEvent& event) override;
+    void processBypass(const ProcessArgs& args) override;
+    json_t* dataToJson() override;
+    void dataFromJson(json_t* root) override;
+    json_t* paramsToJson() override;
+    void paramsFromJson(json_t* root) override;
+private:
+    vessel::BowlDescriptor currentBowl {}, startBowl {};
+    vessel::MalletDescriptor currentMallet {}, startMallet {};
+    vessel::EngineSettings applied;
+    int selectedBowl = 0, selectedMallet = 1;
+    double bowlBlend = 1.0, malletBlend = 1.0;
+    double pitchOctaves = 0.0, controlElapsed = 0.001, visualElapsed = 0.0;
+    double separationHz = 0.0;
+    double idleElapsed = 0.0;
+    float meter = 0.f, strikeFlash = 0.f;
+    bool strikeHigh = false, manualHigh = false, rotateHigh = false;
+    bool sleeping = true, configured = false, needsConfigure = true;
+    double hostRate = 0.0;
+    void resetRuntime();
+    void updateControls(double elapsed);
+    bool configureAudio(double rate);
+};
+
+extern Model* modelVessel;

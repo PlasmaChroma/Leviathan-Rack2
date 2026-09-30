@@ -290,6 +290,19 @@
       "tags": ["Sampler", "Delay"],
       "capabilities": {"polyphony": 1},
       "hidden": false
+    },
+    {
+      "slug": "Vessel",
+      "name": "Vessel",
+      "description": "Tunable struck and friction-excited singing bowl with stereo observation. Crystal is an uncalibrated prototype.",
+      "tags": [
+        "Physical modeling",
+        "Synth voice"
+      ],
+      "capabilities": {
+        "polyphony": 1
+      },
+      "hidden": false
     }
   ]
 }
