@@ -87,6 +87,21 @@ bool ModalBank::finite() const noexcept {
         if (!std::isfinite(states_[j].x) || !std::isfinite(states_[j].y)) return false;
     return true;
 }
+bool ModalBank::advanceFree(const ModalVector& left, const ModalVector& right,
+    double& leftVelocity, double& rightVelocity) noexcept {
+    leftVelocity = rightVelocity = 0.0;
+    bool valid = true;
+    for (std::size_t j = 0; j < count_; ++j) {
+        auto& s = states_[j];
+        const double mid = (s.y-hotA_[j]*s.x)*hotInverseD_[j]+0.0;
+        s.x += h_*hotOmega_[j]*mid;
+        s.y = 2.0*mid-s.y;
+        valid = valid && std::isfinite(s.x) && std::isfinite(s.y);
+        leftVelocity += left[j]*s.y;
+        rightVelocity += right[j]*s.y;
+    }
+    return valid && std::isfinite(leftVelocity) && std::isfinite(rightVelocity);
+}
 ModalVector ModalBank::radialPort(double angle, double width, bool inward) const noexcept {
     ModalVector b {};
     if (!std::isfinite(angle) || !std::isfinite(width) || width < 0.0 || width > 2.0*pi) return b;

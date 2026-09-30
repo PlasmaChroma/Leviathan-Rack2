@@ -22,6 +22,9 @@ struct Vessel final : Module {
     std::atomic<float> visualSeparation {0.f}, leftEnergy {0.f}, rightEnergy {0.f};
     std::atomic<bool> visualFault {false}, visualSleeping {true};
     std::atomic<bool> pendingReset {true};
+    std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Reference)};
+    std::atomic<float> visualInternalRate {0.f};
+    std::atomic<bool> visualRateFallback {false};
 
     Vessel();
     void process(const ProcessArgs& args) override;
@@ -44,6 +47,7 @@ private:
     bool strikeHigh = false, manualHigh = false, rotateHigh = false;
     bool sleeping = true, configured = false, needsConfigure = true;
     double hostRate = 0.0;
+    vessel::ProcessingQuality activeQuality = vessel::ProcessingQuality::Reference;
     void resetRuntime();
     void updateControls(double elapsed);
     bool configureAudio(double rate);

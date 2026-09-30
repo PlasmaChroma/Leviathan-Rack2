@@ -4,7 +4,7 @@
 
 namespace vessel {
 bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-    const EngineSettings& settings, double separation, double rate) noexcept {
+    const EngineSettings& settings, double separation, double rate, ProcessingQuality quality) noexcept {
     if (!std::isfinite(separation) || separation < 0 || separation > 33
         || !std::isfinite(settings.frequency) || settings.frequency < 20 || settings.frequency > 2000) return false;
     const double center = std::max(20+.5*separation, std::min(2000-.5*separation, settings.frequency));
@@ -17,10 +17,20 @@ bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescript
     // Validate both modal configurations before mutating either live adapter.
     // Ordinary retuning leaves filter histories and contact ledgers in place.
     HostRateAdapter::PreparedConfiguration nextLeft, nextRight;
-    if (!left_.prepareConfiguration(bowl, mallet, leftSettings, rate, nextLeft)) return false;
     const auto& rightSource = wakeRight ? left_ : right_;
-    if ((rightActive_ || wantsDual)
-        && !rightSource.prepareConfiguration(bowl, mallet, rightSettings, rate, nextRight)) return false;
+    const unsigned maximum = HostRateAdapter::factorForRate(rate);
+    bool prepared = false;
+    // Keep both bowls at the same rate. Fall back only as far as Reference;
+    // unsupported descriptors still reject transactionally.
+    for (unsigned factor = HostRateAdapter::factorForRate(rate, quality);
+        factor && factor <= maximum; factor *= 2) {
+        if (!left_.prepareConfiguration(bowl, mallet, leftSettings, rate, nextLeft, factor)) continue;
+        if ((rightActive_ || wantsDual)
+            && !rightSource.prepareConfiguration(bowl, mallet, rightSettings, rate, nextRight, factor)) continue;
+        prepared = true;
+        break;
+    }
+    if (!prepared) return false;
     // Waking still clones the complete pre-retune history, including a latched
     // strike and both FIR channels. Preparation above must use that same source.
     if (wakeRight) right_ = left_;

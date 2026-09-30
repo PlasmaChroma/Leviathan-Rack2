@@ -7,6 +7,7 @@
 #include <limits>
 #include <stdexcept>
 #include <random>
+#include <cstring>
 
 namespace {
 using namespace vessel;
@@ -176,11 +177,76 @@ void lifecycle() {
         "undeclared host rate accepted");
     std::cout << "[PASS] Transactional host/descriptor changes, active compression continuity, input sanitation and complete reset\n";
 }
+void qualityPolicies() {
+    for (double rate : {32000.,44100.,48000.,88200.,96000.,176400.,192000.})
+    for (auto quality : {ProcessingQuality::Economy, ProcessingQuality::Balanced, ProcessingQuality::Reference}) {
+        HostRateAdapter host; EngineSettings settings;
+        require(host.configure(seedBowls[0], seedMallets[1], settings, rate, quality), "quality setup");
+        const unsigned factor = HostRateAdapter::factorForRate(rate, quality);
+        require(host.factor() == factor, "C4 unexpectedly falls back");
+        VesselEngine reference; StereoDecimator filter;
+        require(reference.configure(seedBowls[0], seedMallets[1], settings, rate*factor)
+            && filter.configure(factor), "quality oracle setup");
+        HostControls c; c.rotate = true;
+        for (int i = 0; i < 2048; ++i) {
+            c.strikeEvent = i == 0;
+            reference.setRotation(c.rotate, c.speed, c.pressure);
+            if (c.strikeEvent) reference.strike(c.velocity);
+            StereoSample expected;
+            for (unsigned j = 0; j < factor; ++j) {
+                const auto f = reference.step();
+                StereoSample sample; sample.left = f.leftVelocity; sample.right = f.rightVelocity;
+                filter.push(sample, expected);
+            }
+            const auto actual = host.process(c);
+            require(!actual.fault && actual.audio.left == expected.left && actual.audio.right == expected.right,
+                "quality cadence/audio differs from internal-rate oracle");
+        }
+    }
+    HostRateAdapter h; EngineSettings s; s.frequency = 2000;
+    require(h.configure(seedBowls[1], seedMallets[1], s, 48000, ProcessingQuality::Economy)
+        && h.internalRate() == 192000, "high crystal must fall back to Reference");
+    s.frequency = 261.625565;
+    for (auto q : {ProcessingQuality::Economy, ProcessingQuality::Balanced, ProcessingQuality::Reference}) {
+        require(h.configure(seedBowls[0], seedMallets[1], s, 48000, q), "same-host quality switch");
+        require(h.factor() == HostRateAdapter::factorForRate(48000, q), "same-host factor not applied");
+    }
+    std::cout << "[PASS] Three quality policies at seven host rates match internal oracles; high-pitch fallback and same-host factor changes\n";
+}
+
+void freeTailEquivalence() {
+    for (double rate : {32000.,44100.,48000.,88200.,96000.,176400.,192000.})
+    for (auto quality : {ProcessingQuality::Economy,ProcessingQuality::Balanced,ProcessingQuality::Reference}) {
+        HostRateAdapter fast, reference; EngineSettings s;
+        reference.setFastTailEnabled(false);
+        require(fast.configure(seedBowls[0],seedMallets[1],s,rate,quality)
+            && reference.configure(seedBowls[0],seedMallets[1],s,rate,quality), "tail setup");
+        HostControls c;
+        for (int i=0;i<10000;++i) {
+            c.rotate=i<2000 || (i>=7000 && i<8000);
+            c.strikeEvent=i==0 || i==5000;
+            c.speed=i<6000?.4:-.4; c.pressure=i<6000?2.5:1.2;
+            if(i==4000 || i==6500) {
+                s.observerSeparation=i==4000?0:pi/6;
+                s.frequency=i==4000?330:261.625565;
+                require(fast.configure(seedBowls[0],seedMallets[1],s,rate,quality)
+                    && reference.configure(seedBowls[0],seedMallets[1],s,rate,quality), "tail reconfigure");
+            }
+            const auto a=fast.process(c), b=reference.process(c);
+            require(!a.fault && !b.fault && std::memcmp(&a.audio,&b.audio,sizeof(a.audio))==0
+                && std::memcmp(&a.bowlEnergy,&b.bowlEnergy,sizeof(a.bowlEnergy))==0, "fast tail differs from full-step filtered oracle");
+            if(i%64==0)for(std::size_t j=0;j<fast.engine().bowl().size();++j)
+                require(std::memcmp(&fast.engine().bowl().state(j),&reference.engine().bowl().state(j),sizeof(ModalState))==0, "fast tail changes mechanical state");
+        }
+    }
+    std::cout << "[PASS] Fused tails match full-step states and filtered audio through strike/rotation re-entry, tuning and width at seven rates/three qualities\n";
+}
+
 }
 
 int main() {
     try {
-        frequencyResponseAndLatency(); hostSchedulingAndMechanics(); lifecycle();
-        std::cout << "Vessel host-rate adapter: 3 groups PASS\n"; return 0;
+        frequencyResponseAndLatency(); hostSchedulingAndMechanics(); lifecycle(); qualityPolicies(); freeTailEquivalence();
+        std::cout << "Vessel host-rate adapter: 5 groups PASS\n"; return 0;
     } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; return 1; }
 }

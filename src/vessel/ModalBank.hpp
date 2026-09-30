@@ -19,6 +19,10 @@ public:
     double energy() const noexcept;
     bool finite() const noexcept;
 
+    // Fixed unforced step, with unchanged scalar arithmetic and pickup order.
+    // Filtering remains in the host adapter at the original internal cadence.
+    bool advanceFree(const ModalVector& left, const ModalVector& right,
+                     double& leftVelocity, double& rightVelocity) noexcept;
     ModalVector freeMidpoint() const noexcept;
     double velocity(const ModalVector& port) const noexcept;
     double midpointVelocity(const ModalVector& port, const ModalVector& free) const noexcept;

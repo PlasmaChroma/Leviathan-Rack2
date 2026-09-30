@@ -13,7 +13,8 @@ public:
     explicit DualBowlAdapter(bool allowSingle = true) noexcept
         : allowSingle_(allowSingle), rightActive_(!allowSingle), dualMix_(allowSingle ? 0.0 : 1.0) {}
     bool configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-        const EngineSettings& centerSettings, double separationHz, double hostRate) noexcept;
+        const EngineSettings& centerSettings, double separationHz, double hostRate,
+        ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
     void reset() noexcept;
     void setAuditEnabled(bool enabled) noexcept;
     DualBowlFrame process(const HostControls& controls) noexcept;

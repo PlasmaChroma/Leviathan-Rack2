@@ -136,6 +136,8 @@ void audioHeapSafety() {
     run(m, 1000, 44100);
     m.params[Vessel::BINAURAL_PARAM].setValue(0); run(m, 12000, 44100);
     m.params[Vessel::BINAURAL_PARAM].setValue(33); run(m, 1000, 44100);
+    m.requestedQuality.store(0); run(m, 1000, 44100);
+    m.requestedQuality.store(1); run(m, 1000, 44100);
     m.pendingReset.store(true); run(m, 100);
     trapAllocations = false;
     require(heapOperations == 0, "audio callback allocates or frees heap storage");
@@ -162,14 +164,48 @@ void dualControls() {
     require(m.audio.engine().ledger().solverFaults==0 && m.audio.rightEngine().ledger().solverFaults==0, "dual controls fault");
     std::cout << "[PASS] Rack separation smoothing/range, two-bowl energy telemetry, muted mechanics and live return to zero\n";
 }
+void qualityMenuState() {
+    Vessel m;
+    run(m);
+    require(m.audio.internalRate() == 192000 && m.requestedQuality.load() == 2, "Reference default");
+    m.params[Vessel::ROTATE_PARAM].setValue(1);
+    m.params[Vessel::BINAURAL_PARAM].setValue(33);
+    cable(m, Vessel::STRIKE_INPUT, 10); run(m, 12000);
+    for (int q : {0,1,2,0}) {
+        m.requestedQuality.store(q);
+        run(m, 12000);
+        const double expected = 48000*(1 << q);
+        require(m.audio.internalRate() == expected && m.visualInternalRate.load() == expected
+            && m.audio.rightEngine().bowl().timeStep() == m.audio.engine().bowl().timeStep(), "quality rate/paired telemetry");
+        require(m.audio.engine().ledger().strikes == 0, "quality switch retriggers held strike");
+        require(m.audio.engine().contactEngagement() == 1 && !m.visualFault.load()
+            && m.audio.engine().bowl().energy() > 0, "rotation does not recover after switch");
+    }
+    auto* data = m.dataToJson(); Vessel restored; restored.dataFromJson(data); json_decref(data); run(restored);
+    require(restored.requestedQuality.load() == 0 && restored.audio.internalRate() == 48000, "quality persistence");
+    auto* legacy = json_object(); restored.dataFromJson(legacy); json_decref(legacy); run(restored);
+    require(restored.requestedQuality.load() == 2 && restored.audio.internalRate() == 192000, "legacy patch Reference default");
+    auto* invalid = json_pack("{s:i}", "processingQuality", 9000); restored.dataFromJson(invalid); json_decref(invalid); run(restored);
+    require(restored.requestedQuality.load() == 2, "invalid quality default");
+    m.params[Vessel::BOWL_PARAM].setValue(1);
+    m.params[Vessel::PITCH_PARAM].setValue(float(std::log2(2000./261.625565)));
+    run(m, 20000);
+    require(m.visualRateFallback.load() && m.audio.internalRate() == 192000 && !m.visualFault.load(), "high-pitch fallback recovery");
+    m.params[Vessel::PITCH_PARAM].setValue(0); m.params[Vessel::BOWL_PARAM].setValue(0); run(m, 20000, 44100);
+    require(m.audio.internalRate() == 44100 && !m.visualRateFallback.load(), "fallback release/44.1 kHz family");
+    m.params[Vessel::ROTATE_PARAM].setValue(0); m.requestedQuality.store(1); run(m, 1000, 44100);
+    require(m.audio.engine().bowl().energy() == 0 && m.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0, "switch must clear isolated tail");
+    std::cout << "[PASS] Quality switching, held gates, rotation recovery, patch persistence/defaults and shared fallback\n";
+}
+
 }
 int main() {
     rack::Context context; rack::contextSet(&context);
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls();
-            std::cout << "Vessel Rack adapter: 6 groups PASS\n";
+        try { gatesAndControls(); tuningAndMorph(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+            std::cout << "Vessel Rack adapter: 7 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;
     }

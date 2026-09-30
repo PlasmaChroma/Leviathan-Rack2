@@ -117,14 +117,30 @@ void Vessel::updateControls(double dt) {
 }
 
 bool Vessel::configureAudio(double rate) {
-    const bool okay = audio.configure(currentBowl, currentMallet, applied, separationHz, rate);
-    if (okay) { hostRate = rate; configured = true; needsConfigure = false; }
+    const bool okay = audio.configure(currentBowl, currentMallet, applied, separationHz, rate, activeQuality);
+    if (okay) {
+        hostRate = rate; configured = true; needsConfigure = false;
+        visualInternalRate.store(float(audio.internalRate()), std::memory_order_relaxed);
+        visualRateFallback.store(audio.internalRate() > rate*vessel::HostRateAdapter::factorForRate(rate, activeQuality),
+            std::memory_order_relaxed);
+    }
     return okay;
 }
 
 void Vessel::process(const ProcessArgs& args) {
     ProcessTimer timer(debugMetrics);
     if (pendingReset.exchange(false, std::memory_order_acq_rel)) resetRuntime();
+    const int requested = requestedQuality.load(std::memory_order_relaxed);
+    const auto quality = requested >= 0 && requested <= 2 ? vessel::ProcessingQuality(requested)
+        : vessel::ProcessingQuality::Reference;
+    if (quality != activeQuality) {
+        // Test-only quality switching deliberately discards the current tail.
+        // Keep gate edge state, so a held strike does not become a new event.
+        audio.reset();
+        activeQuality = quality;
+        sleeping = true; configured = false; needsConfigure = true;
+        idleElapsed = 0; meter = 0;
+    }
     const double dt = args.sampleTime;
     const bool gateEvent = edge(strikeHigh, inputs[STRIKE_INPUT].getVoltage());
     const bool manualEvent = edge(manualHigh, params[STRIKE_PARAM].getValue());
@@ -183,7 +199,11 @@ void Vessel::process(const ProcessArgs& args) {
     }
 }
 
-void Vessel::onReset(const ResetEvent& event) { Module::onReset(event); pendingReset.store(true, std::memory_order_release); }
+void Vessel::onReset(const ResetEvent& event) {
+    Module::onReset(event);
+    requestedQuality.store(int(vessel::ProcessingQuality::Reference), std::memory_order_relaxed);
+    pendingReset.store(true, std::memory_order_release);
+}
 void Vessel::processBypass(const ProcessArgs& args) {
     // Retain the ongoing contacts/tail when bypass is lifted; bypass is output mute.
     process(args);
@@ -191,6 +211,7 @@ void Vessel::processBypass(const ProcessArgs& args) {
 }
 json_t* Vessel::dataToJson() {
     json_t* root = json_object(); json_object_set_new(root, "schema", json_integer(1));
+    json_object_set_new(root, "processingQuality", json_integer(requestedQuality.load(std::memory_order_relaxed)));
     const int b = choice(params[BOWL_PARAM].getValue(), 1), m = choice(params[MALLET_PARAM].getValue(), 3);
     json_object_set_new(root, "bowlId", json_string(vessel::seedBowls[b].stableId));
     json_object_set_new(root, "bowlVersion", json_integer(vessel::seedBowls[b].version));
@@ -201,6 +222,9 @@ void Vessel::dataFromJson(json_t* root) {
     if (!json_is_object(root)) return;
     const auto* schema = json_object_get(root, "schema");
     if (schema && (!json_is_integer(schema) || json_integer_value(schema) != 1)) return;
+    const auto* quality = json_object_get(root, "processingQuality");
+    const auto qualityValue = json_is_integer(quality) ? json_integer_value(quality) : 2;
+    requestedQuality.store(qualityValue >= 0 && qualityValue <= 2 ? int(qualityValue) : 2, std::memory_order_relaxed);
     const char* bowl = json_string_value(json_object_get(root, "bowlId"));
     const char* mallet = json_string_value(json_object_get(root, "malletId"));
     for (std::size_t i = 0; bowl && i < vessel::seedBowlCount; ++i)

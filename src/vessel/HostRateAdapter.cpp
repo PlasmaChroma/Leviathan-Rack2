@@ -79,28 +79,34 @@ bool StereoDecimator::push(const StereoSample& input, StereoSample& output) noex
     return true;
 }
 
-unsigned HostRateAdapter::factorForRate(double rate) noexcept {
+unsigned HostRateAdapter::factorForRate(double rate, ProcessingQuality quality) noexcept {
     if (!std::isfinite(rate) || rate < 32000.0 || rate > 192000.0) return 0;
+    const double minimum = quality == ProcessingQuality::Economy ? 44100.0
+        : quality == ProcessingQuality::Balanced ? 88200.0 : 176400.0;
     unsigned factor = 1;
-    while (rate*factor < 176400.0 && factor < 8) factor *= 2;
+    while (rate*factor < minimum && factor < 8) factor *= 2;
     return factor;
 }
 bool HostRateAdapter::configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-                                const EngineSettings& settings, double rate) noexcept {
+                                const EngineSettings& settings, double rate, ProcessingQuality quality) noexcept {
     PreparedConfiguration next;
-    if (!prepareConfiguration(bowl, mallet, settings, rate, next)) return false;
-    applyConfiguration(bowl, mallet, settings, rate, next);
-    return true;
+    const unsigned maximum = factorForRate(rate);
+    for (unsigned factor = factorForRate(rate, quality); factor && factor <= maximum; factor *= 2) {
+        if (!prepareConfiguration(bowl, mallet, settings, rate, next, factor)) continue;
+        applyConfiguration(bowl, mallet, settings, rate, next);
+        return true;
+    }
+    return false;
 }
 bool HostRateAdapter::prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-    const EngineSettings& settings, double rate, PreparedConfiguration& next) const noexcept {
-    next.factor = factorForRate(rate);
+    const EngineSettings& settings, double rate, PreparedConfiguration& next, unsigned factor) const noexcept {
+    next.factor = factor;
     return next.factor && engine_.prepareConfiguration(bowl, mallet, settings, rate*next.factor, next.engine);
 }
 void HostRateAdapter::applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
     const EngineSettings& settings, double rate, const PreparedConfiguration& next) noexcept {
     engine_.applyConfiguration(bowl, mallet, settings, next.engine);
-    if (rate != hostRate_) {
+    if (rate != hostRate_ || next.factor != decimator_.factor()) {
         decimator_.configure(next.factor);
         transitionGain_ = hostRate_ > 0.0 ? 0.0 : 1.0;
         transitionFrom_ = lastOutput_;

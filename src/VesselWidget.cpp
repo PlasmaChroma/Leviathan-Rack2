@@ -69,6 +69,24 @@ struct VesselWidget final : ModuleWidget {
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("LEFT_OUTPUT", 50, 110.5f)), module, Vessel::LEFT_OUTPUT));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("RIGHT_OUTPUT", 69, 110.5f)), module, Vessel::RIGHT_OUTPUT));
     }
+    void appendContextMenu(Menu* menu) override {
+        ModuleWidget::appendContextMenu(menu);
+        auto* m = static_cast<Vessel*>(module);
+        if (!m) return;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createSubmenuItem("Processing quality (performance test)", "", [m](Menu* sub) {
+            const char* labels[] = {"48 kHz — Economy", "96 kHz — Balanced", "192 kHz — Reference"};
+            for (int i = 0; i < 3; ++i) sub->addChild(createCheckMenuItem(labels[i], "",
+                [m, i]() { return m->requestedQuality.load(std::memory_order_relaxed) == i; },
+                [m, i]() { m->requestedQuality.store(i, std::memory_order_relaxed); }));
+            sub->addChild(new MenuSeparator);
+            sub->addChild(createMenuLabel("Switching clears the ringing bowl."));
+            sub->addChild(createMenuLabel("Targets follow the host sample rate."));
+        }));
+        const float rate = m->visualInternalRate.load(std::memory_order_relaxed);
+        menu->addChild(createMenuLabel(string::f("Actual internal rate: %.1f kHz%s", rate/1000.f,
+            m->visualRateFallback.load(std::memory_order_relaxed) ? " (fallback)" : "")));
+    }
     void step() override {
         const bool enabled = isDragonKingDebugEnabled();
         layerTiming.beginCycle(enabled);

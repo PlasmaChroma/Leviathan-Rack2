@@ -108,6 +108,22 @@ bool VesselEngine::strike(double normalizedVelocity) noexcept {
 
 EngineFrame VesselEngine::step() noexcept {
     EngineFrame frame;
+    if (fastTail_ && !audit_ && !active_ && !rotating_ && engagement_ == 0.0) {
+        // Keep every internal sample and every FIR history. Fuse only the
+        // unforced modal update, finite checks and pickup projections.
+        speed_ += controlAlpha_*(targetSpeed_-speed_);
+        pressure_ += controlAlpha_*(targetPressure_-pressure_);
+        previousFriction_ = 0.0;
+        if (!bank_.advanceFree(observerL_, observerR_, frame.leftVelocity, frame.rightVelocity)
+            || !std::isfinite(compression_) || !std::isfinite(strikerVelocity_)) {
+            bank_.clear();
+            active_ = false; compression_ = strikerVelocity_ = 0.0;
+            ++ledger_.nonfiniteResets;
+            frame.leftVelocity = frame.rightVelocity = 0.0;
+            frame.fault = true;
+        }
+        return frame;
+    }
     const double before = audit_ ? totalEnergy() : 0.0;
     const double h = bank_.timeStep();
     const auto free = bank_.freeMidpoint();

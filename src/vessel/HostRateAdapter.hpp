@@ -4,6 +4,8 @@
 
 namespace vessel {
 
+enum class ProcessingQuality { Economy = 0, Balanced = 1, Reference = 2 };
+
 struct StereoSample { double left = 0.0, right = 0.0; };
 
 // Causal 2x stages, fixed storage. Each stage has a 129-tap symmetric
@@ -51,8 +53,10 @@ struct HostFrame {
 class HostRateAdapter {
 public:
     bool configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-                   const EngineSettings& settings, double hostRate) noexcept;
+                   const EngineSettings& settings, double hostRate,
+                   ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
     void reset() noexcept;
+    void setFastTailEnabled(bool enabled) noexcept { engine_.setFastTailEnabled(enabled); }
     void setAuditEnabled(bool enabled) noexcept { engine_.setAuditEnabled(enabled); }
     HostFrame process(const HostControls& controls) noexcept;
     const VesselEngine& engine() const noexcept { return engine_; }
@@ -60,7 +64,7 @@ public:
     double internalRate() const noexcept { return hostRate_*decimator_.factor(); }
     unsigned factor() const noexcept { return decimator_.factor(); }
     double latencySeconds() const noexcept { return hostRate_ > 0 ? decimator_.latencyHostSamples()/hostRate_ : 0.0; }
-    static unsigned factorForRate(double hostRate) noexcept;
+    static unsigned factorForRate(double hostRate, ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
 private:
     friend class DualBowlAdapter;
     struct PreparedConfiguration {
@@ -68,7 +72,7 @@ private:
         unsigned factor = 0;
     };
     bool prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
-        const EngineSettings& settings, double rate, PreparedConfiguration& next) const noexcept;
+        const EngineSettings& settings, double rate, PreparedConfiguration& next, unsigned factor) const noexcept;
     void applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
         const EngineSettings& settings, double rate, const PreparedConfiguration& next) noexcept;
     VesselEngine engine_;

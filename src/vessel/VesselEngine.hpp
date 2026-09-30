@@ -70,6 +70,8 @@ public:
     // Enable before launch/reset for a complete cumulative ledger. Turning
     // auditing on halfway through an existing tail omits earlier losses.
     void setAuditEnabled(bool enabled) noexcept { audit_ = enabled; }
+    // Oracle switch for offline equivalence checks; copied with the engine.
+    void setFastTailEnabled(bool enabled) noexcept { fastTail_ = enabled; }
     bool strike(double normalizedVelocity) noexcept;
     bool setRotation(bool engaged, double revolutionsPerSecond, double pressure) noexcept;
     EngineFrame step() noexcept;
@@ -111,6 +113,7 @@ private:
     double strikerVelocity_ = 0.0;
     bool active_ = false;
     bool audit_ = false;
+    bool fastTail_ = true;
     bool rotating_ = false;
     double rotationAngle_ = 0.0;
     double engagement_ = 0.0;

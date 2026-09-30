@@ -73,6 +73,7 @@ build/src/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cp
 
 TEST_BINS_NON_RACK := \
 	build/tests/vessel_engine_spec \
+	build/tests/vessel_fast_paths_spec \
 	build/tests/vessel_host_rate_spec \
 	build/tests/vessel_dual_bowl_spec \
 	build/tests/vessel_module_spec \
@@ -461,8 +462,9 @@ build/tests/vessel_dual_bowl_spec: tests/vessel_dual_bowl_spec.cpp $(VESSEL_SOUR
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-test-vessel: check-vessel-profiles build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
+test-vessel: check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
 	$(call run_test_bin,build/tests/vessel_engine_spec)
+	$(call run_test_bin,build/tests/vessel_fast_paths_spec)
 	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 	$(call run_test_bin,build/tests/vessel_dual_bowl_spec)
 	$(call run_rack_test_bin,build/tests/vessel_module_spec)
@@ -474,6 +476,14 @@ build/tools/vessel_render_host: tools/vessel/render_host.cpp $(VESSEL_SOURCES) $
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tools/vessel_render_dual: tools/vessel/render_dual.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+.PHONY: check-vessel-friction-tables
+check-vessel-friction-tables:
+	python3 tools/vessel/generate_friction_tables.py --check
+build/tools/vessel_benchmark_fast_paths: tools/vessel/benchmark_fast_paths.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tests/vessel_fast_paths_spec: tests/vessel_fast_paths_spec.cpp tools/vessel/experiments/FrictionApproximation.hpp tools/vessel/experiments/FrictionTables.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 VESSEL_BENCH_OPT_FLAGS ?= -O3 $(if $(ARCH_X64),-march=nehalem,)
 build/tools/vessel_benchmark_dual: tools/vessel/benchmark_dual.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
@@ -669,6 +679,7 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/vessel_engine_spec)
+	$(call run_test_bin,build/tests/vessel_fast_paths_spec)
 	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 	$(call run_test_bin,build/tests/vessel_dual_bowl_spec)
 	$(call run_rack_test_bin,build/tests/vessel_module_spec)
