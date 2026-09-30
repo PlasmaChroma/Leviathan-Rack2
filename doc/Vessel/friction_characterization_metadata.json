@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-30",
+  "scope": "51 deterministic 15-second C++ reference trajectories; synthetic seeds, not measured instrument data",
+  "environment": {
+    "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "compiler": "GCC 12.3.0",
+    "standard": "C++11",
+    "flags": "-O2 -fno-fast-math -fno-unsafe-math-optimizations",
+    "cpu": "Intel Core Ultra 7 165H"
+  },
+  "command": "make -j10 build/tools/vessel_characterize && build/tools/vessel_characterize > doc/Vessel/friction_characterization_results.csv",
+  "results": {
+    "cases": 51,
+    "solver_faults": 0,
+    "speed_caps": 0,
+    "max_cumulative_energy_residual_J": 8.946132723508526e-11,
+    "max_step_energy_residual_J": 5.944032531533371e-17
+  },
+  "interpretation": {
+    "onset": "First bowl energy crossing 1e-4 J, not an acoustic or psychoacoustic onset measurement",
+    "displacement": "Sum of absolute modal radial displacements divided by rim radius; conservative bound, not a measured shell strain",
+    "late_windows": "Means over 9\u201312 and 12\u201315 seconds; these indicate short-run trends, not asymptotic saturation proofs",
+    "elapsed": "Audited run includes diagnostic state scans, with other validation work running concurrently; not a controlled production CPU benchmark"
+  },
+  "open_gates": [
+    "Modal enrichment/truncation convergence",
+    "Measured dry strike/rub comparisons and contact calibration",
+    "Spectral aliasing and production rate conversion",
+    "Full parameter/rate/regularization sweep",
+    "Longer perturbed and hysteretic trajectories",
+    "Controlled Rack callback performance and 32-instance budget",
+    "Compliant normal contact/contact loss"
+  ]
+}

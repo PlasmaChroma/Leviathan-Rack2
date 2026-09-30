@@ -69,10 +69,11 @@ FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/src/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 # Vessel's reference mechanics rely on finite checks and the energy ledger.
-build/src/vessel/ModalBank.cpp.o build/src/vessel/StrikeContact.cpp.o build/src/vessel/VesselEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+$(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cpp)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
 	build/tests/vessel_engine_spec \
+	build/tests/vessel_host_rate_spec \
 	build/tests/debug_terminal_timing_spec \
 	build/tests/review_state_handoff_spec \
 	build/tests/halo_metrics_scope_spec \
@@ -443,7 +444,7 @@ CROWNSTEP_MODULE_SOURCES := \
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
 .PHONY: test-spsc-snapshot-tsan
 
-VESSEL_SOURCES := src/vessel/ModalBank.cpp src/vessel/StrikeContact.cpp src/vessel/VesselEngine.cpp
+VESSEL_SOURCES := $(wildcard src/vessel/*.cpp)
 VESSEL_HEADERS := $(wildcard src/vessel/*.hpp)
 .PHONY: test-vessel generate-vessel-profiles check-vessel-profiles
 generate-vessel-profiles:
@@ -452,9 +453,18 @@ check-vessel-profiles:
 	python3 tools/vessel/generate_profiles.py --check
 build/tests/vessel_engine_spec: tests/vessel_engine_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
-test-vessel: check-vessel-profiles build/tests/vessel_engine_spec
+build/tests/vessel_host_rate_spec: tests/vessel_host_rate_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+test-vessel: check-vessel-profiles build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec
 	$(call run_test_bin,build/tests/vessel_engine_spec)
+	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 build/tools/vessel_render: tools/vessel/render.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tools/vessel_render_host: tools/vessel/render_host.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tools/vessel_characterize: tools/vessel/characterize.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 test-build: $(TEST_BINS)
@@ -644,6 +654,7 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/vessel_engine_spec)
+	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 	$(call run_test_bin,build/tests/octavia_presence_spec)
 	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)
 	$(call run_test_bin,build/tests/debug_terminal_timing_spec)

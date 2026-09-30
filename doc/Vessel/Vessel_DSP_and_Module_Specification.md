@@ -25,17 +25,19 @@ Unless explicitly identified as R or V, specifications below are **D**. Numerica
 
 **Ready for an offline prototype:** the paired modal core, energy-consistent integration, finite-mass strike, tangential-only friction model with a prescribed load parameter, control interface, stereo observation, and energy telemetry. This is not yet a validated physical reference instrument. See `Physical_Model_Review.md` for the review findings and `review_check_results.json` for the additional numerical diagnostics.
 
-**Not yet established:** sustained moving-contact onset and saturation; forced mechanical response across sample rates; sufficient modal bandwidth for hard impacts; realistic metal/crystal calibration; mallet friction curves; acoustic radiation; CPU cost in Rack; alias rejection; and normal-contact/contact-loss behavior. Algebra checks included with this draft are not an audio-quality or performance certification. Binaural processing remains optional and downstream of these questions.
+**Not yet established across the supported controls:** sustained moving-contact onset and saturation; forced mechanical response across sample rates; sufficient modal bandwidth for hard impacts; realistic metal/crystal calibration; mallet friction curves; acoustic radiation; CPU cost in Rack; alias rejection; and normal-contact/contact-loss behavior. Limited C++ default-contact trajectories now supplement the algebra checks, but neither constitutes an audio-quality or performance certification. Binaural processing remains optional and downstream of these questions.
 
 **Do not replace missing calibration with fabricated measurements.** Preserve provenance at the individual descriptor-field level.
 
-**Implementation progress (2026-09-30):** the standalone C++ modal bank, finite-mass strike engine, impact/event ledger, and offline renderer are now implemented. `Implementation_Status.md` records native test/build evidence and the remaining friction, calibration, and Rack-integration gates. These results supplement the design oracles; they do not upgrade the synthetic descriptors to measured data.
+**Implementation progress (2026-09-30):** the standalone C++ modal bank, finite-mass strikes, moving friction, coupled strike/rub solver, event/drive/loss ledger, optional prescribed radial-load experiment, and offline render/characterization tools are now implemented. `Implementation_Status.md` records native Windows strike evidence, thirteen passing Linux test groups, 51 limited contact-characterization runs, and the remaining calibration, mechanical convergence and Rack-integration gates. Default Metal/Suede starts from rest and develops a bounded several-rotation response; other profiles have materially different onset behavior. These results supplement the design oracles; they do not upgrade the synthetic descriptors to measured data.
 
 ---
 
 ## 1. Instrument contract
 
 Vessel must provide tunable bowl frequency, a strike gate, strike velocity, a rotation gate, continuous rotation speed, bowl material selection, mallet material selection, stereo audio, and an energy bar.
+
+**Basic-frequency tuning is required.** One PITCH/FINE control and V/oct input retune the bowl's full modal spectrum around the lowest pair's center frequency. Both strikes and rubbing excite this same tuned bowl. Tuning must preserve a ringing tail and active contact state; it must not restart the bowl or change rotation speed, pressure, or mallet properties. The initial range is 20–2000 Hz with C4 as the default; §6 defines the mapping and transition policy.
 
 Add **normal pressure** as a first-class control. It is independent of speed. A knob is required; pressure CV is strongly recommended. The report already identifies force and speed as separate rubbing controls (R, source report lines 19 and 39).
 
@@ -923,6 +925,8 @@ Modes above host Nyquist can still participate internally when supported; the ou
 Converge **modal bandwidth and time step independently**. More oversampling does not recover omitted structural modes. Compare successively enriched modal bases with the same contact law, including contact impulse, peak force, duration, rebound, and rubbing onset. Hard-strike seeds and low fundamental tuning especially require this check because the retained modal bandwidth shrinks with pitch. If convergence fails with available measured modes, use a documented passive residual model, additional supported modes, or restrict/soften that interaction explicitly. Never invent high modes and label them measured. The fixed capacity of 12 pairs is an engineering budget subject to this test.
 
 Use a measured anti-alias decimator with declared passband, stopband, and latency. Compare complete nonlinear renders against a higher-rate reference. Stable time integration alone does not guarantee low aliasing.
+
+**Prototype progress (2026-09-30):** `HostRateAdapter` implements the stated factor policy for 32–192 kHz host rates and causal stereo decimation. Its thirteen mechanical plus three host-adapter test groups pass on Linux; output-filter response and fractional host-tagged latency are measured in `Implementation_Status.md`. Rack control smoothing, module/UI lifecycle, performance and complete nonlinear aliasing characterization remain open. User acceptance of the dry auditions supports continuing prototype integration; Crystal remains uncalibrated.
 
 ### 16.2 Event and control timing
 

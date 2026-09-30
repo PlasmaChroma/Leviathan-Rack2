@@ -4,7 +4,7 @@ Start with **Vessel_DSP_and_Module_Specification.md**.
 
 The specification defines the proposed physical model, numerical contact loop, Rack interface, stereo and optional binaural behavior, energy display, and implementation/test phases.
 
-The first C++ implementation milestone is now available: modal mechanics, finite-mass strikes, energy accounting, and an offline renderer. See `Implementation_Status.md` for files, native validation, listening commands, and the next friction/Rack gate.
+The C++ reference engine includes modal mechanics, finite-mass strikes, moving friction, simultaneous strike/rub solving, full energy accounting, causal host-rate adaptation, and offline render/characterization tools. See `Implementation_Status.md` for native Windows strike validation, Linux contact/host-rate validation, listening commands, and the remaining physical/Rack gates.
 
 ## Files
 
@@ -16,6 +16,8 @@ The first C++ implementation milestone is now available: modal mechanics, finite
 - `vessel_review_checks.py`: additional mechanical-response, local-onset, and passive-trajectory diagnostics.
 - `review_check_results.json`: reproducible review diagnostic results; not a singing/audio certification.
 - `Implementation_Status.md`: current C++ implementation progress, validation evidence, and render commands.
+- `friction_characterization_results.csv`: 51 deterministic C++ moving-contact trajectories and diagnostics.
+- `friction_characterization_metadata.json`: environment, metric definitions, and remaining characterization gates.
 
 ## Run the checks
 
@@ -29,4 +31,4 @@ The checker writes its result JSON next to the script. Small floating-point diff
 
 ## Implementation boundary
 
-The standalone strike engine and render harness are implemented. Complete the moving friction/coupled-contact validation before the Rack panel or optional binaural work. Bowl/mallet calibration and production real-time/aliasing measurements remain open; the crystal seed is still synthetic.
+The standalone strike/rub reference, render harness and causal host-rate foundation are implemented; default singing, coupled energy accounting, stopped-contact damping, limited rate/regularization sweeps and output-filter measurements pass. Complete the broader physical convergence and calibration gates before calling the reference DSP complete. The Rack module/UI, production performance/nonlinear aliasing measurements, normal-contact fidelity and optional binaural work remain open; the crystal seed is still synthetic.

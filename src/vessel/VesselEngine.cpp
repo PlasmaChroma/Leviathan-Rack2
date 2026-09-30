@@ -16,7 +16,26 @@ bool VesselEngine::configure(const BowlDescriptor& bowl, const MalletDescriptor&
         || settings.observerSeparation < 0.0 || settings.observerSeparation > pi
         || settings.frequency < 20.0 || settings.frequency > 2000.0
         || settings.decayMultiplier < 0.25 || settings.decayMultiplier > 4.0) return false;
-    if (!bank_.configure(bowl, settings.frequency, settings.decayMultiplier, settings.imperfection, rate)) return false;
+    ModalBank next = bank_;
+    if (!next.configure(bowl, settings.frequency, settings.decayMultiplier, settings.imperfection, rate)) return false;
+    // A conservative angle-independent upper bound; each pair contributes
+    // max(weightA/mA, weightB/mB)*patch^2/n^2, not the sum of both maxima.
+    double maxYtt = 0.0;
+    for (std::size_t n = 0; n < bowl.pairCount; ++n) {
+        const double order = bowl.pairs[n].order;
+        const double half = 0.5*order*mallet.patchWidth;
+        const double patch = std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
+        const auto& a = next.coefficients(2*n);
+        const auto& b = next.coefficients(2*n+1);
+        maxYtt += patch*patch/(order*order)*std::max(a.admittanceWeight/a.mass, b.admittanceWeight/b.mass);
+    }
+    const double certificate = maxYtt*frictionNegativeSlopeBound(15.0, mallet);
+    if (!std::isfinite(certificate) || certificate > 0.9) return false;
+    bank_ = next;
+    descriptor_ = bowl;
+    frictionCertificate_ = certificate;
+    controlAlpha_ = -std::expm1(-bank_.timeStep()/0.01);
+    orbit_.configure(bowl, bank_, mallet.patchWidth, rotationAngle_);
     settings_ = settings;
     mallet_ = mallet;
     observerL_ = bank_.observer(settings.observerCenter-0.5*settings.observerSeparation);
@@ -32,6 +51,21 @@ void VesselEngine::reset() noexcept {
     compression_ = 0.0;
     strikerVelocity_ = 0.0;
     ledger_ = {};
+    engagement_ = 0.0;
+    rotating_ = false;
+    rotationAngle_ = 0.0;
+    speed_ = targetSpeed_;
+    pressure_ = targetPressure_;
+    previousFriction_ = 0.0;
+    orbit_.configure(descriptor_, bank_, mallet_.patchWidth, rotationAngle_);
+}
+bool VesselEngine::setRotation(bool engaged, double speed, double pressure) noexcept {
+    if (!std::isfinite(speed) || speed < -2.0 || speed > 2.0
+        || !std::isfinite(pressure) || pressure < 0.0 || pressure > 15.0) return false;
+    rotating_ = engaged;
+    targetSpeed_ = speed;
+    targetPressure_ = pressure;
+    return true;
 }
 double VesselEngine::strikerEnergy() const noexcept {
     return active_ ? 0.5*activeMallet_.mass*strikerVelocity_*strikerVelocity_
@@ -67,11 +101,48 @@ EngineFrame VesselEngine::step() noexcept {
     const auto free = bank_.freeMidpoint();
     ModalVector force {};
     StrikeSolution solution;
+    FrictionSolution friction;
+    ModalVector tangent {}, normal {};
+    double radialWork = 0.0;
+    const double oldSpeed = speed_, oldPressure = pressure_, oldEngagement = engagement_;
+    speed_ += controlAlpha_*(targetSpeed_-speed_);
+    pressure_ += controlAlpha_*(targetPressure_-pressure_);
+    engagement_ = rotating_ ? std::min(1.0, engagement_+h/0.01) : std::max(0.0, engagement_-h/0.005);
+    const double midEngagement = 0.5*(oldEngagement+engagement_);
+    const double load = midEngagement*0.5*(oldPressure+pressure_);
+    const double U = 2.0*pi*descriptor_.rimRadius*0.5*(oldSpeed+speed_);
+    const bool orbitActive = midEngagement > 0.0;
+    const double increment = orbitActive ? 2.0*pi*0.5*(oldSpeed+speed_)*h : 0.0;
+    if (orbitActive) {
+        orbit_.midpoint(increment, tangent, normal);
+        if (settings_.prescribedRadialLoad)
+            for (std::size_t j = 0; j < bank_.size(); ++j) force[j] = normal[j]*load;
+    }
+    // Known normal forcing shifts both free port velocities before solving.
+    const double vs0 = bank_.midpointVelocity(strikePort_, free)
+        + (settings_.prescribedRadialLoad ? load*bank_.admittance(strikePort_, normal) : 0.0);
+    const double vt0 = bank_.midpointVelocity(tangent, free)
+        + (settings_.prescribedRadialLoad ? load*bank_.admittance(tangent, normal) : 0.0);
+    const double Ytt = bank_.admittance(tangent, tangent);
+    frame.normalLoad = load;
+    frame.handSpeed = orbitActive ? U : 0.0;
+    frame.uniquenessNumber = Ytt*frictionNegativeSlopeBound(load, mallet_);
     double contactLoss = 0.0, retired = 0.0, recovered = 0.0;
     if (active_) {
-        solution = solveStrike(compression_, strikerVelocity_, bank_.midpointVelocity(strikePort_, free),
-                               bank_.admittance(strikePort_, strikePort_), h, activeMallet_);
+        if (load > 0.0) {
+            const auto coupled = solveContacts(compression_, strikerVelocity_, vs0, vt0,
+                bank_.admittance(strikePort_, strikePort_), bank_.admittance(strikePort_, tangent),
+                Ytt, h, activeMallet_, mallet_, U, load, previousFriction_);
+            solution = coupled.strike;
+            friction = coupled.friction;
+            solution.converged = coupled.converged;
+            ledger_.maxFrictionIterations = std::max(ledger_.maxFrictionIterations, coupled.innerIterations);
+        } else {
+            solution = solveStrike(compression_, strikerVelocity_, vs0,
+                                   bank_.admittance(strikePort_, strikePort_), h, activeMallet_);
+        }
         ledger_.maxSolverIterations = std::max(ledger_.maxSolverIterations, solution.iterations);
+        ++ledger_.strikeIterationHistogram[std::min(80u, solution.iterations)];
         if (!solution.converged) {
             // No unconverged force is ever committed. Discard the contact's
             // kinetic/potential energy explicitly and retain the finite bowl.
@@ -83,13 +154,36 @@ EngineFrame VesselEngine::step() noexcept {
             strikerVelocity_ = 0.0;
             frame.fault = true;
         } else {
-            for (std::size_t j = 0; j < bank_.size(); ++j) force[j] = strikePort_[j]*solution.force;
+            for (std::size_t j = 0; j < bank_.size(); ++j) force[j] += strikePort_[j]*solution.force;
             contactLoss = h*solution.dampingForce*solution.compressionVelocity;
             frame.strikeForce = solution.force;
             frame.compression = solution.compression;
         }
+    } else if (load > 0.0) {
+        friction = solveFriction(U-vt0, Ytt, load, mallet_, previousFriction_);
+        ledger_.maxFrictionIterations = std::max(ledger_.maxFrictionIterations, friction.iterations);
+        if (!friction.converged) { ++ledger_.solverFaults; frame.fault = true; }
     }
+    if (frame.fault) {
+        force = {};
+        friction = {};
+        rotating_ = false;
+        engagement_ = 0.0;
+    } else if (load > 0.0) {
+        for (std::size_t j = 0; j < bank_.size(); ++j) force[j] += tangent[j]*friction.force;
+        frame.frictionForce = friction.force;
+        frame.slip = friction.slip;
+        ledger_.maxFrictionIterations = std::max(ledger_.maxFrictionIterations, friction.iterations);
+        ++ledger_.frictionIterationHistogram[std::min(80u, friction.iterations)];
+    }
+    previousFriction_ = frame.frictionForce;
+    if (audit_ && settings_.prescribedRadialLoad && !frame.fault)
+        radialWork = h*load*(bank_.midpointVelocity(normal, free)+bank_.admittance(normal, force));
     const auto modalAudit = bank_.commit(free, force, audit_);
+    if (orbitActive) {
+        orbit_.finish();
+        rotationAngle_ = std::remainder(rotationAngle_+increment, 2.0*pi);
+    }
     if (active_) {
         compression_ = solution.compression;
         strikerVelocity_ -= h*solution.force/activeMallet_.mass;
@@ -126,7 +220,13 @@ EngineFrame VesselEngine::step() noexcept {
     if (audit_) {
         ledger_.modalLoss += modalAudit.dampingLoss;
         ledger_.contactLoss += contactLoss;
-        frame.stepEnergyResidual = totalEnergy()-before+modalAudit.dampingLoss+contactLoss+retired+recovered;
+        const double handWork = h*frame.frictionForce*frame.handSpeed;
+        const double frictionLoss = h*frame.frictionForce*frame.slip;
+        ledger_.handWork += handWork;
+        ledger_.frictionLoss += frictionLoss;
+        ledger_.radialWork += radialWork;
+        frame.stepEnergyResidual = totalEnergy()-before+modalAudit.dampingLoss+contactLoss+retired+recovered
+            +frictionLoss-handWork-radialWork;
         ledger_.maxStepResidual = std::max(ledger_.maxStepResidual, std::abs(frame.stepEnergyResidual));
     }
     frame.leftVelocity = bank_.velocity(observerL_);
