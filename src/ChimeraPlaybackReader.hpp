@@ -9,7 +9,7 @@ namespace chimera {
 // Partial blocks wrap inside the Splice and read raw audio directly.
 class PlaybackReader {
 public:
-    PlaybackReader() : kernel_(table().values) {}
+    PlaybackReader() : kernel_(table().values), balancedKernel_(balancedTable().values) {}
 private:
     struct Table {
     float values[8193];
@@ -25,6 +25,20 @@ private:
     }
     };
     static const Table& table() { static const Table instance; return instance; }
+    struct BalancedTable {
+        float values[4097];
+        BalancedTable() {
+            for (unsigned i = 0; i <= 4096; ++i) {
+                const double x = double(i) / 1024.0;
+                const double window = .42 + .5 * std::cos(profile1::kPi*x/4.0) +
+                    .08 * std::cos(profile1::kPi*x/2.0);
+                values[i] = float((i ? std::sin(profile1::kPi*.94*x) /
+                    (profile1::kPi*x) : .94) * window);
+            }
+            values[4096] = 0.f;
+        }
+    };
+    static const BalancedTable& balancedTable() { static const BalancedTable instance; return instance; }
 public:
     static StereoFrame cubic(const Reel& reel, Region r, double coordinate, bool& invalid) {
         const double p = profile1::wrapPosition(coordinate, r);
@@ -40,7 +54,7 @@ public:
         return {profile1::audio(left), profile1::audio(right)};
     }
     StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid,
-                     bool accelerate = true) const {
+                     bool accelerate = true, bool balanced = false) const {
         if (r.end <= r.begin) return {0, 0};
         if (!profile1::finite(speed)) { invalid = true; speed = 1; }
         const double width = profile1::clamp(std::fabs(speed), 1.0, 512.0);
@@ -69,9 +83,10 @@ public:
                 left += profile1::clamp(profile1::audio(value.l), -64.0, 64.0);
                 right += profile1::clamp(profile1::audio(value.r), -64.0, 64.0);
             }
-            return {float(left/(r.end-r.begin)), float(right/(r.end-r.begin))};
+            const double inverseLength = 1.0 / (r.end-r.begin);
+            return {float(left*inverseLength), float(right*inverseLength)};
         }
-        const double p = profile1::wrapPosition(coordinate, r), radius = 8.0 * width;
+        const double p = profile1::wrapPosition(coordinate, r), radius = (balanced ? 4.0 : 8.0) * width;
         const std::int64_t begin = std::int64_t(std::ceil(p-radius));
         const std::int64_t end = std::int64_t(std::floor(p+radius));
         std::uint32_t at = profile1::wrapTap(begin, 0, r);
@@ -88,8 +103,8 @@ public:
             if (block) {
                 const double center = (double(tap)+(block-1)*0.5-p)*scale;
                 const double half = (block-1)*0.5*scale;
-                const double a = gainAt(center-half), b = gainAt(center-half/3),
-                    c = gainAt(center+half/3), d = gainAt(center+half);
+                const double a = gainAt(center-half, balanced), b = gainAt(center-half/3, balanced),
+                    c = gainAt(center+half/3, balanced), d = gainAt(center+half, balanced);
                 const double even = (a+d)*0.5, innerEven = (b+c)*0.5;
                 const double odd = (d-a)*0.5, innerOdd = (c-b)*1.5;
                 const double coeff[4] = {even-(even-innerEven)*1.125,
@@ -104,7 +119,7 @@ public:
                 if (at == r.end) at = r.begin;
                 continue;
             }
-            const double gain = gainAt((double(tap)-p)*scale);
+            const double gain = gainAt((double(tap)-p)*scale, balanced);
             StereoFrame value = reel.readActive(at);
             if (!profile1::finite(value.l) || !profile1::finite(value.r)) invalid = true;
             left += profile1::clamp(profile1::audio(value.l), -64.0, 64.0) * gain;
@@ -113,7 +128,8 @@ public:
             ++tap;
             if (++at == r.end) at = r.begin;
         }
-        StereoFrame filtered{float(left/weight), float(right/weight)};
+        const double inverseWeight = 1.0 / weight;
+        StereoFrame filtered{float(left*inverseWeight), float(right*inverseWeight)};
         // Avoid a discontinuity when a smoothed rate crosses unity.
         if (width < 1.125) {
             const auto original = cubic(reel, r, coordinate, invalid);
@@ -124,11 +140,13 @@ public:
         return filtered;
     }
 private:
-    double gainAt(double index) const {
+    double gainAt(double index, bool balanced) const {
         index = std::fabs(index);
         const unsigned i = unsigned(index);
-        return i >= 8192 ? 0.0 : kernel_[i] + (kernel_[i+1]-kernel_[i])*(index-i);
+        const float* kernel = balanced ? balancedKernel_ : kernel_;
+        return i >= (balanced ? 4096u : 8192u) ? 0.0 : kernel[i] + (kernel[i+1]-kernel[i])*(index-i);
     }
     const float* kernel_;
+    const float* balancedKernel_;
 };
 } // namespace chimera

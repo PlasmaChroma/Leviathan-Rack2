@@ -281,6 +281,14 @@ static const std::array<float, 34> morph_density = {{
     4.5f, 4.66666603f, 4.75f, 5.0f, 5.25f, 5.33333015f,
     5.5f, 5.66665983f, 5.75f, 6.0f,
 }};
+static const std::array<float, 34> morph_gain = {{
+    0.756470025f, 0.756470025f, 0.756470025f, 0.756470025f, 0.756470025f, 0.706700027f,
+    0.630930007f, 0.575720012f, 0.553290009f, 0.5f, 0.46085f, 0.449970007f,
+    0.430680007f, 0.41407001f, 0.406599998f, 0.386849999f, 0.370310009f, 0.365370005f,
+    0.356209993f, 0.34788999f, 0.344009995f, 0.333330005f, 0.323890001f, 0.320980012f,
+    0.315459996f, 0.310330003f, 0.307889998f, 0.30103001f, 0.294779986f, 0.292820007f,
+    0.289059997f, 0.285510004f, 0.283800006f, 0.278939992f,
+}};
 // Default chord third ratio is the ROM word 0x3faaaaaa.
 static constexpr float defaultChordThird = 1.3333332538604736f;
 // Interior of the +1x / -1x bins in both bidirectional modes.

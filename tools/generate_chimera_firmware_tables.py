@@ -13,7 +13,7 @@ def main():
              '// Source: firmware/Morphagene/tables; preserve ROM values, not fitted curves.',
              '#pragma once', '#include <array>',
              'namespace chimera { namespace firmware {']
-    for name in ('gene_size_exp', 'varispeed_magnitude', 'varispeed_positive', 'morph_launch', 'morph_density'):
+    for name in ('gene_size_exp', 'varispeed_magnitude', 'varispeed_positive', 'morph_launch', 'morph_density', 'morph_gain'):
         rows = list(csv.DictReader((TABLES / (name + '.csv')).open()))
         values = []
         for row in rows:

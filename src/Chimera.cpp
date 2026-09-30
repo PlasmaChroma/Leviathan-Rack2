@@ -239,9 +239,11 @@ struct Chimera : Module {
     std::atomic<int> menuCommand{0};
     std::atomic<unsigned> selectionMenuCommands{0}; // 1 next Splice, 2 add marker.
     std::atomic<bool> bandlimitedPlayback{false};
+    std::atomic<bool> balancedBandlimiting{false};
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> primaryEosgSetting{true};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
+    std::atomic<bool> firmwareEnvelopesSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
     std::atomic<int> rsopSetting{0}, inputGainSetting{1};
     std::atomic<float> mcrSetting[3]{{2.f}, {1.5f}, {chimera::firmware::defaultChordThird}};
@@ -1613,6 +1615,7 @@ struct Chimera : Module {
         json_object_set_new(root, "schemaVersion", json_integer(1));
         json_object_set_new(root, "dspProfile", json_integer(1));
         json_object_set_new(root, "bandlimitedPlayback", json_boolean(bandlimitedPlayback.load()));
+        json_object_set_new(root, "balancedBandlimiting", json_boolean(balancedBandlimiting.load()));
         const bool unsavedAudio = unsavedImport.load(std::memory_order_acquire) ||
             publishedAudioRevision.load(std::memory_order_acquire) > audioRevision;
         json_object_set_new(root, "audioStatus", json_string(manifest.empty() ?
@@ -1632,6 +1635,7 @@ struct Chimera : Module {
         json_object_set_new(root, "storage", storage);
         json_object_set_new(root, "inop", json_boolean(settings.inop != 0));
         json_object_set_new(root, "gnsm", json_integer(settings.gnsm));
+        json_object_set_new(root, "firmwareEnvelopes", json_boolean(firmwareEnvelopesSetting.load()));
         json_object_set_new(root, "cvop", json_integer(settings.cvop));
         json_object_set_new(root, "omod", json_integer(settings.omod));
         json_object_set_new(root, "primaryEosg", json_boolean(primaryEosgSetting.load(std::memory_order_acquire)));
@@ -1662,6 +1666,7 @@ struct Chimera : Module {
             return;
         }
         bandlimitedPlayback.store(json_is_true(json_object_get(root, "bandlimitedPlayback")));
+        balancedBandlimiting.store(json_is_true(json_object_get(root, "balancedBandlimiting")));
         json_t* storage = json_object_get(root, "storage");
         json_t* manifest = json_object_get(storage, "manifest");
         if (json_is_string(manifest)) {
@@ -1681,6 +1686,8 @@ struct Chimera : Module {
         if (json_is_boolean(inop))
             inopSetting.store(json_is_true(inop), std::memory_order_release);
         json_t* gnsm = json_object_get(root, "gnsm");
+        json_t* firmwareEnvelopes = json_object_get(root, "firmwareEnvelopes");
+        if (json_is_boolean(firmwareEnvelopes)) firmwareEnvelopesSetting.store(json_is_true(firmwareEnvelopes));
         if (json_is_integer(gnsm) && (json_integer_value(gnsm) == 0 || json_integer_value(gnsm) == 1))
             gnsmSetting.store(json_integer_value(gnsm) == 1, std::memory_order_release);
         json_t* cvop = json_object_get(root, "cvop");
@@ -2034,6 +2041,7 @@ struct Chimera : Module {
         lastPlayMode = playMode;
         slice.setInop(inopSetting.load(std::memory_order_relaxed));
         slice.setSmoothGenes(gnsmSetting.load(std::memory_order_relaxed));
+        slice.setFirmwareEnvelopes(firmwareEnvelopesSetting.load(std::memory_order_relaxed));
         slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
         slice.setPrimaryEosg(primaryEosgSetting.load(std::memory_order_relaxed));
         slice.setImmediateTransitions(omodSetting.load(std::memory_order_relaxed));
@@ -2171,6 +2179,7 @@ struct Chimera : Module {
             slice.setPlay(false);
         }
         slice.setBandlimitedPlayback(bandlimitedPlayback.load(std::memory_order_relaxed));
+        slice.setBalancedBandlimiting(balancedBandlimiting.load(std::memory_order_relaxed));
         const chimera::Slice::Output out = slice.step(in);
         if (out.recording && slice.recordState() == chimera::Slice::Current &&
             (recordDestinationChanged || !wasRecording))
@@ -2517,6 +2526,12 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createCheckMenuItem("Bandlimited playback (higher CPU)", "",
             [m] { return m->bandlimitedPlayback.load(); },
             [m] { m->bandlimitedPlayback.store(!m->bandlimitedPlayback.load()); }));
+        menu->addChild(createCheckMenuItem("Bandlimiting quality: Balanced (lower CPU)", "",
+            [m] { return m->balancedBandlimiting.load(); },
+            [m] { m->balancedBandlimiting.store(true); }));
+        menu->addChild(createCheckMenuItem("Bandlimiting quality: Full", "",
+            [m] { return !m->balancedBandlimiting.load(); },
+            [m] { m->balancedBandlimiting.store(false); }));
         const char* memoryStatus = m->controlActiveHandle ? "Reel ready" :
             (m->ioError.load(std::memory_order_acquire) ? "Reel preparation failed" :
              (m->pendingRequestId || m->awaitingHandle ?
@@ -2733,6 +2748,9 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createCheckMenuItem("Writer: live input only (inop)", "",
             [m] { return m->inopSetting.load(std::memory_order_acquire); },
             [m] { m->inopSetting.store(!m->inopSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createCheckMenuItem("Recovered firmware envelopes (experimental)", "",
+            [m] { return m->firmwareEnvelopesSetting.load(); },
+            [m] { m->firmwareEnvelopesSetting.store(!m->firmwareEnvelopesSetting.load()); }));
         menu->addChild(createCheckMenuItem("Smooth Gene window", "",
             [m] { return m->gnsmSetting.load(std::memory_order_acquire); },
             [m] { m->gnsmSetting.store(!m->gnsmSetting.load(std::memory_order_relaxed), std::memory_order_release); }));

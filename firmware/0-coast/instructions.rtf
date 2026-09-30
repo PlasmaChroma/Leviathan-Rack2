@@ -1,0 +1,81 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1404\cocoasubrtf470
+{\fonttbl\f0\fswiss\fcharset0 ArialMT;}
+{\colortbl;\red255\green255\blue255;\red26\green26\blue26;}
+\margl1440\margr1440\vieww24380\viewh14580\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs36 \cf2 \expnd0\expndtw0\kerning0
+If your 0-COAST has serial number 3895 or higher you already have this version of firmware, do not run this firmware updater!!!\
+\
+Before updating, check the light sequence on power up of your 0-COAST. Units that have already been updated to 1.6.8 will flash PGM_A Button and MIDI_A  Activity Window on power up. I
+\b f your 0-COAST flashes PGM_A and MIDI_A on power up do not run this firmware updater!!!\
+
+\b0 \
+If your 0-COAST is running firmware any version below 1.6.5 
+\b you will need to run the Digi Cal after you install this firmware!!! If you do not do this your 0-COAST will not function properly with MIDI.\
+\
+
+\b0 Check the light sequence on power up of your 0-COAST. Units that have already been updated to 1.6.5 are serial numbers
+\fs44  
+\fs34 3558-3894 or 
+\fs36 will flash PGM_B Button on power up. If your unit flashes PGM_B Button on power up, you do not need to run Digi Cal after you install 1.6.8 firmware.\
+\
+If your 0-COAST does 
+\b not
+\b0  power up with the 1.6.8 light sequence, you could run the firmware updater.\
+This firmware version 1.6.8 may be loaded onto your 0-COAST using the attached NoCoast1.6.8.wav file. Here is the procedure:\
+\
+-On a computer or smartphone, open the audio file: NoCoast1.6.8.wav and set the volume to about 90% on the playback device.\
+\
+-Make sure that other sounds (email/IM alerts, notifications, music, video, etc.) are turned OFF and silenced during playback of the NoCoast1.6.8.wav audio file. If the process is interrupted by other sounds the 0-COAST will go dark and you will have to start over. If this happens the 0-COAST will not have any firmware on it except that which allows this process, so it can only be booted into this special mode until the firmware writing procedure is completed successfully. 
+\b If using a phone for playback, put phone into \'93airplane mode.\'94
+\b0 \
+\
+-Make sure the 0-COAST is powered ON by a power strip with an ON/ OFF switch.\
+\
+-Set 0-COAST Voltage MATH Attenuverter full CW (to create positive offset at Voltage MATH OUT).\
+\
+-Patch from either 0-COAST Voltage MATH OUT to the 0-COAST TEMPO IN.\
+\
+-HOLD down PGM_B.\
+\
+-Quickly switch the power strip powering the 0-COAST from ON to OFF and then ON again. You must do this quickly.\
+\
+-PGM_B, MIDI A and MIDI B Activity Windows light. If this does not happen, just try again, quickly turn power from ON to OFF and then ON again via the switch on a power strip. Once PGM_B, MIDI A and MIDI B Activity Windows light, Stop HOLDing PGM_B. \
+\
+-Remove patch  from the 0-COAST Voltage MATH OUT to the 0-COAST TEMPO IN.\
+\
+-PRESS PGMA. PGMA lights, PGM_B turns off.\
+\
+-Patch a mini cable from the output of an audio playback device to theTEMPO IN of the 0-COAST.\'a0\
+\
+-PRESS PGM_B. When the MIDI A and MIDI B Activity Windows lights turn off start playback of the  NoCoast1.6.8.wav audio file (do not monitor the sound yourself as it is quite unpleasant).\
+\
+-PGM_A and PGM_B lights alternate on/ off as the file is read in. When update is finished PGM_A and PGM_B stop alternating on/ off, the unit returns to normal use state, and you will see the Stepped Random Activity Window indicating the various random voltages.\
+\
+
+\b -If you were not already running 1.6.5, you must run the Digi Cal after you install this firmware. Please have the 0-COAST powered on for at least 20 minutes before you do this. Please see the 0-COAST manual page 13 for the Digi Cal procedure. This will take about 5 minutes. Here is a video that shows how to do it:\
+\
+https://youtu.be/1li825HuXcU\
+
+\b0 \
+NOTE: procedure for Digi Cal has changed. You no longer set Fine Tune so MIDI A Activity Window stops flashing. Instead just set Fine Tune on 0-COAST to 10:00 (it is still required to set external VCO so PGM B Button stops flashing when performing Digi-Cal on an external VCO). Additionally, the Activity Windows will no longer flash to indicate progress while calibrating. Instead the PGM_B button will remain ON, and the PGM_A button, MIDI A and MIDI B, TEMPO and Random Voltage Activity Windows will all be OFF. You will just hear the calibration routine playing through all the notes in the scale and when this is complete and the 0-COAST Digi Cal stops playing notes, exits the Program Page and returns to normal operation 
+\b with the Clock and Stepped Random Activity Windows lighting.
+\b0 \
+\
+If you have any trouble with this process, please contact technical@makenoisemusic.com\
+\
+Changes in version 1.6.8\
+\
+1. Fixed MIDI B CV output range for Velocity and Mod Wheel\
+2. Improved Digi Cal procedure so it runs faster.\
+3. Change 0-COAST Fine Tune adjustment for Digi-Cal. Now just set to 10:00 before running Digi Cal.\
+\pard\pardeftab720\sl300\partightenfactor0
+\cf2 \
+\pard\pardeftab720\partightenfactor0
+\cf2 \
+\
+\
+\
+}

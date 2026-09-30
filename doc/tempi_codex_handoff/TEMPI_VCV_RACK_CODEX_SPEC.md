@@ -4,7 +4,8 @@
 **Date:** 2026-09-29<br>
 **Reference target:** the supplied TEMPI 71 firmware-analysis archive and its behavioral dossier  
 **Implementation target:** a native VCV Rack 2 module, integrated into the existing Leviathan plugin checkout when available  
-**Working C++/model name:** `Tempi` / `modelTempi`; treat the eventual public-facing product name as a separate branding decision  
+**Working product name:** Tesseract; confirm the public name and immutable model slug before release  
+**Working C++/model name:** `Tempi` / `modelTempi` (provisional implementation identifiers)  
 **Deliverable:** functioning source code, headless tests, Rack integration, panel controls, persistence, documentation, and reproducible validation—not another design document
 
 ---

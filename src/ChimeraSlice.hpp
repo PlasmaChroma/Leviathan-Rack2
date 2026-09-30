@@ -38,6 +38,7 @@ public:
         clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 
     void setBandlimitedPlayback(bool enabled) { grains_.setBandlimited(enabled); }
+    void setBalancedBandlimiting(bool enabled) { grains_.setBalancedBandlimiting(enabled); }
     void setReel(Reel* reel) {
         markerHistoryState_ = 0;
         overloaded_ = false;
@@ -88,6 +89,10 @@ public:
         conditioning_ = enabled;
     }
     void setSmoothGenes(bool enabled) { grains_.setSmooth(enabled); }
+    void setFirmwareEnvelopes(bool enabled) {
+        firmwareEnvelopes_ = enabled;
+        grains_.setFirmwareEnvelopes(enabled);
+    }
     void setImmediateTransitions(bool enabled) {
         immediateTransitions_ = enabled;
         grains_.setImmediateTransitions(enabled);
@@ -298,6 +303,7 @@ public:
         }
         const bool canRead = play_ && region.end > region.begin;
         const bool finiteGene = !controls_.fullGene();
+        const bool firmwareBus = firmwareEnvelopes_ && finiteGene;
         const double length = region.end - region.begin;
         const bool metadataRefresh = metadataRefreshDue_ && !metadataRegionPending_ && canRead;
         if (metadataRefresh) metadataRefreshDue_ = false;
@@ -342,7 +348,11 @@ public:
         wet.l = guard(wet.l);
         wet.r = guard(wet.r);
         const float gainTarget = canRead && (c.rate != 0.f || pmBlend_ > 0.f) ? 1.f : 0.f;
-        wetGain_ += profile1::clamp(gainTarget - wetGain_, -1.f/48.f, 1.f/48.f);
+        if (firmwareBus) {
+            // MG204 0x08028e28..0x08028e32: audio-rate enable smoothing.
+            wetGain_ = .999f * wetGain_ + .001f * gainTarget;
+        }
+        else wetGain_ += profile1::clamp(gainTarget - wetGain_, -1.f/48.f, 1.f/48.f);
         wet.l *= wetGain_;
         wet.r *= wetGain_;
         // A stopped transport has no fresh reader sample. Fade the last wet
@@ -354,6 +364,13 @@ public:
             wet.l = stopTail_.l * oldFraction + wet.l * (1.f - oldFraction);
             wet.r = stopTail_.r * oldFraction + wet.r * (1.f - oldFraction);
             --stopTailRemaining_;
+        }
+        if (firmwareBus) {
+            // MG204 0x08028e42..0x08028e76 (dense mirror 0x0802a110):
+            // saturate playback AFTER its gain, BEFORE complementary S.O.S.
+            // This same bounded playback feeds monitoring and inop=0 writing.
+            wet.l = profile1::clamp(wet.l, -1.f, 1.f);
+            wet.r = profile1::clamp(wet.r, -1.f, 1.f);
         }
         lastWet_ = wet;
         // One recovered complementary crossfade, shared by monitor and inop=0 writer.
@@ -518,6 +535,7 @@ private:
     unsigned markerHistoryState_ = 0; // 1 Undo, 2 Redo.
     std::uint64_t markerHistoryRevision_ = 0;
     Grains grains_;
+    bool firmwareEnvelopes_ = false;
     Selection selection_;
     Reel* reel_;
     RecordState state_;

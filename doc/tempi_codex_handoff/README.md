@@ -1,5 +1,7 @@
 # TEMPI Codex handoff
 
+**Working product name: Tesseract.** `Tempi` remains the provisional C++/model and source-asset name in this handoff; choose the final public name and model slug before release.
+
 Start with **TEMPI_VCV_RACK_CODEX_SPEC.md**. It is the implementation contract. The `reference/` folder contains the earlier evidence, not an alternate set of implementation defaults.
 
 The implementation-readiness revision is **1.1.0, 2026-09-29**. Follow

@@ -633,5 +633,76 @@ int main() {
         need(std::fabs(stretched.trajectoryOffset() - 630.0) < 1e-4,
              "stopped Stretch Clock freezes source trajectory");
     }
-    std::puts("PASS: Chimera finite-Gene timing, unity plateau, and four-slot density");
+    {
+        chimera::CoreOutput firmwareControl{};
+        firmwareControl.gene = static_cast<float>(gene);
+        firmwareControl.rate = 1.f;
+        firmwareControl.slide = .25f;
+        firmwareControl.morph = 1400.f / 4096.f;
+        chimera::Grains classicFirmware, smoothFirmware;
+        classicFirmware.setFirmwareEnvelopes(true);
+        smoothFirmware.setFirmwareEnvelopes(true);
+        smoothFirmware.setSmooth(true);
+        classicFirmware.step(reel, region, firmwareControl);
+        smoothFirmware.step(reel, region, firmwareControl);
+        need(classicFirmware.slotEnvelopeEdge(0) == 250,
+             "recovered classic overlapping Gene uses 250-frame linear edge");
+        need(smoothFirmware.slotEnvelopeEdge(0) == 300,
+             "recovered smooth overlapping Gene uses half-duration edge");
+        firmwareControl.morph = 400.f / 4096.f;
+        smoothFirmware.reset();
+        smoothFirmware.step(reel, region, firmwareControl);
+        need(smoothFirmware.slotEnvelopeEdge(0) == 250,
+             "firmware unity launch forces short edge even with Smooth Gene");
+        for (int frame = 0; frame < 100; ++frame)
+            smoothFirmware.step(reel, region, firmwareControl);
+        smoothFirmware.setImmediateTransitions(true);
+        const auto handoff = smoothFirmware.step(reel, region, firmwareControl, true);
+        need(handoff.readers == 2 && handoff.audio.l > 0.f,
+             "immediate firmware launch retains outgoing voice and its envelope");
+        const float outgoingEnvelope = smoothFirmware.slotEnvelope(0);
+        smoothFirmware.step(reel, region, firmwareControl);
+        need(smoothFirmware.slotEnvelope(0) < outgoingEnvelope,
+             "firmware launch starts outgoing release instead of continuing its attack");
+    }
+    {
+        chimera::Reel qualityReel(64, 64);
+        for (unsigned i = 0; i < 8192; ++i) {
+            const float tone = .1f * std::sin(float(i) * float(2.0 * chimera::profile1::kPi * .3125));
+            qualityReel.write(i, {.1f, tone}, i);
+        }
+        chimera::Grains raw, filtered;
+        raw.setFirmwareEnvelopes(true);
+        filtered.setFirmwareEnvelopes(true);
+        filtered.setBandlimited(true);
+        filtered.setBalancedBandlimiting(true);
+        chimera::CoreOutput control{};
+        control.gene = .325301f;
+        control.morph = 400.f / 4096.f;
+        control.rate = 2.f;
+        control.slide = .25f;
+        double rawEnergy = 0, filteredEnergy = 0;
+        for (unsigned frame = 0; frame < 24000; ++frame) {
+            const auto a = raw.step(qualityReel, {0,8192}, control);
+            const auto b = filtered.step(qualityReel, {0,8192}, control);
+            need(!a.invalidSource && !b.invalidSource && a.readers == b.readers,
+                 "independent firmware bandlimiting retains finite voice lifecycle");
+            need(std::fabs(a.audio.l - b.audio.l) < .00001f,
+                 "firmware bandlimited extension preserves recovered constant-source gain");
+            if (frame > 1000) {
+                rawEnergy += double(a.audio.r) * a.audio.r;
+                filteredEnergy += double(b.audio.r) * b.audio.r;
+            }
+        }
+        // The raw firmware interpolator already attenuates this tone. Balanced
+        // must add at least 8 dB rejection; Full has a narrower transition band.
+        need(rawEnergy > .1 && filteredEnergy < rawEnergy * .15,
+             "Balanced bandlimited firmware playback rejects a source tone that aliases at 2x");
+        raw.reset(); filtered.reset(); control.rate = 1.f; control.slide = 0.f;
+        for (unsigned frame = 0; frame < 2400; ++frame)
+            need(raw.step(qualityReel, {0,8192}, control).audio.r ==
+                 filtered.step(qualityReel, {0,8192}, control).audio.r,
+                 "firmware unity-speed reader is unchanged by the quality option");
+    }
+    std::puts("PASS: Chimera finite-Gene timing, legacy windows and recovered firmware envelopes");
 }

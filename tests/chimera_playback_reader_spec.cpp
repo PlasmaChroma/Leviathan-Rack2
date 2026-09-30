@@ -63,7 +63,7 @@ int main() {
                  "bulk imported moments remain correct after live append and overwrite");
         }
     }
-    double maxError = 0;
+    double maxError = 0, balancedMaxError = 0;
     for (unsigned i = 0; i < 500; ++i) {
         const chimera::Region splice = i%2 ? chimera::Region{199, 266} : chimera::Region{117, 47003};
         const double speed = 1.125 + 510.875*std::fabs(noise());
@@ -72,9 +72,15 @@ int main() {
         const auto exact = reader.read(reel, splice, position, speed, invalid, false);
         maxError = std::max(maxError, std::fabs(double(fast.l)-exact.l));
         maxError = std::max(maxError, std::fabs(double(fast.r)-exact.r));
+        const auto balancedFast = reader.read(reel, splice, position, speed, invalid, true, true);
+        const auto balancedExact = reader.read(reel, splice, position, speed, invalid, false, true);
+        balancedMaxError = std::max(balancedMaxError, std::fabs(double(balancedFast.l)-balancedExact.l));
+        balancedMaxError = std::max(balancedMaxError, std::fabs(double(balancedFast.r)-balancedExact.r));
     }
     std::printf("accelerated FIR maximum error after repeated live overwrites=%g\n", maxError);
     need(maxError < 0.001 && !invalid, "block approximation and overwrite drift stay below -60 dBFS");
+    need(balancedMaxError < .001 && !invalid,
+         "Balanced block acceleration agrees with its direct FIR after live overwrites");
     for (double speed : {2.0, -2.0, 4.0, 16.0, 512.0}) {
         for (bool reject : {false, true}) {
             // Integer-period source frequency, well inside pass/stop bands.
@@ -85,12 +91,15 @@ int main() {
                     float(std::sin(2*chimera::profile1::kPi*frequency*(i-region.begin)/48000));
                 reel.write(i, {value, -value}, i);
             }
-            double energy = 0, error = 0;
+            double energy = 0, error = 0, balancedEnergy = 0, balancedError = 0;
             for (unsigned i = 0; i < 4096; ++i) {
                 const double p = region.begin + i*speed + 0.375;
                 const auto value = reader.read(reel, region, p, speed, invalid);
                 energy += value.l * value.l;
                 const double reference = std::sin(2*chimera::profile1::kPi*frequency*(p-region.begin)/48000);
+                const auto balanced = reader.read(reel, region, p, speed, invalid, true, true);
+                balancedEnergy += balanced.l * balanced.l;
+                balancedError += (balanced.l-reference)*(balanced.l-reference);
                 error += (value.l-reference)*(value.l-reference);
                 need(std::fabs(value.l + value.r) < 1e-6, "stereo alignment");
             }
@@ -98,6 +107,11 @@ int main() {
             std::printf("speed=%g frequency=%g rms=%g error=%g\n", speed, frequency, rms, rmsError);
             need(!invalid && (reject ? rms < 0.003 : rmsError < 0.003),
                  "splice-local rejection/passband including reverse and maximum width");
+            const double balancedRms = std::sqrt(balancedEnergy/4096);
+            const double balancedRmsError = std::sqrt(balancedError/4096);
+            std::printf("balanced speed=%g frequency=%g rms=%g error=%g\n", speed, frequency, balancedRms, balancedRmsError);
+            need(!invalid && (reject ? balancedRms < .07 : balancedRmsError < .005),
+                 "Balanced filter preserves low band and provides useful alias rejection");
         }
     }
     for (unsigned i = 0; i < 48256; ++i) reel.write(i, {0.5f, -0.5f}, i);
@@ -111,12 +125,12 @@ int main() {
     need(std::fabs(reader.read(reel, region, 1234.5, 4, invalid).l - 0.25f) < 1e-6 &&
          reel.readSnapshot(1234).l == 0.5f, "quality playback reads live COW audio, not stale derived levels");
     volatile float sink = 0;
-    for (double speed : {1.0, 2.0, 8.0, 32.0, 512.0}) {
+    for (bool balanced : {false, true}) for (double speed : {1.0, 2.0, 8.0, 32.0, 512.0}) {
         const auto start = std::chrono::steady_clock::now();
         for (unsigned i = 0; i < 6000; ++i)
-            sink += reader.read(reel, region, i*speed+0.375, speed, invalid).l;
+            sink += reader.read(reel, region, i*speed+0.375, speed, invalid, true, balanced).l;
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-        std::printf("reader speed=%g core_percent_one_stereo_voice=%.3f\n", speed, seconds*800);
+        std::printf("reader quality=%s speed=%g core_percent_one_stereo_voice=%.3f\n", balanced ? "Balanced" : "Full", speed, seconds*800);
     }
     for (unsigned begin : {0u, 1u, 15u}) {
         const auto start = std::chrono::steady_clock::now();

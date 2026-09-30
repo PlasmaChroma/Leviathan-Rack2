@@ -20,6 +20,39 @@ static bool near(float a, float b, float eps = 0.0002f) {
 }
 
 int main() {
+    {
+        chimera::Reel loudReel(64, 64);
+        for (unsigned i = 0; i < 4800; ++i)
+            loudReel.write(i, {20.f, -20.f}, i);
+        chimera::Slice recovered(&loudReel), mixed(&loudReel), baseline(&loudReel);
+        for (auto* s : {&recovered, &mixed, &baseline}) s->setConditioning(false);
+        recovered.setFirmwareEnvelopes(true);
+        mixed.setFirmwareEnvelopes(true);
+        auto wetInput = input(0, 0, 1);
+        wetInput.controls.gene = .325301f;
+        auto mixedInput = wetInput;
+        mixedInput.live = {-2.5f, 2.5f};
+        mixedInput.controls.sos = .5f;
+        const float expectedMixedPeak = -.5f + 1.5f * chimera::soundOnSound::target(.5f);
+        float recoveredPeak = 0, baselinePeak = 0, mixedPeak = 0;
+        for (unsigned i = 0; i < 24000; ++i) {
+            const auto a = recovered.step(wetInput);
+            const auto b = baseline.step(wetInput);
+            const auto c = mixed.step(mixedInput);
+            if (i > 12000) {
+                recoveredPeak = std::max(recoveredPeak, a.audio.l);
+                baselinePeak = std::max(baselinePeak, b.audio.l);
+                mixedPeak = std::max(mixedPeak, c.audio.l);
+                need(a.audio.l <= 1.00001f && a.audio.r >= -1.00001f,
+                     "experimental playback clips both polarities before SOS");
+                need(c.audio.l < expectedMixedPeak + .0002f &&
+                     c.audio.r > -expectedMixedPeak - .0002f,
+                     "SOS blends clipped playback rather than clipping the completed mix");
+            }
+        }
+        need(recoveredPeak > .99f && baselinePeak > 2.f && near(mixedPeak, expectedMixedPeak),
+             "firmware bus saturates while baseline and complementary SOS retain their separate behavior");
+    }
     // A Rack feedback cable delivers the preceding output sample to SHIFT.
     // Exercise both Gene extremes, uneven Splices, and secondary-voice density.
     for (float gene : {0.f, 1.f}) for (float morph : {0.f, 0.5f, 1.f})
@@ -268,7 +301,7 @@ int main() {
     const chimera::Slice::Output selectedFirst = selectedSlice.step(input(0.f, 0.f, 1.f));
     need(selectedFirst.audio.l > 0.9f && !selectedFirst.eosg,
          "Slice selection preserves old-region audio on the first transition frame");
-    for (int frame = 1; frame < 48; ++frame)
+    for (int frame = 1; frame < chimera::Grains::kTransitionFrames; ++frame)
         selectedSlice.step(input(0.f, 0.f, 1.f));
     need(selectedSlice.step(input(0.f, 0.f, 1.f)).audio.l < -0.9f,
          "Slice selection reaches the new region after the bounded reader tail");

@@ -404,6 +404,15 @@ separate 250-sample / 0.004-coefficient branches affected by `gnsm` and overlap
 (`0x08027b7a..0x08027b94`, `0x08028966..0x08028990`). This is stronger
 evidence than a generic guessed Hann window, but not yet a full envelope model.
 
+The 2026-09-29 [Gene/splice envelope trace](analysis/gene_splice_envelope_trace.md)
+now transcribes the configuration selector: half-duration/capped edges survive
+only under the recovered Morph/gnsm conditions, while the seamless launch factor
+forces 250. It also identifies linear per-frame envelope increments, separate
+64-source-sample splice-edge ramps, and rotating voice launches for immediate
+Organize. This does not establish a standalone universal 250-frame Organize
+crossfade or a complete voice/event state machine. See the trace for addresses,
+the component helper, tested cases, and remaining parity work.
+
 `analysis/embedded_options.txt` preserves firmware-emitted option descriptions
 and their addresses. The embedded “firmware version 155b” text also exists; its
 presence is not evidence that the supplied update should be relabeled. Options

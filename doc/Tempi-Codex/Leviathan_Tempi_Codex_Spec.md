@@ -10,7 +10,7 @@ Mandatory first-release scope: shared Leading Tempo; six clock/trigger outputs; 
 
 Hardware panel gestures are not the fidelity target. Their musical operations and state-selection inhibition are. Do not reproduce PIC instruction execution, EEPROM delays, power-bus electronics, LED multiplexing, or a firmware updater in the plugin. No additional sequencer, swing, probability, per-lane ratio CV, host transport synchronization, expander, or polyphonic output bus is required for v1. Those are separate future extensions.
 
-Use `Tempi` as a working code/asset name. Decide the public name and immutable model slug before shipping presets. Proposed panel width: 24 HP; adjust after an actual rendered layout review. These are design proposals, not recovered facts.
+Use `Tempi` as a working code/asset name. The working product name is **Tesseract**. Decide the final public name and immutable model slug before shipping presets. Proposed panel width: 24 HP; adjust after an actual rendered layout review. These are design proposals, not recovered facts.
 
 ## 2. Source authority and fidelity accounting
 

@@ -48,9 +48,11 @@ public:
     }
 
     void setBandlimited(bool enabled) { bandlimited_ = enabled; }
+    void setBalancedBandlimiting(bool enabled) { balancedBandlimiting_ = enabled; }
     void setSmooth(bool enabled) { smooth_ = enabled; }
+    void setFirmwareEnvelopes(bool enabled) { firmwareEnvelopes_ = enabled; }
     void setImmediateTransitions(bool enabled) {
-        if (enabled && !immediate_) {
+        if (enabled && !immediate_ && !firmwareEnvelopes_) {
             pendingResidual_ = false;
             residualLength_ = 0;
             for (int i = 0; i < 4; ++i) { tails_[i].active = false; scalarAge_[i] = 48; }
@@ -76,6 +78,9 @@ public:
         pendingCompletions_ = 0;
         estimateCountdown_ = 0;
         transitionRemaining_ = 0;
+        firmwareGain_ = 1.f;
+        firmwareBlockPhase_ = 0;
+        firmwareDense_ = false;
         startAtCurrent_ = false;
         activeRegion_ = Region{0, 0};
         clockMode_ = 0;
@@ -105,6 +110,8 @@ public:
     double slotCrossmix(std::uint8_t slot) const { return slot < 4 ? slots_[slot].crossmix : 0; }
     double slotRatio(std::uint8_t slot) const { return slot < 4 ? slots_[slot].ratio : 0.0; }
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
+    double slotEnvelopeEdge(std::uint8_t slot) const { return slot < 4 ? slots_[slot].envelopeEdge : 0; }
+    float slotEnvelope(std::uint8_t slot) const { return slot < 4 ? slots_[slot].envelope : 0; }
     double trajectoryOffset() const { return trajectoryOffset_; }
     void resetTrajectory() {
         trajectoryOffset_ = stretchAnchor_ = stretchStep_ = stretchVelocity_ = 0;
@@ -117,6 +124,7 @@ public:
         const double pmDelta = havePmOffset_ ? pmOffset - lastPmOffset_ : 0.0;
         lastPmOffset_ = pmOffset; havePmOffset_ = true;
         qualityBlend_ += profile1::clamp((bandlimited_ ? 1.0 : 0.0) - qualityBlend_, -1.0/240, 1.0/240);
+        balancedBlend_ += profile1::clamp((balancedBandlimiting_ ? 1.0 : 0.0) - balancedBlend_, -1.0/240, 1.0/240);
         Result result = {StereoFrame{0.f, 0.f}, false, pendingCompletions_, primaryPosition_, primaryPosition_, 0.f, 0, false};
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
@@ -215,7 +223,7 @@ public:
             primaryPosition_ = origin(region, c.rate);
             phase_ = 0;
             scheduler_.reset();
-            nextSlot_ = 0;
+            if (!firmwareEnvelopes_) nextSlot_ = 0;
             active_ = true;
             activeRegion_ = region;
             launch(region, c, density, false);
@@ -260,7 +268,11 @@ public:
             }
         }
 
-        double sumL = 0, sumR = 0, weightSum = 0;
+        double sumL = 0, sumR = 0, weightSum = 0, envelopeSum = 0;
+        for (int i = 0; i < 4; ++i)
+            if (slots_[i].active) envelopeSum += slots_[i].envelope;
+        if (firmwareBlockPhase_ == 0) firmwareDense_ = envelopeSum > 2.0;
+        firmwareBlockPhase_ = (firmwareBlockPhase_ + 1) & 7;
         const bool forcedTransition = transitionRemaining_ != 0;
         const double transitionFraction = double(transitionRemaining_) / kTransitionFrames;
         for (int i = 0; i < 4; ++i) {
@@ -271,12 +283,21 @@ public:
             if (v.active) {
                 const double w = voiceWeight(v) * (transitionRemaining_ ?
                     (1.0 - transitionFraction) : (1.0 - tailFraction));
-                const StereoFrame source = read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource);
+                const StereoFrame source = firmwareEnvelopes_ && !v.full ?
+                    readFirmware(reel, v.region, v.position + pmOffset,
+                        c.rate * v.ratio + delta + pmDelta, firmwareDense_, result.invalidSource) :
+                    read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource);
                 const StereoFrame mixed = profile1::stereoCrossmix(source, v.crossmix);
                 sumL += mixed.l * w;
                 sumR += mixed.r * w;
                 weightSum += w;
                 ++result.readers;
+                if (firmwareEnvelopes_ && !v.full) {
+                    if (static_cast<std::int64_t>(v.age) > v.releaseStart)
+                        v.envelope = std::max(0.f, v.envelope - v.envelopeIncrement);
+                    else
+                        v.envelope = std::min(1.f, v.envelope + v.envelopeIncrement);
+                }
                 const double increment = profile1::clamp(c.rate * v.ratio, -512.0, 512.0);
                 // Finite v.length is output time. Advancing by increment for
                 // that many ages traverses abs(increment) * duration source
@@ -287,7 +308,11 @@ public:
                 if (v.full) {
                     if (v.travel >= v.length) { v.active = false; ++pendingCompletions_; }
                 }
-                else if (++v.age >= v.length) { v.active = false; ++pendingCompletions_; }
+                else if ((++v.age >= v.length && !firmwareEnvelopes_) ||
+                         (firmwareEnvelopes_ && v.envelope <= 0.f &&
+                          static_cast<std::int64_t>(v.age) > v.releaseStart)) {
+                    v.active = false; ++pendingCompletions_;
+                }
             }
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
@@ -316,7 +341,13 @@ public:
                 ++scalarAge_[i];
             }
         }
-        const double divisor = weightSum > 1.0 ? weightSum : 1.0;
+        const bool recovered = firmwareEnvelopes_ && !full_;
+        if (recovered) {
+            int index = static_cast<int>((envelopeSum - 1.0) * 6.0) + 3;
+            index = index < 0 ? 0 : (index > 33 ? 33 : index);
+            firmwareGain_ = .01f * firmware::morph_gain[index] + .99f * firmwareGain_;
+        }
+        const double divisor = recovered ? 1.0 / firmwareGain_ : (weightSum > 1.0 ? weightSum : 1.0);
         result.audio = StereoFrame{static_cast<float>(sumL / divisor),
                                    static_cast<float>(sumR / divisor)};
         if (pendingResidual_) {
@@ -368,6 +399,9 @@ private:
         bool active = false;
         bool smooth = false;
         bool full = false;
+        float envelope = 0.f, envelopeIncrement = .004f;
+        double envelopeEdge = 250;
+        std::int64_t releaseStart = 0;
         std::uint32_t age = 0, length = 0;
         double position = 0, ratio = 1, unity = 0;
         float crossmix = 0.f;
@@ -375,6 +409,17 @@ private:
         Region region{0, 0};
     };
     void forceTransition() {
+        if (firmwareEnvelopes_ && !full_) {
+            // Organize rotates a launch slot; the other voices keep their
+            // captured splice bounds. No extra output crossfade or DC residual.
+            active_ = false;
+            phase_ = 0;
+            primaryTravel_ = 0;
+            pendingResidual_ = false;
+            residualLength_ = 0;
+            transitionRemaining_ = 0;
+            return;
+        }
         bool hadOutgoing = false;
         const float outgoingScale = transitionRemaining_ ?
             float(1.0 - double(transitionRemaining_) / kTransitionFrames) : 1.f;
@@ -417,6 +462,12 @@ private:
         return (1.0 - unity) * base + unity;
     }
     double voiceWeight(const Voice& v) const {
+        if (firmwareEnvelopes_ && !v.full) {
+            const double address = std::floor(v.position);
+            const double boundary = profile1::clamp01(std::min(
+                address - v.region.begin, double(v.region.end) - address) / 64.0);
+            return v.envelope * boundary;
+        }
         if (!v.full) return weight(v.length, v.age, v.smooth, v.unity);
         if (v.length <= 2) return 1.0;
         const double phase = profile1::clamp01(v.travel / v.length);
@@ -435,11 +486,19 @@ private:
         return profile1::wrapPosition(offset, Region{0, length});
     }
     void launch(Region region, const CoreOutput& c, double density, bool natural) {
+        if (firmwareEnvelopes_ && !full_) {
+            // MG204 0x08029030..0x08029036: end the previous launch's hold
+            // at its current output age before rotating to the new slot.
+            Voice& outgoing = slots_[(nextSlot_ + 3) % 4];
+            if (outgoing.active && !outgoing.full)
+                outgoing.releaseStart = std::min(outgoing.releaseStart,
+                    static_cast<std::int64_t>(outgoing.age));
+        }
         const std::uint8_t slot = nextSlot_;
         nextSlot_ = (nextSlot_ + 1) % 4;
         Voice& v = slots_[slot];
         const bool replacing = v.active;
-        if (replacing && !immediate_) {
+        if (replacing && !immediate_ && !(firmwareEnvelopes_ && !full_)) {
             if (tails_[slot].active) {
                 scalar_[slot] = tailLast_[slot];
                 scalarWeight_[slot] = tailWeightLast_[slot];
@@ -462,9 +521,23 @@ private:
         v.ratio = choice.ratio;
         v.smooth = smooth_;
         v.unity = profile1::unityBlend(density, smooth_);
+        if (firmwareEnvelopes_ && !full_) {
+            v.envelopeEdge = std::min(v.length * .5, 24000.0);
+            v.envelopeIncrement = v.length * .5 > 24000.0 ?
+                1.f / 24000.f : 2.f * (1.f / v.length);
+            const float launchFactor = firmware::morph_launch[morph::stageIndex(c.morph)];
+            const float occupiedDensity = firmware::morph_density[morph::stageIndex(c.morph)];
+            if ((v.envelopeEdge > 250 && (occupiedDensity < 1.f || !smooth_)) || launchFactor == 1.f) {
+                v.envelopeEdge = 250;
+                v.envelopeIncrement = .004f;
+            }
+            v.releaseStart = static_cast<std::int64_t>(double(v.length) - v.envelopeEdge);
+            tails_[slot].active = false;
+            scalarAge_[slot] = 48;
+        }
         v.crossmix = choice.crossmix;
         ++onsetCount_;
-        if (natural && !replacing && v.unity > 0 && !immediate_) {
+        if (natural && !replacing && v.unity > 0 && !immediate_ && !(firmwareEnvelopes_ && !full_)) {
             pendingResidual_ = true;
             residualAge_ = 0;
             residualLength_ = full_ ? static_cast<std::uint32_t>(profile1::clamp(v.wallEstimate / 2.0, 0.0, 96.0)) :
@@ -473,8 +546,9 @@ private:
         }
     }
     StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid) {
-        if (qualityBlend_ <= 0) return PlaybackReader::cubic(reel, r, coordinate, invalid);
-        StereoFrame filtered = reader_.read(reel, r, coordinate, speed, invalid);
+        if (qualityBlend_ <= 0 || std::fabs(speed) <= 1.0)
+            return PlaybackReader::cubic(reel, r, coordinate, invalid);
+        StereoFrame filtered = readFiltered(reel, r, coordinate, speed, invalid);
         if (qualityBlend_ < 1) {
             const auto original = PlaybackReader::cubic(reel, r, coordinate, invalid);
             filtered.l = float(original.l + (filtered.l-original.l)*qualityBlend_);
@@ -483,7 +557,53 @@ private:
         return filtered;
     }
     PlaybackReader reader_;
+    static float firmwareSparse(float a, float b, float c, float d, float t) {
+        const float curvature = ((a + d) - b) - c;
+        return (((c - a) + curvature * (t * .5f)) * t) + ((a + c) * .5f + b);
+    }
+    StereoFrame readFirmware(const Reel& reel, Region r, double coordinate, double speed,
+                             bool dense, bool& invalid) {
+        // Independent quality extension. Keep the recovered reader at <=1x
+        // and when disabled; match its raw DC gain of TWO when filtering.
+        const double width = std::fabs(speed);
+        if (qualityBlend_ <= 0 || width <= 1.0)
+            return firmwareRead(reel, r, coordinate, dense, invalid);
+        const float blend = static_cast<float>(qualityBlend_ *
+            profile1::clamp01((width - 1.0) * 8.0));
+        const StereoFrame filtered = readFiltered(reel, r, coordinate, speed, invalid);
+        if (blend >= 1.f) return {2.f * filtered.l, 2.f * filtered.r};
+        const StereoFrame original = firmwareRead(reel, r, coordinate, dense, invalid);
+        return {original.l + (2.f * filtered.l - original.l) * blend,
+                original.r + (2.f * filtered.r - original.r) * blend};
+    }
+    static StereoFrame firmwareRead(const Reel& reel, Region r, double coordinate, bool dense, bool& invalid) {
+        const double p = profile1::wrapPosition(coordinate, r);
+        const std::int64_t base = static_cast<std::int64_t>(std::floor(p));
+        const float t = static_cast<float>(p - base);
+        const StereoFrame b = reel.readActive(profile1::wrapTap(base, 0, r));
+        const StereoFrame c = reel.readActive(profile1::wrapTap(base, 1, r));
+        StereoFrame out;
+        if (dense) out = {2.f * (b.l + (c.l - b.l) * t), 2.f * (b.r + (c.r - b.r) * t)};
+        else {
+            const StereoFrame a = reel.readActive(profile1::wrapTap(base, -1, r));
+            const StereoFrame d = reel.readActive(profile1::wrapTap(base, 2, r));
+            out = {firmwareSparse(a.l,b.l,c.l,d.l,t), firmwareSparse(a.r,b.r,c.r,d.r,t)};
+        }
+        if (!profile1::finite(out.l) || !profile1::finite(out.r)) invalid = true;
+        return {profile1::audio(out.l), profile1::audio(out.r)};
+    }
+    StereoFrame readFiltered(const Reel& reel, Region r, double coordinate, double speed, bool& invalid) {
+        if (std::fabs(speed) <= 1.0) return PlaybackReader::cubic(reel, r, coordinate, invalid);
+        if (balancedBlend_ <= 0) return reader_.read(reel, r, coordinate, speed, invalid);
+        if (balancedBlend_ >= 1) return reader_.read(reel, r, coordinate, speed, invalid, true, true);
+        const auto full = reader_.read(reel, r, coordinate, speed, invalid);
+        const auto balanced = reader_.read(reel, r, coordinate, speed, invalid, true, true);
+        return {float(full.l + (balanced.l-full.l)*balancedBlend_),
+                float(full.r + (balanced.r-full.r)*balancedBlend_)};
+    }
     bool bandlimited_ = false, havePmOffset_ = false;
+    bool balancedBandlimiting_ = false;
+    double balancedBlend_ = 0;
     double qualityBlend_ = 0, lastPmOffset_ = 0;
     Voice slots_[4], tails_[4];
     std::uint16_t tailAge_[4];
@@ -502,6 +622,10 @@ private:
     profile1::FirmwareRandom random_;
     bool smooth_;
     bool immediate_ = false;
+    bool firmwareEnvelopes_ = false;
+    float firmwareGain_ = 1.f;
+    std::uint8_t firmwareBlockPhase_ = 0;
+    bool firmwareDense_ = false;
     double ratios_[3];
     float edge_[2049];
     std::uint32_t cachedGeneRegion_ = 0, cachedGeneFrames_ = 0;

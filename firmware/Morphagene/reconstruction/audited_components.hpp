@@ -20,6 +20,20 @@ inline float smooth(float state, float target, float alpha) {
 }
 // Separate mode result: whole-splice is not a short ordinary Gene.
 struct GeneSize { bool wholeSplice; float samples; };
+// Envelope configuration only; not the complete voice lifecycle or renderer.
+// 0x08028ad4..0x08028ae8, 0x08028924..0x08028990,
+// 0x08027b58..0x08027b94. Finite positive duration, after its eight-frame floor.
+struct GeneEnvelopeConfig { float edgeSamples, increment; };
+inline GeneEnvelopeConfig geneEnvelopeConfig(float samples, float density,
+                                             float launchFactor, bool gnsm) {
+    float edge = std::min(samples * .5f, 24000.f);
+    float increment = edge == 24000.f ? 0x1.5d867cp-15f : 2.f * (1.f / samples);
+    if ((edge > 250.f && (density < 1.f || !gnsm)) || launchFactor == 1.f) {
+        edge = 250.f;
+        increment = 0x1.0624dep-8f; // firmware 0x3b83126f
+    }
+    return {edge, increment};
+}
 inline GeneSize ordinaryGene(unsigned adc, int32_t spliceSamples) {
     if (adc <= 199) return {true, float(spliceSamples)};
     float span = float(spliceSamples);
