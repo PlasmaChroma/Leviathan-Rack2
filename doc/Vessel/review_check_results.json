@@ -1,0 +1,127 @@
+{
+  "scope": "review diagnostics; no sustained moving-contact audio validation",
+  "seed": 9302026,
+  "prewarping_compliance": [
+    {
+      "f_over_internal_rate": 0.05,
+      "static_compliance_over_continuous_target": 0.9835914059626246
+    },
+    {
+      "f_over_internal_rate": 0.1,
+      "static_compliance_over_continuous_target": 0.9348623470916095
+    },
+    {
+      "f_over_internal_rate": 0.2,
+      "static_compliance_over_continuous_target": 0.7478898776734221
+    },
+    {
+      "f_over_internal_rate": 0.35,
+      "static_compliance_over_continuous_target": 0.31388285606071126
+    },
+    {
+      "f_over_internal_rate": 0.4,
+      "static_compliance_over_continuous_target": 0.16671389765485073
+    }
+  ],
+  "minimum_outer_effective_admittance_10000_cases": 6.217819015965769e-05,
+  "local_sliding_diagnostics_32_angles_each": [
+    {
+      "bowl": "metal_bowl2_seed_v1",
+      "mallet": "wood_prototype_v1",
+      "speed_m_per_s": 0.19100883333825944,
+      "sliding_force_slope_Ns_per_m": -1.0528011313604266,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        0.4431421422645485,
+        1.1740911928405353
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 0.9939305259044091
+    },
+    {
+      "bowl": "metal_bowl2_seed_v1",
+      "mallet": "suede_prototype_v1",
+      "speed_m_per_s": 0.19100883333825944,
+      "sliding_force_slope_Ns_per_m": -3.356660726209655,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        2.0402424385135305,
+        4.366604777828627
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 1.606608501545723
+    },
+    {
+      "bowl": "metal_bowl2_seed_v1",
+      "mallet": "silicone_prototype_v1",
+      "speed_m_per_s": 0.19100883333825944,
+      "sliding_force_slope_Ns_per_m": -4.779763389707742,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        3.023534674677137,
+        6.328673767976511
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 2.2105858063954154
+    },
+    {
+      "bowl": "metal_bowl2_seed_v1",
+      "mallet": "felt_prototype_v1",
+      "speed_m_per_s": 0.19100883333825944,
+      "sliding_force_slope_Ns_per_m": -0.9590459217741869,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        0.37251861587191115,
+        1.0328523748154907
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 0.8434363015399023
+    },
+    {
+      "bowl": "crystal_ring_seed_v1",
+      "mallet": "wood_prototype_v1",
+      "speed_m_per_s": 0.25132741228718347,
+      "sliding_force_slope_Ns_per_m": -0.2171943876104117,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        0.028830504929970857,
+        0.2550260051272062
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 1.5187352989642
+    },
+    {
+      "bowl": "crystal_ring_seed_v1",
+      "mallet": "suede_prototype_v1",
+      "speed_m_per_s": 0.25132741228718347,
+      "sliding_force_slope_Ns_per_m": -2.2667705428015745,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        4.317681971707537,
+        4.517375091936742
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 2.4546262350817307
+    },
+    {
+      "bowl": "crystal_ring_seed_v1",
+      "mallet": "silicone_prototype_v1",
+      "speed_m_per_s": 0.25132741228718347,
+      "sliding_force_slope_Ns_per_m": -2.76029440622992,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        5.372242087533255,
+        5.534125193339548
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 3.376932554715164
+    },
+    {
+      "bowl": "crystal_ring_seed_v1",
+      "mallet": "felt_prototype_v1",
+      "speed_m_per_s": 0.25132741228718347,
+      "sliding_force_slope_Ns_per_m": -0.6476487265147353,
+      "frozen_angle_max_growth_rate_range_per_s": [
+        0.47163162217751164,
+        1.14042586648128
+      ],
+      "Ytt_times_zero_slip_slope_at_15N": 1.2879069867162938
+    }
+  ],
+  "max_pair_rotation_port_error_1000_cases": 1.7763568394002505e-15,
+  "stationary_contact_8192_steps": {
+    "duration_s": 0.042666666666666665,
+    "initial_energy_J": 0.001246889315751024,
+    "final_energy_J": 0.0004788856702667041,
+    "largest_energy_increment_J": -8.519460273966745e-10,
+    "max_ledger_error_J": 6.410980619530986e-19
+  },
+  "unaccounted_spring_energy_if_suede_changes_to_wood_J": 0.04299209229614209,
+  "status": "PASS"
+}

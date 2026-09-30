@@ -2,14 +2,15 @@
 
 **Plugin:** Leviathan for VCV Rack  
 **Working module name:** Vessel  
-**Document status:** Implementation draft 0.1 — physical model first  
+**Document status:** Implementation draft 0.2 — physical-model review incorporated
+
 **Prepared:** 2026-09-30
 
 ## 0. Scope, evidence, and readiness
 
 Vessel is a tunable, struck and friction-excited singing bowl. A single persistent mechanical model receives both kinds of excitation. Stereo audio and an energy display observe that model. Optional binaural-beat processing sits after it and must not alter its mechanics.
 
-This document starts from the supplied **Singing Bowl Acoustics and Physical Modeling** report, supplied as `Singing Bowl Research(1).md`. It retains the report's organizing ideas: modal/banded resonators, metal versus crystal, mallet-dependent impact/friction, real-time feasibility, and musical parameter mapping. It selects a modal implementation and supplies the equations and engineering decisions the report leaves open.
+This document starts from the supplied **Singing Bowl Acoustics and Physical Modeling** report, stored here as `Singing Bowl Research.md` (originally named `Singing Bowl Research(1).md`). It retains the report's organizing ideas: modal/banded resonators, metal versus crystal, mallet-dependent impact/friction, real-time feasibility, and musical parameter mapping. It selects a modal implementation and supplies the equations and engineering decisions the report leaves open.
 
 Evidence labels used here:
 
@@ -22,9 +23,9 @@ Evidence labels used here:
 
 Unless explicitly identified as R or V, specifications below are **D**. Numerical profile defaults are **U**, except the explicitly identified published metal frequencies. Values in seconds, kilograms, newtons, and meters are internally dimensioned modeling parameters; uncalibrated values must not be advertised as measurements of a commercial instrument.
 
-**Ready to implement:** the paired modal core, energy-consistent integration, finite-mass strike, prescribed-load friction model, control interface, stereo observation, and energy telemetry.
+**Ready for an offline prototype:** the paired modal core, energy-consistent integration, finite-mass strike, tangential-only friction model with a prescribed load parameter, control interface, stereo observation, and energy telemetry. This is not yet a validated physical reference instrument. See `Physical_Model_Review.md` for the review findings and `review_check_results.json` for the additional numerical diagnostics.
 
-**Not yet established:** realistic metal/crystal profile calibration; the best mallet friction curves; audible quality; CPU cost in Rack; alias rejection; and the optional contact-loss and binaural implementations. Algebra checks included with this draft are not an audio-quality or performance certification.
+**Not yet established:** sustained moving-contact onset and saturation; forced mechanical response across sample rates; sufficient modal bandwidth for hard impacts; realistic metal/crystal calibration; mallet friction curves; acoustic radiation; CPU cost in Rack; alias rejection; and normal-contact/contact-loss behavior. Algebra checks included with this draft are not an audio-quality or performance certification. Binaural processing remains optional and downstream of these questions.
 
 **Do not replace missing calibration with fabricated measurements.** Preserve provenance at the individual descriptor-field level.
 
@@ -46,6 +47,8 @@ The following behaviors are mandatory:
 6. Material changes affect model descriptors and contact behavior, not merely output EQ.
 
 Initial scope is **one continuously sounding bowl per module**, with monophonic CV inputs and two monophonic audio outputs. Repeated strikes overlap mechanically on that bowl. Polyphonic cables and multiple independent bowls are later work, not implied by the stereo outputs.
+
+The independent strike and rub ports represent **two virtual actuators** on one bowl. They may share a selected mallet profile, but do not represent one rigid mallet simultaneously following two incompatible trajectories. A single-mallet strike-to-rub transition with shared radial momentum belongs to the normal-contact extension. All contacts and observers are near the rim; an azimuth control is not a height or rim-to-base control.
 
 Do not include a built-in reverb, tuned background oscillator, “healing frequency” mode, or automatic loudness compensation in the reference engine. Do not use an LFO to manufacture the primary bowl shimmer.
 
@@ -151,7 +154,11 @@ Let `n = 2, 3, ...` be azimuthal order and `α_n` the specimen's orientation for
 
 The radial/tangential form is V1, equation (5). Per-pair orientation offsets and finite contact patches are Vessel design additions. Pair orientations are fixed specimen data, not per-strike randomness.
 
-Normal impact uses `φr`. Rubbing uses `φt`. Audio initially observes radial velocity through a separate output weighting.
+Take positive radial displacement as **outward**, and positive tangential displacement along increasing `θ`. Normal impact uses a signed radial projection: an external mallet travelling inward uses `φs = −φr`, including the same sign in force injection and feedback. Its scalar force and striker velocity are positive inward. Rubbing uses `φt`. Audio initially observes outward radial velocity through a separate output weighting. This sign convention also applies to a future inward normal rubbing force.
+
+The shapes assume a small-displacement, approximately inextensional rim: `φr + ∂φt/∂θ = 0`. This is a reduced shell/ring approximation, not a general measured eigenvector for every bowl shape. The normalization is unit peak **radial** displacement; effective masses must use that same normalization and already include all motion of the mode. Do not add a second tangential mass or multiply mass by `1+1/n²` after fitting. A change of eigenvector normalization requires the corresponding mass transformation.
+
+The omitted support and rigid-body degrees of freedom are treated as constrained. Support losses are included in fitted T60, rather than claiming a freely floating bowl. Crystal and deep/thick bowls may need measured radial/tangential ratios or additional meridional mode families; validate the seven rim-bending pairs before generalizing them.
 
 ### 4.3 Finite contact patch
 
@@ -165,6 +172,8 @@ P_n(w)=\operatorname{sinc}(nw/2),\qquad
 Multiply both shapes in the pair by `P_n`. Wider patches reduce excitation of high spatial orders. Use the same patch-averaged shape for force injection and contact-velocity feedback.
 
 This is an explicit spatial approximation, not a measured mallet contact-pressure distribution. Profiles may later replace it with integrated nonuniform patch shapes.
+
+For friction, this is a **single aggregate contact port**, not distributed local stick/slip. In general, applying a nonlinear friction law to average slip differs from integrating local friction over a patch. Retain this inexpensive approximation for narrow patches; compare it with spatial quadrature if width materially affects mode selection. Keep `N` and `F` as total forces, not force per radian. Width is independent of pressure in this prototype; real contact area and indentation are not yet coupled.
 
 ### 4.4 Reciprocity is mandatory
 
@@ -319,7 +328,11 @@ Use approximately 1–2 ms smoothing for pitch in log-frequency space, 10 ms for
 
 A material switch between matched A/B orders may interpolate log frequency, log positive mass, log positive decay, and radiation/contact parameters while holding normalized state continuous. Do not swap A/B identities. When topology differs, use a separately specified state projection or a short dual-engine transition; do not reinterpret array slots.
 
-No audio-rate FM claim is made for draft 0.1. Test ordinary pitch CV and envelopes first. An eventual unsmoothed audio-rate mode needs a separate coefficient-update and aliasing budget.
+**Active-strike exception:** latch striker mass, stiffness, exponent, loading damping, patch width, and strike angle at contact creation, and keep them until separation. A material change updates the rubbing contact and the next striker. Do not interpolate an active striker's mass or contact potential: that changes its kinetic or elastic energy outside the stated ledger. If a future model permits such changes, explicitly account for parameter work. For example, changing `k_s` at fixed compression adds `Δk_s * max(δ,0)^(p+1)/(p+1)` joules.
+
+Pair orientation is a coordinate-basis decision. Keep orientations identical across interpolated prototype descriptors. A future change of orientation requires a defined state/basis transformation; it must not silently rotate the spatial vibration pattern while calling the operation ordinary mass/frequency interpolation. `I=0` removes frequency splitting only; exact rotational-symmetry tests must additionally equalize A/B masses and damping within each pair.
+
+No audio-rate FM claim is made for draft 0.2. Test ordinary pitch CV and envelopes first. An eventual unsmoothed audio-rate mode needs a separate coefficient-update and aliasing budget.
 
 During a musical retune with a strike contact active, retain its compression state continuously and advance it from relative port velocity. Do not reconstruct a new compression by subtracting reinterpreted displacements after changing `omegaHat` or mass. This preserves the chosen normalized contact state; it is another reason not to describe live retuning as a literal geometric resizing operation.
 
@@ -402,15 +415,35 @@ This is a design invariant. It provides a direct test for wrong signs, inconsist
 
 Use double precision for the reference implementation, contact solver, and energy accounting. Optimize storage or SIMD only after the reference tests pass. Never rely on output clipping to make an unstable contact loop appear stable.
 
+### 7.5 Exact free poles do not fix mechanical impedance
+
+The inverse-bilinear construction changes effective stiffness and damping when masses are held fixed. In the weak-loss limit,
+
+\[
+\widehat\omega\simeq\frac{2}{h}\tan(\pi f h),\qquad
+\frac{C_{static,digital}}{C_{static,target}}
+\simeq\left[\frac{\pi f h}{\tan(\pi f h)}\right]^2.
+\]
+
+Here `Cstatic = 1/(m omega²)` is modal static compliance under a constant generalized force; the continuous target uses `omega0 = sqrt((2πf)² + sigma_target²)`. At `f/Fint = 0.10, 0.20, 0.40`, the compliance ratios are approximately `0.935, 0.748, 0.167`. Thus §16's 0.40 ceiling is a numerical guard, **not a fidelity guarantee**. Prewarping also alters modal forced-response residues and the response seen by the nonlinear contact. Changing output EQ cannot repair these effects.
+
+Before freezing quality settings, compare the full collocated force-to-velocity response, static compliance, impact duration/rebound, and rubbed onset against the continuous model at a successively finer internal step. Use the same physical masses, contact parameters, and modes in the comparison. A provisional mechanical-band target is less than 2% per-mode static-compliance error, corresponding roughly to `f/Fint < 0.055` in the weak-loss limit, unless a documented contact-convergence study justifies a wider band. This is a design tolerance, not a measured perceptual threshold. Frequencies outside it are allowed only with an explicit accuracy qualification or higher-rate evidence; do not silently change masses to repair one response metric.
+
+### 7.6 Resolve adhesion as well as proving passivity
+
+For the regularized zero-slip branch, define `K_v = Φ'(0) = N μs/ε` and `χ = Ytt K_v`. This positive slope does not threaten root uniqueness, but can make contact dynamics stiff. In a local damping-only limit, the midpoint multiplier is `(1−χ)/(1+χ)`: for large `χ` it tends toward −1, not zero. Therefore a passive step may retain alternating numerical motion instead of accurately resolving rapid adhesion relaxation. The negative-slope certificate `Ytt L` says nothing about this effect.
+
+Track `χ`, compare `ε/2`, `ε`, and `2ε` at finer internal rates, and inspect slip/force histories as well as audio. Do not call epsilon a harmless numerical constant or shrink it without a resolution study. An eventual exact static-friction or bristle model requires its own state, work law, and solver; it cannot be obtained simply by taking epsilon toward zero at a fixed rate.
+
 ---
 
 ## 8. Strike: finite moving mass and nonlinear contact
 
 ### 8.1 Primary model
 
-Use a striker with effective mass `m_s`, signed inward velocity `v_s`, and compression `δ`. The bowl receives positive radial contact force `F_s`; the striker receives `−F_s`.
+Use a striker with effective mass `m_s`, signed inward velocity `v_s`, and compression `δ`. The bowl receives inward contact force of magnitude `F_s` through `b_js = −P_n φr_j/sqrt(m_j)`; the striker receives `−F_s` in its inward coordinate. The port velocity `v_s^0` below is the free **bowl** inward velocity, not the striker velocity; use distinct variable names such as `strikerVelocity` and `bowlStrikePortFreeVelocity` in code.
 
-At a strike event, sample velocity CV and strike location once. If no striker is active, place it at first contact (`δ=0`) and set its velocity to current local bowl velocity plus the requested launch velocity. Do not clear bowl state.
+At a nonzero strike event, sample velocity CV and strike location once. If no striker is active, place it at first contact (`δ=0`) and set its inward velocity to the current inward bowl port velocity plus the requested launch velocity. This specifies **relative approach speed**, not fixed laboratory-frame mallet speed; it intentionally gives consistent attack opportunity on a ringing bowl. Record the actual incoming kinetic energy. Do not clear bowl state. A zero-velocity event creates no contact and makes no change to an existing one.
 
 An initial mapping is:
 
@@ -467,7 +500,9 @@ v_s'=v_s-hF_s/m_s.
 
 After separation (`δ'≤0` and relative separation velocity outward), retire the striker. Do not clamp away its contact potential before the discrete-gradient step completes. Retiring the detached striker removes its remaining kinetic energy from the simulated bowl system; it does not inject that energy into the bowl.
 
-The striker may exchange energy with an already-moving bowl. Do not demand monotonic output peak versus strike velocity on an arbitrary ringing state. Monotonicity tests should start from rest and compare energy or integrated loudness.
+Specify the retirement test using the **end-of-step** relative velocity, evaluated with the fixed strike port. Audit boundary-crossing steps separately: the discrete-gradient force is an interval force and can be nonzero over a step whose final endpoint has separated. This is not permission to keep applying force to a detached striker on subsequent steps. Compare contact duration, impulse, and restitution at finer steps; energy conservation alone does not exclude early numerical reflection during an underresolved hard impact.
+
+The striker may exchange energy with an already-moving bowl. Do not demand monotonic output peak versus strike velocity on an arbitrary ringing state. Characterize the velocity response from rest using energy or integrated loudness; strict monotonic transfer is not an invariant of arbitrary nonlinear contact/resonance combinations.
 
 ### 8.4 Debugging fallback, not the reference mallet
 
@@ -491,7 +526,9 @@ Represent rotation speed as signed revolutions per second `rps`:
 \dot\theta=2\pi\,rps,\qquad U=2\pi R_{eff}\,rps.
 \]
 
-`U` is imposed mallet tangential speed in m/s. It is not a frequency driving a sine oscillator. Evaluate contact shapes at midpoint angle. Preserve rotation angle across gate transitions; gate-on does not restart its phase. When the gate is off, freeze the displayed/contact orbit unless a future explicit free-spin option is enabled.
+`U` is imposed mallet tangential speed in m/s. It is not a frequency driving a sine oscillator. Evaluate contact shapes at midpoint angle. Preserve rotation angle across gate transitions; gate-on does not restart its phase. Use the **same smoothed speed** for `U` and angle advance. Continue that advance while the release envelope is nonzero; freeze the orbit only after contact is fully lifted, unless a future explicit free-spin option is enabled. Freezing angle immediately on gate-off while retaining nonzero `U` during release would specify incompatible contact trajectories.
+
+This assumes sliding translation along the rim with no separate axial mallet spin or rolling. If mallet spin is added, orbital speed and surface slip must be separate variables. For fixed model parameters the material surface velocity is `Σ φt_j(θ) v_j`, not the total derivative of a moving displacement sample. Do not insert `θdot Σ (∂φt_j/∂θ) q_j` into the friction feedback. The orbit changes which material point is contacted; it is not itself extra material vibration velocity.
 
 Default signed speed range is −2 to +2 rev/s, default +0.4. With SPEED CV patched, multiply the knob value by `clamp(V/5,−1,1)`. Thus 0 V stops, +5 V requests the knob speed, and −5 V reverses it. Unpatched multiplier is 1.
 
@@ -503,9 +540,11 @@ For the initial engine, normal load `N` is prescribed by the pressure control an
 N=e_{contact}\,P,\quad0\le P\le15\ \text{N}.
 \]
 
-This is an ideal normal follower: it maintains the requested load but does **not** model radial mallet bounce, loss of rim contact, or rattling during rubbing. Normal static deformation is omitted in this approximation. Only tangential friction acts dynamically on the bowl while rotating.
+This is a **tangential-only contact proxy with a prescribed load parameter**, not a literal ideal normal follower. Only tangential friction acts dynamically on the bowl while rotating. A real follower also applies radial force, even when contact never opens. The prototype omits its static deformation, moving radial forcing, radial impedance, and normal-to-tangential load feedback, as well as bounce and rattling. It is a controlled first experiment, not a complete mechanical rubbing model.
 
 This approximation is deliberate and must remain named in the implementation. Full normal compliance is a separate refinement in §12. Do not generate random clicks and label them modeled contact loss.
+
+Before describing Vessel as a physically validated bowl, compare this proxy with a model that includes radial normal work. A useful intermediate experiment adds the known prescribed inward load through `b_jn = −P_n φr_j/sqrt(m_j)` before solving the tangential/strike ports. Its work `h N vbar_n` must appear in the energy ledger; prescribed pressure can excite the bowl when engaged or moved. The normal force is known in that experiment, so it need not add another nonlinear unknown. This experiment is not included in the current two-port oracle and does not replace the compliant follower/contact-loss model.
 
 Use approximately 10 ms engagement and 5 ms release. Keep target speed and contact engagement independent. At zero speed with nonzero `N`, friction can remove energy from the moving bowl.
 
@@ -585,6 +624,22 @@ Do not multiply sustained audio by an arbitrary speed envelope to simulate rubbi
 
 No perpetual additive noise is required in the reference engine. A later roughness model must enter as a bounded contact perturbation with documented energy input, not as stereo hiss added after synthesis.
 
+### 9.6 Singing onset is a separate physical test
+
+Neither `F_t s ≥ 0` nor `Ytt L < 1` proves self-excitation. The first establishes interface dissipation; the second establishes uniqueness of a numerical root. For a frozen contact and a steady-sliding equilibrium, linearize at slip `s0` and let `a_f = Φ'(s0)`. With normalized tangential coupling vector `b_t`, the perturbation equations are
+
+\[
+\delta\dot x=\widehat\Omega\delta y,\qquad
+\delta\dot y=-\widehat\Omega\delta x
+ -\left(2\widehat\Sigma+a_f b_t b_t^T\right)\delta y.
+\]
+
+A negative friction slope can overcome modal losses. For an isolated scalar mode this requires `−a_f b_jt² > 2 sigmaHat_j`; the multimode test uses eigenvalues of the complete linearized matrix. At rest under sliding, `s0 = U` after static deflection settles. At very high speed the Gaussian weakening slope tends to zero, so stronger motion need not make a stronger sustained tone.
+
+The review diagnostics find positive frozen-angle growth for the default Metal/Suede conditions, approximately 2.04–4.37 per second over 32 angles at 192 kHz. This is encouraging, **not a prediction of actual rotating onset time**: the moving contact is a time-periodic system, with modal orientation and splitting competing with rotation. Use a time-domain perturbation-growth test or Floquet analysis around its low-amplitude periodic response, then full nonlinear runs to establish saturation and mode selection.
+
+Acceptance must separate (1) a gate-on transient, (2) slow forced response to travelling load, and (3) a sustained friction-driven oscillation. Measure cycle-averaged input work, dissipation, and energy after startup, and after small perturbations of the established tone. A bounded tone must balance average drive and loss without relying on protection. Record modal displacement relative to rim radius and contact indentation; states outside the small-deformation regime invalidate the linear-shell interpretation even if the solver is stable.
+
 ---
 
 ## 10. Simultaneous strike and rotation solver
@@ -610,6 +665,16 @@ Use a bracketed **outer scalar strike-force solve**. For each trial `F_s ≥ 0`,
 
 Then compute `δ'` and the strike-force residual. Under the friction uniqueness condition and the positive-semidefinite port admittance, increasing trial strike force decreases the compression response. The convex contact potential and loading-only damper make this a suitable monotone outer solve.
 
+More explicitly, with `a_f = Φ'(s)` and `A_s = Yss + h/(2 m_s)`,
+
+\[
+\frac{dF_t}{dF_s}=\frac{-a_f Y_{ts}}{1+a_fY_{tt}},\qquad
+-\frac1h\frac{d\delta'}{dF_s}
+=A_s-\frac{a_fY_{st}^2}{1+a_fY_{tt}}>0.
+\]
+
+For negative `a_f`, the correction increases effective midpoint admittance; for nonnegative `a_f`, positive semidefiniteness bounds the subtraction by `Yss`, leaving the positive striker term. This proves the outer compression monotonicity on the certified friction branch. Handle the contact/damper branch boundaries without taking an unguarded Newton step across them.
+
 Start the lower bracket at zero. Build a finite upper bracket by bounded expansion, starting from a physically scaled estimate or the last contact force. In a debug/reference build, at most 24 doublings are allowed; failure is a solver fault, not permission for an unbounded loop. Establish tighter energy-based or profile-specific bounds before optimization.
 
 Use force tolerance `1e-8 + 1e-7 * max(1, relevantForceScale)` N as an initial target. Also check compression residual and the per-step energy residual; force convergence alone is not sufficient near separation. All iteration limits are fixed. Log iteration histograms in the offline harness.
@@ -634,6 +699,8 @@ For fixed coefficients and no new strike event:
 \]
 
 The last term is nonpositive because the loading damper only acts for positive compression velocity. Account separately for energy introduced by launch/retrigger events and removed by retiring a detached striker.
+
+For a newly created striker, add its actual `m_s v_s²/2` as external launch energy. For an active-striker retrigger, record `m_s (v_after²−v_before²)/2` using velocities **after the overload policy**; it can be signed when the striker is rebounding. A speed cap or emergency contact retirement removes or changes modeled energy and must have its own ledger entry. Emergency removal of a compressed contact discards its remaining potential; do not report that as frictional loss. Parameter work, mode retirement, and state resets likewise require separate entries. The identity above covers fixed contact parameters, not unreported coefficient mutation.
 
 The included numerical checks verify the modal identity, friction root/passivity, isolated striker energy balance, and 200 randomized **one-step simultaneous-contact** energy balances using a slow nested reference solver. They do not test sustained trajectories, production iteration budgets, or the native Rack implementation.
 
@@ -666,9 +733,13 @@ A material selector should not promise that every combination sings equally read
 
 Fit modal frequencies and doublet splitting from freely decaying recordings first. Fit amplitude decay independently for each mode, avoiding early impact and late noise floor. Do not fit beating as a rapidly fluctuating damping coefficient.
 
+Fit overlapping A/B decays jointly when a bandpass cannot resolve the splitting; a single filtered envelope may contain beating rather than one exponential. Use multiple strike and observation azimuths to avoid missing a mode at a node. Record bowl dimensions, support/hand contact, and recording positions. Frequencies/T60 from audio do not identify absolute mobility. Where possible, use calibrated force and displacement/velocity (or accelerance) measurements at known locations to identify modal residues and masses under the normalization in §4.2. Include residual flexibility/inertance from omitted modes in the fit when the measured frequency range requires it.
+
 Fit impact spectra across several velocities and mallet materials next. If force measurements are unavailable, modal mass, contact stiffness, and radiation gain may be underdetermined; store that uncertainty instead of calling each fitted number physically unique.
 
 Finally fit sustained-rub behavior over speed/pressure trajectories: onset time, steady amplitude, which mode dominates, spectral evolution, and response to stopping or lifting the mallet. Output EQ alone is insufficient to calibrate the feedback mechanics.
+
+Identify a crystal specimen by geometry and actual material, rather than treating the retail word “crystal” as a constitutive model. A synthetic ring spectrum plus longer decay is a useful prototype voice, but cannot establish quartz/fused-silica identity. Fit both material profiles against dry strikes **and** rub trajectories before promoting them from prototype status; do not postpone every physical calibration task until after the module interface is complete.
 
 Record which parts of any reference sound are bowl, mallet, room, microphone, processing, and performance. Obtain permission for any recordings or datasets distributed with the plugin.
 
@@ -692,6 +763,15 @@ The normal gap is derived from mallet position and the bowl surface at the movin
 
 **Important geometry distinction:** local material surface velocity is the modal velocity projected at the current contact point. The time derivative of displacement sampled at a moving angle also contains `∂q/∂θ * θdot`. These are not interchangeable. Gap evolution, surface slope, and work done by the travelling normal constraint must be treated consistently before claiming passivity for this extension.
 
+For a fixed-coefficient inward port `c_j(θ) = −P_n φr_j(θ)`, an explicit reduced-geometry example is `w_n = Σ c_j q_j`, `δ_n = z−w_n`, with `z` positive inward. Then
+
+\[
+\dot\delta_n=\dot z-\sum_j c_j\dot q_j
+ -\dot\theta\sum_j(\partial_\theta c_j)q_j.
+\]
+
+Besides the hand term `P_hand zdot`, the combined follower/bowl/contact energy balance contains trajectory work `−F_n θdot Σ (∂θ c_j) q_j`. It must be supplied/absorbed by the prescribed orbit actuator, or recovered through a consistent geometric tangential reaction in a more complete contact model. A flat-rim friction work term alone does not account for it. Use a discrete chain rule for both modal displacement and moving contact geometry; this continuous expression does not prescribe an already-validated discrete solver.
+
 Implement it as an explicit new contact-model version with a small coupled normal/tangential solve. Extend the energy ledger to include follower kinetic energy, handle/contact potentials, and hand/trajectory work. Do not assume the one-dimensional uniqueness certificate in §9 automatically proves the full model stable.
 
 Acceptance requires repeatable contact opening/reclosing, no attractive normal force, zero friction when detached, bounded normal-force transients, and parameter/sample-rate convergence. Until those tests pass, label this mode experimental. Rattling is not a release requirement for the first playable Vessel, but this is the principal next step for physical fidelity.
@@ -713,6 +793,8 @@ a_L=\sum_n G_n\left[
 and similarly for R. Distinct A/B radiation gains may be used when calibrated.
 
 This is a spatially meaningful **rim-velocity observer**, not a complete far-field radiation solution or an HRTF. Output weights can later fit microphone responses without changing the mechanics.
+
+Do not multiply the observation shapes by the mallet patch factor. Radiation is independent of the excitation footprint. A calibrated acoustic observer may need frequency-dependent magnitude/phase and elevation dependence; two local rim velocities are virtual pickups, not two physical microphone pressures. Radiation loss is already part of measured total damping and must not be added a second time when fitting output filters. Keep observation fixed in bowl coordinates so rotating vibration patterns can produce natural amplitude variation, including in the zero-splitting limit; verify that behavior from the solved states rather than adding an LFO.
 
 Set observer center to 20° and maximum separation initially to 30°. WIDTH moves symmetrically between coincident and separated observers. Keep the default strike angle at 22.5° relative to the nominal bowl orientation so it does not intentionally excite only one member of the lowest pair.
 
@@ -832,7 +914,11 @@ An economy setting may later use a lower declared rate after comparison. A high-
 
 Keep modal frequencies below 0.40 of internal sample rate. When an extended descriptor exceeds the supported range, smoothly taper that mode's contact coupling and output observation between 0.35 and 0.40 of internal rate, then retire it. Removed state energy is explicit model-truncation loss. Do not wrap a pole, fold it into the audible band, or hard-clamp several modes to the same frequency.
 
+Apply §7.5's mechanical-response check separately from this ceiling. The seeded crystal's top pair at a 2 kHz fundamental is approximately 46.6 kHz, already around 0.264 of 176.4 kHz, well inside the guard but outside the proposed accurate-compliance band. Do not advertise the entire pitch range as equally faithful on the basis of free-pole tests. Mode retirement is reversible only by creating a zero-energy state on re-entry (with smooth coupling); never resurrect discarded state. Any alternative dormant-state policy must be specified and tested explicitly.
+
 Modes above host Nyquist can still participate internally when supported; the output decimator removes their audible aliases. Do not delete them merely because the host output cannot represent them: contact admittance and strike response can depend on them.
+
+Converge **modal bandwidth and time step independently**. More oversampling does not recover omitted structural modes. Compare successively enriched modal bases with the same contact law, including contact impulse, peak force, duration, rebound, and rubbing onset. Hard-strike seeds and low fundamental tuning especially require this check because the retained modal bandwidth shrinks with pitch. If convergence fails with available measured modes, use a documented passive residual model, additional supported modes, or restrict/soften that interaction explicitly. Never invent high modes and label them measured. The fixed capacity of 12 pairs is an engineering budget subject to this test.
 
 Use a measured anti-alias decimator with declared passband, stopband, and latency. Compare complete nonlinear renders against a higher-rate reference. Stable time integration alone does not guarantee low aliasing.
 
@@ -849,6 +935,8 @@ Oversampling filters and optional binaural filters add latency. Report or docume
 Rebuild coefficients and rate-conversion state outside the hot loop where the Rack lifecycle permits. Retain finite normalized bowl state, reinitialize rate-dependent history safely, and apply a short output transition if needed. Do not reinterpret old filter delays as samples at the new rate.
 
 A reference engine must behave safely at every tested rate, with matched free pitches and intended T60. Similar nonlinear onset and contact behavior require separate convergence tests, not just matching poles.
+
+An active striker must retain its latched material parameters and compression across a rate change. Recompute only step-dependent coefficients and continue the relative-velocity compression update; do not reconstruct overlap from reinterpreted bowl displacement. Log any intentional energy loss in the rate-transition policy.
 
 ### 16.4 Sleep
 
@@ -910,17 +998,23 @@ Verify exact complex poles against requested `f,T60` for fixed parameters. Verif
 
 Test long tails for at least 120 s. Test all-zero imperfection without deleting B modes. Test coefficient transitions and descriptor interpolation with finite, nonnegative losses. Check that reciprocity and the positive-semidefinite admittance survive every optimization.
 
+Add equal-pair rotational covariance tests: rotating specimen/contact/observer coordinates consistently must preserve the result, and changing the arbitrary A/B basis must preserve port work and total pair energy. Test inward-strike signs, physical units, and eigenvector/mass renormalization. Compare forced mobility and compliance at multiple rates; free poles alone are insufficient. Test raw energy independently from any display smoothing.
+
 ### B. Impact
 
 From rest, render at least 16 strike velocities for every factory combination. Compare transferred bowl energy, integrated level, contact duration, rebound, and transient spectrum. Test repeated strikes during ringing, retrigger during contact, maximum gate rate, zero velocity, and simultaneous manual/cable triggers.
 
 Audit bowl + striker + contact energy during isolated collision. Confirm that soft/hard materials differ through interaction, not merely an output filter. Solver faults or regular reliance on the 4 m/s cap are failures of ordinary presets.
 
+Use complete contact trajectories starting at zero compression, including separation and retirement, across soft/hard seeds, low/high pitch, and finer rates. For strikes from rest, transferred bowl energy cannot exceed actual launch energy after losses. Do not require strict monotonic transfer across arbitrary stiffness/resonance interactions without evidence. Compare impulse, rebound velocity, maximum indentation, and contact duration as well as the ledger. Switch materials at maximum compression to verify the latching rule. Exercise signed retrigger work, capped launches, zero events, and active-contact sample-rate changes.
+
 ### C. Rubbing
 
 Sweep speed, pressure, pitch, material, mallet, and direction. Record onset time, steady energy, dominant mode, spectrum, force extrema, solver iterations, and stability margin `Ytt L`. Include startup without a preliminary strike and startup while a tail is already ringing.
 
 For `U=0`, verify friction contributes no positive mechanical work. For `N=0`, verify friction force is exactly zero. Stop motion while maintaining pressure, then lift contact separately; these must produce different, intentional behaviors. Inspect whether slow material changes move the usable pressure/speed region discontinuously.
+
+Measure `Ytt Φ'(0)` as well as `Ytt L`, and sweep regularization jointly with internal rate. Verify that changing speed updates slip and orbit consistently during gate release. Compare frozen-angle linearized growth with actual rotating trajectories; neither can substitute for the other. Include a perfectly degenerate pair with a moving contact and fixed observer to distinguish rotation-induced envelope variation from mistuned-doublet beating. Test several complete rotations after onset and after speed/pressure perturbations, recording average hand work, losses, boundedness, and modal displacement. Characterize hysteresis by sweeping controls in both directions.
 
 Initial factory usability targets, not established facts: default Metal/Suede should produce clear sustained tone within about 0.5–5 s; a neighborhood around its default speed and pressure should remain usable. Set final targets by comparison with chosen recordings rather than forcing every setting to sound identical.
 
@@ -929,6 +1023,8 @@ Initial factory usability targets, not established facts: default Metal/Suede sh
 Implement a whole-system energy ledger for simultaneous contacts and run random-state one-step tests. Then render sustained rubbing with periodic strikes. Compare the nested reference solver and any optimized solver. Check that contact work is counted once, that separation does not create impulses, and that contact-parameter changes do not cause faults.
 
 This test group is mandatory before calling the reference DSP complete. The supplied algebra script covers randomized one-step simultaneous contacts only; it does not cover sustained trajectories, production solvers, or real-time operation.
+
+Extend the ledger to launch, cap, retirement, coefficient/contact changes, and any known normal force before using it as a whole-run energy audit. Freeze active strike material properties. Compare the tangential-only proxy, prescribed radial-load experiment, and compliant normal contact on matched conditions before making a full physical-fidelity claim. Audible agreement from one force/speed setting is insufficient.
 
 ### E. Stereo and binaural
 
@@ -942,7 +1038,11 @@ Test at host 44.1, 48, 88.2, 96, 176.4, and 192 kHz, plus 32 kHz if supported. F
 
 Render high-force strikes, sharp pressure changes, and fast rubbing against a higher-rate reference. Measure folded components; define final alias acceptance thresholds from these comparisons, not from the oversampling factor alone.
 
+Use separate rate-convergence and modal-truncation studies, then combined convergence. Keep physical parameters fixed while refining the discretization. Report the tested mechanical-frequency band, parameter ranges, and remaining differences rather than calling every stable render accurate. Re-evaluate the 32-instance performance target if those studies require more bandwidth or a different contact model.
+
 Benchmark core, scalar friction, active impact, observer, resampler, UI, and optional binaural separately. Record mean and worst block time, iteration percentiles, sample rate, compiler flags, CPU model, and build revision. Budget worst-case simultaneous impact/rubbing, not only a sleeping instance.
+
+After matching the double-precision oracle, cache coefficient transforms and use angle recurrences/lookup tables for moving shapes where appropriate. Any friction approximation must preserve oddness, force bounds, `F s ≥ 0`, and a certified negative-slope bound; Newton must use a derivative consistent with the implemented approximation. Preserve the discrete-gradient potential/force relationship rather than approximating the two independently. In Rack, use the repository's debug gating and `Process`, `Step`, `Draw`, `DrawLayer` telemetry semantics; report optional component costs after them.
 
 A provisional objective is 32 active default-rate monophonic instances without overruns in a controlled one-core-equivalent benchmark on the chosen reference desktop, with documented headroom. This is a target, not a measured capability. Revisit it after the first native harness exists.
 
@@ -956,12 +1056,12 @@ Test patch save/load, randomization, reset, engine bypass, output cable changes,
 
 | Phase | Deliverable | Gate before proceeding |
 |---|---|---|
-| 1. Mechanical foundation | Paired modal bank, descriptor format, exact-pole integrator, offline render harness, energy ledger, diagnostic force pulse. | Pole and passive-energy tests pass; deterministic output. |
-| 2. Finite-mass strike | Nonlinear contact potential, mallet profiles, strike velocity and retrigger semantics. | Isolated collision energy audit and velocity/material renders pass. |
-| 3. Singing contact | Moving tangential shape, prescribed pressure, implicit friction, simultaneous strike/rub solver. | Usable sustained tone, full energy audit, convergence and parameter sweeps. |
+| 1. Mechanical foundation | Paired modal bank, descriptor format, exact-pole integrator, offline render harness, energy ledger, diagnostic force pulse. | Pole, passive-energy, rotational-covariance, and forced-mobility tests pass; deterministic output; explicit accurate mechanical band. |
+| 2. Finite-mass strike | Nonlinear contact potential, latched mallet profiles, strike velocity and retrigger semantics. | Complete collision/event energy audit; separate modal/rate convergence; comparison with dry strike references. |
+| 3. Singing contact | Moving tangential shape, prescribed load parameter, implicit friction, simultaneous strike/rub solver. | Sustained moving-contact tone and stable saturation; full energy audit; rate/epsilon/mode sweeps; dry rub reference comparisons and normal-force sensitivity experiment. |
 | 4. Rack instrument | Controls, stereo, energy bar, serialization, rate adaptation, telemetry, performance work. | Lifecycle, long-tail, stereo-invariance, and real-time tests. |
-| 5. Physical calibration | Measured crystal descriptor; improved metal losses/radiation; calibrated material-pair contacts. | Documented reference comparisons and provenance; no invented measurement claims. |
-| 6. Fidelity refinement | Optional radial normal-contact model and contact loss. | Extended energy/geometry audit and contact-loss acceptance. |
+| 5. Physical calibration | Measured crystal descriptor; improved metal losses/radiation; calibrated material-pair contacts. Continue calibration begun in phases 2–3. | Documented reference comparisons and provenance; no invented measurement claims; validated descriptor normalization. |
+| 6. Normal-contact fidelity | Radial normal-contact model and contact loss; necessary to claim these behaviors, optional for a labelled playable proxy. | Extended energy/geometry audit, normal-force comparison, contact-loss acceptance, and reference trajectories. |
 | 7. Optional binaural | Verified analytic transform, ear-frequency shifting, smooth transitions. | Steady-rub and free-tail frequency-offset tests; no mechanical changes. |
 
 Do not spend early development effort on a large animated bowl or binaural controls before Phase 3 demonstrates convincing dry strike and rubbed audio. The key uncertainty is the playable nonlinear interaction and calibration, not panel artwork.
@@ -974,13 +1074,13 @@ Do not spend early development effort on a large animated bowl or binaural contr
 
 **Friction calibration:** static/kinetic coefficients, transition velocity, regularization, pressure range, and patch shape strongly influence onset and mode selection. A plausible numerical range does not establish audible realism.
 
-**Normal contact:** the first engine maintains prescribed pressure and cannot reproduce intermittent radial contact. This is a declared limitation, not something to disguise with noise or amplitude modulation.
+**Normal contact:** the first engine uses pressure only to set friction strength. It omits the radial force itself, not merely intermittent contact. The required sensitivity experiment must determine when that omission is acceptable; noise or amplitude modulation cannot correct it.
 
 **Force normalization:** changing modal masses or contact coupling to “make it louder” changes the feedback physics. Tune output gain separately and retain the energy ledger.
 
 **Model truncation:** adding or removing upper modes changes contact admittance. Compare force and onset behavior as well as the output spectrum.
 
-**Numerical versus physical accuracy:** the integrator is energy-consistent and has the selected free poles. It still approximates contact trajectories; oversampling and convergence tests remain necessary.
+**Numerical versus physical accuracy:** the integrator is energy-consistent and has the selected free poles. Prewarped stiffness, contact stiffness, regularization, and truncated mobility still affect contact trajectories. Root uniqueness, passivity, self-excitation, bounded saturation, and physical fidelity are separate requirements.
 
 **Optional binaural cost:** low-frequency analytic-signal quality, latency, and CPU have not been chosen or measured. Keep the interface optional until this is resolved.
 
@@ -992,7 +1092,7 @@ Do not spend early development effort on a large animated bowl or binaural contr
 
 ### Supplied basis
 
-**R1.** `Singing Bowl Research(1).md`, title *Singing Bowl Acoustics and Physical Modeling*. Relevant source lines: acoustics 3; resonator architecture 7–11; material/mallet ideas 15–19; feasibility 23–27; control mapping 31–43. The report's final source statement does not include a complete traceable bibliography. It is therefore an architectural starting point, not a source of measured descriptor coefficients.
+**R1.** `Singing Bowl Research.md` (original attachment name `Singing Bowl Research(1).md`), title *Singing Bowl Acoustics and Physical Modeling*. Relevant source lines: acoustics 3; resonator architecture 7–11; material/mallet ideas 15–19; feasibility 23–27; control mapping 31–43. The report's final source statement does not include a complete traceable bibliography. It is therefore an architectural starting point, not a source of measured descriptor coefficients.
 
 ### Narrow primary-source checks
 
@@ -1023,7 +1123,7 @@ The accompanying `vessel_numerical_checks.py` uses NumPy and a fixed seed. It is
 | Complex modal pole placement | 192 | 3.51e−16 absolute complex error |
 | Collocated modal energy identity | 10,000 | 1.51e−14 absolute normalized-energy error |
 | Unforced modal energy | 10,000 | All tested changes negative |
-| Implicit friction residual | 3,000 | 3.73e−14 N |
+| Implicit friction residual | 3,000 | 3.64e−14 N (review rerun) |
 | Friction dissipation `F * slip` | 3,000 | No negative result |
 | Isolated nonlinear impact energy | 200 | 8.62e−18 J |
 | Simultaneous strike/rub one-step energy | 200 | 6.61e−18 J |
@@ -1031,3 +1131,9 @@ The accompanying `vessel_numerical_checks.py` uses NumPy and a fixed seed. It is
 | Conservative seed-profile uniqueness bound | 8 bowl/mallet combinations | Maximum `Ytt L` < 0.000975 |
 
 These checks support the algebraic implementation directions in §§7–10. They do **not** establish long-term coupled behavior, a convincing singing tone, calibrated crystal behavior, real-time performance, alias rejection, or finished Rack compatibility. Those remain the explicit implementation and validation gates above.
+
+### Draft 0.2 review checks (2026-09-30)
+
+The original oracle was rerun successfully with Python/NumPy 2.3.5 on Windows. `vessel_review_checks.py` and `review_check_results.json` add reproducible checks of compliance warping, the outer-solve derivative, pair-basis port invariance, frozen-angle sliding linearizations for all eight seed combinations, and an 8,192-step stationary-contact passive trajectory (42.7 ms at 192 kHz). The largest energy-ledger residual in that trajectory was approximately `6.41e−19 J`. A deliberately hypothetical compressed-spring material switch quantifies why contact parameters must latch; no seed values were fitted or changed.
+
+These additional checks are narrow diagnostics, not the sustained rotating, complete impact, aliasing, or production-performance tests requested in §18. `Physical_Model_Review.md` records the remaining gates. Primary-source rechecking confirmed V1 Table I and equation (5); all new stability, compliance, geometry, and event-accounting derivations are Vessel design analysis rather than claims that V1 implemented this numerical scheme.

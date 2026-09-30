@@ -4,7 +4,7 @@
   "max_complex_pole_error_192_cases": 3.510833468576701e-16,
   "max_modal_energy_balance_error_10000_cases": 1.505528557724234e-14,
   "largest_unforced_energy_change_10000_cases": -5.4521022452291845e-06,
-  "max_friction_force_residual_3000_cases_N": 3.730349362740526e-14,
+  "max_friction_force_residual_3000_cases_N": 3.6415315207705135e-14,
   "minimum_friction_dissipation_F_times_slip_W": 0.0,
   "maximum_tested_uniqueness_number": 0.022191607616286173,
   "max_isolated_impact_energy_balance_error_200_cases_J": 8.622795403048777e-18,

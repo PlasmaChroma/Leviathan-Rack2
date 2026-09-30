@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "implementation draft; not release-calibrated",
-  "sourceReport": "Singing Bowl Research(1).md",
+  "status": "draft 0.2 review: unchanged experimental seeds; not physically validated or release-calibrated",
+  "sourceReport": "Singing Bowl Research.md",
   "referenceSpec": "Vessel_DSP_and_Module_Specification.md",
   "notes": [
     "Only sourceFrequencyAHz/sourceFrequencyBHz in the metal profile are published measured values.",
