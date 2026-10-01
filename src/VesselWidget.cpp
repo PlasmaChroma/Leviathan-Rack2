@@ -22,7 +22,7 @@ struct BowlDisplay : TransparentWidget {
         const float hz = vessel ? vessel->visualFrequency.load(std::memory_order_relaxed) : 261.625565f;
         const bool fault = vessel && vessel->visualFault.load(std::memory_order_relaxed);
         const float delta = vessel ? vessel->visualSeparation.load(std::memory_order_relaxed) : 0.f;
-        char text[48]; std::snprintf(text, sizeof(text), "%.1f / %.1f Hz", hz-.5f*delta, hz+.5f*delta);
+        char text[48]; std::snprintf(text, sizeof(text), "L: %.1f Hz  R: %.1f Hz", hz-.5f*delta, hz+.5f*delta);
         nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFontSize(args.vg, 9.f);
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, fault ? nvgRGB(255, 133, 99) : nvgRGB(181, 213, 220));
@@ -42,7 +42,7 @@ struct VesselWidget final : ModuleWidget {
         setModule(module);
         visual_assets::SplitPanelRenderer panel(this, "res/Vessel.panel.svg");
         panel.addThemedLabels("res/Vessel.labels.svg", "res/Vessel.theme-text-input.svg", "res/Vessel.theme-text-output.svg");
-        visual_assets::addCompactLeviathanLogoBranding(this, panel.panelPath());
+        panel.addCompactLeviathanLogoBranding();
         auto point = [&](const char* id, float x, float y) {
             Vec p; return panel_svg::loadPointFromSvgMm(panel.panelPath(), id, &p) ? p : Vec(x, y);
         };
@@ -50,19 +50,13 @@ struct VesselWidget final : ModuleWidget {
         math::Rect r(Vec(6, 15), Vec(69.28f, 8));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ENERGY_DISPLAY", &r);
         display->box.pos = mm2px(r.pos); display->box.size = mm2px(r.size); addChild(display);
-        const char* knobs[] = {"PITCH_PARAM", "FINE_PARAM", "VELOCITY_PARAM", "SPEED_PARAM", "PRESSURE_PARAM",
-            "DECAY_PARAM", "IMPERFECTION_PARAM", "WIDTH_PARAM", "LEVEL_PARAM", "MALLET_PARAM", "BINAURAL_PARAM"};
-        const int ids[] = {Vessel::PITCH_PARAM, Vessel::FINE_PARAM, Vessel::VELOCITY_PARAM, Vessel::SPEED_PARAM,
-            Vessel::PRESSURE_PARAM, Vessel::DECAY_PARAM, Vessel::IMPERFECTION_PARAM, Vessel::WIDTH_PARAM,
-            Vessel::LEVEL_PARAM, Vessel::MALLET_PARAM, Vessel::BINAURAL_PARAM};
-        for (int i = 0; i < 11; ++i) {
-            const float x = i == 9 ? 43.f : i == 10 ? 15.f : i%3 == 0 ? 15.f : i%3 == 1 ? 40.64f : 66.28f;
-            const float y = i < 9 ? 32.f+18.f*(i/3) : 84.f;
-            addParam(createParamCentered<Eclipse2Knob>(mm2px(point(knobs[i], x, y)), module, ids[i]));
-        }
-        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 28, 84)), module, Vessel::BOWL_PARAM));
-        addParam(createParamCentered<SmallGoldButton>(mm2px(point("STRIKE_PARAM", 61, 84)), module, Vessel::STRIKE_PARAM));
-        addParam(createParamCentered<RotationButton>(mm2px(point("ROTATE_PARAM", 72, 84)), module, Vessel::ROTATE_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 27.f, 36.f)), module, Vessel::PITCH_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 54.f, 36.f)), module, Vessel::FINE_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 66.f)), module, Vessel::BINAURAL_PARAM));
+        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 30, 66)), module, Vessel::BOWL_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 45.f, 66.f)), module, Vessel::MALLET_PARAM));
+        addParam(createParamCentered<SmallGoldButton>(mm2px(point("STRIKE_PARAM", 59, 66)), module, Vessel::STRIKE_PARAM));
+        addParam(createParamCentered<RotationButton>(mm2px(point("ROTATE_PARAM", 73, 66)), module, Vessel::ROTATE_PARAM));
         const char* inputs[] = {"VOCT_INPUT", "STRIKE_INPUT", "VELOCITY_INPUT", "ROTATE_INPUT", "SPEED_INPUT", "PRESSURE_INPUT"};
         for (int i = 0; i < 6; ++i) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(inputs[i], 12.f+19.f*(i%4), i < 4 ? 98.f : 110.5f)), module, i));

@@ -2,6 +2,7 @@
 
 #include "plugin.hpp"
 #include "DebugTerminalMetrics.hpp"
+#include "VesselExpanderProtocol.hpp"
 #include "vessel/DualBowlAdapter.hpp"
 #include <atomic>
 
@@ -25,6 +26,7 @@ struct Vessel final : Module {
     std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Reference)};
     std::atomic<float> visualInternalRate {0.f};
     std::atomic<bool> visualRateFallback {false};
+    vessel_expander::TuneMessage tuneMessages[2];
 
     Vessel();
     void process(const ProcessArgs& args) override;
@@ -49,7 +51,8 @@ private:
     double hostRate = 0.0;
     vessel::ProcessingQuality activeQuality = vessel::ProcessingQuality::Reference;
     void resetRuntime();
-    void updateControls(double elapsed);
+    vessel_expander::TuneMessage tuneControls();
+    void updateControls(double elapsed, const vessel_expander::TuneMessage& tune);
     bool configureAudio(double rate);
 };
 

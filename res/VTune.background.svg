@@ -1,14 +1,14 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" width="81.28mm" height="128.5mm" viewBox="0 0 8128 12850" id="Vessel-background">
+<svg xmlns="http://www.w3.org/2000/svg" width="40.64mm" height="128.5mm" viewBox="0 0 4064 12850" id="VTune-background">
   <defs>
-    <linearGradient id="vessel-edge">
+    <linearGradient id="vtune-edge">
       <stop stop-color="#ad77e7" />
       <stop offset="1" stop-color="#54d7d4" />
     </linearGradient>
   </defs>
   <g id="panel_art">
     <g id="theme_background">
-      <rect width="8128" height="12850" fill="#000000" />
+      <rect width="4064" height="12850" fill="#000000" />
     </g>
   </g>
 </svg>

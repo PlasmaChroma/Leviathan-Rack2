@@ -303,6 +303,15 @@
         "polyphony": 1
       },
       "hidden": false
+    },
+    {
+      "slug": "VTune",
+      "name": "V.Tune",
+      "description": "Performance and voicing controls for Vessel.",
+      "tags": [
+        "Expander"
+      ],
+      "hidden": false
     }
   ]
 }

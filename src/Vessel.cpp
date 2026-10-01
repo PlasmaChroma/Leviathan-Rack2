@@ -28,6 +28,8 @@ struct ProcessTimer {
 Vessel::Vessel() {
     debugMetrics.assignInstanceId(vesselInstances);
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+    rightExpander.producerMessage = &tuneMessages[0];
+    rightExpander.consumerMessage = &tuneMessages[1];
     configParam(PITCH_PARAM, std::log2(20.f/261.625565f), std::log2(2000.f/261.625565f), 0.f,
         "Basic bowl frequency", " Hz", 2.f, 261.625565f);
     configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tuning", " cents");
@@ -39,7 +41,7 @@ Vessel::Vessel() {
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configSwitch(BOWL_PARAM, 0.f, 1.f, 0.f, "Bowl material", {"Metal", "Crystal prototype"});
     configSwitch(MALLET_PARAM, 0.f, 3.f, 1.f, "Mallet", {"Wood", "Suede", "Silicone", "Felt"});
-    configParam(DECAY_PARAM, -2.f, 2.f, 0.f, "Decay multiplier", "x", 2.f);
+    configParam(DECAY_PARAM, -2.f, 2.f, 0.f, "Sustain", "x", 2.f);
     configParam(IMPERFECTION_PARAM, 0.f, 2.f, 1.f, "Mode-pair imperfection");
     configParam(WIDTH_PARAM, 0.f, 1.f, .7f, "Stereo width", "%", 0.f, 100.f);
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
@@ -47,7 +49,7 @@ Vessel::Vessel() {
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
         "Rotate gate", "Speed (+/-5 V multiplier)", "Pressure (0-10 V multiplier)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
-    configOutput(LEFT_OUTPUT, "Left / mono"); configOutput(RIGHT_OUTPUT, "Right");
+    configOutput(LEFT_OUTPUT, "Left"); configOutput(RIGHT_OUTPUT, "Right");
     resetRuntime();
 }
 
@@ -70,7 +72,36 @@ void Vessel::resetRuntime() {
     leftEnergy.store(0); rightEnergy.store(0); visualSeparation.store(float(separationHz));
 }
 
-void Vessel::updateControls(double dt) {
+vessel_expander::TuneMessage Vessel::tuneControls() {
+    vessel_expander::TuneMessage tune;
+    tune.velocity = float(bound(params[VELOCITY_PARAM].getValue(), 0, 1));
+    tune.speed = float(bound(params[SPEED_PARAM].getValue(), -2, 2));
+    tune.pressure = float(bound(params[PRESSURE_PARAM].getValue(), 0, 15));
+    tune.sustain = float(bound(params[DECAY_PARAM].getValue(), -2, 2));
+    tune.imperfection = float(bound(params[IMPERFECTION_PARAM].getValue(), 0, 2));
+    tune.width = float(bound(params[WIDTH_PARAM].getValue(), 0, 1));
+    tune.level = float(bound(params[LEVEL_PARAM].getValue(), 0, 2));
+
+    const Module* right = rightExpander.module;
+    if (!right || right->model != modelVTune || right->leftExpander.module != this
+        || !rightExpander.consumerMessage) {
+        return tune;
+    }
+    const auto* message = reinterpret_cast<const vessel_expander::TuneMessage*>(rightExpander.consumerMessage);
+    if (!vessel_expander::isValid(*message)) {
+        return tune;
+    }
+    tune.velocity = float(bound(message->velocity, 0, 1));
+    tune.speed = float(bound(message->speed, -2, 2));
+    tune.pressure = float(bound(message->pressure, 0, 15));
+    tune.sustain = float(bound(message->sustain, -2, 2));
+    tune.imperfection = float(bound(message->imperfection, 0, 2));
+    tune.width = float(bound(message->width, 0, 1));
+    tune.level = float(bound(message->level, 0, 2));
+    return tune;
+}
+
+void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune) {
     const int bowl = choice(params[BOWL_PARAM].getValue(), 1), mallet = choice(params[MALLET_PARAM].getValue(), 3);
     if (bowl != selectedBowl) { startBowl = currentBowl; selectedBowl = bowl; bowlBlend = 0; }
     if (mallet != selectedMallet) { startMallet = currentMallet; selectedMallet = mallet; malletBlend = 0; }
@@ -103,9 +134,9 @@ void Vessel::updateControls(double dt) {
     if (std::abs(target-pitchOctaves) < 1e-7) pitchOctaves = target;
     vessel::EngineSettings next = applied;
     next.frequency = std::max(20.0, std::min(2000.0, 261.625565*std::exp2(pitchOctaves)));
-    next.decayMultiplier = std::exp2(bound(params[DECAY_PARAM].getValue(), -2, 2));
-    next.imperfection = bound(params[IMPERFECTION_PARAM].getValue(), 0, 2);
-    next.observerSeparation = vessel::pi/6*bound(params[WIDTH_PARAM].getValue(), 0, 1);
+    next.decayMultiplier = std::exp2(tune.sustain);
+    next.imperfection = tune.imperfection;
+    next.observerSeparation = vessel::pi/6*tune.width;
     if (next.frequency != applied.frequency || next.decayMultiplier != applied.decayMultiplier
         || next.imperfection != applied.imperfection || next.observerSeparation != applied.observerSeparation) needsConfigure = true;
     applied = next;
@@ -142,6 +173,7 @@ void Vessel::process(const ProcessArgs& args) {
         idleElapsed = 0; meter = 0;
     }
     const double dt = args.sampleTime;
+    const vessel_expander::TuneMessage tune = tuneControls();
     const bool gateEvent = edge(strikeHigh, inputs[STRIKE_INPUT].getVoltage());
     const bool manualEvent = edge(manualHigh, params[STRIKE_PARAM].getValue());
     edge(rotateHigh, inputs[ROTATE_INPUT].getVoltage());
@@ -149,13 +181,13 @@ void Vessel::process(const ProcessArgs& args) {
     controls.strikeEvent = gateEvent || manualEvent;
     controls.rotate = rotateHigh || safeValue(params[ROTATE_PARAM].getValue()) >= .5;
     controls.velocity = inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1)
-        : bound(params[VELOCITY_PARAM].getValue(), 0, 1);
-    controls.speed = bound(params[SPEED_PARAM].getValue(), -2, 2)
+        : tune.velocity;
+    controls.speed = tune.speed
         * (inputs[SPEED_INPUT].isConnected() ? bound(inputs[SPEED_INPUT].getVoltage()/5, -1, 1) : 1);
-    controls.pressure = bound(params[PRESSURE_PARAM].getValue(), 0, 15)
+    controls.pressure = tune.pressure
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
     controlElapsed += dt;
-    if (controlElapsed >= .001 || controls.strikeEvent) { updateControls(controlElapsed); controlElapsed = 0; }
+    if (controlElapsed >= .001 || controls.strikeEvent) { updateControls(controlElapsed, tune); controlElapsed = 0; }
     const bool wake = controls.rotate || (controls.strikeEvent && controls.velocity > 0);
     if (wake) { sleeping = false; idleElapsed = 0; }
     bool fault = false;
@@ -170,7 +202,7 @@ void Vessel::process(const ProcessArgs& args) {
         idleElapsed += dt;
         if (idleElapsed >= .1) sleeping = true;
     } else if (!sleeping) idleElapsed = 0;
-    const double gain = 8*bound(params[LEVEL_PARAM].getValue(), 0, 2);
+    const double gain = 8*tune.level;
     for (int i = 0; i < OUTPUTS_LEN; ++i) {
         const double velocity = i == LEFT_OUTPUT ? frame.audio.left : frame.audio.right;
         // Emergency audio protection observes the model; it cannot drive it.

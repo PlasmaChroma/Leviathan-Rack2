@@ -2,6 +2,7 @@
 #include <engine/Engine.hpp>
 #undef PRIVATE
 #include "../src/Vessel.hpp"
+#include "../src/VTune.hpp"
 #include "../src/vessel/SeedProfiles.hpp"
 #include <cmath>
 #include <iostream>
@@ -24,6 +25,8 @@ void operator delete(void* p, std::size_t) noexcept { ::operator delete(p); }
 void operator delete[](void* p, std::size_t) noexcept { ::operator delete(p); }
 
 bool isDragonKingDebugEnabled() { return false; }
+Model* modelVessel = nullptr;
+Model* modelVTune = nullptr;
 // Stack-owned headless fixture; omit private application teardown.
 namespace rack { Context::~Context() {} }
 namespace {
@@ -79,6 +82,57 @@ void tuningAndMorph() {
     cable(m, Vessel::PRESSURE_INPUT, std::numeric_limits<float>::infinity()); run(m, 1000, 44100);
     require(std::isfinite(m.outputs[Vessel::LEFT_OUTPUT].getVoltage()) && m.audio.engine().ledger().solverFaults == 0, "nonfinite CV safety");
     std::cout << "[PASS] Smoothed octave/fine tuning, live material morph, rate continuity and nonfinite CV\n";
+}
+
+void tuneExpander() {
+    Vessel host;
+    VTune tune;
+    Model vesselModel, tuneModel;
+    vesselModel.slug = "Vessel";
+    tuneModel.slug = "VTune";
+    modelVessel = &vesselModel;
+    modelVTune = &tuneModel;
+    host.model = &vesselModel;
+    tune.model = &tuneModel;
+    host.rightExpander.module = &tune;
+    tune.leftExpander.module = &host;
+
+    tune.params[VTune::VELOCITY_PARAM].setValue(0.f);
+    tune.params[VTune::SPEED_PARAM].setValue(-1.25f);
+    tune.params[VTune::PRESSURE_PARAM].setValue(7.f);
+    tune.params[VTune::SUSTAIN_PARAM].setValue(2.f);
+    tune.params[VTune::IMPERFECTION_PARAM].setValue(.25f);
+    tune.params[VTune::WIDTH_PARAM].setValue(.2f);
+    tune.params[VTune::LEVEL_PARAM].setValue(0.f);
+    Module::ProcessArgs args; args.sampleRate = 48000; args.sampleTime = 1.f/48000.f;
+    tune.process(args);
+    require(host.rightExpander.messageFlipRequested, "V.Tune did not request an expander flip");
+    host.tuneMessages[1] = host.tuneMessages[0];
+    host.rightExpander.messageFlipRequested = false;
+    cable(host, Vessel::STRIKE_INPUT, 10.f);
+    run(host, 100);
+    const auto& settings = host.audio.engine().settings();
+    require(host.audio.engine().ledger().strikes == 0, "V.Tune velocity does not replace Vessel fallback knob");
+    require(std::abs(settings.decayMultiplier - 4.0) < 1e-12, "V.Tune sustain was not applied");
+    require(std::abs(settings.imperfection - .25) < 1e-12, "V.Tune imperfection was not applied");
+    require(std::abs(settings.observerSeparation - vessel::pi/30.0) < 1e-7, "V.Tune width was not applied");
+    require(host.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0.f, "V.Tune level did not mute output");
+
+    host.rightExpander.module = nullptr;
+    tune.leftExpander.module = nullptr;
+    host.params[Vessel::DECAY_PARAM].setValue(-1.f);
+    host.params[Vessel::IMPERFECTION_PARAM].setValue(1.5f);
+    host.params[Vessel::WIDTH_PARAM].setValue(.6f);
+    host.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    run(host, 100);
+    const auto& fallback = host.audio.engine().settings();
+    require(std::abs(fallback.decayMultiplier - .5) < 1e-12
+        && std::abs(fallback.imperfection - 1.5) < 1e-12
+        && std::abs(fallback.observerSeparation - vessel::pi/10.0) < 1e-7,
+        "Vessel did not restore saved fallback controls after V.Tune disconnection");
+    modelVessel = nullptr;
+    modelVTune = nullptr;
+    std::cout << "[PASS] V.Tune publishing, takeover and Vessel fallback restoration\n";
 }
 
 void independentOutputAndEnergy() {
@@ -204,8 +258,8 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
-            std::cout << "Vessel Rack adapter: 7 groups PASS\n";
+        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+            std::cout << "Vessel Rack adapter: 8 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;
     }

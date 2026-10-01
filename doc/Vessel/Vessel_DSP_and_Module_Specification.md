@@ -320,7 +320,7 @@ Q\approx\frac{\pi f T60}{\ln1000}.
 
 Use T60 as the user-facing calibration primitive. Do not interpolate arbitrary Q values and assume the same decay in seconds at all pitches.
 
-The DECAY control multiplies all nominal T60 values by a common logarithmically mapped factor, initially 0.25–4.0. Clamp individual values to 0.1–120 s. Holding decay time fixed while changing pitch is an intentional musical policy, not a claim about physically resizing a bowl.
+The SUSTAIN control multiplies all nominal T60 values by a common logarithmically mapped factor, initially 0.25–4.0. Clamp individual values to 0.1–120 s. Holding decay time fixed while changing pitch is an intentional musical policy, not a claim about physically resizing a bowl.
 
 An optional DAMP control adds nonnegative loss. It must never set negative damping to fake sustain; sustain comes from contact work.
 
@@ -804,7 +804,7 @@ Set observer center to 20° and maximum separation initially to 30°. WIDTH move
 
 For a single bowl, WIDTH=0 makes both observer readouts identical. While both bowls are active, output subtraction nulls only when the mechanical states are also identical. Once zero separation has folded to one bowl, WIDTH=0 again nulls both outputs regardless of the discarded bowl history. WIDTH changes only observation coefficients; it does not mix, detune or resynchronize the two bowls.
 
-When only L is connected, provide a documented L/MONO result. Initial policy: `(L+R)/2` after the selected stereo renderer. Preserve the normal stereo signals when both are connected. Cancellation in a spatial or binaural sum is possible and is not “fixed” by energy normalization. Meter physical energy independently.
+Output connectivity does not alter rendering. L always carries the left observer signal and R always carries the right observer signal, whether one or both jacks are connected. Vessel performs no automatic mono sum or cable-dependent gain change. Meter physical energy independently.
 
 ### 13.2 Binaural tuning: two independent physical bowls
 
@@ -824,23 +824,25 @@ This control specifies structural tuning, not a guaranteed exact difference betw
 
 The following interface is a starting contract. Physical panel width and artwork are intentionally not frozen.
 
+Vessel keeps tuning, excitation, material, performance gates/CV, stereo outputs, and energy feedback on the main module. The directly adjacent right-side **V.Tune** expander owns the VELOCITY, SPEED, PRESSURE, SUSTAIN, IMPERFECTION, WIDTH, and LEVEL knobs. Vessel retains the original parameter IDs and saved values as hidden fallbacks: without V.Tune, existing patches retain their prior behavior; while a valid V.Tune is attached, its values take over. The VELOCITY, SPEED, and PRESSURE CV inputs remain on Vessel and keep the replacement/multiplier rules below.
+
 | Control/input | Initial behavior |
 |---|---|
 | PITCH + FINE | Lowest pair-center tuning; default C4; fine ±100 cents. |
 | V/OCT | Added to coarse pitch, 1 V/octave; finite/clamped total frequency. |
 | STRIKE button + STRIKE gate | Rising-edge events; manual and cable events in the same sample coalesce to one launch. |
-| VELOCITY knob/input | Knob default 0.5; patched CV replaces knob, 0–10 V → 0–1; sampled only at strike. |
+| V.Tune VELOCITY + Vessel input | Knob default 0.5; patched CV replaces knob, 0–10 V → 0–1; sampled only at strike. |
 | ROTATE latch + ROTATE gate | Logical OR; input is a sustained gate, not a trigger-to-toggle. Latch default off. |
-| SPEED knob/input | Signed knob −2…+2 rev/s, default +0.4; patched ±5 V multiplies knob by −1…+1. |
-| PRESSURE knob/input | Knob 0–15 N, default 2.5; patched 0–10 V multiplies pressure by 0–1. |
+| V.Tune SPEED + Vessel input | Signed knob −2…+2 rev/s, default +0.4; patched ±5 V multiplies knob by −1…+1. |
+| V.Tune PRESSURE + Vessel input | Knob 0–15 N, default 2.5; patched 0–10 V multiplies pressure by 0–1. |
 | BOWL | Metal / Crystal prototype; stable descriptor IDs and versions. |
 | MALLET | Wood / Suede-wrapped / Silicone / Felt. |
-| DECAY | 0.25…4 multiplier, logarithmic; default 1. |
-| IMPERFECTION | Pair splitting multiplier 0…2; default 1. |
-| WIDTH | Native stereo observer separation; default 0.7. |
-| LEVEL | Output gain only; no effect on contact or energy. |
+| V.Tune SUSTAIN | Modal T60 multiplier 0.25…4, logarithmic; default 1. |
+| V.Tune IMPERFECTION | Pair splitting multiplier 0…2; default 1. |
+| V.Tune WIDTH | Native stereo observer separation; default 0.7. |
+| V.Tune LEVEL | Output gain only; no effect on contact or energy. |
 | BINAURAL ΔHz | Two physical bowl pair centers separated by 0–33 Hz, default 0; symmetric around effective PITCH. |
-| L/MONO, R | Lower-bowl left observer and upper-bowl right observer; no automatic polyphony. The reference preserves these signals regardless of cable state. |
+| L, R | Lower-bowl left observer and upper-bowl right observer; no automatic mono sum, cable-dependent gain change or polyphony. |
 | ENERGY display | Physical bowl-state energy, not output RMS. |
 
 Context-menu settings may include strike angle, observer azimuth, quality and optional damping. Keep material selection on the panel, not only in a menu.
