@@ -86,12 +86,14 @@ vessel_expander::TuneMessage Vessel::tuneControls() {
     tune.level = float(bound(params[LEVEL_PARAM].getValue(), 0, 2));
 
     const Module* right = rightExpander.module;
-    if (!right || right->model != modelVTune || right->leftExpander.module != this
-        || !rightExpander.consumerMessage) {
-        return tune;
-    }
-    const auto* message = reinterpret_cast<const vessel_expander::TuneMessage*>(rightExpander.consumerMessage);
-    if (!vessel_expander::isValid(*message)) {
+    const bool linked = right && right->model == modelVTune && right->leftExpander.module == this;
+    const auto* message = linked && rightExpander.consumerMessage
+        ? reinterpret_cast<const vessel_expander::TuneMessage*>(rightExpander.consumerMessage)
+        : nullptr;
+    const bool ready = message && vessel_expander::isValid(*message);
+    lights[VTUNE_LINK_LIGHT].setBrightness(linked && !ready ? 1.f : 0.f);
+    lights[VTUNE_READY_LIGHT].setBrightness(ready ? 1.f : 0.f);
+    if (!ready) {
         return tune;
     }
     tune.velocity = float(bound(message->velocity, 0, 1));

@@ -14,7 +14,14 @@ struct Vessel final : Module {
     enum InputId { VOCT_INPUT, STRIKE_INPUT, VELOCITY_INPUT, ROTATE_INPUT,
         SPEED_INPUT, PRESSURE_INPUT, INPUTS_LEN };
     enum OutputId { LEFT_OUTPUT, RIGHT_OUTPUT, OUTPUTS_LEN };
-    enum LightId { STRIKE_LIGHT, ROTATE_LIGHT, FAULT_LIGHT, LIGHTS_LEN };
+    enum LightId {
+        STRIKE_LIGHT,
+        ROTATE_LIGHT,
+        FAULT_LIGHT,
+        VTUNE_LINK_LIGHT,
+        VTUNE_READY_LIGHT,
+        LIGHTS_LEN
+    };
 
     vessel::DualBowlAdapter audio;
     debug_terminal::BaselineModuleMetrics debugMetrics;

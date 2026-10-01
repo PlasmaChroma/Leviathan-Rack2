@@ -107,10 +107,16 @@ void tuneExpander() {
     Module::ProcessArgs args; args.sampleRate = 48000; args.sampleTime = 1.f/48000.f;
     tune.process(args);
     require(host.rightExpander.messageFlipRequested, "V.Tune did not request an expander flip");
+    require(tune.lights[VTune::VESSEL_LINK_LIGHT].getBrightness() == 0.f
+        && tune.lights[VTune::VESSEL_READY_LIGHT].getBrightness() == 1.f,
+        "V.Tune connection LED did not show a ready Vessel link");
     host.tuneMessages[1] = host.tuneMessages[0];
     host.rightExpander.messageFlipRequested = false;
     cable(host, Vessel::STRIKE_INPUT, 10.f);
     run(host, 100);
+    require(host.lights[Vessel::VTUNE_LINK_LIGHT].getBrightness() == 0.f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 1.f,
+        "Vessel connection LED did not show a ready V.Tune link");
     const auto& settings = host.audio.engine().settings();
     require(host.audio.engine().ledger().strikes == 0, "V.Tune velocity does not replace Vessel fallback knob");
     require(std::abs(settings.decayMultiplier - 4.0) < 1e-12, "V.Tune sustain was not applied");
@@ -125,6 +131,12 @@ void tuneExpander() {
     host.params[Vessel::WIDTH_PARAM].setValue(.6f);
     host.params[Vessel::ROTATE_PARAM].setValue(1.f);
     run(host, 100);
+    tune.process(args);
+    require(host.lights[Vessel::VTUNE_LINK_LIGHT].getBrightness() == 0.f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f
+        && tune.lights[VTune::VESSEL_LINK_LIGHT].getBrightness() == 0.f
+        && tune.lights[VTune::VESSEL_READY_LIGHT].getBrightness() == 0.f,
+        "expander connection LEDs did not clear after disconnection");
     const auto& fallback = host.audio.engine().settings();
     require(std::abs(fallback.decayMultiplier - .5) < 1e-12
         && std::abs(fallback.imperfection - 1.5) < 1e-12

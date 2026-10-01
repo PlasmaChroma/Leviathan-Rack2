@@ -27,7 +27,11 @@ VTune::VTune() {
 
 void VTune::process(const ProcessArgs&) {
     Module* vessel = leftExpander.module;
-    if (!isVessel(vessel) || vessel->rightExpander.module != this || !vessel->rightExpander.producerMessage) {
+    const bool linked = isVessel(vessel) && vessel->rightExpander.module == this;
+    const bool ready = linked && vessel->rightExpander.producerMessage;
+    lights[VESSEL_LINK_LIGHT].setBrightness(linked && !ready ? 1.f : 0.f);
+    lights[VESSEL_READY_LIGHT].setBrightness(ready ? 1.f : 0.f);
+    if (!ready) {
         return;
     }
 

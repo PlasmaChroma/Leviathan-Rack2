@@ -25,6 +25,8 @@ struct VTuneWidget final : ModuleWidget {
             Vec(10.5f, 22.f), Vec(30.14f, 22.f), Vec(10.5f, 43.f), Vec(30.14f, 43.f),
             Vec(10.5f, 64.f), Vec(30.14f, 64.f), Vec(20.32f, 85.f)
         };
+        addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+            mm2px(point("VESSEL_EXPANDER_LIGHT", 3.2f, 5.8f)), module, VTune::VESSEL_LINK_LIGHT));
         for (int i = 0; i < 7; ++i) {
             addParam(createParamCentered<Eclipse2Knob>(mm2px(point(anchors[i], fallback[i].x, fallback[i].y)), module, ids[i]));
         }

@@ -4,8 +4,10 @@
 <g id="panel_art"><g id="theme_background"><rect width="8128" height="12850" fill="#000000"/></g>
 <rect x="50" y="50" width="8028" height="12750" rx="90" fill="none" stroke="url(#vessel-edge)" stroke-width="24" opacity="0.65"/>
 <g id="component_anchors" style="display:none"><rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2428.0335" y="11943.102" width="3271.933" height="1224.054"/><rect id="ENERGY_DISPLAY" x="600" y="1500" width="6928" height="800"/>
+<rect id="BOWL_RASTER" x="350" y="2500" width="7428" height="4400"/>
 <rect id="STRIKE_AREA" x="350" y="2450" width="3600" height="5100"/>
 <rect id="ROTATE_AREA" x="4178" y="2450" width="3600" height="5100"/>
+<circle id="VTUNE_EXPANDER_LIGHT" cx="7808" cy="580" r="10"/>
 <circle id="BINAURAL_PARAM" cx="1200" cy="8500" r="10"/>
 <circle id="BOWL_PARAM" cx="2900" cy="8500" r="10"/>
 <circle id="PITCH_PARAM" cx="4250" cy="8500" r="10"/>

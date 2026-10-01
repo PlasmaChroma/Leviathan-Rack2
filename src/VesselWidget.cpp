@@ -136,6 +136,8 @@ struct BowlDisplay : TransparentWidget {
 struct VesselWidget final : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics timing;
     debug_terminal::UiCycleTimingAccumulator layerTiming;
+    Widget* metalBowlRaster = nullptr;
+    Widget* crystalBowlRaster = nullptr;
     explicit VesselWidget(Vessel* module) {
         setModule(module);
         visual_assets::SplitPanelRenderer panel(this, "res/Vessel.panel.svg");
@@ -148,6 +150,16 @@ struct VesselWidget final : ModuleWidget {
         math::Rect r(Vec(6, 15), Vec(69.28f, 8));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ENERGY_DISPLAY", &r);
         display->box.pos = mm2px(r.pos); display->box.size = mm2px(r.size); addChild(display);
+        math::Rect bowlRasterRect(Vec(3.5f, 25.f), Vec(74.28f, 44.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "BOWL_RASTER", &bowlRasterRect);
+        metalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
+            "res/Vessel/Metal-Crop-Only.png", bowlRasterRect);
+        crystalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
+            "res/Vessel/Crystal-Crop-Only.png", bowlRasterRect);
+        addChild(metalBowlRaster);
+        addChild(crystalBowlRaster);
+        addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+            mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 85.f)), module, Vessel::BINAURAL_PARAM));
         addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 29.f, 85.f)), module, Vessel::BOWL_PARAM));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 42.5f, 85.f)), module, Vessel::PITCH_PARAM));
@@ -189,6 +201,10 @@ struct VesselWidget final : ModuleWidget {
         const bool enabled = isDragonKingDebugEnabled();
         layerTiming.beginCycle(enabled);
         const auto start = debug_terminal::debugTimerStart(enabled);
+        auto* vessel = static_cast<Vessel*>(module);
+        const bool crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
+        if (metalBowlRaster) metalBowlRaster->setVisible(!crystalSelected);
+        if (crystalBowlRaster) crystalBowlRaster->setVisible(crystalSelected);
         ModuleWidget::step();
         if (enabled) timing.recordStep(debug_terminal::elapsedUsSince(start));
     }

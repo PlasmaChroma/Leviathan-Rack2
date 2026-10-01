@@ -15,7 +15,7 @@ struct VTune final : Module {
     };
     enum InputId { INPUTS_LEN };
     enum OutputId { OUTPUTS_LEN };
-    enum LightId { LIGHTS_LEN };
+    enum LightId { VESSEL_LINK_LIGHT, VESSEL_READY_LIGHT, LIGHTS_LEN };
 
     VTune();
     void process(const ProcessArgs& args) override;
