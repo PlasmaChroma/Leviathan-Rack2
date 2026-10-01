@@ -1,12 +1,154 @@
 #include "Vessel.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace {
+NVGcolor mixPitchTint(NVGcolor a, NVGcolor b, float amount) {
+    amount = clamp(amount, 0.f, 1.f);
+    return nvgRGBAf(
+        a.r + (b.r - a.r) * amount,
+        a.g + (b.g - a.g) * amount,
+        a.b + (b.b - a.b) * amount,
+        1.f);
+}
+
+NVGcolor vesselPitchTint(float frequency) {
+    // Aparmita's original A4=440 color-derived bands, represented by their
+    // geometric centers. Fold by octaves, then interpolate between centers so
+    // pitch sweeps remain continuous instead of stepping across seven colors.
+    static const float centers[] = {100.25f, 112.50f, 119.32f, 127.25f, 141.72f, 155.71f, 171.21f};
+    static const NVGcolor colors[] = {
+        nvgRGB(255, 56, 72),   // Root
+        nvgRGB(255, 124, 35),  // Sacral
+        nvgRGB(255, 220, 50),  // Solar plexus
+        nvgRGB(40, 224, 110),  // Heart
+        nvgRGB(50, 180, 255),  // Throat
+        nvgRGB(80, 90, 245),   // Third eye
+        nvgRGB(200, 70, 235)   // Crown
+    };
+    float folded = std::isfinite(frequency) ? std::max(frequency, 1.f) : 261.625565f;
+    while (folded < 92.09f) folded *= 2.f;
+    while (folded >= 184.17f) folded *= 0.5f;
+    if (folded < centers[0]) {
+        const float previousCenter = centers[6] * 0.5f;
+        return mixPitchTint(colors[6], colors[0], (folded - previousCenter) / (centers[0] - previousCenter));
+    }
+    for (int i = 0; i < 6; ++i) {
+        if (folded < centers[i + 1])
+            return mixPitchTint(colors[i], colors[i + 1], (folded - centers[i]) / (centers[i + 1] - centers[i]));
+    }
+    const float nextRootCenter = centers[0] * 2.f;
+    return mixPitchTint(colors[6], colors[0], (folded - centers[6]) / (nextRootCenter - centers[6]));
+}
+
+struct VesselTintMask final : TransparentWidget {
+    std::string sourcePath;
+    std::vector<std::uint8_t> pixels;
+    NVGcontext* imageVg = nullptr;
+    int imageHandle = -1;
+    int cachedWidth = 0;
+    int cachedHeight = 0;
+    int sourceWidth = 0;
+    int sourceHeight = 0;
+    bool decodeAttempted = false;
+
+    VesselTintMask(math::Rect rectMm, const char* path) : sourcePath(path ? path : "") {
+        box.pos = mm2px(rectMm.pos);
+        box.size = mm2px(rectMm.size);
+    }
+
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+            imageVg, imageHandle, cachedWidth, cachedHeight, e.vg, imageVg == e.vg);
+        TransparentWidget::onContextDestroy(e);
+    }
+
+    bool ensurePixels() {
+        if (decodeAttempted) return !pixels.empty();
+        decodeAttempted = true;
+        int width = 0;
+        int height = 0;
+        if (!visual_assets::decodeRasterRgba8(
+                asset::plugin(pluginInstance, sourcePath),
+                &pixels, &width, &height)) return false;
+        sourceWidth = width;
+        sourceHeight = height;
+        for (std::size_t i = 0; i + 3 < pixels.size(); i += 4) {
+            const int luminance = (54 * int(pixels[i]) + 183 * int(pixels[i + 1])
+                + 19 * int(pixels[i + 2]) + 128) >> 8;
+            pixels[i] = pixels[i + 1] = pixels[i + 2] = std::uint8_t(luminance);
+        }
+        return true;
+    }
+
+    bool ensureImage(NVGcontext* vg) {
+        if (!ensurePixels()) return false;
+        if (imageVg == vg && imageHandle > 0
+            && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, sourceWidth, sourceHeight)) return true;
+        return nvg_gfx_lifecycle::updateOwnedNvgImageRgba(
+            imageVg, imageHandle, cachedWidth, cachedHeight, vg,
+            sourceWidth, sourceHeight, NVG_IMAGE_GENERATE_MIPMAPS, pixels.data());
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (!ensureImage(args.vg) || sourceWidth <= 0 || sourceHeight <= 0) return;
+        const float aspect = float(sourceWidth) / float(sourceHeight);
+        float drawWidth = box.size.x;
+        float drawHeight = drawWidth / aspect;
+        if (drawHeight > box.size.y) {
+            drawHeight = box.size.y;
+            drawWidth = drawHeight * aspect;
+        }
+        const float x = 0.5f * (box.size.x - drawWidth);
+        const float y = 0.5f * (box.size.y - drawHeight);
+        nvgBeginPath(args.vg);
+        nvgRect(args.vg, x, y, drawWidth, drawHeight);
+        nvgFillPaint(args.vg, nvgImagePattern(
+            args.vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f));
+        nvgFill(args.vg);
+    }
+};
+
+struct VesselPitchTintLayer final : TransparentWidget {
+    Vessel* vessel = nullptr;
+    Widget* metalRaster = nullptr;
+    Widget* crystalRaster = nullptr;
+    bool crystalSelected = false;
+
+    VesselPitchTintLayer(Vessel* module, math::Rect rasterRectMm) : vessel(module) {
+        metalRaster = new VesselTintMask(rasterRectMm, "res/Vessel/Metal-Crop-Only.png");
+        crystalRaster = new VesselTintMask(rasterRectMm, "res/Vessel/Crystal-Crop-Only.png");
+        addChild(metalRaster);
+        addChild(crystalRaster);
+    }
+
+    void step() override {
+        crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
+        if (metalRaster) metalRaster->setVisible(!crystalSelected);
+        if (crystalRaster) crystalRaster->setVisible(crystalSelected);
+        TransparentWidget::step();
+    }
+
+    void draw(const DrawArgs& args) override {
+        const float frequency = vessel
+            ? vessel->visualFrequency.load(std::memory_order_relaxed)
+            : 261.625565f;
+        const NVGcolor tint = vesselPitchTint(frequency);
+        nvgSave(args.vg);
+        nvgGlobalCompositeOperation(args.vg, NVG_SOURCE_OVER);
+        nvgGlobalAlpha(args.vg, crystalSelected ? 0.20f : 0.38f);
+        nvgGlobalTint(args.vg, tint);
+        TransparentWidget::draw(args);
+        nvgRestore(args.vg);
+    }
+};
+
 struct VesselPerformanceArea : app::Switch {
     enum class Kind { Strike, Rotate };
     Kind kind;
@@ -138,6 +280,7 @@ struct VesselWidget final : ModuleWidget {
     debug_terminal::UiCycleTimingAccumulator layerTiming;
     Widget* metalBowlRaster = nullptr;
     Widget* crystalBowlRaster = nullptr;
+    VesselPitchTintLayer* bowlPitchTint = nullptr;
     explicit VesselWidget(Vessel* module) {
         setModule(module);
         visual_assets::SplitPanelRenderer panel(this, "res/Vessel.panel.svg");
@@ -175,9 +318,20 @@ struct VesselWidget final : ModuleWidget {
         // non-interactive raster widgets, so the underlying pad controls remain usable.
         addChild(metalBowlRaster);
         addChild(crystalBowlRaster);
-        const char* inputs[] = {"VOCT_INPUT", "STRIKE_INPUT", "VELOCITY_INPUT", "ROTATE_INPUT", "SPEED_INPUT", "PRESSURE_INPUT"};
-        for (int i = 0; i < 6; ++i) addInput(createInputCentered<Magitek2InputJack>(
-            mm2px(point(inputs[i], 12.f+19.f*(i%4), i < 4 ? 98.f : 110.5f)), module, i));
+        bowlPitchTint = new VesselPitchTintLayer(module, bowlRasterRect);
+        bowlPitchTint->box.size = box.size;
+        addChild(bowlPitchTint);
+        struct InputPlacement { const char* anchor; int id; float x; float y; };
+        const InputPlacement inputs[] = {
+            {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 12.f, 98.f},
+            {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 31.f, 98.f},
+            {"SPEED_INPUT", Vessel::SPEED_INPUT, 50.f, 98.f},
+            {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 69.f, 98.f},
+            {"VOCT_INPUT", Vessel::VOCT_INPUT, 12.f, 110.5f},
+            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 31.f, 110.5f}
+        };
+        for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(
+            mm2px(point(input.anchor, input.x, input.y)), module, input.id));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("LEFT_OUTPUT", 50, 110.5f)), module, Vessel::LEFT_OUTPUT));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("RIGHT_OUTPUT", 69, 110.5f)), module, Vessel::RIGHT_OUTPUT));
     }

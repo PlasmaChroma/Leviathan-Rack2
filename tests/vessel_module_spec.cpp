@@ -177,12 +177,30 @@ void manualPerformancePads() {
         "manual rotate pad height does not scale speed");
     require(std::abs(gatedRotate.audio.engine().rotationAngle()) > 0,
         "manual speed scale incorrectly affects the external rotate gate");
+
+    Vessel negativeSpeedCv, zeroSpeedCv, halfSpeedCv, fullSpeedCv;
+    for (Vessel* vessel : {&negativeSpeedCv, &zeroSpeedCv, &halfSpeedCv, &fullSpeedCv}) {
+        vessel->params[Vessel::SPEED_PARAM].setValue(1.f);
+        cable(*vessel, Vessel::ROTATE_INPUT, 10.f);
+    }
+    cable(negativeSpeedCv, Vessel::SPEED_INPUT, -5.f);
+    cable(zeroSpeedCv, Vessel::SPEED_INPUT, 0.f);
+    cable(halfSpeedCv, Vessel::SPEED_INPUT, 5.f);
+    cable(fullSpeedCv, Vessel::SPEED_INPUT, 10.f);
+    run(negativeSpeedCv, 1200); run(zeroSpeedCv, 1200); run(halfSpeedCv, 1200); run(fullSpeedCv, 1200);
+    const double negativeCvAngle = std::abs(negativeSpeedCv.audio.engine().rotationAngle());
+    const double zeroCvAngle = std::abs(zeroSpeedCv.audio.engine().rotationAngle());
+    const double halfCvAngle = std::abs(halfSpeedCv.audio.engine().rotationAngle());
+    const double fullCvAngle = std::abs(fullSpeedCv.audio.engine().rotationAngle());
+    require(std::abs(negativeCvAngle-zeroCvAngle) < 1e-12 && halfCvAngle > zeroCvAngle
+            && fullCvAngle-zeroCvAngle > 1.9 * (halfCvAngle-zeroCvAngle),
+        "speed CV does not use a clamped 0-10 V multiplier scale");
     slowRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     fastRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     run(slowRotate, 2000); run(fastRotate, 2000);
     require(slowRotate.audio.engine().contactEngagement() == 0 && fastRotate.audio.engine().contactEngagement() == 0,
         "manual rotate pad remains latched after release");
-    std::cout << "[PASS] Manual pad strike velocity, held rotation speed, gate independence and release\n";
+    std::cout << "[PASS] Manual pad strike velocity, held rotation speed, 0-10 V speed CV, gate independence and release\n";
 }
 
 void independentOutputAndEnergy() {

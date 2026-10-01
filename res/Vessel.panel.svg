@@ -20,14 +20,14 @@
       <circle id="PITCH_PARAM" cx="4250" cy="8500" r="10" />
       <circle id="FINE_PARAM" cx="5525" cy="8500" r="10" />
       <circle id="MALLET_PARAM" cx="7100" cy="8500" r="10" />
-      <circle id="VOCT_INPUT" cx="1200" cy="9800" r="10" />
-      <circle id="STRIKE_INPUT" cx="3100" cy="9800" r="10" />
-      <circle id="VELOCITY_INPUT" cx="5000" cy="9800" r="10" />
+      <circle id="STRIKE_INPUT" cx="1200" cy="9800" r="10" />
+      <circle id="VELOCITY_INPUT" cx="3100" cy="9800" r="10" />
+      <circle id="SPEED_INPUT" cx="5000" cy="9800" r="10" />
       <circle id="ROTATE_INPUT" cx="6900" cy="9800" r="10" />
-      <circle id="SPEED_INPUT" cx="1200" cy="11050" r="10" />
+      <circle id="VOCT_INPUT" cx="1200" cy="11050" r="10" />
       <circle id="PRESSURE_INPUT" cx="3100" cy="11050" r="10" />
       <circle id="LEFT_OUTPUT" cx="5000" cy="11050" r="10" />
       <circle id="RIGHT_OUTPUT" cx="6900" cy="11050" r="10" />
     </g>
   </g>
-</sv
+</svg>
