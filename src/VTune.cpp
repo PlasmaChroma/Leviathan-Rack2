@@ -17,7 +17,7 @@ bool isVessel(const Module* module) {
 VTune::VTune() {
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
-    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rotation speed", " rev/s");
+    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configParam(SUSTAIN_PARAM, -2.f, 2.f, 0.f, "Sustain", "x", 2.f);
     configParam(IMPERFECTION_PARAM, 0.f, 2.f, 1.f, "Mode-pair imperfection");

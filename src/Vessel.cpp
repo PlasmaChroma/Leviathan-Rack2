@@ -36,7 +36,7 @@ Vessel::Vessel() {
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
     configButton(STRIKE_PARAM, "Strike bowl");
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
-    configButton(ROTATE_PARAM, "Rotate mallet");
+    configButton(ROTATE_PARAM, "Rub bowl");
     getParamQuantity(ROTATE_PARAM)->randomizeEnabled = false;
     configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rotation speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
@@ -48,7 +48,7 @@ Vessel::Vessel() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
-        "Rotate gate", "Speed (+/-5 V multiplier)", "Pressure (0-10 V multiplier)"};
+        "Rub gate", "Rubbing speed (+/-5 V multiplier)", "Pressure (0-10 V multiplier)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
     configOutput(LEFT_OUTPUT, "Left"); configOutput(RIGHT_OUTPUT, "Right");
     resetRuntime();

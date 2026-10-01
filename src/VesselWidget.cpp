@@ -36,7 +36,7 @@ struct VesselPerformanceArea : app::Switch {
         const int percent = int(std::lround(100.f * currentAmount));
         return kind == Kind::Strike
             ? string::f("Strike: %d%% Velocity", percent)
-            : string::f("Rotate: %d%% Speed", percent);
+            : string::f("Rub: %d%% Speed", percent);
     }
     void createPadTooltip() {
         if (!settings::tooltips || padTooltip || !APP || !APP->scene) return;
@@ -124,7 +124,7 @@ struct BowlDisplay : TransparentWidget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFontSize(args.vg, 9.f);
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, fault ? nvgRGB(255, 133, 99) : nvgRGB(181, 213, 220));
-        nvgText(args.vg, 1, mm2px(5.6f), fault ? "RATE / CONTACT FAULT" : "BOWL ENERGY", nullptr);
+        nvgText(args.vg, 1, mm2px(5.6f), fault ? "RATE / CONTACT FAULT" : "ENERGY", nullptr);
         if (!fault) {
             nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
             nvgText(args.vg, box.size.x-1, mm2px(5.6f), text, nullptr);
@@ -147,17 +147,15 @@ struct VesselWidget final : ModuleWidget {
             Vec p; return panel_svg::loadPointFromSvgMm(panel.panelPath(), id, &p) ? p : Vec(x, y);
         };
         auto* display = new BowlDisplay(); display->vessel = module;
-        math::Rect r(Vec(6, 15), Vec(69.28f, 8));
+        math::Rect r(Vec(3.5f, 15.f), Vec(74.28f, 8.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ENERGY_DISPLAY", &r);
         display->box.pos = mm2px(r.pos); display->box.size = mm2px(r.size); addChild(display);
-        math::Rect bowlRasterRect(Vec(3.5f, 25.f), Vec(74.28f, 44.f));
+        math::Rect bowlRasterRect(Vec(6.64f, 29.89f), Vec(68.f, 40.22f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "BOWL_RASTER", &bowlRasterRect);
         metalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
             "res/Vessel/Metal-Crop-Only.png", bowlRasterRect);
         crystalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
             "res/Vessel/Crystal-Crop-Only.png", bowlRasterRect);
-        addChild(metalBowlRaster);
-        addChild(crystalBowlRaster);
         addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
             mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 85.f)), module, Vessel::BINAURAL_PARAM));
@@ -165,14 +163,18 @@ struct VesselWidget final : ModuleWidget {
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 42.5f, 85.f)), module, Vessel::PITCH_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 85.f)), module, Vessel::FINE_PARAM));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 85.f)), module, Vessel::MALLET_PARAM));
-        math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.f, 51.f));
+        math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.74f, 51.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "STRIKE_AREA", &strikeRect);
         auto* strikeArea = createParam<VesselStrikeArea>(mm2px(strikeRect.pos), module, Vessel::STRIKE_PARAM);
         strikeArea->box.size = mm2px(strikeRect.size); addParam(strikeArea);
-        math::Rect rotateRect(Vec(41.78f, 24.5f), Vec(36.f, 51.f));
+        math::Rect rotateRect(Vec(41.04f, 24.5f), Vec(36.74f, 51.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ROTATE_AREA", &rotateRect);
         auto* rotateArea = createParam<VesselRotateArea>(mm2px(rotateRect.pos), module, Vessel::ROTATE_PARAM);
         rotateArea->box.size = mm2px(rotateRect.size); addParam(rotateArea);
+        // Keep the bowl visually above the pad surfaces. These are transparent,
+        // non-interactive raster widgets, so the underlying pad controls remain usable.
+        addChild(metalBowlRaster);
+        addChild(crystalBowlRaster);
         const char* inputs[] = {"VOCT_INPUT", "STRIKE_INPUT", "VELOCITY_INPUT", "ROTATE_INPUT", "SPEED_INPUT", "PRESSURE_INPUT"};
         for (int i = 0; i < 6; ++i) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(inputs[i], 12.f+19.f*(i%4), i < 4 ? 98.f : 110.5f)), module, i));
