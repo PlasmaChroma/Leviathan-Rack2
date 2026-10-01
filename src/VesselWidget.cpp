@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -150,6 +151,161 @@ struct VesselPitchTintLayer final : TransparentWidget {
     }
 };
 
+struct VesselMalletOverlay;
+
+struct VesselMalletOverlayLink {
+    Widget* owner = nullptr;
+    Vessel* module = nullptr;
+    math::Rect orbit;
+    math::Rect bowl;
+    Widget* metalBowlRaster = nullptr;
+    Widget* crystalBowlRaster = nullptr;
+    VesselPitchTintLayer* bowlPitchTint = nullptr;
+    VesselMalletOverlay* overlay = nullptr;
+    debug_terminal::UiCycleTimingAccumulator* drawLayerTiming = nullptr;
+};
+
+constexpr float kVesselMalletHeightMm = 34.f;
+constexpr float kVesselMalletOverflowPadMm = 40.f;
+constexpr float kVesselMalletTipFraction = .12f;
+constexpr float kVesselMalletTipPenetration = .20f;
+constexpr float kVesselMalletContactOffsetMm = 4.5f;
+
+struct VesselMalletRenderWidget : TransparentWidget {
+    std::shared_ptr<VesselMalletOverlayLink> link;
+    Vec moduleOrigin;
+
+    explicit VesselMalletRenderWidget(std::shared_ptr<VesselMalletOverlayLink> link)
+        : link(std::move(link)) {}
+
+    void onContextCreate(const ContextCreateEvent& e) override {
+        visual_assets::onRasterContextCreate(e.vg);
+        TransparentWidget::onContextCreate(e);
+    }
+
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        visual_assets::onRasterContextDestroy(e.vg);
+        TransparentWidget::onContextDestroy(e);
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (!link || !link->module || !link->module->visualRubbing.load(std::memory_order_relaxed)
+            || !APP || !APP->window) return;
+        float angle = link->module->visualRotationAngle.load(std::memory_order_relaxed);
+        if (!std::isfinite(angle)) angle = 0.f;
+        const float depth = std::sin(angle);
+
+        const std::string fullPath = asset::plugin(pluginInstance, "res/Vessel/WoodSmall.png");
+        std::shared_ptr<window::Image> source = APP->window->loadImage(fullPath);
+        if (!source || source->handle < 0) return;
+        int handle = visual_assets::loadRasterMipmapHandle(args.vg, source, fullPath);
+        if (handle < 0) handle = source->handle;
+        int imageWidth = 0, imageHeight = 0;
+        nvgImageSize(args.vg, handle, &imageWidth, &imageHeight);
+        if (imageWidth <= 0 || imageHeight <= 0) return;
+
+        const Vec center = moduleOrigin.plus(link->orbit.pos).plus(link->orbit.size.mult(.5f));
+        const Vec radius = link->orbit.size.mult(.5f);
+        const Vec contact = center.plus(Vec(
+            radius.x * std::cos(angle),
+            radius.y * depth + mm2px(kVesselMalletContactOffsetMm)));
+        const float drawHeight = mm2px(kVesselMalletHeightMm);
+        const float drawWidth = drawHeight * float(imageWidth) / float(imageHeight);
+        const float tipPenetration = drawHeight
+            * kVesselMalletTipFraction * kVesselMalletTipPenetration;
+        const Vec renderedTip = contact.plus(Vec(0.f, tipPenetration));
+
+        // Preserve the raster's intended 180-degree playing orientation, but
+        // draw it downwards in local space so that after rotation its length
+        // still extends above the rim. Only the requested part of the contact
+        // tip penetrates below the rim path.
+        auto drawImage = [&](float clipTop, float clipHeight) {
+            if (clipHeight <= 0.f) return;
+            nvgSave(args.vg);
+            nvgScissor(args.vg, 0.f, clipTop, box.size.x, clipHeight);
+            nvgTranslate(args.vg, renderedTip.x, renderedTip.y);
+            nvgRotate(args.vg, float(M_PI));
+            const NVGpaint paint = nvgImagePattern(
+                args.vg, -.5f * drawWidth, 0.f, drawWidth, drawHeight, 0.f, handle, 1.f);
+            nvgBeginPath(args.vg);
+            nvgRect(args.vg, -.5f * drawWidth, 0.f, drawWidth, drawHeight);
+            nvgFillPaint(args.vg, paint);
+            nvgFill(args.vg);
+            nvgRestore(args.vg);
+        };
+
+        if (depth >= 0.f) {
+            drawImage(0.f, box.size.y);
+            return;
+        }
+
+        // Both halves stay in one detached rack-level pass, which preserves the
+        // off-module motion. On the back half, replay the module's actual bowl
+        // and pitch-tint widgets over the complete mallet. This uses the raster's
+        // alpha as the occlusion silhouette instead of cutting a geometric slice.
+        drawImage(0.f, box.size.y);
+        Widget* bowlRaster = link->module->params[Vessel::BOWL_PARAM].getValue() >= .5f
+            ? link->crystalBowlRaster : link->metalBowlRaster;
+        if (bowlRaster) {
+            nvgSave(args.vg);
+            nvgTranslate(args.vg,
+                moduleOrigin.x + bowlRaster->box.pos.x,
+                moduleOrigin.y + bowlRaster->box.pos.y);
+            bowlRaster->draw(args);
+            nvgRestore(args.vg);
+        }
+        if (link->bowlPitchTint) {
+            nvgSave(args.vg);
+            nvgTranslate(args.vg,
+                moduleOrigin.x + link->bowlPitchTint->box.pos.x,
+                moduleOrigin.y + link->bowlPitchTint->box.pos.y);
+            link->bowlPitchTint->draw(args);
+            nvgRestore(args.vg);
+        }
+    }
+};
+
+struct VesselMalletOverlay final : TransparentWidget {
+    std::shared_ptr<VesselMalletOverlayLink> link;
+    VesselMalletRenderWidget* renderer = nullptr;
+
+    explicit VesselMalletOverlay(std::shared_ptr<VesselMalletOverlayLink> link)
+        : link(std::move(link)) {
+        renderer = new VesselMalletRenderWidget(this->link);
+        renderer->moduleOrigin = Vec(mm2px(kVesselMalletOverflowPadMm), mm2px(kVesselMalletOverflowPadMm));
+        renderer->box.size = box.size;
+        addChild(renderer);
+    }
+
+    ~VesselMalletOverlay() override {
+        if (link && link->overlay == this) link->overlay = nullptr;
+    }
+
+    void step() override {
+        TransparentWidget::step();
+        if (!link || !link->owner || !link->module || !APP || !APP->scene || !APP->scene->rack
+            || !link->owner->isDescendantOf(APP->scene->rack)) {
+            requestDelete();
+            return;
+        }
+        const float pad = mm2px(kVesselMalletOverflowPadMm);
+        box.pos = link->owner->getRelativeOffset(Vec(), APP->scene->rack).minus(Vec(pad, pad));
+        box.size = link->owner->box.size.plus(Vec(2.f * pad, 2.f * pad));
+        if (renderer) renderer->box.size = box.size;
+    }
+
+    void draw(const DrawArgs&) override {}
+
+    void drawLayer(const DrawArgs& args, int layer) override {
+        auto* timing = link ? link->drawLayerTiming : nullptr;
+        const bool measurePerf = timing && timing->enabled;
+        const auto start = debug_terminal::debugTimerStart(measurePerf);
+        if (layer == 1) TransparentWidget::draw(args);
+        TransparentWidget::drawLayer(args, layer);
+        if (measurePerf) timing->add(debug_terminal::elapsedUsSince(start));
+    }
+};
+
 struct VesselPerformanceArea : app::Switch {
     enum class Kind { Strike, Rotate };
     Kind kind;
@@ -281,6 +437,7 @@ struct BowlDisplay : TransparentWidget {
 struct VesselWidget final : ModuleWidget {
     debug_terminal::BaselineWidgetMetrics timing;
     debug_terminal::UiCycleTimingAccumulator layerTiming;
+    std::shared_ptr<VesselMalletOverlayLink> malletOverlayLink;
     Widget* metalBowlRaster = nullptr;
     Widget* crystalBowlRaster = nullptr;
     VesselPitchTintLayer* bowlPitchTint = nullptr;
@@ -306,6 +463,14 @@ struct VesselWidget final : ModuleWidget {
             "res/Vessel/Metal-Crop-Only.png", bowlRasterRect);
         crystalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
             "res/Vessel/Crystal-Crop-Only.png", bowlRasterRect);
+        math::Rect malletOrbitRect(Vec(2.f, 29.5f), Vec(77.28f, 9.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "MALLET_ORBIT", &malletOrbitRect);
+        malletOverlayLink = std::make_shared<VesselMalletOverlayLink>();
+        malletOverlayLink->owner = this;
+        malletOverlayLink->module = module;
+        malletOverlayLink->orbit = math::Rect(mm2px(malletOrbitRect.pos), mm2px(malletOrbitRect.size));
+        malletOverlayLink->bowl = math::Rect(mm2px(bowlRasterRect.pos), mm2px(bowlRasterRect.size));
+        malletOverlayLink->drawLayerTiming = &layerTiming;
         addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
             mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 83.5f)), module, Vessel::BINAURAL_PARAM));
@@ -328,6 +493,9 @@ struct VesselWidget final : ModuleWidget {
         bowlPitchTint = new VesselPitchTintLayer(module, bowlRasterRect);
         bowlPitchTint->box.size = box.size;
         addChild(bowlPitchTint);
+        malletOverlayLink->metalBowlRaster = metalBowlRaster;
+        malletOverlayLink->crystalBowlRaster = crystalBowlRaster;
+        malletOverlayLink->bowlPitchTint = bowlPitchTint;
         struct InputPlacement { const char* anchor; int id; float x; float y; };
         const InputPlacement inputs[] = {
             {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 9.f, 98.f},
@@ -341,6 +509,46 @@ struct VesselWidget final : ModuleWidget {
             mm2px(point(input.anchor, input.x, input.y)), module, input.id));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("LEFT_OUTPUT", 39.f, 110.5f)), module, Vessel::LEFT_OUTPUT));
         addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("RIGHT_OUTPUT", 52.f, 110.5f)), module, Vessel::RIGHT_OUTPUT));
+    }
+
+    ~VesselWidget() override {
+        destroyMalletOverlay();
+        if (malletOverlayLink) {
+            malletOverlayLink->owner = nullptr;
+            malletOverlayLink->module = nullptr;
+            malletOverlayLink->metalBowlRaster = nullptr;
+            malletOverlayLink->crystalBowlRaster = nullptr;
+            malletOverlayLink->bowlPitchTint = nullptr;
+            malletOverlayLink->drawLayerTiming = nullptr;
+        }
+    }
+
+    bool validMalletOverlayContext() const {
+        return module && APP && APP->scene && APP->scene->rack
+            && parent == APP->scene->rack->getModuleContainer();
+    }
+
+    void createMalletOverlay() {
+        if (!malletOverlayLink || malletOverlayLink->overlay || !validMalletOverlayContext()) return;
+        auto* rack = APP->scene->rack;
+        auto* cableContainer = rack->getCableContainer();
+        if (!cableContainer || !rack->hasChild(cableContainer)) return;
+        auto* overlay = new VesselMalletOverlay(malletOverlayLink);
+        malletOverlayLink->overlay = overlay;
+        rack->addChildBelow(overlay, cableContainer);
+    }
+
+    void destroyMalletOverlay() {
+        if (!malletOverlayLink || !malletOverlayLink->overlay) return;
+        VesselMalletOverlay* overlay = malletOverlayLink->overlay;
+        malletOverlayLink->overlay = nullptr;
+        if (overlay->parent) overlay->requestDelete();
+        else delete overlay;
+    }
+
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        destroyMalletOverlay();
+        ModuleWidget::onContextDestroy(e);
     }
     void appendContextMenu(Menu* menu) override {
         ModuleWidget::appendContextMenu(menu);
@@ -369,6 +577,8 @@ struct VesselWidget final : ModuleWidget {
         if (metalBowlRaster) metalBowlRaster->setVisible(!crystalSelected);
         if (crystalBowlRaster) crystalBowlRaster->setVisible(crystalSelected);
         ModuleWidget::step();
+        if (validMalletOverlayContext()) createMalletOverlay();
+        else destroyMalletOverlay();
         if (enabled) timing.recordStep(debug_terminal::elapsedUsSince(start));
     }
     void drawLayer(const DrawArgs& args, int layer) override {

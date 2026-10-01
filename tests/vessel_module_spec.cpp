@@ -177,6 +177,12 @@ void manualPerformancePads() {
         "manual rotate pad height does not scale speed");
     require(std::abs(gatedRotate.audio.engine().rotationAngle()) > 0,
         "manual speed scale incorrectly affects the external rotate gate");
+    const double visualPhaseError = std::abs(std::remainder(
+        double(fastRotate.visualRotationAngle.load(std::memory_order_relaxed))
+            - fastRotate.audio.engine().rotationAngle(), 2.0 * vessel::pi));
+    require(fastRotate.visualRubbing.load(std::memory_order_relaxed)
+            && visualPhaseError < .08,
+        "mallet visual phase does not follow the active bowl rotation");
 
     Vessel negativeSpeedCv, zeroSpeedCv, halfSpeedCv, fullSpeedCv;
     for (Vessel* vessel : {&negativeSpeedCv, &zeroSpeedCv, &halfSpeedCv, &fullSpeedCv}) {
@@ -200,6 +206,8 @@ void manualPerformancePads() {
     run(slowRotate, 2000); run(fastRotate, 2000);
     require(slowRotate.audio.engine().contactEngagement() == 0 && fastRotate.audio.engine().contactEngagement() == 0,
         "manual rotate pad remains latched after release");
+    require(!fastRotate.visualRubbing.load(std::memory_order_relaxed),
+        "mallet visual remains active after rub release");
     std::cout << "[PASS] Manual pad strike velocity, held rotation speed, 0-10 V speed CV, gate independence and release\n";
 }
 

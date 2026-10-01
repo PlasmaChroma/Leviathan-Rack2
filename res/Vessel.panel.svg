@@ -16,6 +16,7 @@
       <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2428.0335" y="11943.102" width="3271.933" height="1224.054" />
       <rect id="ENERGY_DISPLAY" x="350" y="1500" width="7428" height="800" />
       <rect id="BOWL_RASTER" x="664" y="2989" width="6800" height="4022" />
+      <rect id="MALLET_ORBIT" x="500" y="2950" width="7128" height="900" />
       <rect id="STRIKE_AREA" x="350" y="2450" width="3674" height="5100" />
       <rect id="ROTATE_AREA" x="4104" y="2450" width="3674" height="5100" />
       <circle id="VTUNE_EXPANDER_LIGHT" cx="7808" cy="580" r="10" />

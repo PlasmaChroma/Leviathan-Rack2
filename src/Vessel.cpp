@@ -72,6 +72,8 @@ void Vessel::resetRuntime() {
     manualRotateSpeedScale.store(1.f, std::memory_order_relaxed);
     sleeping = true; configured = false; needsConfigure = true;
     visualEnergy.store(0); rawEnergy.store(0); visualFault.store(false); visualSleeping.store(true);
+    visualRotationAngle.store(0.f, std::memory_order_relaxed);
+    visualRubbing.store(false, std::memory_order_relaxed);
     leftEnergy.store(0); rightEnergy.store(0); visualSeparation.store(float(separationHz));
 }
 
@@ -233,6 +235,8 @@ void Vessel::process(const ProcessArgs& args) {
         rightEnergy.store(float(audio.rightEngine().bowl().energy()), std::memory_order_relaxed);
         const double center = std::max(20+.5*separationHz, std::min(2000-.5*separationHz, applied.frequency));
         visualFrequency.store(float(center), std::memory_order_relaxed);
+        visualRotationAngle.store(float(audio.engine().rotationAngle()), std::memory_order_relaxed);
+        visualRubbing.store(controls.rotate, std::memory_order_relaxed);
         visualSeparation.store(float(separationHz), std::memory_order_relaxed);
         visualFault.store(fault, std::memory_order_relaxed); visualSleeping.store(sleeping, std::memory_order_relaxed);
         visualElapsed = 0;

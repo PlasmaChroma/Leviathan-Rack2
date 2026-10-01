@@ -26,9 +26,10 @@ struct Vessel final : Module {
     vessel::DualBowlAdapter audio;
     debug_terminal::BaselineModuleMetrics debugMetrics;
     std::atomic<float> visualEnergy {0.f}, visualFrequency {261.625565f};
+    std::atomic<float> visualRotationAngle {0.f};
     std::atomic<float> rawEnergy {0.f};
     std::atomic<float> visualSeparation {0.f}, leftEnergy {0.f}, rightEnergy {0.f};
-    std::atomic<bool> visualFault {false}, visualSleeping {true};
+    std::atomic<bool> visualFault {false}, visualSleeping {true}, visualRubbing {false};
     std::atomic<bool> pendingReset {true};
     std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Reference)};
     std::atomic<float> visualInternalRate {0.f};
