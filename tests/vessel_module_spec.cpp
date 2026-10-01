@@ -211,6 +211,33 @@ void manualPerformancePads() {
     std::cout << "[PASS] Manual pad strike velocity, held rotation speed, 0-10 V speed CV, gate independence and release\n";
 }
 
+void strikeAftermathVisual() {
+    Vessel m;
+    run(m, 100);
+    m.params[Vessel::STRIKE_PARAM].setValue(1.f);
+    run(m, 1);
+    require(m.visualStrikeAftermath.load() > .99f, "manual strike does not start aftermath");
+    run(m, 27000);
+    require(m.visualStrikeAftermath.load() == 0.f, "held strike repeats or aftermath fails to expire");
+    m.params[Vessel::STRIKE_PARAM].setValue(0.f);
+    run(m, 1);
+    cable(m, Vessel::STRIKE_INPUT, 10.f);
+    run(m, 1);
+    require(m.visualStrikeAftermath.load() > .99f, "CV strike does not start aftermath");
+    m.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    run(m, 300);
+    require(m.visualStrikeAftermath.load() == 0.f, "rub does not cancel strike aftermath");
+    cable(m, Vessel::STRIKE_INPUT, 0.f);
+    run(m, 1);
+    cable(m, Vessel::STRIKE_INPUT, 10.f);
+    run(m, 1);
+    require(m.visualStrikeAftermath.load() == 0.f, "strike while rubbing starts a second mallet");
+    m.params[Vessel::ROTATE_PARAM].setValue(0.f);
+    run(m, 300);
+    require(m.visualStrikeAftermath.load() == 0.f, "rub release revives stale strike aftermath");
+    std::cout << "[PASS] Strike aftermath manual/CV trigger, expiry and rub priority\n";
+}
+
 void independentOutputAndEnergy() {
     Vessel audible, silent;
     audible.params[Vessel::ROTATE_PARAM].setValue(1); silent.params[Vessel::ROTATE_PARAM].setValue(1);
@@ -297,7 +324,7 @@ void dualControls() {
 void qualityMenuState() {
     Vessel m;
     run(m);
-    require(m.audio.internalRate() == 192000 && m.requestedQuality.load() == 2, "Reference default");
+    require(m.audio.internalRate() == 96000 && m.requestedQuality.load() == 1, "Balanced default");
     m.params[Vessel::ROTATE_PARAM].setValue(1);
     m.params[Vessel::BINAURAL_PARAM].setValue(33);
     cable(m, Vessel::STRIKE_INPUT, 10); run(m, 12000);
@@ -314,9 +341,15 @@ void qualityMenuState() {
     auto* data = m.dataToJson(); Vessel restored; restored.dataFromJson(data); json_decref(data); run(restored);
     require(restored.requestedQuality.load() == 0 && restored.audio.internalRate() == 48000, "quality persistence");
     auto* legacy = json_object(); restored.dataFromJson(legacy); json_decref(legacy); run(restored);
-    require(restored.requestedQuality.load() == 2 && restored.audio.internalRate() == 192000, "legacy patch Reference default");
+    require(restored.requestedQuality.load() == 1 && restored.audio.internalRate() == 96000, "legacy patch Balanced default");
     auto* invalid = json_pack("{s:i}", "processingQuality", 9000); restored.dataFromJson(invalid); json_decref(invalid); run(restored);
-    require(restored.requestedQuality.load() == 2, "invalid quality default");
+    require(restored.requestedQuality.load() == 1, "invalid quality default");
+    restored.requestedQuality.store(2);
+    Module::ResetEvent resetEvent;
+    restored.onReset(resetEvent);
+    run(restored);
+    require(restored.requestedQuality.load() == 1 && restored.audio.internalRate() == 96000,
+        "reset Balanced default");
     m.params[Vessel::BOWL_PARAM].setValue(1);
     m.params[Vessel::PITCH_PARAM].setValue(float(std::log2(2000./261.625565)));
     run(m, 20000);
@@ -334,7 +367,7 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
             std::cout << "Vessel Rack adapter: 9 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;

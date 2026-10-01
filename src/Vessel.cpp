@@ -67,6 +67,8 @@ void Vessel::resetRuntime() {
     separationHz = bound(params[BINAURAL_PARAM].getValue(), 0, 33);
     controlElapsed = .001; visualElapsed = idleElapsed = 0;
     meter = strikeFlash = 0;
+    strikeAnimationRemaining = 0.f;
+    visualStrikeAftermath.store(0.f, std::memory_order_relaxed);
     strikeHigh = manualHigh = rotateHigh = false;
     manualStrikeVelocity.store(1.f, std::memory_order_relaxed);
     manualRotateSpeedScale.store(1.f, std::memory_order_relaxed);
@@ -170,7 +172,7 @@ void Vessel::process(const ProcessArgs& args) {
     if (pendingReset.exchange(false, std::memory_order_acq_rel)) resetRuntime();
     const int requested = requestedQuality.load(std::memory_order_relaxed);
     const auto quality = requested >= 0 && requested <= 2 ? vessel::ProcessingQuality(requested)
-        : vessel::ProcessingQuality::Reference;
+        : vessel::ProcessingQuality::Balanced;
     if (quality != activeQuality) {
         // Test-only quality switching deliberately discards the current tail.
         // Keep gate edge state, so a held strike does not become a new event.
@@ -220,6 +222,12 @@ void Vessel::process(const ProcessArgs& args) {
         outputs[i].setChannels(1); outputs[i].setVoltage(voltage);
     }
     if (controls.strikeEvent && controls.velocity > 0) strikeFlash = 1;
+    // Publish a short post-contact animation. Rub cancels it, including strikes
+    // received while rubbing, so releasing Rub cannot reveal a stale mallet.
+    if (controls.rotate) strikeAnimationRemaining = 0.f;
+    else if (controls.strikeEvent && controls.velocity > 0)
+        strikeAnimationRemaining = strikeApproachSeconds + strikeReboundSeconds;
+    strikeAnimationRemaining = std::max(0.f, strikeAnimationRemaining - float(dt));
     strikeFlash = std::max(0.f, strikeFlash-float(dt/.08));
     lights[STRIKE_LIGHT].setBrightness(strikeFlash);
     lights[ROTATE_LIGHT].setBrightness(controls.rotate ? 1.f : 0.f);
@@ -237,6 +245,9 @@ void Vessel::process(const ProcessArgs& args) {
         visualFrequency.store(float(center), std::memory_order_relaxed);
         visualRotationAngle.store(float(audio.engine().rotationAngle()), std::memory_order_relaxed);
         visualRubbing.store(controls.rotate, std::memory_order_relaxed);
+        visualStrikeAftermath.store(
+            strikeAnimationRemaining / (strikeApproachSeconds + strikeReboundSeconds),
+            std::memory_order_relaxed);
         visualSeparation.store(float(separationHz), std::memory_order_relaxed);
         visualFault.store(fault, std::memory_order_relaxed); visualSleeping.store(sleeping, std::memory_order_relaxed);
         visualElapsed = 0;
@@ -245,7 +256,7 @@ void Vessel::process(const ProcessArgs& args) {
 
 void Vessel::onReset(const ResetEvent& event) {
     Module::onReset(event);
-    requestedQuality.store(int(vessel::ProcessingQuality::Reference), std::memory_order_relaxed);
+    requestedQuality.store(int(vessel::ProcessingQuality::Balanced), std::memory_order_relaxed);
     pendingReset.store(true, std::memory_order_release);
 }
 void Vessel::processBypass(const ProcessArgs& args) {
@@ -267,8 +278,9 @@ void Vessel::dataFromJson(json_t* root) {
     const auto* schema = json_object_get(root, "schema");
     if (schema && (!json_is_integer(schema) || json_integer_value(schema) != 1)) return;
     const auto* quality = json_object_get(root, "processingQuality");
-    const auto qualityValue = json_is_integer(quality) ? json_integer_value(quality) : 2;
-    requestedQuality.store(qualityValue >= 0 && qualityValue <= 2 ? int(qualityValue) : 2, std::memory_order_relaxed);
+    const int defaultQuality = int(vessel::ProcessingQuality::Balanced);
+    const auto qualityValue = json_is_integer(quality) ? json_integer_value(quality) : defaultQuality;
+    requestedQuality.store(qualityValue >= 0 && qualityValue <= 2 ? int(qualityValue) : defaultQuality, std::memory_order_relaxed);
     const char* bowl = json_string_value(json_object_get(root, "bowlId"));
     const char* mallet = json_string_value(json_object_get(root, "malletId"));
     for (std::size_t i = 0; bowl && i < vessel::seedBowlCount; ++i)

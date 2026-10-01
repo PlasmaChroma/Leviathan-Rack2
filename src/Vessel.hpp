@@ -7,6 +7,8 @@
 #include <atomic>
 
 struct Vessel final : Module {
+    static constexpr float strikeApproachSeconds = .035f;
+    static constexpr float strikeReboundSeconds = .50f;
     // Stable IDs: additions append, even while the module is a prototype.
     enum ParamId { PITCH_PARAM, FINE_PARAM, VELOCITY_PARAM, STRIKE_PARAM,
         ROTATE_PARAM, SPEED_PARAM, PRESSURE_PARAM, BOWL_PARAM, MALLET_PARAM,
@@ -27,11 +29,12 @@ struct Vessel final : Module {
     debug_terminal::BaselineModuleMetrics debugMetrics;
     std::atomic<float> visualEnergy {0.f}, visualFrequency {261.625565f};
     std::atomic<float> visualRotationAngle {0.f};
+    std::atomic<float> visualStrikeAftermath {0.f};
     std::atomic<float> rawEnergy {0.f};
     std::atomic<float> visualSeparation {0.f}, leftEnergy {0.f}, rightEnergy {0.f};
     std::atomic<bool> visualFault {false}, visualSleeping {true}, visualRubbing {false};
     std::atomic<bool> pendingReset {true};
-    std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Reference)};
+    std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Balanced)};
     std::atomic<float> visualInternalRate {0.f};
     std::atomic<bool> visualRateFallback {false};
     std::atomic<float> manualStrikeVelocity {1.f};
@@ -56,10 +59,11 @@ private:
     double separationHz = 0.0;
     double idleElapsed = 0.0;
     float meter = 0.f, strikeFlash = 0.f;
+    float strikeAnimationRemaining = 0.f;
     bool strikeHigh = false, manualHigh = false, rotateHigh = false;
     bool sleeping = true, configured = false, needsConfigure = true;
     double hostRate = 0.0;
-    vessel::ProcessingQuality activeQuality = vessel::ProcessingQuality::Reference;
+    vessel::ProcessingQuality activeQuality = vessel::ProcessingQuality::Balanced;
     void resetRuntime();
     vessel_expander::TuneMessage tuneControls();
     void updateControls(double elapsed, const vessel_expander::TuneMessage& tune);

@@ -157,12 +157,32 @@ struct VesselPitchTintLayer final : TransparentWidget {
 struct VesselMalletLink {
     Vessel* module = nullptr;
     math::Rect orbit;
+    math::Rect bowl;
+    float strikePadHeight = 0.f;
 };
 
 constexpr float kVesselMalletHeightMm = 34.f;
 constexpr float kVesselMalletTipFraction = .12f;
 constexpr float kVesselMalletTipPenetration = .20f;
 constexpr float kVesselMalletContactOffsetMm = 7.9f;
+
+// Offline samples of 1 - (2^(6 * progress) - 1) / 63.
+constexpr float kVesselStrikeFade[] = {
+    1.00000000f, 0.99779701f, 0.99528826f, 0.99243133f, 0.98917789f, 0.98547291f,
+    0.98125372f, 0.97644896f, 0.97097735f, 0.96474634f, 0.95765054f, 0.94956992f,
+    0.94036780f, 0.92988854f, 0.91795487f, 0.90436494f, 0.88888889f, 0.87126494f,
+    0.85119498f, 0.82833954f, 0.80231202f, 0.77267218f, 0.73891867f, 0.70048056f,
+    0.65670767f, 0.60685960f, 0.55009318f, 0.48544824f, 0.41183131f, 0.32799718f,
+    0.23252783f, 0.12380843f, 0.00000000f
+};
+
+float vesselStrikeFade(float progress) {
+    const float position = clamp(progress, 0.f, 1.f) * 32.f;
+    const int index = std::min(int(position), 31);
+    const float fraction = position - float(index);
+    return kVesselStrikeFade[index]
+        + fraction * (kVesselStrikeFade[index + 1] - kVesselStrikeFade[index]);
+}
 
 struct VesselMalletRenderWidget : TransparentWidget {
     VesselMalletLink* link = nullptr;
@@ -182,12 +202,15 @@ struct VesselMalletRenderWidget : TransparentWidget {
     }
 
     void drawMallet(const DrawArgs& args) {
-        if (!link || !link->module || !link->module->visualRubbing.load(std::memory_order_relaxed)
-            || !APP || !APP->window) return;
+        if (!link || !link->module || !APP || !APP->window) return;
+        const bool rubbing = link->module->visualRubbing.load(std::memory_order_relaxed);
+        const float aftermath = clamp(
+            link->module->visualStrikeAftermath.load(std::memory_order_relaxed), 0.f, 1.f);
+        if (!rubbing && (aftermath <= 0.f || !frontPass)) return;
         float angle = link->module->visualRotationAngle.load(std::memory_order_relaxed);
         if (!std::isfinite(angle)) angle = 0.f;
         const float depth = std::sin(angle);
-        if (frontPass != (depth >= 0.f)) return;
+        if (rubbing && frontPass != (depth >= 0.f)) return;
 
         const std::string fullPath = asset::plugin(pluginInstance, "res/Vessel/WoodSmall.png");
         std::shared_ptr<window::Image> source = APP->window->loadImage(fullPath);
@@ -207,7 +230,39 @@ struct VesselMalletRenderWidget : TransparentWidget {
         const float drawWidth = drawHeight * float(imageWidth) / float(imageHeight);
         const float tipPenetration = drawHeight
             * kVesselMalletTipFraction * kVesselMalletTipPenetration;
-        const Vec renderedTip = contact.plus(Vec(0.f, tipPenetration));
+        Vec renderedTip = contact.plus(Vec(0.f, tipPenetration));
+        float tilt = 0.f;
+        float opacity = 1.f;
+        float imageY = 0.f;
+        float rotation = float(M_PI);
+        if (!rubbing) {
+            const float elapsed = (1.f - aftermath)
+                * (Vessel::strikeApproachSeconds + Vessel::strikeReboundSeconds);
+            const float progress = clamp(
+                (elapsed - Vessel::strikeApproachSeconds) / Vessel::strikeReboundSeconds,
+                0.f, 1.f);
+            // A fast initial rebound that slows as the mallet disappears.
+            float retreat = progress * (2.f - progress);
+            if (elapsed < Vessel::strikeApproachSeconds) {
+                // Brief visual anticipation after the audio trigger: accelerate
+                // from the raised pose into contact before rebounding.
+                const float approach = elapsed / Vessel::strikeApproachSeconds;
+                retreat = 1.f - approach * approach;
+            }
+            renderedTip = Vec(
+                link->bowl.pos.x + .08f * link->bowl.size.x,
+                link->bowl.pos.y + .56f * link->bowl.size.y + .20f * link->strikePadHeight
+                    - mm2px(5.f * retreat));
+            tilt = .5877335f - .25f * retreat;
+            // An accelerating exponential fade: retain most opacity early,
+            // then drop rapidly to zero as the rebound finishes.
+            opacity = vesselStrikeFade(progress);
+            // Flip the strike artwork around its center while retaining the
+            // contact endpoint: the source's bottom end now meets the front lip,
+            // with the handle extending diagonally up and right across the bowl.
+            rotation = 0.f;
+            imageY = -drawHeight;
+        }
 
         // Preserve the raster's intended 180-degree playing orientation, but
         // draw it downwards in local space so that after rotation its length
@@ -216,11 +271,11 @@ struct VesselMalletRenderWidget : TransparentWidget {
         nvgSave(args.vg);
         nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
         nvgTranslate(args.vg, renderedTip.x, renderedTip.y);
-        nvgRotate(args.vg, float(M_PI));
+        nvgRotate(args.vg, rotation + tilt);
         const NVGpaint paint = nvgImagePattern(
-            args.vg, -.5f * drawWidth, 0.f, drawWidth, drawHeight, 0.f, handle, 1.f);
+            args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight, 0.f, handle, opacity);
         nvgBeginPath(args.vg);
-        nvgRect(args.vg, -.5f * drawWidth, 0.f, drawWidth, drawHeight);
+        nvgRect(args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight);
         nvgFillPaint(args.vg, paint);
         nvgFill(args.vg);
         nvgRestore(args.vg);
@@ -402,6 +457,7 @@ struct VesselWidget final : ModuleWidget {
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "MALLET_ORBIT", &malletOrbitRect);
         malletLink.module = module;
         malletLink.orbit = math::Rect(mm2px(malletOrbitRect.pos), mm2px(malletOrbitRect.size));
+        malletLink.bowl = math::Rect(mm2px(bowlRasterRect.pos), mm2px(bowlRasterRect.size));
         addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
             mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 83.5f)), module, Vessel::BINAURAL_PARAM));
@@ -411,6 +467,7 @@ struct VesselWidget final : ModuleWidget {
         addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 83.5f)), module, Vessel::MALLET_PARAM));
         math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.74f, 51.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "STRIKE_AREA", &strikeRect);
+        malletLink.strikePadHeight = mm2px(strikeRect.size.y);
         auto* strikeArea = createParam<VesselStrikeArea>(mm2px(strikeRect.pos), module, Vessel::STRIKE_PARAM);
         strikeArea->box.size = mm2px(strikeRect.size); addParam(strikeArea);
         math::Rect rotateRect(Vec(41.04f, 24.5f), Vec(36.74f, 51.f));
