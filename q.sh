@@ -1,0 +1,1 @@
+make -j10 install ZSTD_COMPRESSION_LEVEL=1

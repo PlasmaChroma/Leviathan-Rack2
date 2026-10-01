@@ -496,6 +496,7 @@ TestResult testPlasmaConduitAnchorConvention() {
     {"res/proc.panel.svg", 2u},
     {"res/wyrm.panel.svg", 6u},
     {"res/iris.panel.svg", 4u},
+    {"res/Vessel.panel.svg", 2u},
   };
 
   bool pass = true;

@@ -1,6 +1,7 @@
 #include "Vessel.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/PlasmaConduit.hpp"
 #include "visual/VisualAssets.hpp"
 #include <algorithm>
 #include <cmath>
@@ -161,7 +162,9 @@ struct VesselPerformanceArea : app::Switch {
     ~VesselPerformanceArea() override { destroyPadTooltip(); }
 
     float amountAt(float y) const {
-        return 1.f - clamp(box.size.y > 0.f ? y / box.size.y : 0.f, 0.f, 1.f);
+        const float topSaturationMargin = mm2px(3.f);
+        const float activeHeight = std::max(box.size.y - topSaturationMargin, 1e-6f);
+        return 1.f - clamp((y - topSaturationMargin) / activeHeight, 0.f, 1.f);
     }
     void publishAmount(float y) {
         dragY = clamp(y, 0.f, box.size.y);
@@ -286,6 +289,10 @@ struct VesselWidget final : ModuleWidget {
         visual_assets::SplitPanelRenderer panel(this, "res/Vessel.panel.svg");
         panel.addThemedLabels("res/Vessel.labels.svg", "res/Vessel.theme-text-input.svg", "res/Vessel.theme-text-output.svg");
         panel.addCompactLeviathanLogoBranding();
+        if (widget::FramebufferWidget* conduits =
+                visual_assets::createPlasmaConduitLayer(panel.panelPath(), box.size)) {
+            addChild(conduits);
+        }
         auto point = [&](const char* id, float x, float y) {
             Vec p; return panel_svg::loadPointFromSvgMm(panel.panelPath(), id, &p) ? p : Vec(x, y);
         };
@@ -301,11 +308,11 @@ struct VesselWidget final : ModuleWidget {
             "res/Vessel/Crystal-Crop-Only.png", bowlRasterRect);
         addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
             mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 85.f)), module, Vessel::BINAURAL_PARAM));
-        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 29.f, 85.f)), module, Vessel::BOWL_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 42.5f, 85.f)), module, Vessel::PITCH_PARAM));
-        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 85.f)), module, Vessel::FINE_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 85.f)), module, Vessel::MALLET_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 83.5f)), module, Vessel::BINAURAL_PARAM));
+        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM));
+        addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(point("PITCH_PARAM", 42.5f, 83.5f)), module, Vessel::PITCH_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 83.5f)), module, Vessel::FINE_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 83.5f)), module, Vessel::MALLET_PARAM));
         math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.74f, 51.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "STRIKE_AREA", &strikeRect);
         auto* strikeArea = createParam<VesselStrikeArea>(mm2px(strikeRect.pos), module, Vessel::STRIKE_PARAM);
@@ -323,17 +330,17 @@ struct VesselWidget final : ModuleWidget {
         addChild(bowlPitchTint);
         struct InputPlacement { const char* anchor; int id; float x; float y; };
         const InputPlacement inputs[] = {
-            {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 12.f, 98.f},
-            {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 31.f, 98.f},
-            {"SPEED_INPUT", Vessel::SPEED_INPUT, 50.f, 98.f},
-            {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 69.f, 98.f},
-            {"VOCT_INPUT", Vessel::VOCT_INPUT, 12.f, 110.5f},
-            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 31.f, 110.5f}
+            {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 9.f, 98.f},
+            {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 22.f, 98.f},
+            {"SPEED_INPUT", Vessel::SPEED_INPUT, 39.f, 98.f},
+            {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 52.f, 98.f},
+            {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f},
+            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f}
         };
         for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(input.anchor, input.x, input.y)), module, input.id));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("LEFT_OUTPUT", 50, 110.5f)), module, Vessel::LEFT_OUTPUT));
-        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("RIGHT_OUTPUT", 69, 110.5f)), module, Vessel::RIGHT_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("LEFT_OUTPUT", 39.f, 110.5f)), module, Vessel::LEFT_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("RIGHT_OUTPUT", 52.f, 110.5f)), module, Vessel::RIGHT_OUTPUT));
     }
     void appendContextMenu(Menu* menu) override {
         ModuleWidget::appendContextMenu(menu);
