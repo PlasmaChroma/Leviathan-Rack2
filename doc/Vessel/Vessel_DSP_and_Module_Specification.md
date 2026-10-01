@@ -830,9 +830,9 @@ Vessel keeps tuning, excitation, material, performance gates/CV, stereo outputs,
 |---|---|
 | PITCH + FINE | Lowest pair-center tuning; default C4; fine ±100 cents. |
 | V/OCT | Added to coarse pitch, 1 V/octave; finite/clamped total frequency. |
-| STRIKE button + STRIKE gate | Rising-edge events; manual and cable events in the same sample coalesce to one launch. |
+| STRIKE area + STRIKE gate | The left visual strike region is momentary; vertical position maps 100% velocity at the top to 0% at the bottom. Rising-edge events and cable events in the same sample coalesce to one launch. |
 | V.Tune VELOCITY + Vessel input | Knob default 0.5; patched CV replaces knob, 0–10 V → 0–1; sampled only at strike. |
-| ROTATE latch + ROTATE gate | Logical OR; input is a sustained gate, not a trigger-to-toggle. Latch default off. |
+| ROTATE area + ROTATE gate | The right visual region rotates only while held. Vertical position continuously scales V.Tune SPEED from 100% at the top to 0% at the bottom. The external input remains a sustained gate at full knob/CV speed. |
 | V.Tune SPEED + Vessel input | Signed knob −2…+2 rev/s, default +0.4; patched ±5 V multiplies knob by −1…+1. |
 | V.Tune PRESSURE + Vessel input | Knob 0–15 N, default 2.5; patched 0–10 V multiplies pressure by 0–1. |
 | BOWL | Metal / Crystal prototype; stable descriptor IDs and versions. |
@@ -849,7 +849,7 @@ Context-menu settings may include strike angle, observer azimuth, quality and op
 
 Use Schmitt behavior with approximately 0.1 V low / 1 V high thresholds for gates (V2). A held strike gate causes one event. Rotation remains active while its gate is high. Negative gate voltages are low; nonfinite values are sanitized.
 
-At module initialization, a high external strike gate is treated as one initial rising edge; this policy must be tested and documented. Manual button state is not serialized as a held strike. The ROTATE latch may be serialized, so a loaded patch can resume rubbing from a resting mechanical state.
+At module initialization, a high external strike gate is treated as one initial rising edge; this policy must be tested and documented. Manual Strike and Rotate pad states are not serialized as held controls.
 
 Declare parameter/input/output IDs once and preserve them. Additional controls append IDs. Do not reshuffle enums when changing the panel. Mechanical state, unless a future explicitly versioned state-resume feature is implemented, starts at rest on patch load; settings and specimen identity persist.
 

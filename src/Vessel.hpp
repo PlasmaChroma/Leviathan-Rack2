@@ -26,6 +26,8 @@ struct Vessel final : Module {
     std::atomic<int> requestedQuality {int(vessel::ProcessingQuality::Reference)};
     std::atomic<float> visualInternalRate {0.f};
     std::atomic<bool> visualRateFallback {false};
+    std::atomic<float> manualStrikeVelocity {1.f};
+    std::atomic<float> manualRotateSpeedScale {1.f};
     vessel_expander::TuneMessage tuneMessages[2];
 
     Vessel();

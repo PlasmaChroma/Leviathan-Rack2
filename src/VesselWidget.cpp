@@ -1,10 +1,108 @@
 #include "Vessel.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace {
-struct RotationButton : SmallGoldButton { RotationButton() { momentary = false; setColor(nvgRGB(85, 215, 213)); } };
+struct VesselPerformanceArea : app::Switch {
+    enum class Kind { Strike, Rotate };
+    Kind kind;
+    ui::Tooltip* padTooltip = nullptr;
+    float currentAmount = 1.f;
+    float dragY = 0.f;
+    bool hovered = false;
+
+    explicit VesselPerformanceArea(Kind kind) : kind(kind) { momentary = true; }
+    ~VesselPerformanceArea() override { destroyPadTooltip(); }
+
+    float amountAt(float y) const {
+        return 1.f - clamp(box.size.y > 0.f ? y / box.size.y : 0.f, 0.f, 1.f);
+    }
+    void publishAmount(float y) {
+        dragY = clamp(y, 0.f, box.size.y);
+        currentAmount = amountAt(dragY);
+        if (auto* vessel = dynamic_cast<Vessel*>(module)) {
+            if (kind == Kind::Strike)
+                vessel->manualStrikeVelocity.store(currentAmount, std::memory_order_relaxed);
+            else
+                vessel->manualRotateSpeedScale.store(currentAmount, std::memory_order_relaxed);
+        }
+        refreshPadTooltip();
+    }
+    std::string tooltipText() const {
+        const int percent = int(std::lround(100.f * currentAmount));
+        return kind == Kind::Strike
+            ? string::f("Strike: %d%% Velocity", percent)
+            : string::f("Rotate: %d%% Speed", percent);
+    }
+    void createPadTooltip() {
+        if (!settings::tooltips || padTooltip || !APP || !APP->scene) return;
+        padTooltip = new ui::Tooltip();
+        padTooltip->text = tooltipText();
+        APP->scene->addChild(padTooltip);
+    }
+    void destroyPadTooltip() {
+        if (!padTooltip) return;
+        if (padTooltip->parent) padTooltip->parent->removeChild(padTooltip);
+        delete padTooltip;
+        padTooltip = nullptr;
+    }
+    void refreshPadTooltip() {
+        if (padTooltip) padTooltip->text = tooltipText();
+    }
+    void onHover(const event::Hover& e) override {
+        publishAmount(e.pos.y);
+        app::Switch::onHover(e);
+    }
+    void onButton(const event::Button& e) override {
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT) return;
+        if (e.action == GLFW_PRESS) publishAmount(e.pos.y);
+        app::Switch::onButton(e);
+    }
+    void onDragMove(const event::DragMove& e) override {
+        const float zoom = std::max(getAbsoluteZoom(), 1e-6f);
+        publishAmount(dragY + e.mouseDelta.y / zoom);
+        app::Switch::onDragMove(e);
+    }
+    void onEnter(const event::Enter& e) override {
+        hovered = true;
+        app::Switch::onEnter(e);
+        app::ParamWidget::destroyTooltip();
+        createPadTooltip();
+    }
+    void onLeave(const event::Leave& e) override {
+        hovered = false;
+        destroyPadTooltip();
+        app::Switch::onLeave(e);
+    }
+    void step() override {
+        app::Switch::step();
+        refreshPadTooltip();
+    }
+    void draw(const DrawArgs& args) override {
+        const bool active = module && module->params[paramId].getValue() >= .5f;
+        const NVGcolor color = kind == Kind::Strike ? nvgRGB(74, 222, 214) : nvgRGB(163, 113, 245);
+        const float inset = mm2px(.35f);
+        const float radius = mm2px(2.2f);
+        nvgBeginPath(args.vg);
+        nvgRoundedRect(args.vg, inset, inset,
+            std::max(0.f, box.size.x - 2.f * inset), std::max(0.f, box.size.y - 2.f * inset), radius);
+        nvgFillColor(args.vg, nvgTransRGBA(color, active ? 38 : hovered ? 24 : 14));
+        nvgFill(args.vg);
+        nvgStrokeWidth(args.vg, active ? 1.35f : 0.9f);
+        nvgStrokeColor(args.vg, nvgTransRGBA(color, active ? 130 : hovered ? 90 : 55));
+        nvgStroke(args.vg);
+    }
+};
+struct VesselStrikeArea final : VesselPerformanceArea {
+    VesselStrikeArea() : VesselPerformanceArea(Kind::Strike) {}
+};
+struct VesselRotateArea final : VesselPerformanceArea {
+    VesselRotateArea() : VesselPerformanceArea(Kind::Rotate) {}
+};
 struct BowlDisplay : TransparentWidget {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
@@ -50,13 +148,19 @@ struct VesselWidget final : ModuleWidget {
         math::Rect r(Vec(6, 15), Vec(69.28f, 8));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ENERGY_DISPLAY", &r);
         display->box.pos = mm2px(r.pos); display->box.size = mm2px(r.size); addChild(display);
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 27.f, 36.f)), module, Vessel::PITCH_PARAM));
-        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 54.f, 36.f)), module, Vessel::FINE_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 66.f)), module, Vessel::BINAURAL_PARAM));
-        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 30, 66)), module, Vessel::BOWL_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 45.f, 66.f)), module, Vessel::MALLET_PARAM));
-        addParam(createParamCentered<SmallGoldButton>(mm2px(point("STRIKE_PARAM", 59, 66)), module, Vessel::STRIKE_PARAM));
-        addParam(createParamCentered<RotationButton>(mm2px(point("ROTATE_PARAM", 73, 66)), module, Vessel::ROTATE_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 85.f)), module, Vessel::BINAURAL_PARAM));
+        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 29.f, 85.f)), module, Vessel::BOWL_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("PITCH_PARAM", 42.5f, 85.f)), module, Vessel::PITCH_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 85.f)), module, Vessel::FINE_PARAM));
+        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 85.f)), module, Vessel::MALLET_PARAM));
+        math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.f, 51.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "STRIKE_AREA", &strikeRect);
+        auto* strikeArea = createParam<VesselStrikeArea>(mm2px(strikeRect.pos), module, Vessel::STRIKE_PARAM);
+        strikeArea->box.size = mm2px(strikeRect.size); addParam(strikeArea);
+        math::Rect rotateRect(Vec(41.78f, 24.5f), Vec(36.f, 51.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "ROTATE_AREA", &rotateRect);
+        auto* rotateArea = createParam<VesselRotateArea>(mm2px(rotateRect.pos), module, Vessel::ROTATE_PARAM);
+        rotateArea->box.size = mm2px(rotateRect.size); addParam(rotateArea);
         const char* inputs[] = {"VOCT_INPUT", "STRIKE_INPUT", "VELOCITY_INPUT", "ROTATE_INPUT", "SPEED_INPUT", "PRESSURE_INPUT"};
         for (int i = 0; i < 6; ++i) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(inputs[i], 12.f+19.f*(i%4), i < 4 ? 98.f : 110.5f)), module, i));

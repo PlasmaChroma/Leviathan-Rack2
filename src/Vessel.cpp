@@ -36,7 +36,8 @@ Vessel::Vessel() {
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
     configButton(STRIKE_PARAM, "Strike bowl");
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
-    configSwitch(ROTATE_PARAM, 0.f, 1.f, 0.f, "Rotate mallet", {"Lifted", "Engaged"});
+    configButton(ROTATE_PARAM, "Rotate mallet");
+    getParamQuantity(ROTATE_PARAM)->randomizeEnabled = false;
     configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rotation speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configSwitch(BOWL_PARAM, 0.f, 1.f, 0.f, "Bowl material", {"Metal", "Crystal prototype"});
@@ -67,6 +68,8 @@ void Vessel::resetRuntime() {
     controlElapsed = .001; visualElapsed = idleElapsed = 0;
     meter = strikeFlash = 0;
     strikeHigh = manualHigh = rotateHigh = false;
+    manualStrikeVelocity.store(1.f, std::memory_order_relaxed);
+    manualRotateSpeedScale.store(1.f, std::memory_order_relaxed);
     sleeping = true; configured = false; needsConfigure = true;
     visualEnergy.store(0); rawEnergy.store(0); visualFault.store(false); visualSleeping.store(true);
     leftEnergy.store(0); rightEnergy.store(0); visualSeparation.store(float(separationHz));
@@ -177,12 +180,15 @@ void Vessel::process(const ProcessArgs& args) {
     const bool gateEvent = edge(strikeHigh, inputs[STRIKE_INPUT].getVoltage());
     const bool manualEvent = edge(manualHigh, params[STRIKE_PARAM].getValue());
     edge(rotateHigh, inputs[ROTATE_INPUT].getVoltage());
+    const bool manualRotate = safeValue(params[ROTATE_PARAM].getValue()) >= .5;
     vessel::HostControls controls;
     controls.strikeEvent = gateEvent || manualEvent;
-    controls.rotate = rotateHigh || safeValue(params[ROTATE_PARAM].getValue()) >= .5;
-    controls.velocity = inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1)
-        : tune.velocity;
-    controls.speed = tune.speed
+    controls.rotate = rotateHigh || manualRotate;
+    controls.velocity = manualEvent ? bound(manualStrikeVelocity.load(std::memory_order_relaxed), 0, 1)
+        : inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1) : tune.velocity;
+    const double manualSpeedScale = manualRotate && !rotateHigh
+        ? bound(manualRotateSpeedScale.load(std::memory_order_relaxed), 0, 1) : 1;
+    controls.speed = tune.speed * manualSpeedScale
         * (inputs[SPEED_INPUT].isConnected() ? bound(inputs[SPEED_INPUT].getVoltage()/5, -1, 1) : 1);
     controls.pressure = tune.pressure
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
@@ -263,16 +269,20 @@ void Vessel::dataFromJson(json_t* root) {
         if (!std::strcmp(bowl, vessel::seedBowls[i].stableId)) params[BOWL_PARAM].setValue(float(i));
     for (std::size_t i = 0; mallet && i < vessel::seedMalletCount; ++i)
         if (!std::strcmp(mallet, vessel::seedMallets[i].stableId)) params[MALLET_PARAM].setValue(float(i));
-    params[STRIKE_PARAM].setValue(0); pendingReset.store(true, std::memory_order_release);
+    params[STRIKE_PARAM].setValue(0); params[ROTATE_PARAM].setValue(0);
+    pendingReset.store(true, std::memory_order_release);
 }
 json_t* Vessel::paramsToJson() {
     json_t* root = Module::paramsToJson();
     size_t index; json_t* item;
-    json_array_foreach(root, index, item) if (json_integer_value(json_object_get(item, "id")) == STRIKE_PARAM)
-        json_object_set_new(item, "value", json_real(0));
+    json_array_foreach(root, index, item) {
+        const int id = int(json_integer_value(json_object_get(item, "id")));
+        if (id == STRIKE_PARAM || id == ROTATE_PARAM)
+            json_object_set_new(item, "value", json_real(0));
+    }
     return root;
 }
 void Vessel::paramsFromJson(json_t* root) {
-    Module::paramsFromJson(root); params[STRIKE_PARAM].setValue(0);
+    Module::paramsFromJson(root); params[STRIKE_PARAM].setValue(0); params[ROTATE_PARAM].setValue(0);
     pendingReset.store(true, std::memory_order_release);
 }

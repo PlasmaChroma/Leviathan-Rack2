@@ -57,7 +57,7 @@ void gatesAndControls() {
     m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 1000);
     require(m.audio.engine().contactEngagement() == 1, "rotation latch not OR'd with input gate");
     require(m.audio.engine().ledger().solverFaults == 0, "normal controls fault");
-    std::cout << "[PASS] Initial/held/retrigger gates, manual coalescing, velocity replacement, rotate gate/latch and mono outputs\n";
+    std::cout << "[PASS] Initial/held/retrigger gates, manual coalescing, velocity replacement, rotate gate/control and mono outputs\n";
 }
 
 void tuningAndMorph() {
@@ -135,6 +135,44 @@ void tuneExpander() {
     std::cout << "[PASS] V.Tune publishing, takeover and Vessel fallback restoration\n";
 }
 
+void manualPerformancePads() {
+    Vessel softStrike, hardStrike;
+    run(softStrike); run(hardStrike);
+    cable(softStrike, Vessel::VELOCITY_INPUT, 0.f);
+    cable(hardStrike, Vessel::VELOCITY_INPUT, 0.f);
+    softStrike.manualStrikeVelocity.store(.25f);
+    hardStrike.manualStrikeVelocity.store(1.f);
+    softStrike.params[Vessel::STRIKE_PARAM].setValue(1.f);
+    hardStrike.params[Vessel::STRIKE_PARAM].setValue(1.f);
+    run(softStrike); run(hardStrike);
+    require(softStrike.audio.engine().ledger().strikes == 1 && hardStrike.audio.engine().ledger().strikes == 1,
+        "manual pad strikes were replaced by patched velocity CV");
+    require(hardStrike.audio.engine().totalEnergy() > 4.0 * softStrike.audio.engine().totalEnergy(),
+        "manual strike pad height does not scale launch velocity");
+
+    Vessel slowRotate, fastRotate, gatedRotate;
+    run(slowRotate); run(fastRotate); run(gatedRotate);
+    slowRotate.manualRotateSpeedScale.store(.25f);
+    fastRotate.manualRotateSpeedScale.store(1.f);
+    gatedRotate.manualRotateSpeedScale.store(0.f);
+    slowRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    fastRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    cable(gatedRotate, Vessel::ROTATE_INPUT, 10.f);
+    run(slowRotate, 6000); run(fastRotate, 6000); run(gatedRotate, 6000);
+    const double slowAngle = std::abs(slowRotate.audio.engine().rotationAngle());
+    const double fastAngle = std::abs(fastRotate.audio.engine().rotationAngle());
+    require(fastAngle > 2.5 * slowAngle && slowAngle > 0,
+        "manual rotate pad height does not scale speed");
+    require(std::abs(gatedRotate.audio.engine().rotationAngle()) > 0,
+        "manual speed scale incorrectly affects the external rotate gate");
+    slowRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
+    fastRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
+    run(slowRotate, 2000); run(fastRotate, 2000);
+    require(slowRotate.audio.engine().contactEngagement() == 0 && fastRotate.audio.engine().contactEngagement() == 0,
+        "manual rotate pad remains latched after release");
+    std::cout << "[PASS] Manual pad strike velocity, held rotation speed, gate independence and release\n";
+}
+
 void independentOutputAndEnergy() {
     Vessel audible, silent;
     audible.params[Vessel::ROTATE_PARAM].setValue(1); silent.params[Vessel::ROTATE_PARAM].setValue(1);
@@ -163,7 +201,7 @@ void patchAndReset() {
     Vessel loaded; loaded.paramsFromJson(params); loaded.dataFromJson(data); run(loaded);
     require(loaded.params[Vessel::STRIKE_PARAM].getValue() == 0 && loaded.audio.engine().ledger().strikes == 0, "held manual strike restored from patch");
     require(loaded.params[Vessel::BOWL_PARAM].getValue() == 1 && loaded.params[Vessel::MALLET_PARAM].getValue() == 2
-        && loaded.params[Vessel::ROTATE_PARAM].getValue() == 1, "stable profiles or rotation latch not restored");
+        && loaded.params[Vessel::ROTATE_PARAM].getValue() == 0, "stable profiles or momentary rotation state not restored safely");
     require(std::abs(loaded.audio.centerFrequency()-130.8127825) < .001
         && loaded.audio.separationHz()==33 && loaded.params[Vessel::BINAURAL_PARAM].getValue()==33, "saved center/separation not restored");
     require(loaded.audio.engine().bowl().energy() < source.audio.engine().bowl().energy(), "patch load resumes old mechanical state");
@@ -176,7 +214,7 @@ void patchAndReset() {
         && loaded.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0, "reset does not return to quiet defaults");
     cable(loaded, Vessel::STRIKE_INPUT, 5); run(loaded);
     require(!loaded.visualSleeping.load() && loaded.audio.engine().ledger().strikes == 1, "strike does not immediately wake module");
-    std::cout << "[PASS] Stable profile/tuning/latch serialization, no held manual event or mechanical resume, schema safety, reset and sleep wake\n";
+    std::cout << "[PASS] Stable profile/tuning serialization, no held manual controls or mechanical resume, schema safety, reset and sleep wake\n";
 }
 void audioHeapSafety() {
     Vessel m;
@@ -258,8 +296,8 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
-            std::cout << "Vessel Rack adapter: 8 groups PASS\n";
+        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+            std::cout << "Vessel Rack adapter: 9 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;
     }
