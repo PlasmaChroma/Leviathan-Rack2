@@ -38,7 +38,7 @@ Vessel::Vessel() {
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
     configButton(ROTATE_PARAM, "Rub bowl");
     getParamQuantity(ROTATE_PARAM)->randomizeEnabled = false;
-    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rotation speed", " rev/s");
+    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configSwitch(BOWL_PARAM, 0.f, 1.f, 0.f, "Bowl material", {"Metal", "Crystal prototype"});
     configSwitch(MALLET_PARAM, 0.f, 3.f, 1.f, "Mallet", {"Wood", "Suede", "Silicone", "Felt"});
