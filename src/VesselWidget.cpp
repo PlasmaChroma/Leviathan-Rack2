@@ -499,7 +499,7 @@ struct VesselWidget final : ModuleWidget {
             "res/Vessel/Metal-Crop-Only.png", metalBowlRect);
         crystalBowlRaster = visual_assets::createAspectFitRasterImageWidget(
             "res/Vessel/Crystal-Crop-Only.png", crystalBowlRect);
-        math::Rect malletOrbitRect(Vec(2.f, 29.5f), Vec(77.28f, 9.f));
+        math::Rect malletOrbitRect(Vec(3.39f, 29.5f), Vec(74.5f, 9.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "MALLET_ORBIT", &malletOrbitRect);
         malletLink.module = module;
         malletLink.orbit = math::Rect(mm2px(malletOrbitRect.pos), mm2px(malletOrbitRect.size));
