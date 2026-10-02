@@ -17,7 +17,7 @@ bool isVessel(const Module* module) {
 VTune::VTune() {
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
-    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rubbing speed", " rev/s");
+    configParam(SPEED_PARAM, 0.f, 2.f, .4f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configParam(SUSTAIN_PARAM, -2.f, 2.f, 0.f, "Sustain", "x", 2.f);
     configParam(IMPERFECTION_PARAM, 0.f, 2.f, 1.f, "Mode-pair imperfection");
@@ -39,7 +39,7 @@ void VTune::process(const ProcessArgs&) {
     message->magic = vessel_expander::kMagic;
     message->version = vessel_expander::kVersion;
     message->velocity = finiteBound(params[VELOCITY_PARAM].getValue(), 0.f, 1.f, .5f);
-    message->speed = finiteBound(params[SPEED_PARAM].getValue(), -2.f, 2.f, .4f);
+    message->speed = finiteBound(params[SPEED_PARAM].getValue(), 0.f, 2.f, .4f);
     message->pressure = finiteBound(params[PRESSURE_PARAM].getValue(), 0.f, 15.f, 2.5f);
     message->sustain = finiteBound(params[SUSTAIN_PARAM].getValue(), -2.f, 2.f, 0.f);
     message->imperfection = finiteBound(params[IMPERFECTION_PARAM].getValue(), 0.f, 2.f, 1.f);

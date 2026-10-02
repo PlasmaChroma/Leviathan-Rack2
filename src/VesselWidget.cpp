@@ -292,8 +292,7 @@ struct VesselMalletRenderWidget : TransparentWidget {
         Vec renderedTip = contact.plus(Vec(0.f, tipPenetration));
         float tilt = 0.f;
         float opacity = 1.f;
-        float imageY = 0.f;
-        float rotation = float(M_PI);
+        const float imageY = -drawHeight;
         if (!rubbing) {
             const float elapsed = (1.f - aftermath)
                 * (Vessel::strikeApproachSeconds + Vessel::strikeReboundSeconds);
@@ -316,21 +315,14 @@ struct VesselMalletRenderWidget : TransparentWidget {
             // An accelerating exponential fade: retain most opacity early,
             // then drop rapidly to zero as the rebound finishes.
             opacity = vesselStrikeFade(progress);
-            // Flip the strike artwork around its center while retaining the
-            // contact endpoint: the source's bottom end now meets the front lip,
-            // with the handle extending diagonally up and right across the bowl.
-            rotation = 0.f;
-            imageY = -drawHeight;
         }
 
-        // Preserve the raster's intended 180-degree playing orientation, but
-        // draw it downwards in local space so that after rotation its length
-        // still extends above the rim. Only the requested part of the contact
-        // tip penetrates below the rim path.
+        // Draw the artwork in its normal orientation above the contact endpoint.
+        // Only the requested part of the contact tip penetrates below the rim path.
         nvgSave(args.vg);
         nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
         nvgTranslate(args.vg, renderedTip.x, renderedTip.y);
-        nvgRotate(args.vg, rotation + tilt);
+        nvgRotate(args.vg, tilt);
         const NVGpaint paint = nvgImagePattern(
             args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight, 0.f, handle, opacity);
         nvgBeginPath(args.vg);
@@ -341,11 +333,10 @@ struct VesselMalletRenderWidget : TransparentWidget {
             const Vec emblemSize = link->emblem->getSize();
             if (emblemSize.x > 0.f && emblemSize.y > 0.f) {
                 const float scale = .7f * drawWidth / emblemSize.x;
-                // Counter the artwork's playing orientation with a centered
-                // half-turn, keeping the printed emblem upright while rubbing.
-                nvgTranslate(args.vg, .5f * emblemSize.x * scale,
-                    imageY + .5f * (drawHeight + emblemSize.y * scale));
-                nvgScale(args.vg, -scale, -scale);
+                // Center the upright emblem on the mallet artwork.
+                nvgTranslate(args.vg, -.5f * emblemSize.x * scale,
+                    imageY + .5f * (drawHeight - emblemSize.y * scale));
+                nvgScale(args.vg, scale, scale);
                 nvgGlobalAlpha(args.vg, opacity);
                 link->emblem->draw(args.vg);
             }
@@ -372,7 +363,10 @@ struct VesselPerformanceArea : app::Switch {
     float amountAt(float y) const {
         const float topSaturationMargin = mm2px(3.f);
         const float activeHeight = std::max(box.size.y - topSaturationMargin, 1e-6f);
-        return 1.f - clamp((y - topSaturationMargin) / activeHeight, 0.f, 1.f);
+        const float amount = 1.f - clamp((y - topSaturationMargin) / activeHeight, 0.f, 1.f);
+        // Give slow rubbing more travel while retaining zero and full speed.
+        // The strike pad keeps its linear velocity response.
+        return kind == Kind::Rotate ? amount * amount : amount;
     }
     void publishAmount(float y) {
         dragY = clamp(y, 0.f, box.size.y);
@@ -381,7 +375,7 @@ struct VesselPerformanceArea : app::Switch {
             if (kind == Kind::Strike)
                 vessel->manualStrikeVelocity.store(currentAmount, std::memory_order_relaxed);
             else
-                vessel->manualRotateSpeedScale.store(currentAmount, std::memory_order_relaxed);
+                vessel->manualRotateSpeed.store(currentAmount, std::memory_order_relaxed);
         }
         refreshPadTooltip();
     }
@@ -460,12 +454,15 @@ struct BowlDisplay : TransparentWidget {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
         const float energy = vessel ? vessel->visualEnergy.load(std::memory_order_relaxed) : .55f;
+        const bool ringing = vessel && !vessel->visualSleeping.load(std::memory_order_relaxed);
         const float barHeight = mm2px(3.f);
         nvgBeginPath(args.vg); nvgRoundedRect(args.vg, 0, 0, box.size.x, barHeight, 2);
         nvgFillColor(args.vg, nvgRGB(7, 11, 19)); nvgFill(args.vg);
         nvgStrokeColor(args.vg, nvgRGBA(176, 141, 216, 125)); nvgStrokeWidth(args.vg, .7f); nvgStroke(args.vg);
-        if (energy > 0.f) {
-            nvgBeginPath(args.vg); nvgRoundedRect(args.vg, 1, 1, (box.size.x-2)*energy, barHeight-2, 1);
+        if (energy > 0.f || ringing) {
+            // Keep a small tail visible until the physical model goes to sleep.
+            const float width = std::max((box.size.x-2)*energy, ringing ? 2.f : 0.f);
+            nvgBeginPath(args.vg); nvgRoundedRect(args.vg, 1, 1, width, barHeight-2, 1);
             nvgFillPaint(args.vg, nvgLinearGradient(args.vg, 0, 0, box.size.x, 0,
                 nvgRGB(163, 113, 245), nvgRGB(74, 222, 214))); nvgFill(args.vg);
         }

@@ -38,7 +38,7 @@ Vessel::Vessel() {
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
     configButton(ROTATE_PARAM, "Rub bowl");
     getParamQuantity(ROTATE_PARAM)->randomizeEnabled = false;
-    configParam(SPEED_PARAM, -2.f, 2.f, .4f, "Rubbing speed", " rev/s");
+    configParam(SPEED_PARAM, 0.f, 2.f, .4f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configSwitch(BOWL_PARAM, 0.f, 1.f, 0.f, "Bowl material", {"Metal", "Crystal prototype"});
     configSwitch(MALLET_PARAM, 0.f, 3.f, 1.f, "Mallet", {"Wood", "Suede", "Silicone", "Felt"});
@@ -48,7 +48,7 @@ Vessel::Vessel() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
-        "Rub gate", "Rubbing speed (0-10 V multiplier)", "Pressure (0-10 V multiplier)"};
+        "Rub gate", "Rubbing speed (0-10 V, replaces knob)", "Pressure (0-10 V multiplier)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
     configOutput(LEFT_OUTPUT, "Left"); configOutput(RIGHT_OUTPUT, "Right");
     resetRuntime();
@@ -71,7 +71,7 @@ void Vessel::resetRuntime() {
     visualStrikeAftermath.store(0.f, std::memory_order_relaxed);
     strikeHigh = manualHigh = rotateHigh = false;
     manualStrikeVelocity.store(1.f, std::memory_order_relaxed);
-    manualRotateSpeedScale.store(1.f, std::memory_order_relaxed);
+    manualRotateSpeed.store(1.f, std::memory_order_relaxed);
     sleeping = true; configured = false; needsConfigure = true;
     visualEnergy.store(0); rawEnergy.store(0); visualFault.store(false); visualSleeping.store(true);
     visualRotationAngle.store(0.f, std::memory_order_relaxed);
@@ -82,7 +82,7 @@ void Vessel::resetRuntime() {
 vessel_expander::TuneMessage Vessel::tuneControls() {
     vessel_expander::TuneMessage tune;
     tune.velocity = float(bound(params[VELOCITY_PARAM].getValue(), 0, 1));
-    tune.speed = float(bound(params[SPEED_PARAM].getValue(), -2, 2));
+    tune.speed = float(bound(params[SPEED_PARAM].getValue(), 0, 2));
     tune.pressure = float(bound(params[PRESSURE_PARAM].getValue(), 0, 15));
     tune.sustain = float(bound(params[DECAY_PARAM].getValue(), -2, 2));
     tune.imperfection = float(bound(params[IMPERFECTION_PARAM].getValue(), 0, 2));
@@ -101,7 +101,7 @@ vessel_expander::TuneMessage Vessel::tuneControls() {
         return tune;
     }
     tune.velocity = float(bound(message->velocity, 0, 1));
-    tune.speed = float(bound(message->speed, -2, 2));
+    tune.speed = float(bound(message->speed, 0, 2));
     tune.pressure = float(bound(message->pressure, 0, 15));
     tune.sustain = float(bound(message->sustain, -2, 2));
     tune.imperfection = float(bound(message->imperfection, 0, 2));
@@ -192,10 +192,11 @@ void Vessel::process(const ProcessArgs& args) {
     controls.rotate = rotateHigh || manualRotate;
     controls.velocity = manualEvent ? bound(manualStrikeVelocity.load(std::memory_order_relaxed), 0, 1)
         : inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1) : tune.velocity;
-    const double manualSpeedScale = manualRotate && !rotateHigh
-        ? bound(manualRotateSpeedScale.load(std::memory_order_relaxed), 0, 1) : 1;
-    controls.speed = tune.speed * manualSpeedScale
-        * (inputs[SPEED_INPUT].isConnected() ? bound(inputs[SPEED_INPUT].getVoltage()/10, 0, 1) : 1);
+    // The performance pad directly selects the full speed range, independent
+    // of the knob, expander and speed CV, including while a rub gate is high.
+    controls.speed = manualRotate
+        ? 2 * bound(manualRotateSpeed.load(std::memory_order_relaxed), 0, 1)
+        : inputs[SPEED_INPUT].isConnected() ? 2 * bound(inputs[SPEED_INPUT].getVoltage()/10, 0, 1) : tune.speed;
     controls.pressure = tune.pressure
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
     controlElapsed += dt;
@@ -236,8 +237,11 @@ void Vessel::process(const ProcessArgs& args) {
     if (visualElapsed >= .005 || controls.strikeEvent || fault) {
         const double energy = sleeping ? audio.meanEnergy() : frame.bowlEnergy;
         const double db = 10*std::log10((std::max(0.0, energy)+2e-20)/.02);
-        const float target = float(std::max(0.0, std::min(1.0, (db+60)/60)));
+        // Reserve the bottom 10% for quiet tails; give the audible range more room.
+        const double position = db < -40 ? (db+60)*.005 : .1+(db+40)*.0225;
+        const float target = float(std::max(0.0, std::min(1.0, position)));
         meter += float(-std::expm1(-visualElapsed/(target > meter ? .005 : .15)))*(target-meter);
+        if (sleeping) meter = 0.f;
         visualEnergy.store(meter, std::memory_order_relaxed); rawEnergy.store(float(energy), std::memory_order_relaxed);
         leftEnergy.store(float(audio.engine().bowl().energy()), std::memory_order_relaxed);
         rightEnergy.store(float(audio.rightEngine().bowl().energy()), std::memory_order_relaxed);

@@ -111,6 +111,7 @@ void tuneExpander() {
         && tune.lights[VTune::VESSEL_READY_LIGHT].getBrightness() == 1.f,
         "V.Tune connection LED did not show a ready Vessel link");
     host.tuneMessages[1] = host.tuneMessages[0];
+    require(host.tuneMessages[1].speed == 0.f, "V.Tune speed still permits reverse rotation");
     host.rightExpander.messageFlipRequested = false;
     cable(host, Vessel::STRIKE_INPUT, 10.f);
     run(host, 100);
@@ -149,6 +150,11 @@ void tuneExpander() {
 
 void manualPerformancePads() {
     Vessel softStrike, hardStrike;
+    require(softStrike.getParamQuantity(Vessel::SPEED_PARAM)->minValue == 0.f,
+        "Vessel speed knob is not unipolar");
+    VTune tuneRange;
+    require(tuneRange.getParamQuantity(VTune::SPEED_PARAM)->minValue == 0.f,
+        "V.Tune speed knob is not unipolar");
     run(softStrike); run(hardStrike);
     cable(softStrike, Vessel::VELOCITY_INPUT, 0.f);
     cable(hardStrike, Vessel::VELOCITY_INPUT, 0.f);
@@ -164,9 +170,9 @@ void manualPerformancePads() {
 
     Vessel slowRotate, fastRotate, gatedRotate;
     run(slowRotate); run(fastRotate); run(gatedRotate);
-    slowRotate.manualRotateSpeedScale.store(.25f);
-    fastRotate.manualRotateSpeedScale.store(1.f);
-    gatedRotate.manualRotateSpeedScale.store(0.f);
+    slowRotate.manualRotateSpeed.store(.25f);
+    fastRotate.manualRotateSpeed.store(1.f);
+    gatedRotate.manualRotateSpeed.store(0.f);
     slowRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
     fastRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
     cable(gatedRotate, Vessel::ROTATE_INPUT, 10.f);
@@ -177,6 +183,35 @@ void manualPerformancePads() {
         "manual rotate pad height does not scale speed");
     require(std::abs(gatedRotate.audio.engine().rotationAngle()) > 0,
         "manual speed scale incorrectly affects the external rotate gate");
+    Vessel independentPad, fullRangeGate, stoppedPad;
+    run(independentPad); run(fullRangeGate); run(stoppedPad);
+    independentPad.params[Vessel::SPEED_PARAM].setValue(0.f);
+    cable(independentPad, Vessel::SPEED_INPUT, 0.f);
+    cable(independentPad, Vessel::ROTATE_INPUT, 10.f);
+    independentPad.manualRotateSpeed.store(1.f);
+    independentPad.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    fullRangeGate.params[Vessel::SPEED_PARAM].setValue(2.f);
+    cable(fullRangeGate, Vessel::ROTATE_INPUT, 10.f);
+    stoppedPad.params[Vessel::SPEED_PARAM].setValue(2.f);
+    cable(stoppedPad, Vessel::ROTATE_INPUT, 10.f);
+    stoppedPad.manualRotateSpeed.store(0.f);
+    stoppedPad.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    run(independentPad, 1200); run(fullRangeGate, 1200); run(stoppedPad, 1200);
+    require(std::abs(independentPad.audio.engine().rotationAngle()
+        - fullRangeGate.audio.engine().rotationAngle()) < 1e-12,
+        "rub pad does not reach full speed independently of knob, CV and gate");
+    // Let the engine's existing speed smoothing settle before checking zero.
+    run(stoppedPad, 24000);
+    const double stoppedAngle = stoppedPad.audio.engine().rotationAngle();
+    run(stoppedPad, 1200);
+    require(std::abs(stoppedPad.audio.engine().rotationAngle() - stoppedAngle) < 1e-8,
+        "rub pad zero does not override knob and gate speed");
+    independentPad.params[Vessel::ROTATE_PARAM].setValue(0.f);
+    run(independentPad, 24000);
+    const double settledAngle = independentPad.audio.engine().rotationAngle();
+    run(independentPad, 1200);
+    require(std::abs(independentPad.audio.engine().rotationAngle() - settledAngle) < 1e-8,
+        "rub pad release does not restore gated knob/CV speed");
     const double visualPhaseError = std::abs(std::remainder(
         double(fastRotate.visualRotationAngle.load(std::memory_order_relaxed))
             - fastRotate.audio.engine().rotationAngle(), 2.0 * vessel::pi));
@@ -186,7 +221,7 @@ void manualPerformancePads() {
 
     Vessel negativeSpeedCv, zeroSpeedCv, halfSpeedCv, fullSpeedCv;
     for (Vessel* vessel : {&negativeSpeedCv, &zeroSpeedCv, &halfSpeedCv, &fullSpeedCv}) {
-        vessel->params[Vessel::SPEED_PARAM].setValue(1.f);
+        vessel->params[Vessel::SPEED_PARAM].setValue(0.f);
         cable(*vessel, Vessel::ROTATE_INPUT, 10.f);
     }
     cable(negativeSpeedCv, Vessel::SPEED_INPUT, -5.f);
@@ -200,7 +235,23 @@ void manualPerformancePads() {
     const double fullCvAngle = std::abs(fullSpeedCv.audio.engine().rotationAngle());
     require(std::abs(negativeCvAngle-zeroCvAngle) < 1e-12 && halfCvAngle > zeroCvAngle
             && fullCvAngle-zeroCvAngle > 1.9 * (halfCvAngle-zeroCvAngle),
-        "speed CV does not use a clamped 0-10 V multiplier scale");
+        "speed CV does not override a zero knob with the full 0-10 V speed range");
+    Vessel knobReference, overRangeCv;
+    knobReference.params[Vessel::SPEED_PARAM].setValue(2.f);
+    cable(knobReference, Vessel::ROTATE_INPUT, 10.f);
+    cable(overRangeCv, Vessel::ROTATE_INPUT, 10.f);
+    cable(overRangeCv, Vessel::SPEED_INPUT, 20.f);
+    run(knobReference, 1200); run(overRangeCv, 1200);
+    require(std::abs(fullCvAngle - std::abs(knobReference.audio.engine().rotationAngle())) < 1e-12
+        && std::abs(fullCvAngle - std::abs(overRangeCv.audio.engine().rotationAngle())) < 1e-12,
+        "10 V speed CV does not match full knob speed or over-range CV is not clamped");
+    // Unplugging CV restores the saved knob, including its zero setting.
+    fullSpeedCv.inputs[Vessel::SPEED_INPUT].channels = 0;
+    run(fullSpeedCv, 24000);
+    const double unpluggedAngle = fullSpeedCv.audio.engine().rotationAngle();
+    run(fullSpeedCv, 1200);
+    require(std::abs(fullSpeedCv.audio.engine().rotationAngle() - unpluggedAngle) < 1e-8,
+        "unplugging speed CV does not restore the zero knob setting");
     slowRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     fastRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     run(slowRotate, 2000); run(fastRotate, 2000);
