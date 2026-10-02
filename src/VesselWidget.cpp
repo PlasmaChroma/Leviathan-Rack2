@@ -122,6 +122,8 @@ struct VesselPitchTintLayer final : TransparentWidget {
     Widget* metalRaster = nullptr;
     Widget* crystalRaster = nullptr;
     bool crystalSelected = false;
+    NVGcolor displayedTint = vesselPitchTint(261.625565f);
+    bool tintInitialized = false;
 
     VesselPitchTintLayer(
         Vessel* module,
@@ -134,6 +136,22 @@ struct VesselPitchTintLayer final : TransparentWidget {
     }
 
     void step() override {
+        const float frequency = vessel
+            ? vessel->visualFrequency.load(std::memory_order_relaxed)
+            : 261.625565f;
+        const NVGcolor targetTint = vesselPitchTint(frequency);
+        if (!tintInitialized) {
+            displayedTint = targetTint;
+            tintInitialized = true;
+        }
+        else {
+            const float frameTime = APP && APP->window
+                ? clamp(float(APP->window->getLastFrameDuration()), 0.f, 0.1f)
+                : 1.f / 60.f;
+            // Match Puffy's character-tint easing: about 90% settled in 0.45s.
+            // Blend the color itself so octave jumps don't sweep unrelated hues.
+            displayedTint = mixPitchTint(displayedTint, targetTint, 5.f * frameTime);
+        }
         crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
         if (metalRaster) metalRaster->setVisible(!crystalSelected);
         if (crystalRaster) crystalRaster->setVisible(crystalSelected);
@@ -141,14 +159,10 @@ struct VesselPitchTintLayer final : TransparentWidget {
     }
 
     void draw(const DrawArgs& args) override {
-        const float frequency = vessel
-            ? vessel->visualFrequency.load(std::memory_order_relaxed)
-            : 261.625565f;
-        const NVGcolor tint = vesselPitchTint(frequency);
         nvgSave(args.vg);
         nvgGlobalCompositeOperation(args.vg, NVG_SOURCE_OVER);
         nvgGlobalAlpha(args.vg, crystalSelected ? 0.20f : 0.38f);
-        nvgGlobalTint(args.vg, tint);
+        nvgGlobalTint(args.vg, displayedTint);
         TransparentWidget::draw(args);
         nvgRestore(args.vg);
     }
