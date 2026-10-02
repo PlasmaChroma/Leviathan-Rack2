@@ -1,0 +1,397 @@
+# Data Bender v1.4.7 — control, timing, mode and persistence recovery
+
+This report describes the uploaded executable as loaded at `0x08000000` with Thumb code. It combines direct instruction analysis, the recovered Ghidra functions, and isolated execution of original ARM instructions. Symbol names below are analyst names, not recovered C++ identifiers. All offsets in the structure tables are hexadecimal.
+
+The manual corroboration is Qu-Bit's `Data_Bender_v145-7ghx.pdf`, linked from the manufacturer's v1.4.7 release page. Full documentation notes are in `research/documentation.txt`; their claims should not be confused with discoveries from the binary. The actual sample-clock investigation belongs to the platform report. Here, numerical clock formulas are proven firmware computations; references to seconds/Hz use the firmware's intended units rather than claiming an independently measured hardware clock.
+
+## 1. Evidence and confidence
+
+- **Direct**: instructions/data tables in the supplied binary establish the result.
+- **Executed**: the relevant original instructions also ran in isolated Unicorn Cortex-M7 emulation. Hardware I/O and irrelevant downstream DSP were replaced by explicit hooks. `expf` and `powf` were replaced with Python mathematical equivalents in these probes, so they establish formulas/branches rather than bit-for-bit libm equivalence.
+- **Documented**: manufacturer manual corroboration supplies a panel name or intended behavior.
+- **Unresolved**: wall-clock accuracy, hardware analog tolerances, and some exact clock-edge/transient interactions need system-level testing.
+
+Primary addresses:
+
+| Address | Analyst name | Role |
+|---|---|---|
+| `0x080023a0` | `PollControlsAndRenderLeds` | ADC processing, button event production, gate actions, status LEDs |
+| `0x08003264` | `OnExternalClockEdge` | Timestamp capture, period history, median-of-three filter |
+| `0x080032fc` | `AudioCallback` | Polling, Time mapping, timing events, dispatcher call |
+| `0x08003878` | `main` | Startup settings, event dispatch, Shift behavior, saving |
+| `0x08001e4c` | `ProcessBlockAndMapControls` | Normalized controls, Macro/Micro mapping, mix and output chain |
+| `0x08007078` | `AnalogControlProcess` | Raw ADC normalization and smoothing |
+| `0x080070e4` | `GateInTrig` | Inverted digital read plus rising-edge detection |
+| `0x0800713c` | `SwitchDebounce` | Millisecond-limited shift-register button debounce |
+| `0x080045a8` | static initialization | Defaults/constants, including two Decimator word sizes |
+| `0x08017488` | `CrossFadeProcess` | Stereo width's crossfeed operation |
+
+## 2. Main memory structures and control names
+
+Four global structures are sufficient to follow most application-level behavior:
+
+- **H** = hardware object at `0x24000468`.
+- **U** = UI/control manager at `0x24000ab8`; `U+0x0c` points to H, `U+0x10` points to P, `U+0x14` points to C.
+- **C** = clock state at `0x24000cf8`.
+- **P** = processor/engine object at `0x24000d68`; buffer engine starts at `P+0x98`, Corrupt processor at `P+0x2d4`.
+
+### 2.1 Knob enumeration and destinations
+
+The six-case table at `0x08003d64` dispatches analog event indices as follows. Panel names are confirmed independently by their behavior and documentation.
+
+| Index | Panel knob | Normal destination | Shift destination |
+|---:|---|---|---|
+| 0 | Time | `C+0x38` | Window control `P+0x70`; squared window coefficient `P+0x1a4` |
+| 1 | Repeats | `P+0x4c` | Seven LED brightness fields, each `H+0x578+24*i+8` |
+| 2 | Mix | `P+0x50` | Stereo crossfeed `P+0x6d0` |
+| 3 | Bend | `P+0x30` | Bend CV depth `P+0x3c` |
+| 4 | Break | `P+0x34` | Break CV depth `P+0x40` |
+| 5 | Corrupt | `P+0x38` | Corrupt CV depth `P+0x44` |
+
+**Control overscan matters.** The polling code at `0x0800248a–0x080024c2` multiplies all knob event values by **1.05**, except index 3/Bend. The main Time handler deliberately reads raw H's Time value instead of the event payload, so Time and Bend ultimately use unboosted knob positions. Repeats, Mix, Break, and Corrupt use `1.05*raw_knob` before later clamping. This lets those controls reach their upper endpoint despite ADC/pot tolerances.
+
+The Shift destinations inherit these details: Window uses raw Time then clamps; Bend depth uses raw Bend; Break/Corrupt depth can reach approximately **1.05** because assignment does not clamp their high endpoint. This differs slightly from the manual's convenient 0–100% description.
+
+### 2.2 CV enumeration and normalization
+
+Direct copies at `0x080024fa–0x08002524` establish:
+
+| ADC index | Logical CV | Analog value address | Application destination |
+|---:|---|---|---|
+| 6 | Time | `H+0x29c` | `C+0x3c` |
+| 7 | Repeats | `H+0x2bc` | `P+0x64` |
+| 8 | Mix | `H+0x2dc` | `P+0x68` |
+| 9 | Bend | `H+0x2fc` | `P+0x54` |
+| 10 | Break | `H+0x31c` | `P+0x58` |
+| 11 | Corrupt | `H+0x33c` | `P+0x5c` |
+
+The hardware analysis found `AnalogControlProcess` computes knob targets as `raw_u16/65536` and bipolar CV targets as `1 - raw_u16/32768`. Thus the code's normalized CV range is approximately `[-1,+1]`, with electrical inversion already undone. The manual specifies ±5 V externally. For an ideal Rack input the intended nominal mapping is consequently `CV_normalized = voltage / 5`, but circuit calibration/tolerances are not derived from raw ADC code alone.
+
+Each ADC object smooths toward its target. The Time CV receives an explicit `0.1` smoothing coefficient; other coefficients come from the hardware initialization constants. Exact elapsed smoothing time depends on actual callback rate and is covered by the platform timing caveat.
+
+### 2.3 Button and gate enumeration
+
+The button table at `0x08003e12` is:
+
+| Index | Button | Ordinary release action | Shift + release |
+|---:|---|---|---|
+| 0 | Shift | Exit Shift display; mark settings for saving | — |
+| 1 | Clock | Toggle internal/external source | Toggle global gate latch/level behavior |
+| 2 | Mode | Toggle Macro/Micro, retaining independent Bend/Break flags | Toggle full five-effect Corrupt set/original three |
+| 3 | Freeze | Toggle freeze request, or release momentary Freeze | Toggle Freeze button latch/momentary |
+| 4 | Bend | Toggle Macro Bend or Micro reverse | Toggle Unique/Shared Macro stereo decisions |
+| 5 | Break | Toggle Macro Break or Micro silence/traverse | Restore defaults |
+| 6 | Corrupt | Advance selected effect | Reassign Corrupt gate as clock reset |
+
+Button **press** and **release** are distinct. The producer emits event value 0 when the debouncer reaches `0x7f`, and value 1 at `0x80`. With the inverted pullup wiring these are press and release respectively. Most non-Shift actions happen on release. Freeze's momentary setting handles press as well, so it freezes while held.
+
+The four regular GateIn objects map as follows:
+
+| Gate object | Jack | Normal behavior |
+|---|---|---|
+| `H+0x170` | Freeze | Toggle request on trigger or contribute a held level |
+| `H+0x188` | Bend | Toggle active-mode Bend flag or contribute a held level |
+| `H+0x1a0` | Break | Toggle active-mode Break flag or contribute a held level |
+| `H+0x1b8` | Corrupt | Advance effect, or reset timing if reassigned |
+| `H+0x634` | Clock | External clock edge handling |
+
+All GateIn instances are initialized with inverted logic; `GateInTrig` returns `current && !previous`. The 0.4 V electrical threshold is a manufacturer specification, not a floating-point threshold in this binary.
+
+## 3. Effective parameter formulas
+
+Let `k` be a raw normalized knob, `cv` the normalized voltage, `sat(x)=clamp(x,0,1)`, and `d` the applicable saved CV-depth setting. The following are direct control-map results at `0x08001e4c`:
+
+```text
+Time         = sat(kTime + cvTime)
+RepeatsNorm  = sat(1.05*kRepeats + cvRepeats)
+MixNorm      = sat(1.05*kMix + cvMix)
+MacroBend    = sat(kBend + calibratedCvBend * dBend)
+BreakNorm    = sat(1.05*kBreak + cvBreak * dBreak)
+CorruptNorm  = sat(1.05*kCorrupt + cvCorrupt * dCorrupt)
+```
+
+Bend CV calibration is `calibratedCvBend = offset + scale*cvBend`, loaded from `P+0x6c8` and `P+0x6cc`. The saved Bend attenuator is bypassed in Micro mode's pitch calculation. The numerical calibration factory alternatives in the binary are `(offset,scale)=(0.04,0.96)` and `(0.0075,0.9975)`, selected by a hardware-revision digital input. In a Rack implementation with ideal voltage scaling, use `(0,1)` unless deliberately emulating a particular board's calibration state.
+
+### 3.1 Repeats is exponential division, not delay feedback
+
+At `0x08001e84`, the instruction `vcvt.s32.f32 ..., #3` truncates the previous normalized Repeats value multiplied by 8. It is converted back to float and written to `P+0x104` / buffer offset `+0x6c`. The buffer engine subsequently computes the number of divisions from a power of two:
+
+```text
+baseExponent = floor(8 * RepeatsNorm_previous_block)
+baseDivisions = 2^baseExponent
+```
+
+The baseline sequence is **1, 2, 4, 8, 16, 32, 64, 128, 256**. Macro Break can add to this exponent within the engine's clamp. The old normalized value is used before the current block overwrites `P+0x28`, creating a one-block parameter pipeline delay.
+
+With no CV, knob thresholds are approximately `k = n/8.4`, for `n=1..8`: 11.9048%, 23.8095%, 35.7143%, 47.6190%, 59.5238%, 71.4286%, 83.3333%, 95.2381%. A smooth linear 1–10 repeats control would substantially miss the device behavior.
+
+### 3.2 Mix endpoint behavior and smoothing
+
+At the block map, normalized Mix below 0.02 snaps to zero; values above 0.98 snap to one. The audio loop then applies a second dry-end test: target below 0.03 becomes zero, or becomes one while Freeze is requested. Thus the effective dry dead zone extends to `<0.03`, equivalent to a no-CV raw knob below approximately 2.8571% after 1.05 overscan.
+
+The target is smoothed per stereo frame:
+
+```text
+mixState += 0.001 * (mixTarget - mixState)
+dryGain = sin((1 - mixState) * pi/2)
+wetGain = sin(mixState * pi/2)
+```
+
+This is a sine equal-power crossfade. In particular, the Freeze-at-dry exception changes the **target**, not the current smoother state: it does not jump the first sample directly to 100% wet. Root's isolated output probe independently verified a zero-to-one target gives `mixState=.001` after the first frame.
+
+The 0.001 coefficient is per frame. Its equivalent time constant is `-1/(Fs*log(.999))`, about 10.4 ms at 96 kHz or 20.8 ms at 48 kHz. A variable-rate Rack recreation should define this timing deliberately after resolving which physical/reference behavior is intended.
+
+## 4. Micro mode: exact pitch and Break mapping
+
+### 4.1 Micro Bend transfer function and octave snapping
+
+Direct instructions `0x08001fae–0x08002030`, `0x080022c2–0x08002340`, corroborated by isolated execution:
+
+1. Compute the knob-only speed magnitude:
+
+   `s0 = exp(4.1588830948 * kBend) / 8`, approximately `2^(6*kBend - 3)`.
+
+2. Snap `s0` to the seven targets stored at `0x08019bf4`: `[0.125,0.25,0.5,1,2,4,8]` when it lies strictly inside a relative interval around the target. The lowest target uses ±15%; the other six use ±2.5%.
+
+3. Apply calibrated CV:
+
+   `s1 = s0 * 2^(5 * calibratedCvBend)`.
+
+4. Apply a second snap to the same octave targets. The lowest target again uses ±15%; the others now use ±1.5%. A successful snap sets the octave-indicator flag `P+0x75`.
+
+5. Set the indicator also when magnitude is greater than 8, then negate the magnitude if the Micro reverse flag or Bend gate level is active.
+
+This proves the knob's ±3-octave endpoints and intended 1 V/oct external control. It also proves that the firmware contains actual snapping, not merely an LED that announces near-octave tuning. A 0.5 knob gives rate 1; calibrated CV `+0.2` gives rate 2, and `-0.2` gives rate 0.5. A 0.25 knob gives approximately 0.353553, between octave snaps.
+
+The post-CV magnitude is **not clamped to 8** in this control stage. The probe measured center knob plus normalized CV +1 as rate 32, and normalized CV −1 as rate 1/32. At both extreme knob/CV combinations, the ideal requested-rate formula spans approximately 1/256 to 256. **This is not the final audible speed range:** the companion engine analysis found reader limits initialized to −8 and +8 in `0x08004a6c`, and `0x0800493c` clamps the requested/base rate multiplied by Macro rate to those bounds before slew. Thus the demonstrated +32 request becomes at most +8 in the actual reader with default bounds. Keep requested rate, reader bound and final slewed rate as distinct quantities.
+
+Both snap tests use strict inequalities; exact edge behavior is therefore sensitive to float rounding. The supplied evidence retains the actual IEEE single-precision constants rather than rounding them into a false universal quantizer threshold.
+
+### 4.2 Micro Break deliberately clears the inactive path
+
+The independent stored Micro Break flag `P+0x0e`, OR'd with the Break gate level, selects:
+
+```text
+Traverse:
+    buffer.traverseFraction = BreakNorm
+    buffer.manualSilence = 0
+
+Silence:
+    buffer.traverseFraction = 0
+    buffer.manualSilence = BreakNorm if BreakNorm >= .015 else 0
+```
+
+Destinations are `P+0x158` / buffer `+0xc0` for traversal and `P+0x120` / buffer `+0x88` for silence. Original execution with amount 0.5 produced `(traverse=.5, silence=0)` and `(traverse=0, silence=.5)` respectively. The button state survives a Macro/Micro change, but the inactive amount path is explicitly cleared each block. **The recovered executable has a [0,1] Silence range, with no 0.9 cap on this path.** The engine computes `audibleFrames = uint32((1 - clamp(manualSilence + macroSilence,0,1))*subdivisionLength)`. At amount 1 this length becomes zero, but the resulting output is not reliably muted: for the usual first slice at offset zero, subtracting one from the unsigned audible endpoint underflows to `0xffffffff`, admitting samples through the raw gate. With Window disabled, the original-instruction probe passed constant-one input at unity; with the default Window it retained short pulses. The companion engine report's “Micro Silence range and the zero-length endpoint” section documents all five cases and distinguishes this observed behavior from the manual's stated 90% maximum. A port should explicitly choose whether to preserve the artifact or handle zero audible length as mute.
+
+### 4.3 Macro gating and mode transitions
+
+Macro assigns effective Bend to `P+0x19c` only while Macro Bend flag `P+0x0c` or the Bend gate level is active; otherwise this target is zero. Similarly Macro Break reaches `P+0x1a0` only while its flag `P+0x0f` or Break gate is active. Micro clears both Macro targets.
+
+Switching Mode preserves four separate Boolean states:
+
+| Field | Meaning |
+|---|---|
+| `P+0x0c` | Macro Bend enabled |
+| `P+0x0d` | Micro reverse enabled |
+| `P+0x0e` | Micro silence selected |
+| `P+0x0f` | Macro Break enabled |
+
+Returning to Macro explicitly resets the Micro speed state `P+0x13c` to 1 (`0x08003f10–0x08003f18`). This corroborates the manual's v1.4.5 mode-isolation fix.
+
+## 5. Clock/Time recovery
+
+### 5.1 Continuous internal clock mapping
+
+Code `0x08003494–0x08003504` computes:
+
+```text
+x = sat(TimeKnob + TimeCV)
+f = exp(7.15461540222168 * x) * 0.0625
+T_us = uint32(1_000_000 / f)
+phaseIncrement = f * 2*pi / clockSampleRate
+```
+
+The exponent constant is `ln(1280)` to float precision, so the intended range is exactly 0.0625–80 Hz, or 16 s down to 12.5 ms. The midpoint is about **2.236068 Hz / 447.2136 ms**, not the arithmetic midpoint of the endpoint durations. These computations were executed successfully in `probe_clock.py`.
+
+An input-change cache rejects changes smaller than 0.001 from the last accepted normalized value. Both continuous frequency and external ratio are calculated together when a new value passes this threshold; changing the selected clock source does not require another knob calculation.
+
+The internal phase accumulates per stereo sample frame and wraps by subtracting `2*pi` on an event. Code directly initializes the model clock rate to 96028. Physical wire-rate/clock-tree verification must be considered before interpreting this as a measured actual cadence.
+
+### 5.2 External ratio table and exact selection rule
+
+The immutable float table at `0x08019d20` is:
+
+`[0.0625, 0.125, 0.25, 0.5, 1, 2, 3, 4, 8]`.
+
+The index rule is `min(floor(8.25*x),8)` after clamping x. This yields unequal end-zone widths:
+
+| Nominal effective-control range | Ratio | Effective period for 500 ms input |
+|---|---:|---:|
+| `[0, 4/33)` | /16 | 8000 ms |
+| `[4/33, 8/33)` | /8 | 4000 ms |
+| `[8/33, 12/33)` | /4 | 2000 ms |
+| `[12/33, 16/33)` | /2 | 1000 ms |
+| `[16/33, 20/33)` | ×1 | 500 ms |
+| `[20/33, 24/33)` | ×2 | 250 ms |
+| `[24/33, 28/33)` | ×3 | 166.666 ms after integer truncation |
+| `[28/33, 32/33)` | ×4 | 125 ms |
+| `[32/33, 1]` | ×8 | 62.5 ms |
+
+These are ideal float-expression boundaries before the 0.001 change cache and ADC smoothing. The ×8 zone is only the final ~3.03% of the effective knob/CV range. It is **not** nine evenly spaced zones. Probe values on both sides of key boundaries confirmed this.
+
+### 5.3 External clock period filter
+
+`OnExternalClockEdge` at `0x08003264`:
+
+- Reads a high-resolution tick counter.
+- Subtracts the previous edge tick using unsigned arithmetic.
+- Divides the difference by 200 with a multiply/shift equivalent.
+- Maintains the latest three intervals.
+- Selects their **median**, not their arithmetic average.
+- Marks a fresh input clock event.
+
+The histories initialize to 500000 in the main startup sequence, equivalent to a nominal 500 ms interval. Original instruction emulation gave:
+
+| Input interval µs | Filtered median µs |
+|---:|---:|
+| 500000 | 500000 |
+| 1000000 | 500000 |
+| 501000 | 501000 |
+| 502000 | 502000 |
+| 503000 | 502000 |
+
+The effective period is `uint32(median_period_us / ratio)`. The edge filter's use of unsigned wrap arithmetic is appropriate for counter wrap; its real tick scale still depends on the board's clock configuration.
+
+Division ratios maintain an edge counter and synchronize when the requisite input count arrives. Multiplication ratios maintain a subdivision count passed to the buffer engine. A reset in external mode loads the divider count from the ratio, so the next incoming clock qualifies as the boundary; in internal mode it clears phase immediately. These paths are `0x080028a0–0x080028b6` and `0x08002e74–0x08002e8e`.
+
+### 5.4 Clock loss and period-change guard
+
+The callback checks missing external clocks against roughly four previous input periods. Its expression uses effective period multiplied back by the current ratio, matching the input clock period. It marks the UI's lost-clock condition; it does not reset the last filtered tempo. Further engine cycling details belong to the buffer-engine report.
+
+Separately, each stereo frame smooths the effective period in milliseconds:
+
+```text
+smoothedPeriod = 0.999869168 * previous + 0.000130832 * currentPeriodMs
+periodChanging = abs(currentPeriodMs - smoothedPeriod) > 5
+```
+
+The flag is copied to `P+0x94` and `P+0x1a8` and can suppress a new processor clock event during abrupt Time changes. This is more specific than generic knob smoothing: it is a 5 ms timing-instability guard. The precise audible boundary should be validated in full-system emulation or on hardware, especially when changing external ratios.
+
+## 6. Freeze and gate-state semantics
+
+The gate behavior setting `U+0x22a` is 0 for edge-triggered latching and 1 for level/momentary:
+
+- Latching mode clears the temporary gate-level fields and uses rising edges to toggle the currently relevant Bend, Break, or Freeze Boolean state.
+- Level mode writes current gate levels to `P+0x12` (Bend), `P+0x13` (Break), and `P+0x15` (Freeze).
+- Corrupt remains an edge action: cycle the effect or issue clock reset. A held Corrupt gate does not repeatedly cycle at control rate.
+
+For Bend/Break/Freeze, active behavior combines stored button state with the level gate using logical OR. Button toggling takes an already-active gate into account: when the button state is off and gate is high, releasing the button leaves its stored state off. A button cannot cancel an asserted external level.
+
+The Freeze **button** setting is separate (`U+0x228`, mirrored into `P+0x7c`). At `0x080020a2–0x080020ae`, the dispatcher combines button and gate into freeze request `P+0x1b3`; when the Freeze button setting is momentary it copies that directly into actual freeze `P+0x1b2`. In latch mode actual application is left to the engine's boundary logic. The engine agent recovered the acceptance path near `0x08005262`: pending updates can be committed at a raw-sample sign crossing, or at reader wrap when its transition countdown reaches zero; accepted updates copy requested Freeze to actual Freeze. The clock requests the transition, and this later acceptance chooses its sample boundary. Therefore the global level-gate setting and the Freeze button timing setting are not interchangeable. This combination deserves an explicit fidelity test in a port rather than assuming every level Freeze gate is immediately applied under all settings.
+
+The documented dry-Mix Freeze exception is present directly in the output loop, using the combined Freeze request. Memory preservation and exact write-pointer freeze behavior are addressed in the engine report.
+
+## 7. Shift secondary settings
+
+### Window
+
+`windowControl = sat(rawTimeKnob)`, and `windowCoefficient = windowControl²`. Reset uses `windowControl ≈ 0.14142136`, hence a coefficient of approximately 0.02. This explains why a knob represented as a 2% linear window slider would have the wrong response. The engine report recovers the actual playback window shape.
+
+### LED brightness
+
+Shift+Repeats applies `max(0.2,eventValue)` to all seven RGB LED brightness fields. Reset brightness is 0.7. There is no upper clamp at this assignment; physical LED code ultimately sets channel values.
+
+### Stereo width
+
+Shift+Mix calculates `a = 0.5 * (1 - min(1.1*eventValue,1))`, where eventValue is already about `1.05*rawMixKnob`. Thus `a` spans 0.5 at the narrow end to 0 at the fully separated end. Reset sets a=0.
+
+The output code uses the linear CrossFade variant, and **updates in place**:
+
+```text
+Lnew = (1-a)*L + a*R
+Rnew = (1-a)*R + a*Lnew
+```
+
+Root's original-instruction output probe verified `a=.5, L=0, R=1` produces `(0.5,0.75)`. It is not a symmetrical mid/side-width matrix. This is a meaningful literal-firmware quirk: a faithful mode can preserve it, while an improved-width option should be named as an intentional change.
+
+### Unique/Shared
+
+Shift+Bend toggles `P+0x100`, buffer offset `+0x68`. The manufacturer labels this Unique versus Shared **Macro decisions**. It is independent of stereo-width crossmixing and does not imply collapsing stereo audio to mono.
+
+### Corrupt set and gate role
+
+Shift+Mode toggles `P+8`: 0 permits modes 1–5; 1 restricts cycling to 1–3. Switching to the original set while a higher-numbered effect is selected immediately forces selection to 1. Ordinary effect advance uses modulo 6 or 4 and skips zero. This establishes **one-based internal effect numbers**, even though a host UI might use a zero-based enum.
+
+Shift+Corrupt toggles `U+0x229`. Its gate then either advances selected effect or resets clock/divider state. It is a reassigned gate action, not a sixth audio algorithm.
+
+### Restore defaults
+
+The exact reset path at `0x0800446c–0x080044e6` resets:
+
+- Macro mode; all four independent Bend/Break flags off; Freeze button request off.
+- Corrupt selection 1 and full five-effect set.
+- Unique Macro decisions; gate latching; Freeze button latching; normal Corrupt gate role.
+- Window coefficient .02 and its square-root control value.
+- All three CV depths to 1.
+- Stereo crossfeed to 0, i.e. full separation.
+- LED brightness .7.
+- Micro speed to 1, traversal and manual silence targets to 0.
+
+It does not indiscriminately clear the recording buffers or reset every global. For example, the reset path does not write clock-source `C+0`, primary knob values, or the stored hardware calibration pair. A Rack reset operation should distinguish this secondary-settings reset from a patch-wide reinitialization.
+
+## 8. Persistent-state layout and save policy
+
+The settings image is **56 bytes**, copied from memory-mapped external flash `0x90001000` into `0x24000420`. Its format marker is 4. A separate 12-byte Bend calibration image at `0x90009000` loads into `0x2400045c`, marker 5.
+
+Recovered settings layout:
+
+| Offset | Type | Meaning |
+|---|---|---|
+| `00` | u8 | Format marker 4 |
+| `01` | u8 | Global gate latch/level behavior |
+| `02` | u8 | Corrupt gate reset role |
+| `03` | u8 | Freeze button latch/momentary |
+| `04` | u8 | Macro Bend state |
+| `05` | u8 | Micro reverse state |
+| `06` | u8 | Micro silence/traverse state |
+| `07` | u8 | Macro Break state |
+| `08–0b` | reserved/unused here | Startup zeroes byte 08; no active restore use identified |
+| `0c` | float | Bend CV depth |
+| `10` | float | Break CV depth |
+| `14` | float | Corrupt CV depth |
+| `18` | float | Square-root Window control |
+| `1c` | u32 | Macro/Micro selection |
+| `20` | u32 | Unique/Shared Macro setting |
+| `24` | u32 | Internal/external clock source |
+| `28` | u32 | Selected Corrupt effect, 1-based |
+| `2c` | float | LED brightness |
+| `30` | float | Width representation `1-2*a` |
+| `34` | u32 | Full/original Corrupt effect set |
+
+Shift release marks the settings snapshot dirty. The main loop compares its bytes against flash and writes only when they differ and at least approximately 2000 ms have passed since the previous save. Saving can fold an asserted level gate into the stored active mode's Bend/Break state, because the snapshot uses button OR gate for that mode.
+
+A subtle literal behavior: saved width is `1-2*a`, but restore again multiplies this saved value by 1.1 before converting back to a. Thus non-maximum width may drift toward greater separation across save/reboot cycles. The report identifies the arithmetic; it does not recommend copying such a quirk by accident. A port can store the actual a or an unboosted host parameter, explicitly documenting any fidelity difference.
+
+Calibration capture uses two normalized Bend-CV readings corresponding to documented 1 V and 3 V. It computes `scale=.4/(high-low)` and `offset=.2-low*scale`. Save validation requires a separation greater than .25, scale strictly between approximately .85 and 1.15, and offset strictly between −.15 and +.15. These conditions identify the calibration routine and hardware intent; ideal Rack voltage needs none of this user gesture machinery.
+
+## 9. Movement detection, UI timing and LED identity
+
+The UI event queue contains 32 slots of 8 bytes (event type, control ID, float payload). Analog events are type 0; button events type 4. Producers and consumer use indices modulo 32. The code does not show a conventional full-queue guard before producer writes, so preserve semantic events in a port rather than requiring the same embedded queue architecture.
+
+Each knob has a slowly tracked value and a movement residual. In ordinary operation the coefficients are approximately `oldWeight=.99869221`, `newWeight=.00130779`; during Shift they change to `.9490018` and `.0509982`. Events are created when the residual exceeds a small threshold (.005 normally, .002 in the checked held-button case) and more than 200 ms have elapsed since the last Shift edge. This supports the manual's pickup-like behavior: changing a secondary control does not immediately replace its saved primary value after releasing Shift.
+
+The switch debouncer updates no more than once per millisecond and recognizes seven-sample edge patterns. Main-loop LED driver transfers are paced at roughly 3 ms. These are UI implementation details; audio/control equivalence does not require artificially delaying a VCV Rack button by the same physical debounce interval.
+
+The RGB LED object's order differs from the button enum: Shift, Clock, Mode, Bend, Break, Corrupt, Freeze. Seven objects start at `H+0x578`, stride 0x18. The hardware report maps their PWM channels.
+
+## 10. Validation artifacts and practical handoff
+
+The following are reproducible investigation artifacts in this directory:
+
+- `probe_controls.py`, `controls_probe.json`: original block-control instructions, 30 representative cases covering speed, CV, reverse, Break routing and Mix endpoints.
+- `probe_clock.py`, `clock_probe.json`: original Time mapping and clock-edge filter instructions; 38 mapping cases plus five median-filter steps.
+- `clock.asm`, `polling.asm`, `main.asm`, `init.asm`: bounded original disassembly excerpts with literal annotations.
+
+These tests establish concrete local behavior, not a finished executable clone or a full hardware-in-the-loop match. In particular, exact ADC timing, codec scaling, transient scheduling under changing clocks, and full Freeze/write semantics must be reconciled with the companion platform and buffer-engine reports.
+
+The highest-value implementation facts are already concrete: power-of-two Repeats with 256 as the baseline maximum; logarithmic Time with the 8.25 external quantizer; median-of-three external period filtering; two-stage octave snapping; separate Macro/Micro state flags; combined button/gate Freeze requests; window's squared parameter mapping; sine equal-power Mix; one-based Corrupt selection; and an independent, asymmetric stereo-width operation. Those details provide a materially stronger recreation target than a generic glitch buffer built only from the front-panel descriptions.

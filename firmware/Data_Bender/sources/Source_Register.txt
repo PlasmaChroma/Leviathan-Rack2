@@ -1,0 +1,29 @@
+PRIMARY SOURCE URL REGISTER
+Retrieved 2 October 2026
+
+v1.4.7 release page
+https://www.qubitelectronix.com/alternate-firmware/p/data-bender-v147
+
+official raw binary
+https://www.qubitelectronix.com/s/Data_Bender_v1_4_7.bin
+
+manual linked by the release
+https://www.qubitelectronix.com/s/Data_Bender_v145-7ghx.pdf
+
+Qu-Bit FAQ
+https://www.qubitelectronix.com/faq
+
+Data Bender update support
+https://www.qubitelectronix.com/im-having-trouble-updating-my-data-bender
+
+Data Bender product page
+https://www.qubitelectronix.com/shop/p/data-bender
+
+libDaisy
+https://github.com/electro-smith/libDaisy
+
+DaisySP
+https://github.com/electro-smith/DaisySP
+
+DaisySP-LGPL
+https://github.com/electro-smith/DaisySP-LGPL

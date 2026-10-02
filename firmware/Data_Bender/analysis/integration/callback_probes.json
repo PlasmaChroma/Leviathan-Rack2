@@ -1,0 +1,521 @@
+{
+  "method": "Original callback clock scheduling and dispatcher RNG-consumption probes.\nHardware clock/gate/polling calls are stubbed; callback DSP is replaced by a\nstate recorder. Dispatcher tests separately bypass Buffer, Corrupt and Tone.\nPrepared states test scheduling, not physical clocks or whole-device audio.\n",
+  "firmware_sha256": "591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d",
+  "callback_cases": [
+    {
+      "prepared_event_after_frames": 1,
+      "callback_event_frames": [
+        0
+      ],
+      "dispatch": {
+        "clock_pending": 1,
+        "event_offset_field": 0,
+        "time_guard": 0,
+        "scalar_count": 192
+      }
+    },
+    {
+      "prepared_event_after_frames": 24,
+      "callback_event_frames": [
+        23
+      ],
+      "dispatch": {
+        "clock_pending": 1,
+        "event_offset_field": 0,
+        "time_guard": 0,
+        "scalar_count": 192
+      }
+    },
+    {
+      "prepared_event_after_frames": 48,
+      "callback_event_frames": [
+        47
+      ],
+      "dispatch": {
+        "clock_pending": 1,
+        "event_offset_field": 0,
+        "time_guard": 0,
+        "scalar_count": 192
+      }
+    },
+    {
+      "prepared_event_after_frames": 72,
+      "callback_event_frames": [
+        71
+      ],
+      "dispatch": {
+        "clock_pending": 1,
+        "event_offset_field": 0,
+        "time_guard": 0,
+        "scalar_count": 192
+      }
+    },
+    {
+      "prepared_event_after_frames": 96,
+      "callback_event_frames": [
+        95
+      ],
+      "dispatch": {
+        "clock_pending": 1,
+        "event_offset_field": 0,
+        "time_guard": 0,
+        "scalar_count": 192
+      }
+    }
+  ],
+  "dispatcher_cases": [
+    {
+      "mode": 0,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 0,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 0,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 0,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 0,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 0,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 1,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 1,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 1,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 1,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 1,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 1,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 2,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 2,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 2,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 2,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 2,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 2,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 3,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 3,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 3,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 3,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 3,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 3,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 4,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 4,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 4,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 4,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 4,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 4,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 5,
+      "amount": 0.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 5,
+      "amount": 0.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 5,
+      "amount": 0.5,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 5,
+      "amount": 0.5,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 5,
+      "amount": 1.0,
+      "clock_pending_initial": 0,
+      "rand_draws": [],
+      "buffer_transition_request": 0,
+      "buffer_transition_guard": 0,
+      "corrupt_channel_choice": 0,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 5,
+      "amount": 1.0,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.19607843458652496
+    },
+    {
+      "mode": 0,
+      "amount": 0.001953125,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 266.23529052734375
+    },
+    {
+      "mode": 0,
+      "amount": 0.00390625,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.0
+    },
+    {
+      "mode": 0,
+      "amount": 0.0078125,
+      "clock_pending_initial": 1,
+      "rand_draws": [
+        12345,
+        67890
+      ],
+      "buffer_transition_request": 1,
+      "buffer_transition_guard": 37,
+      "corrupt_channel_choice": 1,
+      "corrupt_random_value": 0.0
+    }
+  ]
+}

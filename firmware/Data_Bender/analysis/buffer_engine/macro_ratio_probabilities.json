@@ -1,0 +1,195 @@
+{
+  "note": "Exhaustive enumeration of 255 remainder values assuming equally likely residues; original arithmetic emulated with IEEE float32 round-after-each-operation.",
+  "rows": [
+    {
+      "bend": 0.1,
+      "rates": [
+        {
+          "rate": 1.0,
+          "count": 189,
+          "percent": 74.11764705882354
+        },
+        {
+          "rate": -1.0,
+          "count": 66,
+          "percent": 25.882352941176475
+        }
+      ]
+    },
+    {
+      "bend": 0.25,
+      "rates": [
+        {
+          "rate": 1.0,
+          "count": 76,
+          "percent": 29.80392156862745
+        },
+        {
+          "rate": -1.0,
+          "count": 76,
+          "percent": 29.80392156862745
+        },
+        {
+          "rate": 2.0,
+          "count": 75,
+          "percent": 29.411764705882355
+        },
+        {
+          "rate": 0.5,
+          "count": 28,
+          "percent": 10.980392156862745
+        }
+      ]
+    },
+    {
+      "bend": 0.5,
+      "rates": [
+        {
+          "rate": 1.0,
+          "count": 38,
+          "percent": 14.901960784313726
+        },
+        {
+          "rate": -1.0,
+          "count": 38,
+          "percent": 14.901960784313726
+        },
+        {
+          "rate": 2.0,
+          "count": 38,
+          "percent": 14.901960784313726
+        },
+        {
+          "rate": 0.5,
+          "count": 38,
+          "percent": 14.901960784313726
+        },
+        {
+          "rate": -2.0,
+          "count": 37,
+          "percent": 14.50980392156863
+        },
+        {
+          "rate": -0.5,
+          "count": 38,
+          "percent": 14.901960784313726
+        },
+        {
+          "rate": 0.25,
+          "count": 28,
+          "percent": 10.980392156862745
+        }
+      ]
+    },
+    {
+      "bend": 0.75,
+      "rates": [
+        {
+          "rate": 1.0,
+          "count": 26,
+          "percent": 10.196078431372548
+        },
+        {
+          "rate": -1.0,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": 2.0,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": 0.5,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": -2.0,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": -0.5,
+          "count": 26,
+          "percent": 10.196078431372548
+        },
+        {
+          "rate": 0.25,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": 1.5,
+          "count": 28,
+          "percent": 10.980392156862745
+        },
+        {
+          "rate": -0.25,
+          "count": 25,
+          "percent": 9.803921568627452
+        },
+        {
+          "rate": -1.5,
+          "count": 25,
+          "percent": 9.803921568627452
+        }
+      ]
+    },
+    {
+      "bend": 1.0,
+      "rates": [
+        {
+          "rate": 1.0,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": -1.0,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": 2.0,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": 0.5,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": -2.0,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": -0.5,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": 0.25,
+          "count": 19,
+          "percent": 7.450980392156863
+        },
+        {
+          "rate": 1.5,
+          "count": 85,
+          "percent": 33.33333333333333
+        },
+        {
+          "rate": -0.25,
+          "count": 18,
+          "percent": 7.0588235294117645
+        },
+        {
+          "rate": -1.5,
+          "count": 19,
+          "percent": 7.450980392156863
+        }
+      ]
+    }
+  ]
+}

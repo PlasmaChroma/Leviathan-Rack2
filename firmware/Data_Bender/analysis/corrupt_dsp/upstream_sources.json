@@ -1,0 +1,118 @@
+{
+  "retrieved_utc": "2026-10-02T11:58:35.238088+00:00",
+  "warning": "Source matches establish algorithms/layout, not the precise DaisySP commit used by firmware. Downloaded source files are comparison material and need not be included in the deliverable.",
+  "files": [
+    {
+      "filename": "DaisySP-LGPL-LICENSE.txt",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/LICENSE",
+      "sha256": "637cad0a42f4801acaf10322eeebdd06d89f501f2fe5a35ee74585a192f76f06",
+      "bytes": 78519,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "DaisySP-LICENSE.txt",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/LICENSE",
+      "sha256": "ae36576d7394109775a8cc86c31c94f016de256526e86d11ee554ef25d429570",
+      "bytes": 3492,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "atone.cpp",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Filters/atone.cpp",
+      "sha256": "c7da7221d642bdadcdf6a22cdf877679f457e545922695ac77e31f94375686af",
+      "bytes": 527,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "atone.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Filters/atone.h",
+      "sha256": "dc3b6b2811792e2dcdf33b1756dee964b01019676988824a6d18f57e70b2a32d",
+      "bytes": 1360,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "compressor.cpp",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Dynamics/compressor.cpp",
+      "sha256": "09bc49674a27266650b1676dcaba0c2b75a82efd9721fbb49b7fa3889cf9bbee",
+      "bytes": 1793,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "compressor.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Dynamics/compressor.h",
+      "sha256": "f55922390da56906a4723c6c30ff3551a74441f6c2c3a949153c9d587d42fade",
+      "bytes": 5883,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "decimator.cpp",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Effects/decimator.cpp",
+      "sha256": "cca9eaaf632fff5d98d04c5d8c799e9df47718e7cdd24939d7c72e0ad6370af3",
+      "bytes": 1128,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "decimator.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Effects/decimator.h",
+      "sha256": "f70e6ca4f20278af6858e5606af69988d5c6ec9348f0daa62d1f9d510a5c5b5c",
+      "bytes": 2472,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "dust.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Noise/dust.h",
+      "sha256": "e338d80f646aeb7a37d383a1c157f50c137f3a9c450be889fc6df2481960f32c",
+      "bytes": 1274,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "svf.cpp",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Filters/svf.cpp",
+      "sha256": "27ff7d834b9c6d705570bec43079c752028c15d4bfb00c97140a42508ec87ce0",
+      "bytes": 2217,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "svf.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Filters/svf.h",
+      "sha256": "97356a57d038421c5df461d22de2c2ad02b27e92067c65275791da4831620bca",
+      "bytes": 2191,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "tone.cpp",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Filters/tone.cpp",
+      "sha256": "23d1a8dcb09f1850eb16923a78bb106ff3cb796d5aee3e45611f3a84012d71f4",
+      "bytes": 583,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "tone.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP-LGPL/master/Source/Filters/tone.h",
+      "sha256": "07112202829157580a12d499c03b1230dc4d3b89a217713b0be485af7fc811ee",
+      "bytes": 1322,
+      "license_family": "LGPL-2.1 per repository",
+      "commit": "unresolved; master fetched, not pinned"
+    },
+    {
+      "filename": "whitenoise.h",
+      "source_url": "https://raw.githubusercontent.com/electro-smith/DaisySP/master/Source/Noise/whitenoise.h",
+      "sha256": "1c63f308f9d5e1af7efbb86ef5a2a2f41b36faeff857bf91d3865b95cc89074b",
+      "bytes": 1182,
+      "license_family": "MIT per file headers/repository (other source attributions may apply)",
+      "commit": "unresolved; master fetched, not pinned"
+    }
+  ]
+}

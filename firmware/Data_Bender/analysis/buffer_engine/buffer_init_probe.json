@@ -1,0 +1,31 @@
+{
+  "args": {
+    "sample_rate_constant": 96028.0,
+    "base": "0xc0000000",
+    "float_count": 7202100
+  },
+  "allocation": {
+    "total_floats": 7202100,
+    "floats_per_channel": 3601050,
+    "left_pointer": "0xc0000000",
+    "left_capacity": 3601050,
+    "right_pointer": "0xc0dbca68",
+    "right_capacity": 3601050,
+    "history_left_pointer": "0xc0000000",
+    "history_left_capacity": 3601050,
+    "history_right_pointer": "0xc0dbca68",
+    "history_right_capacity": 3601050,
+    "maximum_capture_window_frames": 1800525
+  },
+  "memset_calls": [
+    {
+      "address": "0xc0000000",
+      "bytes": 14404196
+    },
+    {
+      "address": "0xc0dbca68",
+      "bytes": 14404196
+    }
+  ],
+  "pc": "0x200e0000"
+}

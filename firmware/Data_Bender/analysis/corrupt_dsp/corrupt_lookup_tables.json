@@ -1,0 +1,179 @@
+{
+  "firmware_sha256": "591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d",
+  "bit_table_address": "0x08019d44",
+  "rate_table_address": "0x08019d88",
+  "index_formula": "roundAwayFromZero(16 * fmodf(2*u,1.01f))",
+  "downsample_multiplier": "2*u > 1 ? 1 : 0.25",
+  "rows": [
+    {
+      "index": 0,
+      "bit_factor": 0.0,
+      "bit_factor_hex": "0x0",
+      "rate_factor": 0.0,
+      "rate_factor_hex": "0x0",
+      "discarded_bits": 0,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 1
+    },
+    {
+      "index": 1,
+      "bit_factor": 0.0,
+      "bit_factor_hex": "0x0",
+      "rate_factor": 0.0,
+      "rate_factor_hex": "0x0",
+      "discarded_bits": 0,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 1
+    },
+    {
+      "index": 2,
+      "bit_factor": 0.5799999833106995,
+      "bit_factor_hex": "0x3f147ae1",
+      "rate_factor": 0.33000001311302185,
+      "rate_factor_hex": "0x3ea8f5c3",
+      "discarded_bits": 9,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 11
+    },
+    {
+      "index": 3,
+      "bit_factor": 0.6000000238418579,
+      "bit_factor_hex": "0x3f19999a",
+      "rate_factor": 0.5099999904632568,
+      "rate_factor_hex": "0x3f028f5c",
+      "discarded_bits": 9,
+      "hold_samples_first_half": 2,
+      "hold_samples_second_half": 25
+    },
+    {
+      "index": 4,
+      "bit_factor": 0.17000000178813934,
+      "bit_factor_hex": "0x3e2e147b",
+      "rate_factor": 0.4699999988079071,
+      "rate_factor_hex": "0x3ef0a3d7",
+      "discarded_bits": 2,
+      "hold_samples_first_half": 2,
+      "hold_samples_second_half": 22
+    },
+    {
+      "index": 5,
+      "bit_factor": 0.6800000071525574,
+      "bit_factor_hex": "0x3f2e147b",
+      "rate_factor": 0.49000000953674316,
+      "rate_factor_hex": "0x3efae148",
+      "discarded_bits": 10,
+      "hold_samples_first_half": 2,
+      "hold_samples_second_half": 24
+    },
+    {
+      "index": 6,
+      "bit_factor": 0.6899999976158142,
+      "bit_factor_hex": "0x3f30a3d7",
+      "rate_factor": 0.41999998688697815,
+      "rate_factor_hex": "0x3ed70a3d",
+      "discarded_bits": 11,
+      "hold_samples_first_half": 2,
+      "hold_samples_second_half": 17
+    },
+    {
+      "index": 7,
+      "bit_factor": 0.6299999952316284,
+      "bit_factor_hex": "0x3f2147ae",
+      "rate_factor": 0.8199999928474426,
+      "rate_factor_hex": "0x3f51eb85",
+      "discarded_bits": 10,
+      "hold_samples_first_half": 5,
+      "hold_samples_second_half": 65
+    },
+    {
+      "index": 8,
+      "bit_factor": 0.4300000071525574,
+      "bit_factor_hex": "0x3edc28f6",
+      "rate_factor": 0.2800000011920929,
+      "rate_factor_hex": "0x3e8f5c29",
+      "discarded_bits": 6,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 8
+    },
+    {
+      "index": 9,
+      "bit_factor": 0.6399999856948853,
+      "bit_factor_hex": "0x3f23d70a",
+      "rate_factor": 0.7300000190734863,
+      "rate_factor_hex": "0x3f3ae148",
+      "discarded_bits": 10,
+      "hold_samples_first_half": 4,
+      "hold_samples_second_half": 52
+    },
+    {
+      "index": 10,
+      "bit_factor": 0.49000000953674316,
+      "bit_factor_hex": "0x3efae148",
+      "rate_factor": 0.6399999856948853,
+      "rate_factor_hex": "0x3f23d70a",
+      "discarded_bits": 7,
+      "hold_samples_first_half": 3,
+      "hold_samples_second_half": 40
+    },
+    {
+      "index": 11,
+      "bit_factor": 0.5199999809265137,
+      "bit_factor_hex": "0x3f051eb8",
+      "rate_factor": 0.25999999046325684,
+      "rate_factor_hex": "0x3e851eb8",
+      "discarded_bits": 8,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 7
+    },
+    {
+      "index": 12,
+      "bit_factor": 0.5400000214576721,
+      "bit_factor_hex": "0x3f0a3d71",
+      "rate_factor": 0.5199999809265137,
+      "rate_factor_hex": "0x3f051eb8",
+      "discarded_bits": 8,
+      "hold_samples_first_half": 2,
+      "hold_samples_second_half": 26
+    },
+    {
+      "index": 13,
+      "bit_factor": 0.8700000047683716,
+      "bit_factor_hex": "0x3f5eb852",
+      "rate_factor": 0.17000000178813934,
+      "rate_factor_hex": "0x3e2e147b",
+      "discarded_bits": 13,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 3
+    },
+    {
+      "index": 14,
+      "bit_factor": 0.7400000095367432,
+      "bit_factor_hex": "0x3f3d70a4",
+      "rate_factor": 0.2199999988079071,
+      "rate_factor_hex": "0x3e6147ae",
+      "discarded_bits": 11,
+      "hold_samples_first_half": 1,
+      "hold_samples_second_half": 5
+    },
+    {
+      "index": 15,
+      "bit_factor": 0.7699999809265137,
+      "bit_factor_hex": "0x3f451eb8",
+      "rate_factor": 0.9599999785423279,
+      "rate_factor_hex": "0x3f75c28f",
+      "discarded_bits": 12,
+      "hold_samples_first_half": 6,
+      "hold_samples_second_half": 89
+    },
+    {
+      "index": 16,
+      "bit_factor": 0.800000011920929,
+      "bit_factor_hex": "0x3f4ccccd",
+      "rate_factor": 0.6000000238418579,
+      "rate_factor_hex": "0x3f19999a",
+      "discarded_bits": 12,
+      "hold_samples_first_half": 3,
+      "hold_samples_second_half": 35
+    }
+  ]
+}

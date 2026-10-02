@@ -1,0 +1,398 @@
+DATA BENDER v1.4.7: DEEPER EXECUTION FINDINGS AND RACK DESIGN
+2 October 2026 — follow-up to the supplied reconstruction dossier
+
+The existing dossier is already sufficient to begin a native DSP prototype.
+This follow-up executes additional original firmware instructions to answer a
+more architectural question: which details survive a straightforward per-frame
+Rack port, and which depend on the original scheduling and shared state?
+
+The main new conclusion: block size and channel order are part of this
+firmware's behavior. A literal reference renderer should retain 96 stereo
+frames per block, with the entire left buffer pass before the right pass.
+An improved renderer can intentionally remove these dependencies, while keeping
+the distinctive rate tables, slice operations, control curves and corruption.
+
+No production plugin source was changed. All new probes and result files are
+under analysis/integration/. This note supplements the original reports;
+manifest.json remains the original bundle inventory. The extension's own
+inventory and verification are in analysis/integration/validation.json.
+
+1. EVIDENCE BOUNDARIES
+======================
+Firmware SHA-256:
+591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d
+
+The new work contains:
+- 20 block-partition cases, each rendering 1,920 stereo frames.
+- 20 prepared Freeze/transition cases, each rendering 1,920 stereo frames.
+- 48 isolated reader cases, 160 frames each: 7,680 checked reader updates.
+- Four explicit PRNG seeds, 256 draws each: 1,024 exactly checked draws.
+- Five callback clock-position cases and 39 dispatcher/RNG cases.
+
+These are 136 prepared configurations. They execute original Cortex-M7 code,
+with the substitutions stated in each script. The buffer cases inherit the
+existing deterministic rand, host powf and memset hooks. The reader/PRNG cases
+have no substituted arithmetic or random function. The callback cases replace
+hardware access and record the downstream DSP call; separate dispatcher cases
+replace the Buffer, Corrupt and Tone routines to isolate state changes.
+
+The existing 64 Corrupt differential comparisons were rerun successfully:
+Decimate, Destroy and Vinyl were bit-identical in those short vectors; DJ Filter
+retained maximum error 1.1920928955078125e-7. Their recorded JSON remains
+byte-identical to the original bundle manifest.
+
+Prepared transitions are deliberately diagnostic. They do not establish how
+frequently the hardware UI creates these states. This is not full-system boot,
+a hardware A/B recording, a completed clone, or proof over all input signals.
+
+2. BLOCK PARTITIONING CHANGES THE AUDIO
+======================================
+Evidence: probe_scheduling.py, scheduling_probes.json; processor 0x08004d58.
+
+The original report noted channel-major processing. The new experiment tests
+its consequence by giving identically initialized engines the same 1,920-frame
+input and deterministic random stream, partitioned into blocks of 1, 16, 48,
+96 or 192 frames. Both planes begin with identical sin(i * .071) sample data.
+Window is disabled to isolate the reader/scheduler. Capture starts at N=1000.
+
+Scenario                         Max difference, 1-frame vs 96-frame blocks
+Steady, frozen unity playback     0
+Change target Time, frozen        1.1350553
+Macro Bend/Break, Shared          0.1048591
+Macro Bend/Break, Unique          1.9953977
+
+Differences are peak absolute differences in normalized test audio, not an
+average error or a perceptual quality score. The steady case is an important
+negative control: simply changing call partition does not always change sound.
+
+Time explanation: the left pass updates the shared smoothed frequency once per
+left frame. The right pass then uses the final frequency/inverse left behind
+by that block. It does not replay the left frequency trajectory at matching
+sample positions. With 96-frame blocks, the prepared Time test's first L/R
+sample difference is at frame 1661. At the end, both N values are 1744, but the
+committed subdivision lengths are 1740 and 1744, with read positions 239 and
+222. A one-frame partition remains identical between channels in this case.
+The fixture directly changes the target frequency without the outer callback's
+Time guard; it proves local coupling, not a full physical Time-knob response.
+
+Shared Macro explanation: right copies the current left decisions at its own
+reroll point. Because the complete left block has already run, those can be
+later left decisions than the corresponding right frame should see. Identical
+input therefore does not guarantee identical output even in Shared mode. In
+this prepared 96-frame case the first difference is at frame 1566. Unique mode
+also changes which channel receives which draw from the global stream when
+call partition changes.
+
+Rack consequence:
+- A literal renderer must own its block cadence. Do not substitute calls to
+  Buffer::process(oneStereoFrame) and describe the result as equivalent.
+- A fixed-rate adapter needs separate input/output FIFOs, aligned controls and
+  explicit latency. At 48 kHz, 96 frames span 2 ms, before any resampler delay.
+  Keep dry/wet aligned if mixing across the adapter boundary.
+- An improved renderer should advance shared time once per stereo frame and
+  publish a single immutable Shared decision for the matching stereo event.
+  This is a deliberate behavioral improvement, not an optimization preserving
+  the original sample sequence.
+
+3. CLOCK POSITION IS DISCARDED BEFORE AUDIO PROCESSING
+=====================================================
+Evidence: probe_callback.py, callback_probes.json; 0x080032fc and 0x08001e4c.
+
+Five prepared internal-clock phases produce a single callback event at frame
+0, 23, 47, 71 or 95 of a 96-frame block. All five calls reach the DSP dispatcher
+with the same clock_pending=1 and P+0x90=0, after the clock loop has completed.
+
+Instructions 0x080035b8 and 0x080035be store zero into P+0x90 and one into P+0x74.
+The actual sample position is not forwarded as an offset. The dispatcher copies
+P+0x90 to B+0x120 and sets B+0x119 before invoking the buffer processor. The
+buffer subsequently decides acceptance using crossings and wraps.
+
+Thus there are two separate timing approximations: the callback presents a
+block-level request, and the reader chooses a later eligible acceptance point
+within its processing pass. Do not invent exact sample-offset clock delivery
+for compatibility, or describe these observations as a measured hardware
+latency. The tests use stubbed timer reads and only the internal-clock path.
+
+For an improved Rack mode, keep a timestamped event queue, process the stereo
+frame at the actual clock edge, and explicitly select immediate/crossing/wrap
+acceptance. Freeze/reset need a defined simultaneous-event ordering. This also
+makes automated patch behavior easier to reproduce.
+
+4. FREEZE ACCEPTANCE IS SHARED STATE WITH PER-CHANNEL PENDING FLAGS
+================================================================
+Evidence: scheduling_probes.json freeze_cases; acceptance at 0x08005262.
+
+The existing distinction between requested and active Freeze is essential.
+The new cases additionally establish:
+
+- The transition guard B+0x120 is shared and decremented in the right-channel
+  pass. Either channel accepting a transition clears it globally.
+- Active Freeze B+0x11a is shared. A left acceptance can therefore protect the
+  right bank before the corresponding right-frame acceptance has occurred.
+- A zero-to-zero pair qualifies in the prepared crossing test. So do negative
+  to positive, positive to zero, and zero to positive. Implementing only a
+  strict sign-bit change would delay transitions on silence.
+
+Concrete fixture: N=64, constant positive audio, positive previous sample,
+pending Freeze on both channels, guard=100. With one-frame calls, both channel
+acceptance traces occur at frame 127. With 96-frame calls, the right accepts at
+127 and the left at 255. These are positions within each channel's rendered
+stream; CPU execution order is left block, right block. Active Freeze changes
+at the first acceptance, not only when both pending flags have cleared.
+
+Without that guard, both channel traces accept at frame 63. A crossing including
+zero accepts at frame 0 even with guard=100. All indices above are zero-based.
+
+A safer enhanced design uses one stereo transaction: latch a requested freeze
+state, pick a shared acceptance boundary, commit capture protection atomically
+for L/R, then update both heads. Give immediate, quantized and crossing modes
+explicit names. Add a bounded fallback for constant-sign material so a request
+cannot wait indefinitely for an impossible crossing. These are design choices;
+they are not additional recovered firmware behavior.
+
+5. EXACT RANDOM GENERATOR AND OTHERWISE INVISIBLE DRAW CONSUMPTION
+=================================================================
+Evidence: probe_reader_rng.py, reader_rng_probes.json; 0x08018958.
+
+The executable's libc generator is reproduced by:
+
+  uint64_t state;
+  uint32_t next() {
+      state = state * UINT64_C(6364136223846793005) + UINT64_C(1);
+      return uint32_t(state >> 32) & UINT32_C(0x7fffffff);
+  }
+
+Unsigned overflow is modulo 2^64. Four test seeds, including zero and the full
+64-bit maximum, matched every return value AND updated state for 256 draws.
+The Macro helper's U remains float(next() % 255) / 255.0f. Natural hardware
+startup seed and total pre-audio draw consumption remain unresolved.
+
+Separately, the original dispatcher consumes TWO draws whenever P+0x74 is set:
+  retainedChoice = next() % 3 + 1;
+  modulus = uint32_t(256.0f * normalizedCorruptAmount);
+  retainedAmount = remainder(next(), modulus) / 255.0f;
+
+Both draws occur for all five selected effects, for primary mode zero/bypass,
+and at amount zero in the tested dispatcher states. Without a clock request,
+none are consumed by this dispatcher branch. Buffer helpers and Dropout have
+additional draws; Vinyl has its own generators. Do not optimize the two draws
+away merely because the retained effect is currently inaudible. Doing so
+changes all subsequent Macro choices using the same stream.
+
+One portability trap: amount < 1/256 produces modulus zero. The isolated ARM
+execution has divide-by-zero trapping disabled; UDIV returns zero and the
+following multiply/subtract leaves the dividend unchanged. With injected draw
+67890, retainedAmount becomes 266.2352905 at amount 0 and 1/512, but zero at
+amount 1/256. This establishes the local instruction result under the stated
+trap configuration, not an observed audible effect or boot trap configuration.
+Native C++ remainder by zero is undefined: explicitly handle modulus==0. A safe
+compatibility model can return the unchanged dividend; enhanced behavior can
+set the retained amount to zero while still consuming the draw.
+
+Use an owned PRNG per module instance. Do not call host-global std::rand(). For
+an improved mode, separate Bend, Break and Corrupt streams so changing an effect
+does not unpredictably reshuffle later Bend events. Save seeds/state for
+repeatable patches. Exact compatibility instead requires the shared stream
+and original call order.
+
+6. SHORT SLICES HAVE QUANTIZED LOOP PERIODS AND CAN BECOME CONSTANT
+================================================================
+Evidence: probe_reader_rng.py, reader_rng_probes.json; 0x0800493c.
+
+The existing report recovered discarded wrap overshoot. The new reader tests
+quantify its consequences for lengths 2,4,8,16,64,101 and eight signed rates.
+They check output, next position and wrap flag against an independent model on
+all 7,680 reader calls. Buffers contain an address ramp, Freeze is active, and
+only the isolated reader runs. The coefficients are one: no rate slew.
+
+For a length S, initial endpoint and constant exactly representable rate v,
+the observed cycle follows the boundary comparison, giving in these cases:
+
+  cycleFrames = floor((S - 1) / abs(v)) + 1
+
+For general rates, float32 accumulation can shift a boundary; the recurrence
+and strict comparison are authoritative, rather than this real-number formula.
+
+Examples for an eight-frame slice:
+  +0.5: 15 output frames per cycle, not 16.
+  +1.0: 8 frames per cycle.
+  +1.5: 5 frames per cycle, not 5.333...
+  +2.0: 4 frames per cycle.
+  +8.0: 1 frame per cycle, always the first sample.
+  -8.0: 1 frame per cycle, always the last sample.
+
+Thus commanded playback speed is not always the exact loop repetition rate.
+At sufficiently short slices the reader can repeat a single value, even though
+the speed target is nonzero. Window/silence and subsequent filters can change
+the audible outcome; this test does not claim the whole module always emits DC.
+
+Preserving fractional overshoot modulo S improves pitch/time consistency, but
+changes this character. It belongs behind an explicit reader/quality choice.
+A bandlimited reader is a separate decision: cubic interpolation alone does
+not remove downsampling aliasing. Keep a cheap linear/gritty default available
+because the aliasing and collapsing short loops can be musically useful.
+
+7. A CONCRETE RACK ARCHITECTURE
+==============================
+Recommended sequence: first build a portable, headless reference engine with
+explicit original scheduling; establish golden audio/state traces; then add
+an enhanced profile and the panel. The Python/Unicorn code stays offline as a
+behavioral oracle. The shipping module should use native C++ DSP.
+
+Suggested ownership boundaries (new design, not recovered original names):
+
+  Rack controls/audio
+        |
+  voltage normalization + Schmitt edges + host timestamps
+        |
+  rate/block adapter [needed for fixed-rate reference profile]
+        |
+  control mapping / clock / requested events
+        |
+  decision scheduler + owned RNG
+        |
+  capture store -> signed readers -> silence/windows -> Corrupt -- wet --+
+                                                                        |
+  dry input -------------------------------------------------> equal-power mix
+                                                                        |
+                                                              output Tone
+                                                                        |
+                                                                      width
+                                                                        |
+                                                              host-rate output
+
+Corrupt processes the wet reader output only. Tone and width follow the mix,
+so literal Mix=0 is still subject to those output stages.
+
+A. Clock/control state
+   Separate host sample rate, renderer sample rate, F_init=96028, block size,
+   internal oscillator, external median estimator, divide/multiply counter and
+   buffer event schedule. Keep Macro enable and Micro reverse/silence flags
+   independent. Make Window, width and CV depths directly accessible in Rack.
+   Avoid porting physical ADC overscan, calibration and button debounce by
+   default; retain an optional control-compatibility map if needed.
+
+B. Stereo capture store
+   The original storage is 7,202,100 floats total, about 27.47 MiB per stereo
+   instance. Each channel's two banks and history tail share one plane.
+   Maximum N=1,800,525. Allocate and initialize off the audio thread. Start
+   stereo/monophonic; naive 16-voice duplication alone would cost ~439.6 MiB.
+   Keep size changes logical within preallocated storage. Define sample-rate
+   change and patch-load behavior before adding optional saved frozen audio.
+
+C. Event scheduler
+   Distinguish capture-cycle rerolls, reader-wrap rerolls and outer clock
+   retained-effect draws. Store rate target, actual rate, coefficient, repeats
+   exponent, random slice and silence separately. Preserve the recovered
+   threshold/table character before adding probability editors or new modes.
+   Enhanced options worth prioritizing: repeatable seed/reset, lock current
+   decisions, explicit reroll trigger, and stereo correlation control.
+
+D. Readers and windows
+   Shared specification for interpolation, wrap convention, slice acceptance,
+   rate slew and zero-length cases. Compatibility uses original arithmetic;
+   enhanced mode keeps fractional phase, makes transitions stereo-coherent,
+   clamps window lengths safely and optionally crossfades between two heads.
+   A short dual-head transition can remove clicks without attenuating every
+   capture's final 240 frames as the original capture window does.
+
+E. Corrupt and output
+   The four existing independent models plus Dropout state are sufficient
+   implementation references. Start with the original single selected effect.
+   Chaining/rerouting multiple effects is an extension after a verified base.
+   Enhanced stereo width should be symmetric; retain sequential crossfeed only
+   where the original behavior is intended. Publish clear audio headroom and
+   float/voltage scaling, then test dry and wet unity levels separately.
+
+F. Persistent state and realtime contract
+   Versioned JSON for settings and deterministic random state; a separate
+   optional audio snapshot policy. No filesystem access, unbounded queues,
+   allocation, buffer clearing or debug logging inside process(). UI reads
+   snapshots rather than live mutable audio data. Follow the repository's
+   existing graphics lifecycle and debug telemetry conventions at UI stage.
+
+8. PERFORMANCE AND EXISTING REPOSITORY REUSE
+===========================================
+- Cache normalized controls and recompute mappings only when values change or
+  at the selected control cadence. Repeats uses integer exponent/bit shift
+  when the exponent is known integral, instead of repeated powf calls.
+- Use a small sine crossfade table or established fast approximation for Mix;
+  build interpolation/quality tables outside realtime processing. Quantify
+  error against the reference vectors before selecting approximations.
+- Compute nontrivial filter coefficient mappings at control rate. Keep state
+  updates per sample where their timing affects sound.
+- At a different renderer rate, preserve a one-pole time constant with
+      a_new = 1 - (1 - a_reference)^(Fs_reference / Fs_new)
+  calculated during rate changes, not per audio sample. Do not apply this
+  blindly to clock-event probabilities or fixed callback decisions.
+- Benchmark actual block execution cost: a 96-frame block concentrates work
+  into one Rack process invocation even if its average cost is modest. Use
+  preallocated scratch memory and a bounded processing path.
+
+Concrete local precedents reviewed:
+  src/ChimeraRateBridge.hpp
+    Stereo rate conversion, delayed control history, bounded event queues,
+    latency accounting and gate-resume handling. It is Chimera-specific and
+    fixed around 48 kHz: extract/adapt the pattern, not its port IDs or state.
+  src/ChimeraPlaybackReader.hpp
+    Offline kernel setup and optional higher-quality interpolation. Its reel,
+    slice and moment-cache assumptions differ from this capture-bank engine.
+  src/ChimeraClock.hpp
+    Explicit clock state and timeout handling. Its interval estimator is not
+    the recovered median-of-three Data Bender estimator.
+
+A fixed 48 kHz initial reference renderer is a practical approximation to the
+binary's nominal audio-driver configuration. Keep that choice configurable in
+the offline harness: the predicted 48014.323 Hz physical rate and the 96028
+coefficient constant are different quantities. Neither this follow-up nor the
+prior static clock calculation replaces a physical clock measurement.
+
+9. NEXT IMPLEMENTATION MILESTONE AND REMAINING RESEARCH
+=====================================================
+The useful next deliverable is a headless native C++ core, not more panel work:
+1. Port the seeded PRNG, original reader, banks, Micro subdivisions and windows.
+2. Compare audio AND state traces against original-code fixtures at fixed
+   96-frame cadence, including the partition-sensitive cases above.
+3. Connect callback/control mapping, Macro scheduling and Freeze transitions.
+4. Port Corrupt/output and run existing short golden vectors plus longer ones.
+5. Add the fixed-rate Rack adapter, then enhanced timing/reader behavior.
+
+Acceptance should cover silence/constant-sign input, both directions, rate
+reversal during slew, tiny slices, shared and unique decisions, overlapping
+Freeze/clock/Time events, sample-rate changes, and bounded memory/CPU cost.
+Native Windows plugin linking belongs to that implementation milestone; this
+research-only extension changes no C++ or plugin build inputs.
+
+Highest-value unresolved items:
+- Full callback -> buffer -> Corrupt integration with original libm and PRNG.
+  The present probes connect observations across functions but intentionally
+  isolate those layers; they are not a complete callback audio renderer.
+- Complete history reuse during Time expansion/contraction, including the
+  outer stability guard and crossing-based resize acceptance.
+- Natural startup seed/draw order, long-run Vinyl modulation/rare events, and
+  all possible external writes to the global rate-slew field. A text search
+  for a structure offset is insufficient to prove there are no aliased writes.
+- Physical sample clock, codec/analog gain and response, and externally visible
+  clock/Freeze timing. These require an actual board or trustworthy captures.
+
+The new evidence strengthens the case for two explicit behavior profiles:
+a reference profile for the recovered firmware's quirks, and an enhanced
+profile for exact clock delivery, stereo-coherent transitions and stable
+fractional playback. The musical identity is already recoverable; the remaining
+choices are largely how much embedded scheduling behavior to preserve.
+
+REPRODUCTION
+============
+From the repository root, with Python and the pinned requirements installed:
+
+  python firmware/Data_Bender/analysis/integration/probe_scheduling.py
+  python firmware/Data_Bender/analysis/integration/probe_reader_rng.py
+  python firmware/Data_Bender/analysis/integration/probe_callback.py
+  python firmware/Data_Bender/analysis/corrupt_dsp/verify_reconstructions.py
+  python firmware/Data_Bender/analysis/integration/verify_extension.py
+
+The scripts fail on checked mismatches and write JSON next to themselves.
+The pre-existing Corrupt script records all_pass rather than raising on numeric
+mismatch; inspect that field. Development here used a temporary virtualenv at
+/tmp/data-bender-analysis-venv with unicorn 2.1.4 and capstone 5.0.9. Nothing was
+staged or committed.

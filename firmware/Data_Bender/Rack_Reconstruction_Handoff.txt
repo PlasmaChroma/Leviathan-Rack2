@@ -1,0 +1,134 @@
+VCV RACK IMPLEMENTATION HANDOFF — DATA BENDER v1.4.7
+2 October 2026
+
+GOAL AND REFERENCE
+==================
+Build a portable stereo DSP engine from the recovered behavior, then connect
+it to VCV Rack controls, voltages and patch state. Use the supplied firmware
+and isolated emulator probes as an offline oracle. Read the full report before
+implementing; generated Ghidra C has known prototype/FP-select limitations.
+
+The original program is time-domain buffer manipulation plus post-processing.
+The recovered reader uses linear interpolation. No FFT or phase-vocoder stage
+was identified in that active path. Native DSP components fit this evidence.
+
+FIRST DESIGN DECISION: TIME AND RATE
+===================================
+Keep five quantities separate:
+  - DSP coefficient initialization value F_init = 96028.0.
+  - Internal renderer sample rate, pending a physical confirmation.
+  - Host sample rate.
+  - 96-stereo-frame firmware block/control cadence.
+  - Capture-clock and subdivision-wrap event schedules.
+
+The original driver requests nominal 48 kHz; a conditional clock calculation
+predicts about 48014.323 Hz. Do not silently use 96 kHz everywhere or globally
+halve every clock value. External timing and internal phase use different
+paths. A configurable fixed-rate renderer plus resampling is a useful initial
+compatibility design; direct host-rate rendering requires explicit conversion
+of fixed frame counts, smoothing coefficients and probability event rates.
+
+Choose an internal float-to-voltage convention and verify dry passthrough.
+For ideal ±5 V control inputs, normalized CV = V/5. The board's ADC inversion
+is hardware conditioning. For ideal Micro Bend 1 V/oct, use calibration offset
+0 and scale 1; keep the hardware calibration values as evidence, not defaults
+for ideal Rack voltage input. Preserve left-to-right input normalization.
+
+IMPLEMENTATION ORDER
+====================
+1. Parameter/gesture state and deterministic clock scheduler.
+   Preserve separate Macro Bend enable vs Micro reverse, and Macro Break
+   enable vs Micro silence/traverse. Keep Freeze request, active state and
+   pending acceptance flags separate. Keep global gate mode separate from
+   Freeze button momentary/latch mode. Preserve the retained Corrupt state.
+
+2. Stereo storage and deterministic playback.
+   Capacity is 3,601,050 floats per channel, largest N is 1,800,525 frames.
+   Two alternating N-frame capture banks and the history tail share each
+   plane. Do not allocate a second independent history store by mistake.
+   Capture/history continue according to their individual protection rules.
+   Use original interpolation, signed speed slew and bank-selection order.
+   Return the old-position sample, then advance phase. Wrap discards overshoot.
+   Preserve the reciprocal/+1 subdivision-length arithmetic where required.
+
+3. Micro mode, Window and Freeze.
+   Base Repeats is powers of two from 1 through 256 with a one-block pipeline.
+   Micro knob rate is 2^(6k-3), with two octave-snapping passes, 1 V/oct CV,
+   reverse state and reader target bounds of ±8. Traversal uses hysteresis and
+   delayed acceptance at qualifying boundaries. Silence leaves the playhead
+   traversing the full subdivision while changing its audible interval.
+   Window combines linear slice and capture-phase envelopes and has a stored
+   .015 activation threshold. Do not substitute a Hann window by default.
+   Freeze protects active banks while the history tail can continue recording.
+
+4. Corrupt effects with an independent comparison harness.
+   Port Decimate, Destroy, DJ Filter and Vinyl from reference_models.py, keeping
+   float32 rounding where it is material. Implement Dropout's persistent stereo
+   gate directly from the recovered branch. Its decision is once per block.
+   Compare the recorded golden vectors before changing numerical precision,
+   resampling, clipping, gains, random sources or initialization behavior.
+   Extend Vinyl testing past its slow modulation rollover before claiming
+   long-run equivalence; the current short cases do not cover that naturally.
+
+5. Macro event controller and deterministic random state.
+   Capture rerolls and subdivision-wrap rerolls are separate event types.
+   Use the recovered tables and modulo-255 random mapping. Shared stereo
+   copies decisions and consumes fewer draws than Unique stereo. Preserve
+   the original channel/block processing order if matching deterministic
+   sequences. libc rand and Vinyl's noise generators are different systems.
+
+6. Output path, panel behavior and patch persistence.
+   Corrupt follows wet-buffer reading, then sine equal-power mix, Tone lowpass,
+   and sequential width crossfeed. Width's right update uses the new left.
+   Serialize logical state with a versioned JSON representation; raw QSPI
+   emulation is unnecessary. Decide separately whether patch saving includes
+   captured audio and which stochastic states should resume deterministically.
+   Keep large allocations, file access and logging outside audio processing.
+
+EVIDENCE ENTRY POINTS
+=====================
+0x08001e4c  Main engine block processing / output routing
+0x080032fc  Audio callback / parameter dispatch
+0x08003264  Clock parameter mapping
+0x08004678  Macro Bend decision helper
+0x0800493c  Fractional sample reader
+0x08004a6c  Buffer initializer / actual active capacity
+0x08004d58  Buffer processor / banks / scheduling / windows
+0x08001868  Corrupt mode dispatcher
+0x08001cf4  Decimate parameter mapping / processing
+0x08001ca8  Dropout control update
+0x08001ad4  Destroy
+0x080018aa  DJ Filter
+0x080019aa  Vinyl
+0x08005cd8  Daisy audio configuration
+0x08017488  Crossfade primitive used by width
+
+Read analysis/function_map.tsv for the full address map, the component TXT
+notes for fields and control details, and the JSON probes for observed results.
+
+DECISIONS THAT SHOULD BE EXPLICIT
+=================================
+- Safe indexing and initialization: bound both interpolation indexes, fully
+  initialize host buffers, and define audibleFrames==0 without unsigned
+  underflow. If exact endpoint artifacts are desired, emulate them safely.
+- Window behavior: the recovered capture envelope reaches zero early and
+  suppresses the last 240 frames of sufficiently long captures.
+- Stereo width: sequential original crossfeed gives (.5,.75) for input (0,1)
+  at maximum crossfeed. A symmetric mono endpoint would be a behavioral change.
+- Aliasing: bandlimited interpolation and oversampled crushing can be optional
+  alternatives; the recovered reference uses linear reading and sample holds.
+- Timing: preserve per-frame, per-block, capture and wrap domains individually.
+- Analog behavior: no board recordings establish voltage gain, clipping,
+  output filtering, codec latency or the actual wire sample rate here.
+- Boot randomness: explicit test seeds are not proof of the natural device
+  startup sequence. Distinguish a deterministic port seed from that unknown.
+
+ACCEPTANCE TARGETS
+==================
+Use the existing 64 Corrupt comparisons and isolated control, clock, buffer,
+window, Freeze, output and reader probes as regression references. Check
+functional boundaries before adding broad listening tests. Obtain a physical
+sample-clock measurement and impulse/sweep recording to settle rate and analog
+scaling, then compare clock/Freeze/reset at different phases using uniquely
+identifiable audio segments. See research/measurement_plan.txt for the full
+staged recording plan. No such physical recordings were made in this task.

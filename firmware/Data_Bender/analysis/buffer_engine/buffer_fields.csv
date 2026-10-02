@@ -1,0 +1,67 @@
+offset_from_B,type,provisional_name,notes
+0x000,pointer,allocationBase,Memory passed to Buffer Init
+0x004,u32,totalFloatCount,Actual main argument7202100
+0x008,u32,channelCapacity,totalFloatCount>>1
+0x00c,pointer,leftPlane,0xc0000000
+0x010,u32,leftCapacity,3601050
+0x02c,pointer,rightPlane,0xc0dbca68
+0x030,u32,rightCapacity,3601050
+0x04c,f32,sampleRateConstant,96028
+0x050,f32,timeFrequency,Smoothed; +=.001*(target-current)
+0x054,f32,targetTimeFrequency,Set by clock/control caller
+0x05c,f32,inverseTimeFrequency,1/timeFrequency
+0x068,u32,sharedMode,1 shared;0 unique
+0x06c,f32,baseRepeatsExponent,0..8 integer stored asfloat
+0x070/+4,f32,macroRepeatsExponent,Perchannel random exponent
+0x080,f32,minimumExponent,0
+0x084,f32,maximumExponent,8
+0x088,f32,manualSilence,Micro Silence
+0x08c/+4,f32,macroSilence,Random table amplitude dutyfraction
+0x09c,f32,minimumSilence,0
+0x0a0,f32,maximumSilence,1
+0x0a4,f32,baseRate,Micro mapped rate; Macro mode entry resets1
+0x0a8/+4,f32,macroRate,Signed multiplier table
+0x0b8,f32,minimumRate,-8
+0x0bc,f32,maximumRate,8
+0x0c0,f32,microTraversal,Normalized fraction
+0x0c4/+4,f32,macroRandomPosition,"Reroll U in[0,254/255]"
+0x0dc,f32,globalRateSlew,Init1; reader min withchannelvalue
+0x0e0/+4,f32,macroRateSlew,"1,.005,.0001 or preservedprior"
+0x0f8/+4,f32,currentPlaybackRate,Onepole smoothed signed speed
+0x104,f32,macroBendAmount,Effective normalizedMacroBend
+0x108,f32,macroBreakAmount,Effective normalizedMacroBreak
+0x10c,f32,windowAmount,Default.02; UI mapping squared
+0x110,bool,timeChangeGuard,Not Freeze
+0x11a,bool,activeFreeze,Latched state
+0x11b,bool,requestedFreeze,Requested control state
+0x120,u32,transitionGuardCountdown,Controls whetherwrapaloneacceptsreset
+0x124,u32,transitionGeneration,Copied to channelcountdownonacceptedreset; external meaningprovisional
+0x128/+4,u32,sampleCounter,Perchannelincrements
+0x13c/+4,f32,readPosition,Fractional relativeposition
+0x144/+4,f32,writePhase,Unitincrementmodcapturelength
+0x14c/+4,u32,subdivisionFrames,S
+0x154/+4,u32,captureFrames,N
+0x15c/+4,u32,sliceStart,Inclusive
+0x164/+4,u32,sliceEnd,Readerupperboundend-1
+0x16c/+4,u32,audibleEnd,sliceStart+audibleFrames
+0x184/+4,u32,candidateSliceOffset,Nextcandidate; clampavailablewindow
+0x18c/+4,u32,audibleFrames,floor((1-silence)*S)
+0x194/+4,u32,writeBankStart,Normally0orN
+0x19c/+4,u32,readBankStart,Normally0orN
+0x1a4/+4,u32,lastBankChangeSample,GuardN/4
+0x1ac/+4,u32,readWrapCount,Resetonacceptedtransition
+0x1b4/+4,u32,subdivisions,1..256
+0x1bc,ringstruct20bytes,leftHistoryWriter,Sameleftplane; startsatorbeyond2N
+0x1d0,ringstruct20bytes,rightHistoryWriter,Samerightplane
+0x1ec,f32,microSliceIndex,Sharedhystereticintegerindex
+0x1f0/+4,f32,previousRawOutput,Forzerocrossing
+0x1f8/+4,f32,priorRawOutput,Previouspreviousforzerocrossing
+0x200/+20,u32,windowAudibleFrames,Perchannelwindowstruct
+0x204/+20,u32,windowFadeFrames,"max(floor(A*w*.5),24)"
+0x208/+20,u32,windowPhase,Postincrementreadphase-relative
+0x20c/+20,f32,windowGain,Firstenvelopegain
+0x22a/+1,bool,writerCyclePulse,Perchannel
+0x22c/+4,u32,cyclesRemaining,Countsdownonwritewrap
+0x234/+1,bool,transitionPending,Acceptatzerocrossing/allowedwrap
+0x236/+1,bool,resizePending,Timechangecommitflag
+0x238/+1,bool,macroRerollPending,CallBreakandBendhelpers

@@ -1,0 +1,393 @@
+# Data Bender 1.4.7 — recovered Corrupt DSP
+
+## Status and evidence
+
+The five Corrupt effects are recoverable at the equation and state-update level. Their processing code is ordinary ARM Thumb/Cortex-M7 floating-point code. The names below are analyst-assigned names; the firmware has no surviving source symbols for these classes.
+
+The strongest evidence is a differential comparison between independently expressed mathematical models and execution of the uploaded firmware's original instructions in Unicorn. The original Corrupt initializer and original `expf`, `sinf`, `fmodf`, and other math code execute in these comparisons; math functions are **not replaced with host hooks**. Across 64 cases, consisting of four effects × sixteen amounts × 256 interleaved input floats, Decimate, Destroy, and Vinyl matched bit for bit. DJ Filter differed by at most `1.1920928955078125e-7` in the firmware's internal amplitude units. Dropout has a separate seven-case execution check with a deterministic replacement only for the libc random-number result.
+
+This is strong evidence for the recovered equations and short-run state transitions. It is not a hardware listening comparison, an exhaustive input proof, or a certification of the whole module. In particular, the Vinyl slow modulation counter does not reach its natural first rollover within a fresh 128-stereo-frame comparison, and rare impulse branches are primarily established by instruction analysis. Full device boot, peripherals, exact original startup randomness, and long-run whole-module scheduling are outside this component test.
+
+**Primary evidence locations:**
+
+- Uploaded `Data_Bender_v1_4_7.bin`, mapped at `0x08000000`.
+- `0x08001384`: Corrupt initialization.
+- `0x08001868`: Corrupt interleaved block processor.
+- `0x08000d28`: Vinyl stereo sample processor.
+- `0x08017564` / `0x08017580`: DaisySP Decimator initializer/processor.
+- `0x08017614` / `0x0801765c`: DaisySP SVF initializer/processor.
+- `0x080179f8` / `0x08017a10` / `0x08017a30`: DaisySP ATone initializer, processor, and coefficient calculation.
+
+The relevant upstream Decimator, SVF, and ATone source bodies match the instruction sequences and field layouts. The precise DaisySP commit used to build this firmware is unresolved. `upstream_sources.json` records source URLs and retrieved-content hashes; current upstream `master` is corroboration, not a claim about the original build's dependency revision.
+
+## 1. Processor interface, mode dispatch, and state
+
+The recovered normal calling convention is:
+
+```cpp
+Corrupt_ProcessInterleavedBlock(
+    CorruptState* state,       // r0
+    const float* input,       // r1
+    float* output,            // r2
+    unsigned floatCount);     // r3, twice the stereo frame count
+```
+
+The normal input is interleaved `L, R, L, R, ...`. The count is a count of floats, not stereo frames. The generated loops assume even counts; they process stereo pairs.
+
+The dispatch at `0x08001894–0x080018aa` maps mode numbers as follows:
+
+| Mode | Meaning | Case entry |
+|---|---|---|
+| 0 | Bypass or use a separately retained mode | Selection before switch |
+| 1 | Decimate | `0x08001cf4` |
+| 2 | Dropout | `0x08001ca8` |
+| 3 | Destroy | `0x08001ad4` |
+| 4 | DJ Filter | `0x080018aa` |
+| 5 | Vinyl | `0x080019aa` |
+
+If the primary mode at `+0x00` is nonzero, the processor uses it and the amount at `+0x10`. If that mode is zero and the flag at `+0x0c` is false, it copies input to output. If the mode is zero and the flag is true, it instead uses retained mode `+0x08` and retained amount `+0x1c`. The control/UI analysis is responsible for the user-facing name and transitions of that retained effect behavior.
+
+Important offsets relative to this Corrupt object:
+
+| Offset | Recovered role |
+|---|---|
+| `+0x00` | Primary mode integer |
+| `+0x08` | Retained/alternate mode integer |
+| `+0x0c` | Enable retained mode when primary mode is zero |
+| `+0x10` | Primary amount float |
+| `+0x14` | DSP initialization sample-rate float |
+| `+0x18` | Dropout shared stereo gate state |
+| `+0x1c` | Retained/alternate amount float |
+| `+0x20` | Destroy bypass/low-amount flag |
+| `+0x24` | Destroy smoothed effect blend |
+| `+0x28`, `+0x50` | Left/right DaisySP Decimator objects |
+| `+0x78`, `+0xb8` | Initialized compressor objects; absent from the five Corrupt processing cases |
+| `+0xfc`, `+0x148` | Left/right lowpass SVFs |
+| `+0x194`, `+0x1e0` | Left/right highpass SVFs |
+| `+0x22c` … `+0x238` | Four logarithmic cutoff endpoints |
+| `+0x23c` | DJ Filter amount copy |
+| `+0x240` | Vinyl child object |
+| `+0x3ac` | Vinyl enable byte, also Vinyl-relative `+0x16c` |
+
+Compressor allocation should not be mistaken for proof that Destroy is a compressor. Its processing branch contains the explicit saturator equations below, with no compressor processing call. The initializer configures those compressor objects with 5 ms attack, 5 ms release, ratio 2, and a −6 dB threshold, but their presence does not establish an audible role in these five effects.
+
+All following equations use `u` for the amount received by Corrupt, normally in `[0,1]`. Mapping the physical knob and CV into `u`, and identifying whether the Corrupt route is applied to the wet signal or another internal bus, belong to the top-level control/signal-flow analysis. Amplitude here is the firmware's float amplitude domain, not VCV Rack volts.
+
+## 2. Decimate: two irregular lookup tables and exact integer quantization
+
+### Parameter mapping
+
+Decimate does not implement a simple monotonic bit-depth sweep. At `0x08001cf4–0x08001dac` it doubles the amount, wraps it with floating remainder, and selects a pair of table entries:
+
+```cpp
+float doubled = 2.0f * u;
+int k = round_away_from_zero(16.0f * fmodf(doubled, 1.01f));
+float bitFactor = bitTable[k];
+float rateFactor = rateTable[k] * (doubled > 1.0f ? 1.0f : 0.25f);
+unsigned discardedBits = unsigned(16.0f * bitFactor);
+unsigned threshold = unsigned(96.0f * rateFactor * rateFactor);
+unsigned holdSamples = threshold + 1;
+```
+
+Rounding in the index is nearest with ties away from zero, performed by the ARM `VRINTA` instruction. For normal nonnegative amounts this is the usual nearest-integer rule with upward ties. The actual binary stores the values as IEEE float32; `corrupt_lookup_tables.json` contains both exact decoded floats and raw hexadecimal words.
+
+| Index | Bit factor | Rate table | Discarded bits | Hold samples, `u <= .5` | Hold samples, `u > .5` |
+|---|---|---|---|---|---|
+| 0 | 0.00 | 0.00 | 0 | 1 | 1 |
+| 1 | 0.00 | 0.00 | 0 | 1 | 1 |
+| 2 | 0.58 | 0.33 | 9 | 1 | 11 |
+| 3 | 0.60 | 0.51 | 9 | 2 | 25 |
+| 4 | 0.17 | 0.47 | 2 | 2 | 22 |
+| 5 | 0.68 | 0.49 | 10 | 2 | 24 |
+| 6 | 0.69 | 0.42 | 11 | 2 | 17 |
+| 7 | 0.63 | 0.82 | 10 | 5 | 65 |
+| 8 | 0.43 | 0.28 | 6 | 1 | 8 |
+| 9 | 0.64 | 0.73 | 10 | 4 | 52 |
+| 10 | 0.49 | 0.64 | 7 | 3 | 40 |
+| 11 | 0.52 | 0.26 | 8 | 1 | 7 |
+| 12 | 0.54 | 0.52 | 8 | 2 | 26 |
+| 13 | 0.87 | 0.17 | 13 | 1 | 3 |
+| 14 | 0.74 | 0.22 | 11 | 1 | 5 |
+| 15 | 0.77 | 0.96 | 12 | 6 | 89 |
+| 16 | 0.80 | 0.60 | 12 | 3 | 35 |
+
+The first table begins at `0x08019d44`, the second at `0x08019d88`. Each contains seventeen float32 entries.
+
+Two distinct boundaries matter. The sample-rate multiplier changes immediately above `u=.5`; the table coordinate wraps near `u=.505`, where `2*u` reaches `1.01`. Thus `u=.5` selects index 16 with a three-sample hold; just above `.5` the same index has a 35-sample hold; near `.505` the table returns to its clean entries. Replacing `1.01` with `1.0`, smoothing this discontinuity, or substituting a monotonic curve changes the recovered behavior.
+
+### Sample processing
+
+Each channel has an independent counter and held sample. At `0x08017580`:
+
+```cpp
+counter += 1;
+if (counter > threshold) {
+    counter = 0;
+    held = input;
+}
+int32_t q = int32_t(held * 65536.0f); // truncate toward zero
+q = arithmetic_right_shift(q, discardedBits);
+q = q << discardedBits;             // restore scale with low bits cleared
+output = float(q) / 65536.0f;
+```
+
+There is no anti-aliasing filter in this effect path. The initial counter and held sample are zero, so a newly initialized downsampler emits zero until the first capture. The processing period is `threshold+1`, a detail easily lost when translating the source to a new engine.
+
+The library has a second branch for smooth bit crushing using `bit_overflow`, but the firmware initializer disables it and this parameter mapping does not turn it on. The active behavior is integer bit masking. Preserve arithmetic shifts for negative integers; a portable implementation should avoid relying on undefined behavior from left shifting a negative signed C++ value.
+
+## 3. Dropout: shared stereo gate toggled once per processing block
+
+The complete algorithm is short:
+
+```cpp
+if (u <= 0.03f) {
+    gateOpen = true;
+} else if (rand() % 1024 < 376.0f * u * u) {
+    gateOpen = !gateOpen;
+}
+for (each stereo frame) {
+    outputL = gateOpen ? inputL : 0.0f;
+    outputR = gateOpen ? inputR : 0.0f;
+}
+```
+
+Addresses `0x08001ca8–0x08001cf2` implement the copy/mute loop; `0x08001e00–0x08001e3e` implement the random toggle. **Both channels mute together.** An early visual reading of the compact assembly could suggest otherwise because the right-channel load is skipped by a branch. Direct execution confirms that the zero value is retained for both stores.
+
+For a uniform integer random value, the per-block toggle probability is approximately `376*u²/1024`, with integer comparison boundaries. The state alternates rather than being independently chosen open or closed each block. Above the low-amount bypass zone, its stationary duty cycle is therefore approximately half open/half muted; the amount mainly changes the lengths and frequency of dropout runs. It is not simply a wet/dry gain or a knob-proportional probability of setting the output to zero each sample.
+
+The event rate is tied to **calls of the Corrupt block processor**. A Rack port that evaluates this random decision every sample will behave very differently. Preserve the original callback cadence through a dedicated internal control/block schedule, or convert a desired per-time transition probability explicitly. The component analysis does not assume that the initialization sample-rate constant is the codec wire rate.
+
+This mode uses the firmware's libc/newlib `rand()` at `0x08018958`. Its implementation updates a 64-bit LCG using multiplier `0x5851f42d4c957f2d` and increment 1, and returns the upper word with the sign bit cleared. Vinyl uses different RNG algorithms.
+
+## 4. Destroy: exponential saturation, staged gain, clipping, compensation
+
+The code at `0x08001ad4–0x08001c5e` implements a symmetric saturator. Define:
+
+\[
+t=2u^2,
+\qquad k=\max\left(2,1+86\operatorname{clamp}(t,0,1)\right),
+\]
+
+\[
+g=1+8\operatorname{clamp}(t-1,0,1),
+\qquad A=0.5-0.375\sin(\pi u/2).
+\]
+
+For either channel's input sample `x`:
+
+\[
+s(x)=\operatorname{sgn}(x)\left(1-e^{-k|x|}\right),
+\]
+
+\[
+w(x)=A\operatorname{clamp}(g\,s(x),-0.6,0.6).
+\]
+
+The final output crossfades this processed value with the input. A shared stereo blend state `b` advances once per frame:
+
+\[
+T=\begin{cases}0,&u<0.02\\1,&u\geq0.02\end{cases},
+\qquad b\leftarrow b+0.001(T-b),
+\]
+
+\[
+y_L=(1-b)x_L+b\,w(x_L),
+\qquad y_R=(1-b)x_R+b\,w(x_R).
+\]
+
+At `u=1`, `k=87`, `g=9`, and `A=.125`; the processed branch consequently clips to approximately ±.075 internal units. This attenuation is part of the recovered gain compensation. Any later module gain stages must be accounted for before translating that number into Rack output volts.
+
+The two shaping controls are staged around `u=1/sqrt(2)`, because the first one clamps `2u²` to one and the second begins when `2u²−1` becomes positive. The curve is exponential soft saturation followed by hard clipping and level compensation. There is no evidence here for a wavefolder, arbitrary bit corruption, or a compressor doing the main shaping.
+
+The `.001` smoothing coefficient is fixed per processed stereo frame. If the internal execution rate changes in a port, use a time-corrected coefficient only as an explicit behavior adaptation; an exact compatibility path must preserve the original time basis.
+
+## 5. DJ Filter: logarithmic lowpass/highpass sweeps through four SVFs
+
+There are two SVF objects per channel, run in series. The lowpass objects precede the highpass objects; `tanhf` saturates the resulting output.
+
+The parameter laws are:
+
+\[
+f_\mathrm{LP}(u)=\exp\left[\ln100+\operatorname{clamp}(2u,0,1)(\ln18000-\ln100)\right],
+\]
+
+\[
+f_\mathrm{HP}(u)=\exp\left[\ln25+\operatorname{clamp}(2u-1,0,1)(\ln3000-\ln25)\right].
+\]
+
+The four literal logarithmic endpoints are stored at `+0x22c`, `+0x230`, `+0x234`, and `+0x238`. Exact stored values are `4.605170249938965`, `9.798127174377441`, `3.2188758850097656`, and `8.006367683410645`.
+
+| Amount | Nominal LP parameter | Nominal HP parameter |
+|---|---|---|
+| 0 | 100 | 25 |
+| .5 | 18000 | 25 |
+| 1 | 18000 | 3000 |
+
+These are cutoff parameters relative to the sample rate passed to the filters. Their physical frequencies cannot be inferred solely by reading these constants if the actual execution rate differs from that initialization rate.
+
+All four filters initialize with DaisySP resonance parameter `.7` and drive `0`. For the normal linear filter state, each sample takes two successive integration passes. With `B` the band state, `L` the low state, coefficient `f`, damping `d`, and input `x`, a pass computes:
+
+```cpp
+notch = x - d * B;
+L = L + f * B;
+high = notch - L;
+B = B + f * high; // nonlinear drive term is zero in this configuration
+```
+
+The outputs average the corresponding first- and second-pass values. DaisySP's coefficient equations are:
+
+\[
+f=2\sin\left(\pi\min\left(0.25,\frac{f_c}{2F_\mathrm{init}}\right)\right),
+\]
+
+\[
+d=\min\left(2(1-r^{1/4}),\,2,\,2/f-f/2\right), \qquad r=.7.
+\]
+
+The actual stereo signal chain is:
+
+```cpp
+yL = tanhf(HP_L.high(LP_L.low(xL)));
+yR = tanhf(HP_R.high(LP_R.low(xR)));
+```
+
+The center setting has the most open passband but is not a literal digital bypass: both filters and the `tanhf` stage still run. Substituting generic one-pole filters or assuming the center returns the input unchanged loses part of this mode's character.
+
+## 6. Vinyl: five sparse-noise layers, shared hiss, modulation, highpass filtering
+
+### Amount mapping and bypass
+
+The Vinyl branch first enables processing only for `u > .05`. It still calculates parameters at smaller amounts, but its per-sample routine returns the input directly and freezes its sample-processing states while disabled.
+
+Let:
+
+\[
+a=1.25\frac{e^{\max(u,.001)}-1}{1.7183}.
+\]
+
+The literal denominator is the double-precision value **1.7183**, not an exact symbolic `e−1`. The firmware computes `expf`, subtracts one as float32, divides using that double literal, rounds to float32, then multiplies by 1.25. At full amount, `a` is approximately 1.249987.
+
+### Components and parameters
+
+| Component | Instances | Update interval | Density / amplitude setting |
+|---|---|---|---|
+| Frequent bipolar dust | `D0`, `D1` | Every 5 processed samples | Density `500*a`; amplitude `.05+.07*a` |
+| Sparse larger bipolar dust | `D2`, `D3`, `D4` | Every 15 processed samples | Density `15*a`; amplitude `.5+.2*a` |
+| Fast shared white noise | 1 | Every sample | Amplitude `.01*a` |
+| Slowly modulated held white noise | 1 | New noise every 10 samples | Base amplitude `.03*a`; additional held modulation below |
+| Noise highpass | Left/right | Every sample | ATone cutoff parameter 3000 |
+| Input highpass | Left/right | Every sample | ATone cutoff parameter `700*a` |
+| Filtered input gain | Shared setting | Once per block | `1−.15*a` |
+| Final noise gain | Shared constant | Every sample | 1.2 |
+
+Each dust object holds its last output between update instants. At an update, it draws `R` in `[0,1)` and computes:
+
+\[
+p=\mathrm{density}/F_\mathrm{init},
+\qquad D=\begin{cases}
+\mathrm{amplitude}\,(2R/p-1),&R<p\\
+0,&R\geq p.
+\end{cases}
+\]
+
+The density is divided by the configured initialization rate; it is **not multiplied by the 5- or 15-sample hold interval**. Thus the event rate per physical second is approximately
+
+\[
+\frac{F_\mathrm{execution}}{\mathrm{holdInterval}}\frac{\mathrm{density}}{F_\mathrm{init}}.
+\]
+
+The one event's value is then held for the whole interval. This distinction matters to both crackle density and spectrum.
+
+All five dust objects draw from a shared 31-bit LCG:
+
+```cpp
+state = (1103515245 * state + 12345) & 0x7fffffff;
+R = float(state) * (1.0f / 2147483648.0f);
+```
+
+At a sample where all objects update, the effective draw order is `D0`, `D1`, `D3`, `D2`, `D4`. Preserve it when deterministic sequence compatibility matters. Individual dust seed fields are initialized, but this processor uses the shared global generator at `0x24000004`.
+
+The two white-noise sources use independent signed 32-bit states with multiplication by 16807 and wraparound modulo `2^32`; each becomes a bipolar float by dividing its signed value by `2^31`. They initialize with state 1. The fast source advances every sample. The slow source advances every ten samples and is multiplied by a modulation value held for `floor(.5*F_init)` processed samples. At each modulation boundary, that value becomes `.3 * currentSlowSeed / 2^31`, before a same-sample slow-seed advance if the ten-sample counter also rolls over. Its initial modulation value is zero. The short verification runs do not reach this long counter's natural first update.
+
+### Exact stereo construction
+
+Let `S` be the shared slowly modulated held noise and `W` the shared fast white noise. Let `HP3k` denote independent left/right ATone state:
+
+\[
+H_0=HP3k_L(D_0+S+W),\qquad H_1=HP3k_R(D_1+S+W).
+\]
+
+The noise outputs are:
+
+\[
+N_L=H_0+.3H_1+D_2+D_4,
+\qquad N_R=H_1+.3H_0+D_3+D_4.
+\]
+
+The full output is:
+
+\[
+y_L=(1-.15a)\,ATone_{700a,L}(x_L)+1.2N_L,
+\]
+
+\[
+y_R=(1-.15a)\,ATone_{700a,R}(x_R)+1.2N_R.
+\]
+
+The `.3` crossfeed, shared hiss/modulation, and common `D4` impulses produce correlated stereo noise with additional channel-specific components. Generating two fully independent vinyl-noise streams would not match this structure.
+
+### The filters are highpasses
+
+The function at `0x08017a10` matches DaisySP **ATone**, whose recurrence is:
+
+```cpp
+y = c * (x + previous);
+previous = y - x;
+```
+
+Its coefficient calculation at `0x08017a30` is:
+
+\[
+b=2-\cos(2\pi f_c/F_\mathrm{init}),\qquad c=b-\sqrt{b^2-1}.
+\]
+
+The transfer function is
+
+\[
+H(z)=\frac{c(1-z^{-1})}{1-cz^{-1}},
+\]
+
+so its DC gain is zero: this is a highpass. It is distinct from DaisySP's ordinary `Tone` lowpass, also present elsewhere in the binary. Labeling this Vinyl path as a generic lowpass would contradict the executable recurrence.
+
+There is no explicit saturation or output clamp inside this Vinyl routine. Any outer limiting or output scaling belongs to the top-level signal chain.
+
+## 7. Reimplementation priorities and practical limits
+
+A useful Rack compatibility implementation can be written from these equations without translating the entire firmware or emulating its CPU in normal audio processing. The modes need only small persistent state: decimator counters/held values, one dropout gate, one Destroy blend, four SVF states, and Vinyl's noise/filter states.
+
+The fidelity-sensitive details are:
+
+1. Preserve the paired Decimate tables, nonmonotonic values, `1.01` wrapping, strict `.5` rate-tier boundary, integer quantization, and `threshold+1` sample holds.
+2. Evaluate Dropout's gate transition at the original processing cadence, preserve stereo linkage, and distinguish its generator from Vinyl's generators.
+3. Preserve Destroy's shaping law, two quadratic stages, compensation, and bypass smoothing.
+4. Use the recovered two-pass SVF response for DJ Filter and retain the final `tanhf` stage.
+5. Preserve Vinyl's mixture of held impulses, shared noise, crossfeed, highpasses, threshold bypass, and multiple RNG state streams.
+6. Separate `F_init`, the sample-rate number stored in the DSP objects, from the actual audio execution rate. The verified models used the firmware's `96028.0` initialization constant. The hardware/clock analysis determines how to interpret its times and nominal filter frequencies physically.
+
+No listening verdict is implied by the implementation's exactness. A Rack version may intentionally expose a modernized mode with sample-rate-correct controls or other refinements. Those choices should be explicit, because they change the recovered behavior.
+
+### Reproducible materials
+
+- `reference_models.py`: readable independent reconstructions for Decimate, Destroy, DJ Filter, and Vinyl.
+- `firmware_harness.py`: isolated Cortex-M7 call harness executing the uploaded code, with configurable function hooks.
+- `verify_reconstructions.py`: differential test driver; no host math substitution.
+- `differential_verification.json`: all 64 comparisons and short golden vectors.
+- `emulate_corrupt.py`: direct seven-case Dropout execution driver.
+- `dropout_emulation.json`: Dropout outputs and random-call evidence.
+- `corrupt_lookup_tables.json`: exact table floats, raw words, and derived bit/hold settings.
+- `function_labels.json`: provisional semantic address map.
+- `upstream_sources.json`: primary-source comparison URLs, hashes, and license-family metadata.
+
+The harness initializes relevant floating-point facilities and memory, then calls individual firmware functions. It does not emulate the codec, DMA, analog control board, interrupt schedule, or whole-module startup. Changing the machine setup to emulate more hardware is unnecessary for the verified component comparisons.
+
+Ghidra output remains an analysis aid. In particular, the decompiler misrendered a floating conditional select near `0x08001d3e` as inequality rather than the strict greater-than condition shown by the assembly and direct execution. Function signatures, casts of stored floats, and some condition expressions should be checked against the instructions before treating pseudocode as implementation source.

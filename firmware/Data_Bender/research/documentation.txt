@@ -1,0 +1,222 @@
+DATA BENDER: PRIMARY-DOCUMENTATION RESEARCH NOTES
+Research date: 2026-10-02
+Research scope: manufacturer documentation, published firmware descriptions, behavioral contract for a VCV Rack recreation. These are internal research notes for integration with binary evidence, not a claim to have extracted implementation from the executable.
+
+EVIDENCE CONVENTION
+DOCUMENTED = behavior stated or diagrammed in a manufacturer source.
+DERIVED = arithmetic or engineering consequences of documented behavior.
+UNRESOLVED = not specified precisely by the manuals; investigate binary or hardware.
+Pages below use the printed page number, followed by zero-based PDF page index where useful. The current 25-page manual starts printed p1 at PDF page index 2.
+
+SOURCE REGISTER
+[Q1] Qu-Bit, Data Bender v1.4.7 official firmware release page.
+https://www.qubitelectronix.com/alternate-firmware/p/data-bender-v147
+Web references: turn0search1, turn1view0, turn7search0.
+Relevant lines: 35-49. Its single published change is disabling a software-filter setting on revision-5 hardware.
+Actual linked download: https://www.qubitelectronix.com/s/Data_Bender_v1_4_7.bin
+Downloaded size: 108884 bytes. SHA-256: 591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d. Root independently confirmed exact byte identity with the user's uploaded image.
+
+[Q2] Qu-Bit, Data Bender user manual, internally labeled firmware v1.4.5, 25 pages.
+https://www.qubitelectronix.com/s/Data_Bender_v145-7ghx.pdf
+Web references: turn2view0, turn4view0, turn5view0.
+Downloaded local original: research/Data_Bender_manual_v145.pdf
+Local full text extraction: research/Data_Bender_manual_v145_extracted.txt
+This is the manual directly linked by the official v1.4.7 page at retrieval time.
+
+[Q3] Qu-Bit, Getting Started Guide, 14 pages.
+https://www.qubitelectronix.com/s/DB_getting_started-gmry.pdf
+Web references: turn2view1, turn4view1.
+Useful corroboration: pp4-6 control/CV/gate inventory; p7 audio normaling/levels; pp8-9 secondary settings.
+
+[Q4] Qu-Bit, original Data Bender manual, 22 pages, linked from v1.2.0 firmware page.
+https://www.qubitelectronix.com/s/QB_Data_Bender-xb8y.pdf
+Web references: turn2view2, turn4view2.
+Source landing page: https://www.qubitelectronix.com/alternate-firmware/p/data-bender-v120
+Landing references: turn1view2, turn0search3.
+Original manual independently describes timing, nondestructive playback manipulation, freeze timing, and original three Corrupt modes.
+
+[Q5] Qu-Bit product page.
+https://www.qubitelectronix.com/shop/p/data-bender
+Web references: turn1view1, turn0search8.
+96 kHz, 24-bit audio; more than one minute of stereo buffer; 14 HP; 28 mm depth; +/-12 V supply consumption 58/60 mA. Page firmware CTA still says v1.4.5.
+
+[Q6] Qu-Bit support, trouble updating Data Bender.
+https://www.qubitelectronix.com/im-having-trouble-updating-my-data-bender
+Web references: turn1view3, turn0search9.
+Explicitly identifies the rear daughterboard as a Daisy Seed. Describes its USB connection and BOOT/RESET entry into DFU mode. This settles platform identity independently of image inference.
+
+[Q7] Manufacturer-hosted PDF whose filename suggests v1.4.6, but whose cover, scope declaration, version-check text, and final changelog still say v1.4.5.
+https://static1.squarespace.com/static/56feccc7a3360c08ffa34ed4/t/677f09a97d7b28043f64b8bb/1736378797797/Data_Bender_v1.4.6-2.pdf
+Web references: turn8view0, turn9view0.
+Found via archive index https://eurorackref.com/sources/587/ (turn7view0), but substantive source is the manufacturer-hosted PDF itself.
+Notably removes the inaccurate Shift+Mix input-level note on printed p17. Does not document a sixth Corrupt/reverb mode.
+
+WEB-CITATION HANDOFF NOTE
+The search service labels these sources with wordlim 200. Root should open needed references itself before citing, and keep final prose summaries within source budgets; these research notes are an internal navigation and verification aid. Prefer binary-derived evidence for long implementation explanations. Do not paste long manual prose or redistribute entire downloaded manuals in a deliverable merely because available locally.
+
+1. VERSION DISCIPLINE AND TRAPS
+1.1 Root confirmed the uploaded image is byte-for-byte identical to the official currently linked release (size/hash in Q1). Thus this is the released mainline image, irrespective of community files sharing a '1.4.7' version label.
+1.2 Q1 describes v1.4.7 as a hardware-specific filter fix. It does not claim reverb or altered Freeze modes.
+1.3 There are community references to an alternate/beta '1.4.7' containing reverb and four Freeze choices. Official Qu-Bit Instagram search result dated 2024-04-16 advertises an alternate Data Bender reverb firmware, but no accessible primary technical documentation tying that image to the uploaded bytes was found. Therefore do not merge reverb features into the regular binary based on version text alone.
+1.4 The v1.4.5 manual is the official linked behavioral baseline, although the uploaded image may have later implementation refinements. The manufacturer-hosted v1.4.6-named PDF is not evidence of a separate comprehensive v1.4.6 feature set: its body/changelog still v1.4.5.
+1.5 Q2 p23 changelog: v1.4.4 adds Micro Bend 1V/oct calibration, LED dimmer, stereo-width control, three effect-CV attenuators, DJ Filter, Vinyl Sim, and original/current Corrupt selection. Fixes wet endpoint dry bleed; repairs Micro Bend knob third-octave reach/LEDs; adds default-window indication.
+1.6 Q2 p23 changelog: v1.4.5 isolates Micro pitch from Macro mode, repairs cross-mode Bend/Break switching, and stores distinct Bend and Break states for each processor mode. Also expands boot-version colors to purple/white/orange for digits 5/6/7.
+1.7 Q2 calls v1.1.0 release firmware; Q4's landing page calls v1.2.0 original firmware. Avoid treating this as a reliable full historical release list.
+
+2. FRONT-PANEL INVENTORY / ELECTRICAL CONTRACT
+DOCUMENTED in Q2 pp4-17; Q3 pp3-7.
+Six continuous controls: Time, Repeats, Mix, Bend, Break, Corrupt.
+Seven buttons: Shift, Clock, Mode, Bend, Break, Corrupt, Freeze.
+Six CV inputs: Time, Repeats, Mix, Bend, Break, Corrupt.
+Five gate/clock inputs: Bend gate, Break gate, Corrupt gate, Freeze gate, Clock.
+Two audio inputs: Left, Right. Two audio outputs: Left, Right.
+DERIVED jack count: 15 total = 6 CV + 5 gate/clock + 4 audio.
+CV input published range: -5 V to +5 V, generally summed with panel-knob position.
+Gate/clock published threshold: 0.4 V. No documented separate rising/falling Schmitt thresholds or pulse-width specification.
+Left audio input normals to Right when Right is unpatched. The converse is not specified.
+Q2/Q3 newer specification: input 10 Vpp, AC-coupled; output 10 Vpp.
+Old Q4 text claims outputs can reach approximately 14 Vpp with substantial Corrupt. This is a version/documentation discrepancy, not evidence of a fixed firmware gain scale. Firmware and codec/analog circuit should decide the faithful amplitude scaling.
+Q2 audio input page says Shift+Mix changes input level, while the actual Shift+Mix section and guide define stereo width. Q7 removes the input-level parenthesis, strongly indicating an editorial error. Do not implement hidden gain under Shift+Mix solely from Q2 p17.
+
+3. TIME, REPEATS, AND BUFFER MODEL
+3.1 Time (Q2 p5/PDF6)
+DOCUMENTED: determines acquisition/update period for the manipulated audio section. Memory outside the active section continues recording in the background. Expanding/changing the active period can expose historical audio from up to about one minute earlier.
+Internal mode: Time CCW = 16 seconds; Time CW = 80 Hz update rate; continuous intermediate control. DERIVED shortest period = 12.5 ms. Curve between endpoints is not stated.
+External mode: Time chooses clock multiplier m from [1/16,1/8,1/4,1/2,1,2,3,4,8] in that order across the knob. DERIVED update period = incoming measured clock period / m, subject to implementation limits not provided in manual.
+Clock LED blue in internal mode, white in external mode. It flashes at effective update rate. Crossing an external div/mult selection flashes gold.
+UNRESOLVED: mapping curve, discrete-control thresholds/hysteresis, Time smoothing, maximum usable external period, buffer allocation, exact write/read phase, and behavior when a new buffer period differs drastically from the old one.
+
+3.2 Repeats (Q2 p6/PDF7)
+DOCUMENTED: divides the active primary section into equal smaller parts; chosen part is repeated. Minimum is one whole section, not zero-length or disabled recording. Other controls may alter division count and selected part.
+The illustrations show N=1,2,10 as examples. TEN IS NOT A DOCUMENTED MAXIMUM. The manual never gives the numerical full-range Repeats mapping or maximum.
+Q2 p10 clarifies Traverse selection has no audible effect at N=1.
+DERIVED for a basic model: section length = active period / N. Selecting subsections and adding stutters are linked; modeling a conventional feedback-delay repeats control would be incorrect.
+UNRESOLVED: maximum N, integer rounding, knob/CV transfer function, buffer wrap/quantization, whether N changes immediately or at boundary, and higher N selected by Macro Break.
+
+3.3 Mix (Q2 p6/PDF7)
+DOCUMENTED: CCW all dry/live input; CW all processed buffer. CV adds to knob position. Full-wet dry leak was fixed in v1.4.4.
+UNRESOLVED: equal-power versus linear curve, correlated dry/wet behavior, stereo-width placement, and exact clipping/saturation normalization.
+Important Freeze exception below: older/mainline documented behavior forces full wet when Freeze engages with Mix fully dry.
+
+4. PROCESSOR MODES AND EVENT RULES
+Mode button alternates Macro (blue) and Micro (green). Only Bend/Break functions change meaning; Time/Repeats/Mix/Corrupt/Freeze keep their roles. v1.4.5 explicitly preserves distinct Bend/Break states in each mode.
+
+4.1 Macro Bend (Q2 p7/PDF8)
+DOCUMENTED: enabling its button/gate allows clock-timed probabilistic playback changes. Knob zero disables audible effect. Near minimum active values, rare normal-rate reversal; higher values expand available playback rates and reverse states, then rate slewing/tape-stop behavior.
+Visually verified p8/PDF9 illustrative knob positions:
+Knob fraction approximately 0: no Bend.
+Approximately 1/6: reversal introduced.
+Approximately 1/3: octave variations.
+Approximately 1/2: two-octave variations.
+Approximately 2/3: tape-stop variation.
+Approximately 5/6: slewing.
+At full scale: all available variations.
+These are pictured representative settings at 7:30/9:00/10:30/12:00/1:30/3:00/4:30, not evidence of exact numerical code boundaries. Features accumulate rather than replace earlier possibilities.
+UNRESOLVED: probability equations, discrete rate table, how direction is chosen, exact activation schedule, slew law/time, stop duration/recovery, interaction with Repeats, and whether 'vinyl clicks/pops' here mean dedicated injected noise or abrupt-read artifacts.
+
+4.2 Macro Break (Q2 p8/PDF9)
+DOCUMENTED: clock-timed probabilistic changes of repeat count, selected subsection, and silence proportion. Zero disables audible effect. Low amounts have sparse extra stutters/movement; high amounts can move anywhere within active section, select more repetitions than panel setting, and mute as much as 90% of each repeat.
+Illustrative knob fractions approximately 0,1/6,1/3,1/2,2/3,5/6,1:
+none; two subsections; jumping; more subsections; audio-rate repetition; silence; everything.
+Manual explicitly cautions these zones depend on Time, Repeats, and clock mode. Do not copy the illustrative fractions as measured decision thresholds.
+UNRESOLVED: random distributions, maximum repeats, selection persistence, event conditions, silence ordering/windowing, stereo-shared random-state behavior.
+
+4.3 Micro Bend (Q2 p9/PDF10)
+DOCUMENTED: direct playback-speed control from -3 to +3 octaves; CV tracks 1 V/oct after calibration. Bend button/gate toggles forward/reverse.
+DERIVED speed magnitude endpoints: 2^-3 = 0.125 and 2^3 = 8; changing speed changes pitch and read-head travel together.
+LEDs: forward off octave blue; forward on octave cyan; reverse off octave green; reverse on octave gold.
+Bend CV attenuator is bypassed in Micro mode to preserve tracking.
+UNRESOLVED: center detent width, octave snapping versus merely indicating proximity, exact knob range/CV combination, extreme CV clamp, interpolation, rate smoothing, output band limiting at high rates.
+
+4.4 Micro Break (Q2 p10/PDF11)
+Button/gate alternates Traverse (normally LED off) and Silence (blue).
+Traverse: knob/CV selects first through last of N active subsections; changing selection via Break or Repeats flashes gold. N=1 removes traversal effect.
+Silence: knob controls playback duty; CCW no silence, CW 90% silent. The stored recording remains intact; this is playback gating.
+UNRESOLVED: persistence of previous Traverse and Silence values when switching, index rounding, exact duty transfer curve, location of muted region, whether transition happens at segment boundaries.
+
+5. CORRUPT ALGORITHM CONTRACT
+Q2 p11/PDF12; Q3 p6; original modes independently Q4 pp8-9.
+DOCUMENTED: one selectable effect at a time, applied after buffer manipulation. Button or gate advances selection. Default/current set has five choices; legacy set has first three.
+Decimate (blue): bit-depth reduction plus downsampling. Crucial characterization: knob scans fixed combinations in a scrambled/nonmonotonic sequence. A smooth 'more crush as knob increases' design will not match this personality. Exact table absent from manual.
+Dropout (green): random signal losses. Low setting: rarer, longer losses. High setting: more frequent, shorter losses. Exact rates and shape absent.
+Destroy (gold): lower half soft saturation, upper half increasingly severe clipping. Manual flags gain increase with low-level input. Exact drive curve and waveshaper absent.
+DJ Filter (purple): lowpass below center, nominally neutral at center, highpass above center; moderate resonance. Exact poles/Q/frequency mapping absent.
+Vinyl Sim (orange): starts clean; clockwise adds dust/pops and tonal coloration; maximum strongest aging. Exact noise model, event rates, filtering, wow/flutter presence not specified.
+UNRESOLVED manual contradiction: generic statement says Corrupt is off at CCW and/or <=0 V input; DJ Filter is described as neutral at CENTER. Since CV is elsewhere additive to knob position, the <=0 V phrasing also cannot safely be interpreted as every zero-CV input bypassing effect. Resolve endpoint/bypass behavior in executable, do not take literal generic prose as a universal branch.
+No reverb is documented in Q2, Q3, Q7, or Q1's mainline release notes. A sixth case in the supplied binary would be stronger evidence than these incomplete documents.
+
+6. FREEZE, CLOCK LOSS, RESET, AND GATES
+6.1 Freeze (Q2 p12/PDF13, p15/PDF16; Q4 p9)
+Freeze stops new writes and retains recorded contents. Playback manipulation continues and is nondestructive. Expanding Time while frozen can reveal older contents outside formerly active region. Do not clear or resize away that history.
+Latching button mode (blue): button release requests toggling frozen state at next effective clock cycle.
+Momentary button mode (green): button down freezes immediately, release unfreezes immediately.
+Freeze button mode is a separate setting from gate input behavior.
+Documented mainline Mix corner case: when fully dry, engaging Freeze changes audible output to fully wet. Behavior at near-zero Mix and subsequent knob moves is not fully stated.
+UNRESOLVED: exact freeze-write boundary, request cancellation, gate-versus-button precedence, whether legacy/full-wet Freeze exception applies to both mainline modes, and clock behavior while frozen.
+
+6.2 Clock loss (Q2 p12/PDF13)
+After no external pulse for four prior beat periods, indicator becomes dim white. Timing continues at last measured rate until another input arrives. It does not stop the sound or silently revert to a new internal tempo.
+UNRESOLVED: original input period versus multiplied period used for timeout, period filter, multipulse stability, first-ever external-mode startup tempo, pulse reentry phase correction.
+
+6.3 Corrupt gate repurposed as reset (Q2 p15/PDF16)
+Shift+Corrupt button enables reset role; Shift-menu LED normal blue/reset green.
+Internal clock: reset acts immediately, moves read heads to reset positions, restarts clock and loads/acquires a new section. Clicks/temporary silence possible and documented. May trigger new Macro randomization.
+External clock: resets divider phase, taking effect at next incoming clock pulse. This is synchronization, not a general 'erase buffer' command despite informal naming.
+UNRESOLVED: what is retained under Freeze during reset, divider counter exact start value, clock-phase correction and event callback sequence.
+
+6.4 Gate behavior (Q2 p16/PDF17)
+Shift+Clock alternates latching (blue) and momentary (green).
+Latching: incoming triggers toggle associated state.
+Momentary: held-high input holds an otherwise-off associated function on.
+Manual does not formally specify which toggle-only controls (e.g. Corrupt cycling) honor global gate behavior, how an already-on button state combines with gate, or whether note changes at both edges are possible. Infer from binary state code or explicit hardware tests.
+
+7. SHIFT SETTINGS / STATE STORAGE
+Q2 pp13-16/PDF14-17.
+Shift+Time knob = playback/glitch window length. Default described as 2%; minimum permits abrupt edges; maximum fades almost continuously with only a moment at peak. Window function itself not given. LED off at zero, blue at default, then dim-to-bright white above default.
+Shift+Repeats = indicator brightness.
+Shift+Mix = stereo width enhancement; low to high increases width. No specified mid/side, crossmix, or pan-law formula.
+Shift+Bend knob = CV attenuation 0..1, Macro only.
+Shift+Break knob = CV attenuation 0..1, both modes.
+Shift+Corrupt knob = CV attenuation 0..1, both modes.
+Shift+Bend button = Unique (blue) versus Shared (green) Macro channel decisions. Shared means both channels receive same automatic Bend/Break values, not necessarily summed audio or cross-channel reuse of audio data.
+Shift+Break button = default settings restore.
+Shift+Corrupt button = gate reset role.
+Shift+Freeze button = freeze button latch/momentary.
+Shift+Clock button = gate latch/momentary.
+Shift+Mode button = current five Corrupt choices (blue) versus original three (green).
+Shift release preserves each primary knob's pre-edit value until the knob moves again or corresponding CV is sent. This is control pickup/state behavior, not merely an immediate reading of panel position.
+
+Documented reset list: window 2%; Bend off; Break off; Freeze off; Macro; Unique stereo; gates latch; reset jack normal; Freeze button latch.
+The reset list says 'Break Jack' though the actual reassignment feature is Corrupt. Treat this as a manual typo, pending firmware verification. List may omit newer added settings; do not assume listed items are exhaustive code behavior.
+Documented persistence list: Bend state; Break state; Corrupt choice; clock source; Macro/Micro; Unique/Shared; window; gate mode; freeze button mode; reset input role. Saved on Shift release, no more often than once every two seconds.
+Newer width/brightness/attenuator/offering states absent from persistence list even though controls exist. The code may save more than the older list; verify structure. v1.4.5 separately stores Macro/Micro Bend/Break states.
+VCV mapping proposal (DERIVED): represent persistent settings in patch JSON, preserve independent mode states, expose secondary settings via context menu or dedicated controls; exact hardware Shift gesture can remain optional UI emulation while audible state semantics should be retained.
+
+8. BOOT INDICATORS AND CALIBRATION (FOR CODE RECOGNITION)
+Q2 pp17-18/PDF18-19. Version display digit colors: 0 off/dark, 1 blue, 2 green, 3 red, 4 yellow, 5 purple, 6 white, 7 orange. Thus a true 1.4.7 version display is expected blue/yellow/orange by the documented scheme. Visual verification: research/manual_version_leds.png.
+Calibration: hold Mode during power-up; Bend red, Break white. Submit 1 V at Bend CV, press Bend (gold); submit 3 V, press Bend (green); Shift saves/exits. Break during calibration restores factory calibration. These are useful landmarks for recognizing initialization/control routines; Rack needs no emulation of ADC calibration error.
+
+9. RECONSTRUCTION PRIORITIES GENERATED BY THESE DOCUMENTS
+These are engineering analysis, not manufacturer algorithms.
+A. Separate acquisition/history storage from read-head processing. Both Freeze history and nondestructive edits require this distinction.
+B. Treat repetition count, chunk selection, speed/direction, silence duty, and clock-update cadence as distinct state variables. Most of the audible interface can then be represented without duplicating DSP per mode.
+C. Macro should drive the same lower-level engine as Micro through clock-scheduled event selection; an arbitrary noise modulator on controls will fail to match structured zone behavior.
+D. Preserve separate channel event-state paths plus Shared switch. Stereo width is another independent operation; do not conflate it with independent randomization.
+E. Recover exact tables early: external ratios, Repeats quantizer, Decimate variations, Macro speed/distribution values. These are stronger identity signals than generic distortion code.
+F. Recover transition behavior: freeze scheduling, external reset next-edge semantics, mode-state isolation, endpoint dry/wet behavior. These strongly affect patch usability even when individual DSP effects sound plausible.
+G. Extract actual read interpolation/windowing/filter/saturation functions from the image; manuals state categories, not their implementation.
+H. If exact byte identity is confirmed against official Q1, qualify absent documented reverb as 'not advertised in the mainline docs' until code switch dispatch rules it out.
+
+10. TARGETED HARDWARE/EMULATION EXPERIMENTS IF BINARY LEAVES GAPS
+These proposals are independent experimental reasoning.
+- Feed sample-index-coded pulses or a chirp, force Freeze, sweep Time and Traverse: identifies history addressing, exact section count, wrap direction, and whether old data lies contiguously or in rotating acquisition banks.
+- Clock at a stable known interval, apply Time values across full CV range: record exact quantizer boundaries, especially center x1 and x3 region.
+- In Micro use frozen sine, sweep Bend finely near octave values: measure slope, deadbands, snapping, CV clamp and interpolation aliases.
+- Use constant-amplitude alternating sign signal for Corrupt: Decimate steps reveal sample-hold period/bit depth; Dropout shows durations, probabilities, fade shape; Destroy reveals static transfer curve after accounting for AC coupling.
+- Apply impulse or sweep with DJ Filter at positions near ends/center: identify pole order, Q, cutoff scaling, center bypass width.
+- Feed identical signal into both channels; compare Shared versus Unique with width disabled and enabled: isolates stochastic behavior from stereo enhancement math.
+- Record markers at external clock/Freeze/Reset edges: locate sample/block alignment and latch delays; missing external pulses test continued-clock and timeout semantics.
+- Perform Macro-to-Micro switches with distinct stored states: verify v1.4.5 fixes rather than reproducing older bugs.
+
+11. RELATED REPOSITORY DISCOVERY (NOT ORIGINAL-FIRMWARE EVIDENCE)
+Search found https://github.com/thorinside/corrupter (turn7search13), explicitly a Data Bender-inspired C++/C DSP library and disting NT plugin, shown with MIT license. This is an independently implemented work, not a reverse-engineered source release from Qu-Bit. Could be investigated as a separate implementation reference only; do not use its features (such as extra tape character in Micro) as evidence of Data Bender internals. No official Data Bender source repository was identified in the conducted searches.

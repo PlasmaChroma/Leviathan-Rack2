@@ -1,0 +1,167 @@
+{
+  "analyst_assigned_labels": true,
+  "entries": [
+    {
+      "address": "0x08000d28",
+      "label": "Vinyl_ProcessStereoSample",
+      "evidence_note": "Custom five-dust plus modulated white-noise and ATone circuit.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08001384",
+      "label": "Corrupt_Init",
+      "evidence_note": "Stereo Decimators and Compressors, four SVFs, and Vinyl child initialization.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08001868",
+      "label": "Corrupt_ProcessInterleavedBlock",
+      "evidence_note": "Primary/latched mode selection; five mode cases.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x0801755c",
+      "label": "InitSingleFloatHalf_unknown",
+      "evidence_note": "Writes one float0.5; insufficient evidence for class identity.",
+      "confidence": "provisional"
+    },
+    {
+      "address": "0x08017564",
+      "label": "DaisySP_Decimator_Init",
+      "evidence_note": "Strong exact-body source match.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017580",
+      "label": "DaisySP_Decimator_Process",
+      "evidence_note": "Exact-body match; bit shift and sample hold.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017614",
+      "label": "DaisySP_Svf_Init",
+      "evidence_note": "Exact layout and source match.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x0801765c",
+      "label": "DaisySP_Svf_Process",
+      "evidence_note": "Double-sampled state variable filter.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017724",
+      "label": "DaisySP_Svf_SetFreq",
+      "evidence_note": "Sine transform and stable damping.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x0801781c",
+      "label": "DaisySP_Svf_SetRes",
+      "evidence_note": "Resonance clamp and damping update.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x080178a8",
+      "label": "DaisySP_Svf_SetDrive",
+      "evidence_note": "Drive normalization and resonance coupling.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x080178dc",
+      "label": "DaisySP_DcBlock_Init",
+      "evidence_note": "Source-like pole1\u221210/Fs; not essential to five Corrupt cases.",
+      "confidence": "provisional"
+    },
+    {
+      "address": "0x080178f8",
+      "label": "DaisySP_Compressor_Init",
+      "evidence_note": "Initialized in Corrupt; not evidence of compression in Destroy.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x080179f8",
+      "label": "DaisySP_ATone_Init",
+      "evidence_note": "Highpass initializer.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017a10",
+      "label": "DaisySP_ATone_Process",
+      "evidence_note": "y=c*(state+x);state=y\u2212x.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017a30",
+      "label": "DaisySP_ATone_CalculateCoefficients",
+      "evidence_note": "b=2\u2212cos(2\u03c0fc/Fs);c=b\u2212sqrt(b\u00b2\u22121).",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017a90",
+      "label": "DaisySP_Tone_Init",
+      "evidence_note": "Standard one-pole lowpass initializer.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017aac",
+      "label": "DaisySP_Tone_Process",
+      "evidence_note": "c1*x+c2*previous output; not ATone.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017acc",
+      "label": "DaisySP_Tone_CalculateCoefficients",
+      "evidence_note": "Lowpass coefficients.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017b48",
+      "label": "libm_cosf",
+      "evidence_note": "Direct machine execution and trigonometric implementation.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017da4",
+      "label": "libm_expf",
+      "evidence_note": "Direct machine execution confirms expf(1)=2.7182817459.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08017e88",
+      "label": "libm_powf",
+      "evidence_note": "SVF damping computation.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x080181b0",
+      "label": "libm_tanhf",
+      "evidence_note": "DJ filter final saturation.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08018268",
+      "label": "libm_sinf",
+      "evidence_note": "Destroy compensation and SVF cutoff computation.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08018474",
+      "label": "libm_fmodf",
+      "evidence_note": "Decimate mode index wrap.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x0801892c",
+      "label": "libc_memcpy",
+      "evidence_note": "Mode0 bypass copy.",
+      "confidence": "high"
+    },
+    {
+      "address": "0x08018958",
+      "label": "newlib_rand",
+      "evidence_note": "64-bit LCG, upper31bit result. Dropout source; distinct from Vinyl PRNGs.",
+      "confidence": "high"
+    }
+  ]
+}

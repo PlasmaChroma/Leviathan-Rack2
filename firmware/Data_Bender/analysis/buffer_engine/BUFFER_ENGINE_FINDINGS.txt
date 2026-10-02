@@ -1,0 +1,368 @@
+# Data Bender 1.4.7: buffer, Repeats, Macro Bend/Break and window findings
+
+This note describes the uploaded executable at flash base `0x08000000`. `P` is the main DSP object at `0x24000d68`; `B = P + 0x98 = 0x24000e00` is the buffer object. Names are analyst-assigned. Addresses refer to original Thumb instructions, not reconstructed source symbols. The decoded code has been inspected with the improved FPv5-capable Ghidra export and Capstone disassembly; isolated original instructions were exercised on Unicorn's Cortex-M7 model.
+
+**Confidence conventions:** **verified** means both original instructions and isolated execution support the claim; **strong static** means the relevant original instructions are decoded and the flow is clear, but not every integrated case has been executed; **unresolved** identifies a specific missing caller, hardware timing or edge-case determination. These tests do not run the actual board, ADC, codec, clock interrupt or analog circuitry.
+
+## 1. Allocation: distinguish actual active planes from outer object metadata
+
+**Verified by executing the actual initializer with the actual call arguments.** At `0x08003894`, `main()` loads `14,404,200` and stores it in outer object `P+0x84`. Before calling Buffer Init, `0x080038a8` overwrites argument register `r2` with `7,202,100`. The actual call at `0x080038ae` is therefore conceptually:
+
+```cpp
+buffer.Init(96028.0f, reinterpret_cast<float*>(0xc0000000), 7202100);
+```
+
+The hard-float ABI puts the rate in `s0`, object in `r0`, memory pointer in `r1`, and total float count in `r2`. Do not use the immediately preceding outer metadata as the argument.
+
+`0x08004a6c` divides the argument by two and constructs these active planes:
+
+| Item | Recovered value |
+|---|---:|
+| Active total floats | 7,202,100 |
+| Floats per channel | 3,601,050 |
+| Bytes per channel | 14,404,200 |
+| Left active plane | `0xc0000000` |
+| Right active plane | `0xc0dbca68` |
+| Exclusive end of active pair | `0xc1b794d0` |
+| Active total bytes | 28,808,400 |
+| Largest single capture window, each channel | 1,800,525 frames |
+
+The two additional ring-writer structs at `B+0x1bc` and `B+0x1d0` point to these **same** two active planes. They are not a second allocation. Their write cursors are constrained to begin at or after `2*N`, beyond the two current capture banks. The corresponding capacities are also 3,601,050 floats.
+
+Outer metadata `P+0x88` and `P+0x8c` stores `0xc0000000` and `0xc1b794d0`. In the reviewed application decompilation these outer metadata fields have initialization references but no identified active sample-reader references. In particular, `0xc1b794d0` must not be described as the active right-channel pointer. It is the exclusive end of the allocation passed to Buffer Init.
+
+The processor caps one capture window to half a channel plane, leaving room for the two alternating capture banks. At the firmware's numerical `96028` constant, 1,800,525 frames is exactly 18.75 seconds. At a true 48,000 stereo frames/s, the same frame count lasts 37.5109375 seconds. Which wall-clock interpretation applies must follow the independent codec/callback investigation; buffer constants alone cannot resolve that. The distinction also matters when interpreting a public buffer-duration specification.
+
+Init requests zeroing `(channelCapacity-1)*4` bytes for each plane, leaving the last float outside its explicit memset. A VCV implementation should allocate and zero its own complete memory safely rather than copy this initialization detail accidentally.
+
+Evidence: `buffer_init_probe.json`; `probe_init.py`; instructions `0x08003892..0x080038ae`, `0x08004a6c..0x08004bf8`.
+
+## 2. Core structure and sample reader
+
+**Verified/strong static.** This is a time-domain buffer player. The signal path under study is not an FFT reconstruction or a phase-vocoder pitch shifter. Each channel has a capture phase, a fractional playback phase, a selected capture bank, a playback bank, a subdivision start/end, and a gated audible subregion.
+
+The capture phase advances by one each processed channel frame. The playback phase advances by a signed smoothed rate. Positive and negative playback choose different write/read ordering:
+
+```cpp
+if (currentPlaybackRate > 0) {
+    writeInput();
+    y = readInterpolated();
+} else {
+    y = readInterpolated();
+    writeInput();
+}
+```
+
+That ordering is visible at `0x08004f2a..0x08004f58` and the alternate block `0x08005430`; it matters when reads and writes meet in the same bank.
+
+The reader at `0x0800493c` implements:
+
+```cpp
+absolutePosition = float(readBankStart) + readPosition;
+i = truncateToUnsigned(absolutePosition);
+fraction = absolutePosition - float(i);
+y = plane[i % capacity]
+  + fraction * (plane[(i + 1) % capacity] - plane[i % capacity]);
+
+targetRate = clamp(baseRate * macroRate[channel], -8.0f, +8.0f);
+a = min(globalRateSlew, macroRateSlew[channel]);
+currentRate += a * (targetRate - currentRate);
+readPosition += currentRate;
+```
+
+The first-index implementation only performs its modulo when `i > capacity`, rather than `i >= capacity`; valid ordinary playback should avoid the equality edge. A host port should handle the boundary deliberately and safely.
+
+The playback window is `[sliceStart, sliceEnd-1]`. If the increment moves below the start, the reader resets to `sliceEnd-1`. If it moves above `sliceEnd-1`, it resets to `sliceStart`. **Fractional overshoot is discarded**, rather than being carried through a modulo loop. The returned sample uses the old position; windowing later in the processor sees the advanced/reset position. This ordering can explain single-frame boundary discrepancies in an independently written player.
+
+When unfrozen, a positive-rate wrap switches the read bank to the current write bank. A nonpositive-rate wrap selects the opposite capture bank. Rate targets are capped at **±8**, even if a Micro control mapper can request a larger raw rate from CV.
+
+No interpolation antialias filter appears inside this reader. Any complete signal-path filtering must be checked elsewhere in the effect/output path; it is not justified to describe this routine as a bandlimited resampler.
+
+## 3. Time and Repeats segmentation
+
+**Verified for representative cases; strong static for float-boundary details.** Let `F` be the stored sample-rate constant, `f` the smoothed capture-frequency parameter, `N` the current integer capture-window length, and `R` the subdivisions count. The left-channel processing loop smooths Time on every left-channel frame:
+
+```cpp
+f += 0.001f * (targetFrequency - f);
+invFrequency = 1.0f / f;
+Nrequested = min(uint32_t(F / f), channelCapacity / 2);
+```
+
+The right channel uses the resulting stored Time values. This processor deinterleaves and processes channel blocks, rather than alternating its entire internal algorithm left/right on each frame; matching block order matters if recreating exact shared RNG timing.
+
+The controls investigation derives the base Repeats exponent as `floor(8 * normalizedRepeats)` with a one-audio-block lag. Macro Break adds a per-channel integer exponent. The processor commits:
+
+```cpp
+exponent = clamp(baseRepeatsExponent + macroRepeatsExponent[channel], 0, 8);
+R = uint32_t(powf(2.0f, exponent));
+S = min(N, uint32_t((F * invFrequency) / float(R) + 1.0f));
+```
+
+`S` is the playback subdivision length. The possible `R` values are:
+
+| Exponent | Subdivisions |
+|---:|---:|
+| 0 | 1 |
+| 1 | 2 |
+| 2 | 4 |
+| 3 | 8 |
+| 4 | 16 |
+| 5 | 32 |
+| 6 | 64 |
+| 7 | 128 |
+| 8 | 256 |
+
+The `+1.0f` and reciprocal multiplication are actually present. Replacing this with `N / R` does not match every frame boundary. Near an integer duration, `F/f` and `F*(1/f)` may round differently. For example, the probe configured `F=96028`, `f=float32(96.028)`, yielding integer `N=1000` and `S=500`, `250`, `4` at `R=2`, `4`, `256`, respectively. A configuration whose reciprocal product is exactly 1000 can instead produce `S=501` at `R=2`. Preserve arithmetic/rounding if exactness is required; choose an explicit stable alternative if the host design prioritizes consistency.
+
+The current slice offset is constrained by the available window. A committed slice is:
+
+```cpp
+sliceStart = candidateOffset;
+sliceEnd = sliceStart + S;
+audibleFrames = uint32_t((1.0f - clamp(manualSilence + macroSilence, 0, 1)) * S);
+audibleEnd = sliceStart + audibleFrames;
+```
+
+The reader still traverses the full subdivision; the remaining fraction is silenced by the processor. Thus the Silence operation changes a duty cycle inside the subdivision, not the playback speed.
+
+Subdivision/silence changes are committed at a detected raw-output sign crossing or a reader wrap, according to the branches at `0x08005152..0x080053fe`. A control movement is not necessarily an immediate arbitrary sample-position jump.
+
+### Micro Silence range and the zero-length endpoint
+
+**Verified with five targeted original-instruction cases.** The manual/documented description of a 90% maximum must not be used as the recovered executable mapping. The Micro mapper sends the normalized amount directly to `B+0x88`; the processor clamps manual plus Macro silence to **[0,1]**, with the upper bound initialized to 1. No 0.9 cap is present on this path. At a Silence amount of 1, `audibleFrames` becomes zero.
+
+However, **zero audible frames does not consistently mean a muted output in this executable**. For the usual first slice with `sliceStart=0`, `audibleEnd` is also zero. The raw-output gate subtracts one from that unsigned endpoint at `0x08004ff6..0x08005004`, producing `0xffffffff`, then converts it to float for the range comparison. The gate consequently admits the samples rather than rejecting them. With Window disabled, an otherwise constant-one buffer passes at unity despite the computed zero audible length.
+
+With Window enabled, the additional envelope introduces another unsigned zero-length boundary: early positions can yield an underflowed `(A-p)` and be clamped to gain 1, before later positions fall into the zero-gain branch. The result is short surviving pulses, not a guaranteed all-zero output. This is a compatibility decision for a port: preserve this specific endpoint artifact or explicitly handle `A==0` as mute. Do not describe either 90% limiting or universal full mute as the observed executable behavior.
+
+The probe used a frozen constant-one buffer, `N=1000`, settled `R=4`, `S=251`, and measured the next 1,000 left-channel output frames:
+
+| Silence | Window | Slice start | Audible frames | Nonzero output frames | Peak output |
+|---:|---:|---:|---:|---:|---:|
+| .9 | 0 | 0 | 25 | 96 | 1 |
+| 1 | 0 | 0 | 0 | 1,000 | 1 |
+| .9 | .02 | 0 | 25 | 70 | .541667 |
+| 1 | .02 | 0 | 0 | 67 | 1 |
+| 1 | 0 | 251 | 0 | 0 | 0 |
+
+The final row deliberately seeds simultaneous traversal and silence at the buffer-object level to locate the underflow condition; it is not a claim that the normal Micro panel provides both controls simultaneously. At a nonzero slice start, `audibleEnd-1` does not underflow, and the original raw gate correctly rejects every sample. Counts depend on measurement phase; their purpose is to establish the endpoint behavior, not to promise a fixed output duty cycle for every signal.
+
+Evidence: `probe_silence_limits.py`, `micro_silence_limits_probe.json`; all five runs returned normally from the original processor.
+
+Evidence: `buffer_engine_probes.json`; `probe_engine.py`; `0x08004e36..0x08004f2a`; `0x080053be..0x0800542a`.
+
+## 4. Micro Break traversal and its hysteresis
+
+**Strong static with representative execution.** In Micro traversal mode, let `t` be the normalized Break amount and `kOld` the previously selected index. The index is derived from the left-channel subdivisions count:
+
+```cpp
+q = R <= 1 ? 0.0f : float(R - 1) * t;
+h = R <= 4 ? 0.1f : 0.3f;
+k = int(q + 0.5f + (q > kOld ? -h : +h));
+```
+
+This is direction-dependent hysteretic rounding. The coefficient is 0.1 for 1, 2 or 4 subdivisions and 0.3 for larger counts. It reduces the tendency to chatter between adjacent slices near a quantization boundary. `k` is stored as a float but represents an integer.
+
+**Decompiler caution:** Ghidra's exported C can render the ARM `VSELGT` condition here as `!= 0.0` rather than `> 0.0`. Original instructions at `0x08005230..0x08005250` and `0x080055c2..0x080055ce` select by the greater-than flags. The formula above follows the instructions.
+
+On reader wrap, Macro's random selection can be added to this Micro-derived index, then bounded:
+
+```cpp
+chosenIndex = min(R - 1, k + int(float(R) * macroRandomPosition[channel]));
+candidateOffset = min(N - S, S * chosenIndex);
+```
+
+For normal Micro mode the Macro random state is cleared, so this gives direct traversal. A probe with `R=4` and `t=0.5` settled on slice index 1 when approached from the low side, consistent with the hysteresis. At the last slice, exact integer-duration float rounding can interact with the separate `candidateOffset > F*invFrequency-S` check and cause a reset to zero in an artificial test case; this is an identified arithmetic edge, not a general musical behavior claim.
+
+## 5. Macro Bend: exact speed table and slew selection
+
+**Verified.** The helper is `0x08004678`. Define the repeatedly used random float:
+
+```cpp
+U() = float(rand() % 255) / 255.0f;
+```
+
+It can take `0/255` through `254/255`; **1.0 is not reachable**. Statistical percentages below assume approximately uniform remainders, not a measured RNG distribution.
+
+On a Macro Bend reroll, if normalized amount `b <= 0.03`, the caller sets the channel multiplier and slew to 1. Otherwise the helper computes:
+
+```cpp
+j = uint32_t(U() * b * 1.5f * 9.0f);
+macroRate = j < 10 ? rateTable[j] : 1.5f;
+```
+
+The table at `0x08019dcc` is:
+
+| Index | Signed playback multiplier | Meaning at base rate 1 |
+|---:|---:|---|
+| 0 | +1 | Forward original speed |
+| 1 | -1 | Reverse original speed |
+| 2 | +2 | Forward octave up |
+| 3 | +0.5 | Forward octave down |
+| 4 | -2 | Reverse octave up |
+| 5 | -0.5 | Reverse octave down |
+| 6 | +0.25 | Forward two octaves down |
+| 7 | +1.5 | Forward 3:2 speed ratio |
+| 8 | -0.25 | Reverse two octaves down |
+| 9 | -1.5 | Reverse 3:2 speed ratio |
+| ≥10 | +1.5 | Explicit fallback |
+
+The range is not an equal-probability choice among ten speeds at full knob. At `b=1`, the fallback makes +1.5 occur for 85 of the 255 remainder values, exactly one third under the uniform-remainder assumption. Most other choices occur for 19 of 255 residues; -0.25 occurs for 18. At `b=.1`, only +1 and -1 are reachable, with approximately 74.1% and 25.9% respectively. `macro_ratio_probabilities.json` records additional exhaustive remainder enumerations using float32 arithmetic.
+
+### Slew at large Bend values
+
+For `b <= float32(.667)`, the helper sets the channel slew coefficient to 1. For larger amounts:
+
+1. Draw a second `U`.
+2. If `U <= .25`, return **without changing the previous slew coefficient**. The new speed multiplier has already been selected.
+3. Otherwise draw another integer `r`, calculate `M = uint32_t(256.0 + (double(b)-0.667) * 3.0 * 384.0)`, and take `v = r % M`.
+4. Set the channel coefficient according to:
+
+| `v` | New slew coefficient |
+|---:|---:|
+| 0–127 | 1.0 |
+| 128–255 | 0.005 |
+| ≥256 | 0.0001 |
+
+At maximum `b`, `M=639`. The threshold arithmetic uses double precision, including a double literal 0.667 distinct from its float comparison literal. The hold branch corresponds to remainders 0–63 of the second `%255` draw; the reroll branch corresponds to 64–254.
+
+The rate then approaches its signed target using the reader's one-pole recurrence. A slowly changing reverse target passes through a region of near-zero playback speed and can create tape-stop-like deceleration. **There is no zero multiplier in this Macro table or its fallback, and no independent zero-target stop branch was found in these buffer routines.** Do not invent a separate stop algorithm solely to match a manual adjective. A complete search of all external setters of the global slew could further constrain this observation.
+
+## 6. Macro Break: repeat exponent, silence and random slice jumps
+
+**Verified for the helper, strong static for the full scheduling tree.** Helper `0x08004bf8` receives normalized amount `b`. In shared stereo mode (`B+0x68==1`), the right-channel invocation copies the left-channel exponent, silence and random-position state and consumes no RNG.
+
+Otherwise it selects three related variables:
+
+```cpp
+extraExponent = b > .03f ? floor(U() * b * 8.0f) : 0;
+
+if (b > .5f) {
+    q = roundTiesAway(4.0f * clamp(2.0f*b - 1.0f, 0.0f, 1.0f));
+    j = floor(U() * q);
+    silence = silenceTable[j];
+} else {
+    silence = 0.0f;
+}
+
+randomPosition = b > .33f ? U() : 0.0f;
+```
+
+`roundTiesAway` follows `VRINTA.F32` at `0x08004cc8`. The silence table at `0x08019df4` contains `[0, .25, .5, .75, .9]`.
+
+**Stored versus reachable values matters:** because `U < 1` and `q <= 4`, this helper can index only 0–3 for normalized input in `[0,1]`. The stored `.9` entry is not reachable on this path. At `b=1` the maximum selected silence is `.75`. Likewise the maximum extra exponent is **7**, not 8, although the sum with the front-panel Repeats exponent is capped to 8 in the processor.
+
+The silence-depth stages are also later than a casual reading of “above halfway” suggests: q=1 still selects index zero because `U<1`. q becomes 2 at `b=.6875`, permitting .25 silence; q=3 at .8125 permits .5; q=4 at .9375 permits .75. The exact `.5625` threshold changes q from zero to one but still produces no silence.
+
+### Additional randomization on each subdivision wrap
+
+The processor adds a second scheduling layer. When `R>1`, at each read wrap it draws another `U` on the left, and on each channel separately in unique mode. If `U>.75` and Macro Break `b>.2`, it replaces `randomPosition` with a fresh `U` before computing the next slice index. Otherwise it retains the prior random position. Shared right copies the left value.
+
+Therefore random slice jumps can begin above `.2` even though the helper's initial-position threshold is `.33`. The distinction is between per-capture rerolls and per-subdivision jump rerolls. Under approximately uniform residues, the `U>.75` event is 63/255, about 24.7%, of eligible wraps.
+
+The helper is called on capture-boundary reroll flags, including normal capture wraps and accepted externally requested resets. The helper resets ineligible parameters to zero; a control change may retain an old random choice until that scheduling point. This is more stateful than simply using the knob as a per-sample probability.
+
+## 7. Window: two multiplicative envelopes, exact thresholds
+
+**Verified with original-instruction constant-buffer probes.** Let `w` be the stored Window amount, `A` audible frames in the current subdivision, `p` the unsigned distance of the advanced reader position from slice start, and `z` the advanced capture/write phase. A separate control mapping squares its front-panel setting before this processor receives `w`.
+
+The processor always computes:
+
+```cpp
+H = max(uint32_t(float(A) * w * .5f), 24u);
+```
+
+It applies window envelopes only if `w > .015f`. At `w=0` or exactly `.015`, both envelope layers below are bypassed, while the basic Silence-region gate remains active. With a squared UI map, the enable threshold is around a raw normalized Window setting of `sqrt(.015)`, approximately .12247.
+
+### First layer: subdivision amplitude window
+
+This is a linear/trapezoidal amplitude window, not a Hann/cosine window:
+
+```cpp
+if (p < H || p > A-H) {
+    if (p < A/2) gain = float(p) / H;
+    else         gain = min(float(A-p) / H, 1.0f);
+} else if (p < A) {
+    gain = 1.0f;
+} else {
+    gain = 0.0f;
+}
+```
+
+The original uses unsigned integers for these positions and subtractions. For ordinary `A>=H` this is the expected linear attack/plateau/release. The minimum H of 24 means very short subdivisions do not necessarily reach unity gain. A safe host implementation should explicitly decide how to handle `A<H` rather than silently rely on unsigned underflow behavior.
+
+### Second layer: capture/write-boundary envelope
+
+The first-layer output is multiplied by:
+
+```cpp
+if (z < 240.0f)
+    writerGain = z / 240.0f;
+else if (z > float(N) - 480.0f)
+    writerGain = clamp((float(N) - (z + 240.0f)) / 240.0f, 0.0f, 1.0f);
+else
+    writerGain = 1.0f;
+```
+
+This has an unusual but reproducible result: at a long enough capture window the fade-out reaches zero **240 frames before the capture boundary**, then remains zero for the final 240 frames. This is distinct from a symmetric fade ending precisely on the boundary. The hardcoded lengths are sample/frame counts, not durations recalculated from the stored sample rate.
+
+For a frozen constant-one buffer, N=1000, unity rate and `w=.02`, the measured left output was:
+
+| Zero-based output frame | Output |
+|---:|---:|
+| 0 | 0.0001736111 |
+| 23 | 0.1 |
+| 239 | 1.0 |
+| 519 | 1.0 |
+| 520 | 0.9958333 |
+| 758 | 0.004166667 |
+| 759 onward through 999 | 0.0 |
+
+At `w=.015` the same test outputs exactly 1 for all those frames. At `w=.015001`, both windows become active and the measured samples match the default `.02` case because both use minimum H=24 here.
+
+For short capture windows, the precedence of the initial `z<240` test matters. The N=300 and N=480 tests rose to approximately .995833 at output frame 238 then dropped to zero at frame 239. At N=100 with default window, maximum measured gain was .316667. These are actual isolated algorithm results; they should inform a fidelity decision, not be assumed desirable for a new design.
+
+Evidence: `window_freeze_probes.json`; `probe_window_freeze.py`; instructions `0x08004fa6..0x08005032`, `0x08005478..0x080054b2`, `0x080055d0..0x0800563c`.
+
+## 8. Freeze, alternating capture banks and the history tail
+
+**Verified in a representative state transition; strong static across all clock guards.** Freeze has a requested state (`B+0x11b`) and an active/latched state (`B+0x11a`). The processor is not simply using the incoming jack level directly.
+
+In the ordinary latched mode, pending transition flags `B+0x234`/`+0x235` are accepted at a raw-output sign crossing, or at reader wrap when the transition guard permits it. The acceptance path at `0x08005262`:
+
+- Resets capture phase and playback phase to a suitable window boundary.
+- Clears the transition and writer-cycle flags.
+- Requests Macro rerolls.
+- Copies the requested Freeze byte to active Freeze at `0x080052d6..0x080052da`.
+- When both Freeze and the Time-change guard are inactive, updates alternating capture-bank choices.
+
+In the control path's momentary-button configuration, the requested state can also be copied to active Freeze immediately before processing. That bypass belongs to the controls dispatcher, not this buffer routine.
+
+The probe first set requested Freeze without setting a pending transition: active Freeze remained false. After a pending transition was supplied and processing crossed a boundary, active Freeze became true. With active Freeze, both protected capture banks were unchanged after another 256 frames. Their write/read phases and audio playback continued advancing.
+
+**The rest of the plane is still being written while frozen.** The auxiliary ring-writer, used every frame at `0x08004f60..0x08004fa2`, places the incoming signal at or beyond `2*N`. The probe verified that the two active banks remained byte-identical while the later region changed. Thus “Freeze protects the current captured buffer” is accurate; “Freeze stops every SDRAM write” is not.
+
+Normal unfrozen capture wraps alternate `writeBankStart` between 0 and N, with a guard requiring more than N/4 frames since the previous bank change. Positive read wraps pick the current bank; reverse read wraps pick the opposite one. While frozen the bank-selection updates are suppressed. Macro rerolls can still occur on capture cycles while frozen, because playback/control evolution continues.
+
+`B+0x110` is **not Freeze**. It is the Time-change/stability guard set by the surrounding clock-processing logic. During that condition, the writer uses a special path and normal bank transitions are inhibited. Full clock-history and extreme simultaneous Time/Freeze transition ordering remains outside the isolated tests in this note.
+
+## 9. Reproduction and evidence files
+
+- `probe_init.py` / `buffer_init_probe.json`: actual Init arguments; active pointers, capacities and requested memset ranges.
+- `probe_helpers.py` / `macro_helper_probes.json`: 68 original-instruction Macro Bend and Break cases, including strict thresholds, RNG consumption, preserved-slew branches, shared/unique copying and table reachability. No probe errors.
+- `probe_engine.py` / `buffer_engine_probes.json`: seven representative 2,048-frame stereo Buffer processor runs covering Repeats, Silence and traversal; records changing slice/bank state. No probe errors.
+- `probe_window_freeze.py` / `window_freeze_probes.json`: eight constant-buffer window cases plus a requested/latched Freeze transition and protected-versus-history write check.
+- `probe_silence_limits.py` / `micro_silence_limits_probe.json`: five targeted Micro Silence endpoint cases, with Window disabled/default and a synthetic nonzero slice start.
+- `macro_ratio_probabilities.json`: exhaustive arithmetic enumeration of the 255 possible random remainders at five Bend amounts. This is a mathematical distribution under a stated uniformity assumption, not measured hardware randomness.
+- `buffer_fields.csv`: provisional field map useful when revisiting decompilation.
+- `buffer_functions.csv`: semantic entry-point map.
+
+The scripts hook libc `rand()` with supplied deterministic integers. The processor probe hooks `powf` with its explicitly equivalent Python operation and returns float32; memset is either emulated or, in the allocation-only probe, skipped while its arguments are recorded. All surrounding Thumb instructions are original firmware bytes. They are behavioral probes rather than a binary-exact replacement library or a full-system emulator.
+
+## 10. Remaining work with the highest practical value
+
+The important buffer algorithms, table contents and representative scheduling behavior are established. The remaining uncertainty is concentrated in integrated timing and edge cases: actual codec/callback frame rate versus the `96028` constant; all outer setters of global slew and Time-change state; complete history-tail reuse during unusual Time changes; zero crossings at high signed rates; simultaneous Freeze/clock/mode changes; and externally observable CV latency. These are appropriate targets for hardware A/B capture or a more complete callback harness.
+
+A Rack recreation can already implement the signed fractional reader, power-of-two subdivisions, exact Macro tables, hysteretic traversal, per-capture and per-subdivision randomization, separate requested/active Freeze and both window envelopes from this evidence. It should make a deliberate fidelity decision about arithmetic quirks and short-window attenuation, rather than baking accidental assumptions into a supposedly exact clone.
+
+Run the scripts with Python 3 and the `unicorn` package. They locate the original firmware in standard bundle folders or accept its absolute path through the `DATA_BENDER_FIRMWARE` environment variable; they do not download firmware. `firmware_input.py` must remain beside the probe scripts.

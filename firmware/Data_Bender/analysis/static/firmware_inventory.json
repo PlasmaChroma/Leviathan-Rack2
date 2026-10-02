@@ -1,0 +1,28 @@
+{
+  "filename": "Data_Bender_v1_4_7.bin",
+  "bytes": 108884,
+  "sha256": "591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d",
+  "entropy_bits_per_byte": 7.170023440397263,
+  "format": "raw, little-endian Thumb firmware; no transport decoding required",
+  "load_base": "0x8000000",
+  "initial_stack": "0x20020000",
+  "reset_vector_thumb": "0x8000a09",
+  "data_copy": {
+    "file_offset": "0x1a570",
+    "virtual_start": "0x24000000",
+    "bytes": 996
+  },
+  "bss": {
+    "start": "0x240003e4",
+    "end_exclusive": "0x240047d4",
+    "bytes": 17392
+  },
+  "active_buffer": {
+    "left_base": "0xc0000000",
+    "right_base": "0xc0dbca68",
+    "frames_per_channel": 3601050,
+    "bytes_total": 28808400,
+    "maximum_primary_window_frames": 1800525
+  },
+  "caution": "The binary is the source of truth; memory regions, rates and durations require semantic analysis."
+}

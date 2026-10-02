@@ -1,0 +1,586 @@
+#!/usr/bin/env python3
+"""Build the self-contained human report and portable Codex handoff.
+All substantive findings are tied to the supplied firmware or named evidence.
+"""
+from pathlib import Path
+import base64,csv,html,json,re
+import markdown
+
+ROOT=Path(__file__).resolve().parents[1]
+OUT=ROOT/'deliverables'
+OUT.mkdir(exist_ok=True)
+
+BODY=r'''
+## 1. Outcome and how to read the evidence
+
+**This image yields enough information to build a well-grounded Data Bender-style VCV Rack engine.** The work recovered the active buffer layout, fractional reader, subdivision rules, Macro randomization tables, Micro control curves, five Corrupt algorithms, physical control mapping, persistent settings structure, and several timing and arithmetic quirks. Independently written effect models were compared with execution of the supplied ARM instructions.
+
+This is a reconstruction dossier, not a claim that a complete Rack module or a complete hardware emulator has been built. Its strongest material is the collection of formulas, original-code probes, golden vectors, and address-indexed decompilation. Its remaining uncertainty is concentrated in integrated hardware timing, long-run transitions, and analog input/output behavior.
+
+Three evidence levels are used throughout:
+
+| Level | Meaning | Appropriate use |
+|---|---|---|
+| Executed | Original instructions plus a stated isolated emulator experiment support the finding | Implement the tested equation or state transition, preserving the stated setup |
+| Static | Instruction/data inspection supports the finding; integrated behavior is not exhaustively exercised | Implement carefully and retain an explicit verification target |
+| Inferred | A conclusion follows from stated hardware or statistical assumptions | Do not silently promote it to a measured hardware fact |
+
+Addresses are virtual flash addresses. Subtract `0x08000000` to obtain the raw file offset. Function and structure names are assigned by this analysis; the original C++ source symbols were not present. `P=0x24000d68` is the main engine object and `B=P+0x98=0x24000e00` is its buffer object.
+
+The bundle includes **497 extracted function candidates**, of which **96 have semantic labels**, together with a synthetic ELF wrapper, the analyzed Ghidra project, disassembly, structured tables, component notes, independent reference models, and reproducible probes. Successful decompilation is not proof that every generated C expression is correct: floating conditional selects and hard-float prototypes require particular care.
+
+## 2. Image identity, processor and board
+
+The uploaded file is byte-for-byte identical to the official Qu-Bit `Data_Bender_v1_4_7.bin` download checked during this analysis. The release page describes v1.4.7 as a revision-5 hardware filtering fix; it does not identify a new reverb instrument. The behavioral manual linked by that release is internally labeled v1.4.5. [S1, S2]
+
+| Property | Result | Evidence |
+|---|---|---|
+| Raw image size | 108,884 bytes; `0x1a954` | File bytes |
+| Format | Unwrapped, uncompressed executable Thumb image | Vector table and coherent executable flow |
+| Flash base | `0x08000000` | Vector targets, literals and reset flow |
+| Initial stack pointer | `0x20020000` | First 32-bit word |
+| Reset vector | `0x08000a09`; code at `0x08000a08` | Second word, Thumb bit set |
+| Main entry | `0x08003878` | Reset call chain |
+| Audio callback | `0x080032fc` | Pointer registered by main |
+| Processor family | STM32H7 / Cortex-M7; Daisy STM32H750 platform | Hardware image, startup/peripheral code and libDaisy matches |
+| Arithmetic | IEEE float32 DSP, FPv5 instructions, hard-float calls | Original instructions and emulator execution |
+| Initialized data | 996 bytes copied from `0x0801a570` to `0x24000000` | Reset routine |
+| BSS zero range | `0x240003e4` through `0x240047d3` | Reset routine |
+
+```
+SHA-256
+591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d
+```
+
+The yellow daughterboard in the supplied photograph is consistent with the original Daisy Seed; Qu-Bit's own FAQ and firmware-update support instructions explicitly identify the yellow board as a Daisy Seed. The carrier's visible Rev 1 marking does not establish that every codec branch in this executable belongs to that photographed revision. [S3]
+
+The binary supports original AK4556, WM8731 and PCM3060 codec variants through libDaisy board detection. This matters when interpreting compensation branches. Main samples PD4, stores its inverted logical value at `0x24000410`, and conditionally negates every right output at `0x08003732`. That is board-dependent compensation, not a universal stereo effect to copy into Rack.
+
+The image also contains a newlib build-system path referring to a GCC-10 toolchain. That is toolchain provenance, not a reliable firmware build date. No original source tree, source-level names, complete linker map or saved device settings were recovered from the BIN.
+
+## 3. The consequential timing discrepancy
+
+**Keep the DSP's initialization rate separate from the audio driver's selected rate.** The application initializes its DSP with `96028.0f`, but this exact image configures its SAI audio driver for nominal **48,000 stereo frames/s**. This is supported by original-code execution of the initialization routines, not merely comparison with a current library default.
+
+| Quantity | Recovered value | Status |
+|---|---:|---|
+| DSP initialization rate, `F_init` | 96,028 | Executed/static literal |
+| SAI sample-rate enum | 3 | Executed |
+| This image's enum-3 interpretation | 48,000 | Its own table and branch |
+| Both HAL audio-frequency fields | 48,000 | Executed initialization |
+| Audio block | 96 stereo frames / 192 scalar floats | Executed/static call chain |
+| PLL3 parameters | M=6, N=295, P=16, Q=4, R=32, FRACN=0 | Executed clock configuration |
+| Nominal crystal parameter | 16 MHz | Firmware RCC constants |
+| SAI kernel clock under that assumption | 49,166,666.67 Hz | Inferred arithmetic |
+| HAL master-clock divider | 4 | Executed divider calculation |
+| Predicted physical frame rate | Approximately 48,014.323 Hz | Inferred; not measured on a board |
+| Predicted 96-frame callback interval | Approximately 1.9994 ms | Inferred |
+
+The relevant entry points are `0x08005cd8` (audio configuration), `0x08008d3c` (SAI initialization), `0x08009550` (clock setup), and `0x08011a68` (HAL SAI initialization). `audio_config_emulation.json` records the substituted hardware/library boundaries and captured configuration. It does not emulate an actual crystal, codec or DMA peripheral.
+
+Qu-Bit's product description advertises 96 kHz/24-bit audio. [S4] The executable and that description therefore need a hardware check before claiming exact wall-clock equivalence. The source of the discrepancy is not established by a release-note sentence, and this investigation did not compare older firmware revisions.
+
+The consequences are practical. A filter initialized for 96,028 but executed around 48,014 has roughly half its nominal physical cutoff. A fixed 240-frame envelope lasts about 5 ms at the predicted execution rate. A once-per-block probability decision occurs about 500 times/s, not 1,000. A phase accumulator that uses the initialization constant can also acquire a different physical timing scale. Full internal and external clock behavior should be measured rather than globally “corrected” by guessing a factor of two.
+
+For a port, make `F_init`, internal rendering rate, host rate, and control/block cadence distinct quantities during development. Use a documented reference rate for compatibility tests, then make any rate correction an explicit design decision.
+
+## 4. Actual memory layout and the signal path
+
+The active buffer layout required tracing the actual initializer arguments. Main first stores a larger number in outer metadata, then overwrites the argument register before calling Buffer Init. Executing that call proves the following:
+
+| Item | Value |
+|---|---:|
+| Float-count argument passed to Buffer Init | 7,202,100 total floats |
+| Active capacity per channel | 3,601,050 floats |
+| Bytes per channel | 14,404,200 |
+| Left plane | `0xc0000000` |
+| Right plane | `0xc0dbca68` |
+| Exclusive end of active allocation | `0xc1b794d0` |
+| Total active sample storage | 28,808,400 bytes, about 27.47 MiB |
+| Largest single capture window per channel | 1,800,525 frames |
+
+The address `0xc1b794d0` is **not** the active right-channel pointer. It appears in outer metadata, while the initializer constructs the right plane halfway through the supplied float allocation. This correction is backed by `buffer_init_probe.json` and instructions `0x08003892–0x080038ae`, `0x08004a6c`.
+
+At `F_init`, a full channel plane represents 37.5 seconds of samples and the largest capture window 18.75 seconds. Under the predicted physical execution rate, those same counts represent approximately 75 and 37.5 seconds. These durations are conditional arithmetic; the frame counts and addresses are the verified facts.
+
+Each channel plane holds two alternating current capture banks, each of length `N`, plus a history tail beginning at or beyond `2*N`. The auxiliary history writers reuse these planes; they are not another allocation. Increasing Time can therefore expose older material without the simplistic behavior of clearing or reallocating a delay line.
+
+The logical signal path is listed below. Within capture and playback, the read/write order depends on playback direction, as detailed in section 6.
+
+1. Capture live input into the current banks and history tail, subject to bank protection.
+2. Read a selected subdivision through a signed fractional playback head.
+3. Apply silence-region gating and the two optional window envelopes.
+4. Pass the resulting wet signal through Corrupt.
+5. Mix that processed signal with the live input using sine equal-power gains.
+6. Run a per-channel Tone lowpass, initialized with a 38,000 cutoff parameter.
+7. Apply the sequential stereo crossfeed/width stage.
+8. Apply hardware-specific output compensation when the board branch requires it.
+
+Corrupt is applied after buffer playback; its distortion is not inherently written back into the protected captured material. Dry audio joins at the mix stage, so even a fully dry selection still traverses the later output conditioning and width stages. The primary engine block routine is `0x08001e4c`, buffer processing is `0x08004d58`, and Corrupt processing is `0x08001868`.
+
+## 5. Controls, I/O and normalization
+
+The executable contains a complete mapping of six knobs, six CV channels, seven buttons, four function gates and a clock input. The supplied board photograph alone would not have been sufficient to infer all those roles; pin tables and the event dispatcher resolve them.
+
+| Logical index | Knob / CV | Button | Gate index and role |
+|---:|---|---|---|
+| 0 | Time | Shift | 0: Freeze |
+| 1 | Repeats | Clock | 1: Bend |
+| 2 | Mix | Mode | 2: Break |
+| 3 | Bend | Freeze | 3: Corrupt / reassigned reset |
+| 4 | Break | Bend | 4: Clock |
+| 5 | Corrupt | Break | — |
+| 6 | — | Corrupt | — |
+
+The control/CV ordering, button ordering and LED ordering are different. `pin_map.csv` records MCU pins, Daisy pin numbers and table addresses. For example, the knobs map to Daisy D15, D16, D23, D24, D25 and D28; the CVs to D17 through D22. The controls do not require emulating those pins in Rack, but the map anchors the semantic reconstruction.
+
+The manual supplies analog-interface facts that the executable cannot measure: ±5 V CV ranges, approximately 0.4 V gate thresholds, 10 Vpp audio and left-input normalization to the right. [S2] These should inform Rack's external voltage contract. Analog gain, clipping and frequency response still need measurement if matching the physical module is a goal.
+
+The hardware control layer converts ADC values as:
+
+```text
+knobTarget = rawUnsigned16 / 65536
+cvTarget   = 1 - rawUnsigned16 / 32768
+```
+
+Both are smoothed. The inverted raw-CV relation reflects board conditioning; ideal Rack voltages should map to a bipolar normalized value such as `V/5`, not receive a second accidental inversion. Bend has a separate stored calibration offset and scale; ideal Rack voltage scaling should use offset 0 and scale 1 unless a hardware-calibration compatibility mode is deliberately requested.
+
+Repeats, Mix, Break and Corrupt knob events receive a factor of **1.05** before the effective parameter clamp. Bend does not. Time ultimately uses its unboosted hardware value. Thus normalized musical positions and raw physical rotation are not interchangeable. For example, the top Repeats value becomes reachable around 95.238% of raw rotation.
+
+Shift destinations are fully traced:
+
+| Shift operation | Recovered function |
+|---|---|
+| Time knob | Window; stored amount is the square of the setting |
+| Repeats knob | LED brightness |
+| Mix knob | Stereo width/crossfeed |
+| Bend / Break / Corrupt knobs | Respective CV depths; Micro Bend bypasses its depth for pitch tracking |
+| Bend button | Shared versus Unique Macro stereo behavior |
+| Break button | Restore defaults |
+| Corrupt button | Reassign the Corrupt gate to reset/synchronization |
+| Freeze button | Freeze-button latching versus momentary behavior |
+| Clock button | Latching/toggle versus level-gate behavior |
+| Mode button | Three versus five Corrupt offerings |
+
+These roles come from main's event handling around `0x08003d22–0x08004678`, the polling routine at `0x080023a0`, and the engine's parameter mapper. Their state should be represented explicitly rather than folded into one generic “gate mode.”
+
+## 6. Time, Repeats and the fractional reader
+
+### Time
+
+For effective normalized Time `x=clamp(knob+CV,0,1)`, the recovered internal frequency parameter is:
+
+```text
+frequency = exp(7.15461540222168 * x) / 16
+          ≈ 1280^x / 16
+```
+
+Numerically that spans approximately 0.0625 to 80 in the code's frequency units. The external ratio is quantized differently:
+
+```text
+index = min(floor(8.25 * x), 8)
+ratio = [1/16, 1/8, 1/4, 1/2, 1, 2, 3, 4, 8][index]
+```
+
+The final ×8 region is only about 3.03% of the normalized range. Replacing the quantizer with nine equal-width zones changes the panel behavior. External interval capture uses a **median of three**; its spike rejection was verified by original-code execution. A 0.001 change threshold and additional timing-stability state are also present.
+
+Evidence: `0x08003264`, `0x080034b8–0x08003502`, `clock_probe.json`. These tests establish formulas and filtering, not the final physical timing scale discussed in section 3.
+
+### Repeats
+
+The baseline subdivision count is powers of two, not a linear 1–10 or 1–16 sweep:
+
+```text
+r = clamp(1.05 * rawRepeatsKnob + repeatsCV, 0, 1)
+baseExponent = floor(8 * previousBlock_r)
+R = 2^clamp(baseExponent + macroExtraExponent, 0, 8)
+```
+
+The baseline set is **1, 2, 4, 8, 16, 32, 64, 128, 256**. The previous block supplies the baseline exponent, so there is one block of parameter pipeline delay. At effective normalized 0.5, the baseline count is 16.
+
+In the buffer processor, Time is smoothed with coefficient .001 per left-channel frame. It calculates `N=min(uint(F_init/f), capacity/2)` and a subdivision length using:
+
+```text
+S = min(N, uint((F_init * (1/f)) / R + 1))
+```
+
+The reciprocal multiplication and `+1` are present in the executable. Integer `N/R` is a reasonable new design, but it does not reproduce every original boundary. Float rounding can make neighboring parameter values produce different one-frame outcomes.
+
+### Reader and bank transitions
+
+The reader at `0x0800493c` is **linear interpolation**:
+
+```text
+i = truncate(readBankStart + readPosition)
+fraction = readBankStart + readPosition - i
+y = plane[i] + fraction * (plane[nextWrappedIndex] - plane[i])
+
+targetRate = clamp(baseRate * macroRate, -8, +8)
+alpha = min(globalRateSlew, macroRateSlew)
+currentRate += alpha * (targetRate - currentRate)
+readPosition += currentRate
+```
+
+If the position crosses a subdivision end, it resets to the opposite boundary and **discards fractional overshoot**. It is not a generic modulo phase accumulator. The returned sample uses the old read position; later windowing sees the advanced position. Five original-code probes, including interpolation across the end of a plane, matched the predicted samples exactly.
+
+Forward motion writes before reading; nonpositive motion reads before writing. Positive read wraps select the current write bank, while nonpositive wraps select the opposite bank when unfrozen. These choices matter near capture/playback collisions. There is no bandlimited interpolation stage inside this reader.
+
+## 7. Micro mode: pitch snapping, traversal and silence
+
+### Bend
+
+The ideal knob-only requested speed is `2^(6*k-3)`, covering 0.125× through 8×. The code adds two snapping passes:
+
+1. Snap the knob-derived rate near `[.125,.25,.5,1,2,4,8]`, using ±2.5% relative windows except ±15% for .125.
+2. Multiply by `2^(5*calibratedNormalizedCV)`. With ideal `CV=V/5`, this is the expected `2^V` factor.
+3. Snap again around the same targets, now using ±1.5%, except the same ±15% lowest target.
+4. Apply reverse state, then let the reader clamp its signed target to −8/+8 and slew toward it.
+
+A +1 V change doubled the requested rate in the original-code probe. Large CV can make the mapper request 32× or more, but the default reader bounds prevent claiming that as the actual playback rate. Negative CV can request very slow nonzero rates below the knob's .125× minimum. Keep requested speed, signed target, bound and current slewed speed separate.
+
+Macro Bend enable and Micro reverse use separate retained flags. Switching modes should not collapse their state into one boolean. The same separation applies to Macro Break enable and Micro silence/traversal selection.
+
+### Break traversal
+
+The control mapper clears the inactive branch: normalized Break is sent either to traversal or to silence. In traversal, `q=(R-1)*Break` is quantized with direction-sensitive hysteresis:
+
+```text
+h = R <= 4 ? .1 : .3
+selectedIndex = int(q + .5 + (q > oldIndex ? -h : +h))
+```
+
+This avoids slice chatter around thresholds. Subdivision changes are accepted at a qualifying raw-output sign crossing or reader wrap, not necessarily on the exact sample where a CV value changes. The relevant code is around `0x08005152–0x0800542a`.
+
+### Silence and its endpoint artifact
+
+The code accepts a normalized silence fraction in **[0,1]**, rather than clamping the Micro path at .9. It computes audible frames from `(1-silence)*S` while the reader continues across the full subdivision. The manual's 90% description should not replace this recovered arithmetic.
+
+However, zero audible frames are not handled safely in every original branch. At slice start zero, unsigned `audibleEnd-1` underflows to `0xffffffff`. A targeted original-code test with a frozen constant-one buffer, `N=1000`, `R=4`, `S=251` found:
+
+| Silence | Window | Audible frames | Nonzero frames out of 1,000 | Result |
+|---:|---:|---:|---:|---|
+| .9 | 0 | 25 | 96 | Expected short audible duty |
+| 1 | 0 | 0 | 1,000 | Unity passes despite zero audible length |
+| .9 | .02 | 25 | 70 | Windowed short duty |
+| 1 | .02 | 0 | 67 | Short surviving pulses |
+
+A synthetic nonzero slice start with silence 1 and Window 0 muted all samples, isolating the underflow condition. This is a specific verified edge case, not a claim that maximum Silence always passes audio in every state. A Rack implementation should explicitly define `audibleFrames==0`; a safe zero-output rule can be distinguished from a compatibility option reproducing the original endpoint.
+
+## 8. Macro mode: exact random choices and their schedules
+
+Macro processing changes buffer parameters through scheduled random decisions. It does not model a physical tape machine or CD mechanism. Much of its character comes from the tables, probabilities, state retention and the timing of those decisions.
+
+Many choices use `U=float(rand()%255)/255`, whose maximum is `254/255`, not 1. The libc generator at `0x08018958` is a 64-bit LCG with multiplier `0x5851f42d4c957f2d`, increment 1, and a returned upper word with its sign bit cleared. Vinyl uses different generators.
+
+### Macro Bend
+
+For enabled Bend above its low dead zone:
+
+```text
+j = floor(U * Bend * 1.5 * 9)
+ratio = j < 10 ? table[j] : 1.5
+table = [1, -1, 2, .5, -2, -.5, .25, 1.5, -.25, -1.5]
+```
+
+This is not an equal-probability selection among ten values. Enumerating the 255 possible remainders at full Bend makes +1.5 occur in **85 cases, one third of the outcomes**, because the out-of-table branch also returns +1.5. Near Bend .1, only forward and reverse unity rates are reachable. These percentages assume approximately uniform remainders, not measured hardware randomness.
+
+Above approximately .667, the helper can retain the previous slew coefficient or select **1, .005, .0001**. It updates the target speed even when its sticky branch retains the old slew. At full amount, the later modulus bound is 639, with ranges 0–127 selecting 1, 128–255 selecting .005, and 256 upward selecting .0001.
+
+There is no explicit zero target in this table or fallback. A slow transition toward reverse passes near zero and can create tape-stop-like deceleration; that is a plausible consequence of the recovered slew, not proof of a separate dedicated stop simulator. Evidence: `0x08004678`, `macro_helper_probes.json`, `macro_ratio_probabilities.json`.
+
+### Macro Break
+
+The helper independently chooses an extra Repeats exponent, a silence fraction and a random slice position:
+
+```text
+extraExponent = Break > .03 ? floor(U * Break * 8) : 0
+q = roundTiesAway(4 * clamp(2*Break-1, 0, 1))
+silence = Break > .5 ? silenceTable[floor(U*q)] : 0
+randomPosition = Break > .33 ? U : 0
+silenceTable = [0, .25, .5, .75, .9]
+```
+
+Because `U<1` and `q<=4`, the stored **.9 entry is unreachable through this helper** for normal normalized input. Maximum selected Macro silence is .75, and maximum extra exponent is 7 before addition to baseline Repeats and the final exponent-8 cap. Nonzero silence first becomes reachable around Break .6875, with deeper stages around .8125 and .9375.
+
+There is another decision layer at eligible subdivision wraps. With `R>1` and Break above .2, a fresh `U>.75` can replace the retained random position. That event covers 63/255 residues, about 24.7%. Thus slice jumps can arise above .2 even though the helper's initial random-position threshold is .33. Capture rerolls and subdivision rerolls must be modeled separately.
+
+Shared stereo mode copies the left channel's decisions into the right and changes RNG consumption. Unique mode lets channels choose separately. The buffer processor works through channel blocks internally, so exact deterministic sequences depend on processing order as well as the random generator.
+
+## 9. Corrupt: five recovered algorithms
+
+The mode dispatcher at `0x08001868` selects Decimate, Dropout, Destroy, DJ Filter or Vinyl. Mode zero either copies the input or uses a retained alternate mode and amount, depending on state. The engine also has a clock-linked alternate-selection path: its state and draw order should be retained when implementing the corresponding disabled/retained control behavior, rather than treating every zero mode as unconditional bypass.
+
+All amplitudes below are internal float units. They are not directly volts. `u` is the effective Corrupt amount after control mapping.
+
+### Decimate
+
+Two seventeen-entry tables govern bit removal and sample holding:
+
+```text
+doubled = 2*u
+index = roundTiesAway(16 * fmod(doubled, 1.01))
+discardedBits = uint(16 * bitTable[index])
+rateFactor = rateTable[index] * (doubled > 1 ? 1 : .25)
+holdFrames = uint(96 * rateFactor^2) + 1
+```
+
+Each channel independently holds samples, converts `held*65536` to a signed integer by truncation, arithmetically shifts away low bits, restores the scale and divides by 65536. It has no antialiasing filter in this branch. The `.5` rate-tier change and separate wrap around `.505` create intentional-looking discontinuities that a smooth generic crusher would lose.
+
+At amount .5, the selected table step holds for three frames; just above .5, it holds for 35; near .505, selection wraps to clean initial entries. The exact table floats, raw words and derived settings are in `corrupt_lookup_tables.json` and the appendix below. Evidence: `0x08001cf4`, `0x08017580`.
+
+### Dropout
+
+```text
+if u <= .03: gateOpen = true
+else if rand()%1024 < 376*u*u: gateOpen = !gateOpen
+outL = gateOpen ? inL : 0
+outR = gateOpen ? inR : 0
+```
+
+The decision occurs **once per Corrupt block**, and both channels mute together. The amount changes run lengths, not simply a per-sample chance of writing zero. Under an approximately uniform RNG, the persistent alternating gate tends toward half open/half muted over time above the bypass zone. That statistical conclusion is inferred from the state machine; the stereo gate behavior itself was executed and checked. Evidence: `0x08001ca8`, `0x08001e00`, `dropout_emulation.json`.
+
+### Destroy
+
+Define `t=2u²`, `k=max(2,1+86*clamp(t,0,1))`, `g=1+8*clamp(t-1,0,1)`, and `A=.5-.375*sin(pi*u/2)`. The processed branch is:
+
+```text
+s(x) = sign(x) * (1 - exp(-k*abs(x)))
+w(x) = A * clamp(g*s(x), -.6, .6)
+blend += .001 * ((u < .02 ? 0 : 1) - blend)
+y = (1-blend)*x + blend*w(x)
+```
+
+The shared stereo blend advances once per frame. At u=1, `k=87`, `g=9`, `A=.125`; the processed branch is bounded around ±.075 internal units. This gain compensation is part of the effect. Two compressor objects are initialized elsewhere in Corrupt, but the recovered five-mode processing dispatcher does not call them; their presence does not make Destroy a compressor. Evidence: `0x08001ad4–0x08001c5e`.
+
+### DJ Filter
+
+Each channel runs a lowpass SVF into a highpass SVF, then `tanh`. Four DaisySP-style SVFs use resonance .7, zero drive, and two integration passes per sample.
+
+```text
+LP = exp(ln(100) + clamp(2*u,0,1) * (ln(18000)-ln(100)))
+HP = exp(ln(25) + clamp(2*u-1,0,1) * (ln(3000)-ln(25)))
+y = tanh(highpass(lowpass(x)))
+```
+
+These are cutoff parameters relative to `F_init`, not independently measured physical frequencies. Center amount has the widest passband but still runs both filters and `tanh`; it is not digital bypass. The independently reconstructed recurrence had a maximum absolute difference of 1.1920929e-7 internal float units in the tested original outputs. Evidence: `0x080018aa`, `0x0801765c` and related coefficient routines.
+
+### Vinyl
+
+Vinyl is a layered stereo noise and filtering network. Processing bypasses at `u<=.05`, freezing its per-sample state while disabled. Its amount mapping uses:
+
+```text
+a = 1.25 * (exp(max(u,.001))-1) / 1.7183
+```
+
+The precise implementation uses float `expf` and a double literal denominator 1.7183. It combines two frequent dust sources updated every five frames, three larger sparse dust sources every fifteen, shared fast white noise, and held white noise with slow amplitude modulation. Noise passes through separate 3000-parameter highpasses with .3 crossfeed; impulses include both common and channel-specific contributions. The input passes through separate highpasses with cutoff parameter `700*a`, then gain `1-.15*a`; the final noise gain is 1.2.
+
+The dust sources share a 31-bit LCG. The two white-noise states use signed 32-bit multiplication by 16807 with wraparound. This is distinct from libc's 64-bit generator. Seed state, draw order, held noise and stereo correlation all contribute to repeatable texture.
+
+The filter at `0x08017a10` is ATone, a **highpass**, with recurrence `y=c*(x+previous); previous=y-x`. Its transfer function has zero DC gain. Mistaking it for the ordinary Tone lowpass also present in this image would reconstruct a different effect.
+
+The bundle's `reference_models.py` contains the detailed five-dust construction, recurrences, coefficient arithmetic and state. Short differential cases matched Vinyl bit for bit, but they did not naturally reach its first long modulation rollover or prove exhaustive rare-impulse coverage. Those longer branches remain primarily instruction-derived. Evidence: `0x08000d28`, `0x080019aa`, `0x08017a10`.
+
+## 10. Window, Freeze and output behavior
+
+### Two window layers
+
+Window receives the square of its Shift setting. Default stored amount is .02, corresponding to a setting around .141421. Both envelope layers are bypassed when the stored amount is <=.015; basic silence gating remains active.
+
+The subdivision envelope is linear/trapezoidal, with `fadeFrames=max(floor(audibleFrames*window*.5),24)`. It is not a Hann or cosine window. Its minimum 24-frame fade can attenuate short subdivisions substantially.
+
+A second multiplicative envelope follows the capture/write phase:
+
+```text
+if phase < 240:
+    gain = phase/240
+else if phase > N-480:
+    gain = clamp((N-phase-240)/240, 0, 1)
+else:
+    gain = 1
+```
+
+For sufficiently long captures, this reaches zero **240 frames before the capture boundary** and remains zero for the final 240 frames. A constant-one original-code probe at N=1000 measured unity at output frame 519, .995833 at 520, and zero from 759 through the remainder of the capture. At Window=.015 those envelopes disappear; just above it they are active. Short-window cases and zero-length silence expose additional arithmetic edges documented in the evidence.
+
+This envelope behavior is a material compatibility decision. Replacing it with a conventional symmetric fade may sound smoother, but changes the recovered short-loop character. Evidence: `window_freeze_probes.json`, `0x08004fa6`, `0x08005478`, `0x080055d0`.
+
+### Freeze
+
+Requested Freeze (`B+0x11b`) and active Freeze (`B+0x11a`) are separate. In the ordinary latched route, acceptance depends on pending flags and a qualifying sign crossing or read wrap. Momentary-button mode can copy the request directly before processing. A Time-change/stability guard at `B+0x110` further affects transitions; it is not itself the Freeze flag.
+
+Executed tests verified that a request without a pending transition did not immediately latch. After acceptance, the two current banks stayed byte-identical while the history tail continued recording. Playback phases and Macro evolution can continue during Freeze. A new implementation that stops all buffer activity when frozen would lose this behavior.
+
+The reassigned Corrupt/reset gate directly clears internal clock phase or preloads the external divider for synchronization. This investigation does not promote the manual's stronger immediate-playhead-reset wording to a completely verified integrated behavior. Simultaneous Time, clock, Freeze and reset gestures remain useful full-system tests.
+
+### Mix and width
+
+Mix has endpoint dead zones and a per-frame smoother `m += .001*(target-m)`. Gains are `dry=sin((1-m)*pi/2)` and `wet=sin(m*pi/2)`. Below the effective dry threshold, requesting Freeze changes the target to one; it does not set the current smoother to one instantaneously. The first frame in the executed dry-to-Freeze probe had m=.001.
+
+The width stage uses a crossfeed value `a` between 0 and .5, with zero meaning full original separation. Its update order is significant:
+
+```text
+Lnew = (1-a)*L + a*R
+Rnew = (1-a)*R + a*Lnew
+```
+
+At a=.5, input (0,1) becomes **(.5,.75)**, not (.5,.5). This was verified by running the actual engine output path with explicit isolation hooks for buffer return, Corrupt copy and Tone bypass. Maximum output-model error across the tested mix/width cases was below 4.5e-8. The mapping is therefore neither a conventional symmetric crossfeed nor a mid/side widening algorithm.
+
+The controls notes also identify a potential save/restore width drift: save derives `1-2a`, while restoration applies another 1.1 gain before converting back. Treat this as a static persistence quirk, not a hardware-observed conclusion. Evidence: `output_probe.json`, `0x08002156–0x080021fa`, `0x08017488`.
+
+## 11. Settings, boundaries and portability decisions
+
+The firmware loads a **56-byte settings record** from memory-mapped external flash `0x90001000`, with format marker 4. It separately loads a **12-byte Bend calibration record** from `0x90009000`, with marker 5. The BIN contains the firmware and defaults, not any particular module's stored records. The controls notes include each recovered field, restore paths, defaults, pickup logic and the two-second save scheduling behavior.
+
+For Rack, serialize logical values in patch JSON rather than emulating external flash. Preserve separate Macro/Micro button states, alternate Corrupt mode state, per-channel random state, clock median/divider state, desired and active Freeze, Window, width, gate behavior and calibration policy. Deciding whether captured audio itself persists in a patch is a new product decision; the firmware evidence does not imply that all captured RAM survives device power loss.
+
+Several original arithmetic details deserve explicit treatment:
+
+- The reader's first-index modulo branch uses `>` rather than `>=`; valid normal positions generally avoid equality, but a host should remain memory-safe.
+- Init zeros each plane except its final float. Allocate and initialize complete host buffers safely.
+- Negative signed left shifts in a direct C++ crusher translation can be undefined; preserve the intended bit pattern using well-defined unsigned operations.
+- Zero audible lengths and short envelopes expose unsigned underflow. A corrected behavior should be documented separately from fidelity settings.
+- Continuous host-rate random decisions would change Dropout and Macro character. Preserve their event domains.
+- Linear interpolation and deliberate sample holding generate aliasing. Optional higher-quality modes should not silently replace the reference behavior.
+- Hardware GPIO inversion and right-channel polarity compensation should remain outside the musical engine.
+
+These are engineering boundaries for a reproducible implementation, not reasons to abandon the reconstruction. The recovered behavior is detailed enough to make each choice concrete.
+
+## 12. What was validated, and what remains
+
+| Area | Executed coverage | Result and limit |
+|---|---|---|
+| Four Corrupt modes | 64 cases: four modes × 16 amounts × 128 stereo frames | Decimate/Destroy/Vinyl bit-exact; DJ maximum error 1.1920929e-7 |
+| Dropout | Seven deterministic-random cases | Stereo gate and toggle behavior checked |
+| Control mapper | 30 prepared control cases | Pitch curve/snaps, CV, mode routing and related fields checked |
+| Clock mapping | 38 Time values plus five median steps | Exact ratios/formula and median behavior checked |
+| Macro helpers | 68 cases | Table choice, thresholds, sticky slew, state copying and RNG consumption checked |
+| Buffer processor | Seven 2,048-frame stereo cases | Representative segmentation, traversal and gating checked |
+| Window / Freeze | Eight window cases plus a Freeze transition | Envelope samples and protected-bank/history-tail behavior checked |
+| Micro Silence endpoint | Five targeted cases | Zero-length underflow isolated |
+| Output path / reader | 16 mix-width cases and five reader cases | Output equations within float rounding; interpolation samples exact |
+| Platform init | Selected original initialization and divider routines | Requested rate, block format, PLL configuration and divider checked |
+
+These tests execute original Cortex-M7 instructions in Unicorn. Each script states its boundaries: hardware calls, allocator operations, deterministic RNG or an unrelated processing stage may be substituted as appropriate. The effect differential test runs the original initializer and original libm functions without host math substitutions, and its bit-exact result compares packed float32 bytes, including the sign of zero. Some buffer probes substitute an equivalent float32 `powf` result. Control probes substitute host equivalents for `expf` and `powf`, and the Time-mapping probe substitutes `expf`; these validate formulas and branches rather than bit-exact original-libm behavior. None should be described as complete board emulation.
+
+The main remaining uncertainties are the physically measured sample rate, analog gain/frequency response, exact compiler/dependency revision, natural startup random state, long-run Vinyl modulation and rare-event coverage, full history-tail reuse under unusual Time gestures, all outer global-slew setters, simultaneous control transitions, and externally observable latency. These are specific remaining targets; they do not erase the recovered component equations.
+
+## 13. VCV Rack implementation handoff
+
+The efficient next implementation is portable native DSP, using the binary as an offline reference. A Cortex emulator belongs in the analysis/test harness, not in the production audio callback.
+
+Recommended component boundaries are:
+
+| Component | Responsibilities |
+|---|---|
+| Parameter and gesture state | Knob/CV normalization, Macro/Micro flags, Shift settings, gate/button semantics, pending changes |
+| Clock scheduler | Internal phase, external median/divider, lost-clock continuation, capture events, stability guard |
+| Stereo history/capture store | Two protected banks per channel, history tail, explicit bounded indexing |
+| Playback channel | Fractional reader, signed slew, bank selection, subdivisions, traversal hysteresis, silence and windows |
+| Macro controller | Capture and subdivision rerolls, exact tables, shared/unique state, reproducible RNG streams |
+| Corrupt processor | Five small persistent-state algorithms, preserved parameter discontinuities and event cadence |
+| Output stage | Equal-power mix, Tone response, width policy, voltage scaling |
+| Patch state | Versioned serialization of logical settings and an explicit captured-audio persistence policy |
+
+Implement in this order:
+
+1. Establish one explicit rate/cadence contract and a dry/wet voltage reference. Keep it configurable for later hardware-rate confirmation.
+2. Build buffer capture, linear reading, Repeats and Micro controls, with deterministic signals and no randomization.
+3. Add transition scheduling, protected Freeze banks, history tail and Window, checking boundary traces.
+4. Add the recovered Corrupt reference models one by one and compare the provided vectors.
+5. Add Macro decisions and exact draw order, then shared/unique stereo behavior.
+6. Add output conditioning, width, full gesture state and versioned patch persistence.
+7. Compare device recordings and integrated transitions before claiming a close hardware match.
+
+Do not allocate, resize large sample storage, log, or access files on the audio thread. If host sample-rate changes require different storage, prepare that outside real-time processing and switch ownership safely. A fixed reference renderer with input/output resampling makes some fidelity tests simpler; a host-rate renderer can be more direct, but requires deliberate conversion of every frame-count, smoothing and event-rate assumption.
+
+The raw BIN, golden vectors and independently expressed Python models give Codex a concrete reference. The generated C is a navigation aid and should be treated as pseudocode until checked against instructions and tests. The included synthetic ELF adds addresses and labels without modifying original image bytes; it is an analysis file, not replacement firmware for flashing.
+
+## 14. Highest-value measurements still worth doing
+
+The first hardware experiment should resolve the clock-rate discrepancy: measure LRCLK/BCLK or record a suitably identifiable firmware-generated/processed test at a known external rate. Pair that with an impulse or sweep to determine output-filter frequency and analog scaling. This is more decisive than inferring time solely from product specifications.
+
+Next, use a changing, uniquely segment-coded input to compare clock, Freeze and reset at different phases. Include fully dry Mix, near-dry Mix, ordinary mixed output and full wet. That establishes when a requested gesture becomes audibly active and whether the signed-rate bank choice matches the reconstructed scheduler.
+
+For longer stochastic matching, record Macro choices with a frozen recognizable buffer, Window disabled and Corrupt isolated. Compare capture-triggered and subdivision-triggered decisions, run-length distributions, shared/unique channel correlation and changes around exact thresholds. For Vinyl, extend beyond the slow modulation rollover and inspect rare impulses. The source dossier includes a staged measurement plan; these proposed tests were not performed on physical hardware here.
+
+## 15. Sources and evidence register
+
+**Primary source of behavioral findings:** the user-supplied `Data_Bender_v1_4_7.bin`, identified by the SHA-256 above. Address-indexed instruction listings, emulator results and tables in this bundle substantiate the firmware claims. The supplied `DB-back.png` is the source of the board photograph.
+
+- **S1 — Official release and binary:** [v1.4.7 release page](https://www.qubitelectronix.com/alternate-firmware/p/data-bender-v147); [official raw binary](https://www.qubitelectronix.com/s/Data_Bender_v1_4_7.bin). The checked raw image matched the upload exactly.
+- **S2 — Manufacturer behavioral documentation:** [manual linked by the release](https://www.qubitelectronix.com/s/Data_Bender_v145-7ghx.pdf), internally version 1.4.5. Used for external interface facts and to cross-check terminology; executable behavior takes precedence in this dossier's explicitly identified discrepancies.
+- **S3 — Board identification:** [Qu-Bit FAQ](https://www.qubitelectronix.com/faq) and [Data Bender update support](https://www.qubitelectronix.com/im-having-trouble-updating-my-data-bender).
+- **S4 — Public audio specification:** [Data Bender product page](https://www.qubitelectronix.com/shop/p/data-bender). Its 96 kHz description is distinguished from the supplied executable's selected driver rate.
+- **S5 — Platform implementation comparisons:** [libDaisy](https://github.com/electro-smith/libDaisy), especially `daisy_seed.cpp`, `hid/audio.cpp`, `per/sai.cpp` and `sys/system.cpp`.
+- **S6 — DSP implementation comparisons:** [DaisySP](https://github.com/electro-smith/DaisySP) and [DaisySP-LGPL](https://github.com/electro-smith/DaisySP-LGPL). `upstream_sources.json` records exact retrieved files and hashes. Matching current source bodies does not establish the original firmware's dependency commit.
+
+The report intentionally does not bundle manufacturer manuals or downloaded upstream implementation files. It includes the supplied firmware, independently reconstructed analysis models, generated disassembly/pseudocode and source references.
+'''
+
+CSS='''
+:root{--ink:#1c2433;--muted:#596578;--paper:#f6f4ef;--card:#fff;--accent:#684ec0;--line:#dfe3eb;--soft:#eeebfa}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:#4e3f99;text-underline-offset:3px}header{background:#202535;color:#fff;padding:52px max(28px,calc((100vw - 1180px)/2));border-top:7px solid #b8a4ee}
+header .eyebrow{color:#c8b5fa;letter-spacing:.16em;text-transform:uppercase;font-size:12px;font-weight:750}header h1{font-size:clamp(32px,4vw,54px);line-height:1.13;letter-spacing:-.03em;margin:16px 0}
+header p{color:#d4dae6;font-size:19px;max-width:900px}.meta{display:flex;flex-wrap:wrap;gap:12px;font-size:13px}.meta span{border:1px solid #526075;border-radius:6px;padding:5px 10px}
+.layout{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:38px;padding:38px 26px}
+aside{align-self:start;position:sticky;top:18px;max-height:94vh;overflow:auto;font-size:12px;line-height:1.5;padding-right:10px}aside h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}aside ul{padding-left:16px}aside li{margin:9px 0}aside ul ul{display:none}aside a{text-decoration:none}
+article{min-width:0;background:var(--card);padding:34px 42px;border:1px solid var(--line);border-radius:12px;box-shadow:0 5px 25px #20253508}
+h2{font-size:28px;line-height:1.25;letter-spacing:-.02em;margin:58px 0 20px;padding-top:20px;border-top:2px solid var(--soft);scroll-margin-top:20px}article>h2:first-of-type{margin-top:5px;border-top:0;padding-top:0}h3{font-size:20px;line-height:1.35;margin:30px 0 13px;color:#40345e}
+p{margin:16px 0}li{margin:7px 0}strong{font-weight:720}code{font: .9em/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;background:#f1eff7;border-radius:4px;padding:2px 5px;overflow-wrap:anywhere}
+pre{background:#202535;color:#e9edf5;padding:18px 20px;border-radius:8px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}pre code{padding:0;background:none;color:inherit;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.5;margin:22px 0;table-layout:auto}th{text-align:left;background:#eeeaf8;color:#32284b;padding:11px 10px;border-bottom:2px solid #c8b9e9}td{vertical-align:top;padding:10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}tr:nth-child(even)td{background:#fafbfc}table code{font-size:11px}
+.board{display:flex;align-items:center;gap:25px;padding:24px;background:var(--soft);border-radius:10px;margin-bottom:32px}.board img{width:112px;height:auto;flex-shrink:0;border-radius:3px}.board p{margin:9px 0}.board .kicker{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:#655582}
+.foot{max-width:1180px;margin:0 auto;padding:0 30px 40px;color:var(--muted);font-size:13px}.printlink{display:inline-block;color:#ddd1ff;font-size:13px;border:0;background:transparent;cursor:pointer;padding:0;margin-top:18px;text-decoration:underline}
+@media(max-width:880px){.layout{display:block;padding:20px 12px}aside{position:static;max-height:none;padding:0 12px}aside ul{columns:2}article{padding:25px 19px}.board{padding:16px;gap:17px}.board img{width:90px}h2{font-size:25px}table{font-size:12px}td,th{padding:8px 6px}}
+@media print{body{background:white;font-size:10pt}.layout{display:block;padding:0}aside,.printlink{display:none}header{padding:24px;color:black;background:white;border-top:4px solid #684ec0}header p,header .eyebrow{color:#333}article{border:0;box-shadow:none;padding:0 16px}h2{page-break-after:avoid;font-size:19pt}h3{page-break-after:avoid}tr,pre,.board{break-inside:avoid}table{font-size:8pt}a{color:inherit}pre{background:#eee;color:#111}}
+'''
+
+def table_appendix():
+    tab=json.loads((ROOT/'analysis/static/lookup_tables.json').read_text())
+    bit=tab['decimate_bitcrush_table']['values'];rate=tab['decimate_downsample_table']['values']
+    s='\n## Appendix A. Decimate table values\n\nThe displayed decimals are readable summaries. The JSON preserves every original float word.\n\n| Index | Bit factor | Rate factor | Discarded bits | Hold below/equal .5 | Hold above .5 |\n|---:|---:|---:|---:|---:|---:|\n'
+    # For these table entries, these decimal expressions yield the same integers
+    # as the original float32 arithmetic; the evidence JSON is authoritative.
+    for i,(b,r) in enumerate(zip(bit,rate)):
+        s+=f'| {i} | {b:.2f} | {r:.2f} | {int(16*b)} | {int(96*(.25*r)**2)+1} | {int(96*r*r)+1} |\n'
+    return s
+
+def main():
+    body=BODY+table_appendix()
+    md=markdown.Markdown(extensions=['tables','fenced_code','toc'],extension_configs={'toc':{'toc_depth':'2'}})
+    content=md.convert(body)
+    photo=base64.b64encode((ROOT/'upload/DB-back.png').read_bytes()).decode()
+    board=f'<div class="board"><img src="data:image/png;base64,{photo}" alt="The supplied rear-board photograph, showing the yellow Daisy Seed daughterboard"><div><div class="kicker">Supplied board · original image preserved</div><p><strong>Data Bender 1.4.7<br>Reverse engineering for VCV Rack</strong></p><p>Executable evidence, reconstructed DSP, control mappings and a portable implementation handoff.</p></div></div>'
+    doc=f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Data Bender 1.4.7 — Reverse Engineering for VCV Rack</title><style>{CSS}</style></head><body>
+<header><div class="eyebrow">Leviathan · Firmware research dossier</div><h1>Inside Data Bender</h1><p>Recovered algorithms, controls and timing from the supplied v1.4.7 executable.</p><div class="meta"><span>2 October 2026</span><span>497 function candidates</span><span>96 semantic labels</span><span>Original ARM code probed</span></div><button class="printlink" onclick="window.print()">Print / save as PDF</button></header>
+<div class="layout"><aside aria-label="Contents"><h2>Contents</h2>{md.toc}</aside><article>{board}{content}</article></div><div class="foot">Prepared for Dragon King Leviathan · Static analysis and isolated original-code execution. Physical hardware was not measured. The raw BIN and evidence records remain authoritative.</div></body></html>'''
+    target=OUT/'Data_Bender_Reverse_Engineering.html';target.write_text(doc)
+    # A plain-text companion is generated from the rendered document, keeping
+    # headings, paragraphs and table text available to coding assistants.
+    from lxml import html as lh
+    tree=lh.fromstring(content)
+    lines=[]
+    for node in tree:
+        if node.tag in ('h1','h2','h3'):
+            title=node.text_content().strip();lines.extend(['',title,'='*min(len(title),90),''])
+        elif node.tag=='table':
+            for row in node.xpath('.//tr'):
+                lines.append(' | '.join(' '.join(c.text_content().split()) for c in row))
+            lines.append('')
+        elif node.tag in ('ul','ol'):
+            for n,li in enumerate(node.xpath('./li'),1):lines.append(f'{n}. '+li.text_content().strip())
+            lines.append('')
+        else:lines.extend([node.text_content().strip(),''])
+    lines.extend(['','SOURCE URLS','===========',''])
+    seen_urls=set()
+    for anchor in tree.xpath('.//a[starts-with(@href,"https://")]'):
+        url=anchor.get('href')
+        if url not in seen_urls:
+            lines.extend([anchor.text_content().strip()+':',url,''])
+            seen_urls.add(url)
+    (OUT/'Data_Bender_Reverse_Engineering.txt').write_text('DATA BENDER 1.4.7 — REVERSE ENGINEERING FOR VCV RACK\n2 October 2026\n'+'\n'.join(lines))
+    visible=lh.fromstring(content).text_content()
+    (OUT/'report_build_metadata.json').write_text(json.dumps({'html':str(target),'words':len(visible.split()),'html_bytes':target.stat().st_size,'self_contained_photo':True},indent=2)+'\n')
+    print(json.dumps({'html':str(target),'words':len(visible.split()),'bytes':target.stat().st_size}))
+
+if __name__=='__main__':main()

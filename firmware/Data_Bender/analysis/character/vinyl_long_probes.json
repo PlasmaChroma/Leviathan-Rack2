@@ -1,0 +1,410 @@
+{
+  "method": "Long original-code Vinyl/model comparisons, including natural rollovers.\nOriginal initializer, libm, noise generators and processing execute; no stubs.\nExplicit zeroed RAM and seed=1, no hardware boot. 96-frame blocks, F_init=96028.\nWAV playback rate 48000 is an audition assumption, not a board measurement.\n",
+  "firmware_sha256": "591eb538e2c6ce3024a1dfc1d85d8c7ef466ca5e13290191f2994aae2706f41d",
+  "cases": [
+    {
+      "amount": 0.25,
+      "pause": false,
+      "frames": 288096,
+      "max_abs_error": 0.0,
+      "unequal_float32_samples": 0,
+      "dust_event_counts": [
+        61,
+        57,
+        0,
+        0,
+        1
+      ],
+      "rollovers": [
+        {
+          "frame": 48013,
+          "modulation": -0.08141356706619263
+        },
+        {
+          "frame": 96027,
+          "modulation": 0.11094986647367477
+        },
+        {
+          "frame": 144041,
+          "modulation": 0.08909815549850464
+        },
+        {
+          "frame": 192055,
+          "modulation": -0.1504220813512802
+        },
+        {
+          "frame": 240069,
+          "modulation": -0.22073915600776672
+        },
+        {
+          "frame": 288083,
+          "modulation": -0.023661313578486443
+        }
+      ],
+      "checkpoints": [
+        {
+          "frame_end": 47904,
+          "amount": 0.25,
+          "mod_counter": 47904,
+          "modulation": 0.0,
+          "slow_value": -0.0
+        },
+        {
+          "frame_end": 48000,
+          "amount": 0.25,
+          "mod_counter": 48000,
+          "modulation": 0.0,
+          "slow_value": 0.0
+        },
+        {
+          "frame_end": 48096,
+          "amount": 0.25,
+          "mod_counter": 82,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.00018235915922559798
+        },
+        {
+          "frame_end": 48192,
+          "amount": 0.25,
+          "mod_counter": 178,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0002379045617999509
+        },
+        {
+          "frame_end": 48288,
+          "amount": 0.25,
+          "mod_counter": 274,
+          "modulation": -0.08141356706619263,
+          "slow_value": 9.14976917556487e-05
+        },
+        {
+          "frame_end": 95904,
+          "amount": 0.25,
+          "mod_counter": 47890,
+          "modulation": -0.08141356706619263,
+          "slow_value": 9.89574400591664e-05
+        },
+        {
+          "frame_end": 96000,
+          "amount": 0.25,
+          "mod_counter": 47986,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0002207777724834159
+        },
+        {
+          "frame_end": 96096,
+          "amount": 0.25,
+          "mod_counter": 68,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.00030752611928619444
+        },
+        {
+          "frame_end": 96192,
+          "amount": 0.25,
+          "mod_counter": 164,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0006225261022336781
+        },
+        {
+          "frame_end": 96288,
+          "amount": 0.25,
+          "mod_counter": 260,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.00014439782535191625
+        },
+        {
+          "frame_end": 96384,
+          "amount": 0.25,
+          "mod_counter": 356,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.0002627523790579289
+        },
+        {
+          "frame_end": 96480,
+          "amount": 0.25,
+          "mod_counter": 452,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0006708467262797058
+        },
+        {
+          "frame_end": 96576,
+          "amount": 0.25,
+          "mod_counter": 548,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.00010878918692469597
+        }
+      ],
+      "peak": 0.3160174489021301,
+      "rms": 0.002988681770534744,
+      "audio_float32_sha256": "1b3acbe8823ab784d9abe525738be0fc2578aec508b873679535a14ff9d51c46"
+    },
+    {
+      "amount": 1.0,
+      "pause": false,
+      "frames": 288096,
+      "max_abs_error": 0.0,
+      "unequal_float32_samples": 0,
+      "dust_event_counts": [
+        407,
+        369,
+        3,
+        0,
+        2
+      ],
+      "rollovers": [
+        {
+          "frame": 48013,
+          "modulation": -0.08141356706619263
+        },
+        {
+          "frame": 96027,
+          "modulation": 0.11094986647367477
+        },
+        {
+          "frame": 144041,
+          "modulation": 0.08909815549850464
+        },
+        {
+          "frame": 192055,
+          "modulation": -0.1504220813512802
+        },
+        {
+          "frame": 240069,
+          "modulation": -0.22073915600776672
+        },
+        {
+          "frame": 288083,
+          "modulation": -0.023661313578486443
+        }
+      ],
+      "checkpoints": [
+        {
+          "frame_end": 47904,
+          "amount": 1.0,
+          "mod_counter": 47904,
+          "modulation": 0.0,
+          "slow_value": -0.0
+        },
+        {
+          "frame_end": 48000,
+          "amount": 1.0,
+          "mod_counter": 48000,
+          "modulation": 0.0,
+          "slow_value": 0.0
+        },
+        {
+          "frame_end": 48096,
+          "amount": 1.0,
+          "mod_counter": 82,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.0011032266775146127
+        },
+        {
+          "frame_end": 48192,
+          "amount": 1.0,
+          "mod_counter": 178,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0014392622979357839
+        },
+        {
+          "frame_end": 48288,
+          "amount": 1.0,
+          "mod_counter": 274,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.0005535378586500883
+        },
+        {
+          "frame_end": 95904,
+          "amount": 1.0,
+          "mod_counter": 47890,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.0005986674223095179
+        },
+        {
+          "frame_end": 96000,
+          "amount": 1.0,
+          "mod_counter": 47986,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0013356495182961226
+        },
+        {
+          "frame_end": 96096,
+          "amount": 1.0,
+          "mod_counter": 68,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.001860455027781427
+        },
+        {
+          "frame_end": 96192,
+          "amount": 1.0,
+          "mod_counter": 164,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.003766125300899148
+        },
+        {
+          "frame_end": 96288,
+          "amount": 1.0,
+          "mod_counter": 260,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0008735702722333372
+        },
+        {
+          "frame_end": 96384,
+          "amount": 1.0,
+          "mod_counter": 356,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.001589585212059319
+        },
+        {
+          "frame_end": 96480,
+          "amount": 1.0,
+          "mod_counter": 452,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0040584527887403965
+        },
+        {
+          "frame_end": 96576,
+          "amount": 1.0,
+          "mod_counter": 548,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0006581469788216054
+        }
+      ],
+      "peak": 0.8206776976585388,
+      "rms": 0.014618011316627105,
+      "audio_float32_sha256": "180675f33abe6a7d83d7d8503a305c0b886d1ab1f1baabfd1b1cd7a6789b2d4b"
+    },
+    {
+      "amount": 1.0,
+      "pause": true,
+      "frames": 288096,
+      "max_abs_error": 0.0,
+      "unequal_float32_samples": 0,
+      "dust_event_counts": [
+        407,
+        369,
+        3,
+        0,
+        2
+      ],
+      "rollovers": [
+        {
+          "frame": 48205,
+          "modulation": -0.08141356706619263
+        },
+        {
+          "frame": 96219,
+          "modulation": 0.11094986647367477
+        },
+        {
+          "frame": 144233,
+          "modulation": 0.08909815549850464
+        },
+        {
+          "frame": 192247,
+          "modulation": -0.1504220813512802
+        },
+        {
+          "frame": 240261,
+          "modulation": -0.22073915600776672
+        }
+      ],
+      "checkpoints": [
+        {
+          "frame_end": 47904,
+          "amount": 1.0,
+          "mod_counter": 47904,
+          "modulation": 0.0,
+          "slow_value": -0.0
+        },
+        {
+          "frame_end": 48000,
+          "amount": 0.05,
+          "mod_counter": 47904,
+          "modulation": 0.0,
+          "slow_value": -0.0
+        },
+        {
+          "frame_end": 48096,
+          "amount": 0.05,
+          "mod_counter": 47904,
+          "modulation": 0.0,
+          "slow_value": -0.0
+        },
+        {
+          "frame_end": 48192,
+          "amount": 1.0,
+          "mod_counter": 48000,
+          "modulation": 0.0,
+          "slow_value": 0.0
+        },
+        {
+          "frame_end": 48288,
+          "amount": 1.0,
+          "mod_counter": 82,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.0011032266775146127
+        },
+        {
+          "frame_end": 95904,
+          "amount": 1.0,
+          "mod_counter": 47698,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.002524326788261533
+        },
+        {
+          "frame_end": 96000,
+          "amount": 1.0,
+          "mod_counter": 47794,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0016617926303297281
+        },
+        {
+          "frame_end": 96096,
+          "amount": 1.0,
+          "mod_counter": 47890,
+          "modulation": -0.08141356706619263,
+          "slow_value": 0.0005986674223095179
+        },
+        {
+          "frame_end": 96192,
+          "amount": 1.0,
+          "mod_counter": 47986,
+          "modulation": -0.08141356706619263,
+          "slow_value": -0.0013356495182961226
+        },
+        {
+          "frame_end": 96288,
+          "amount": 1.0,
+          "mod_counter": 68,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.001860455027781427
+        },
+        {
+          "frame_end": 96384,
+          "amount": 1.0,
+          "mod_counter": 164,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.003766125300899148
+        },
+        {
+          "frame_end": 96480,
+          "amount": 1.0,
+          "mod_counter": 260,
+          "modulation": 0.11094986647367477,
+          "slow_value": -0.0008735702722333372
+        },
+        {
+          "frame_end": 96576,
+          "amount": 1.0,
+          "mod_counter": 356,
+          "modulation": 0.11094986647367477,
+          "slow_value": 0.001589585212059319
+        }
+      ],
+      "peak": 0.8206776976585388,
+      "rms": 0.014615467016081183,
+      "audio_float32_sha256": "88826a62007ebdafe5509b046cf8faa65142b0e980f8474a3a65089b5144ec25"
+    }
+  ]
+}

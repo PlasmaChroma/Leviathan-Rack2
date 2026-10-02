@@ -1,0 +1,27 @@
+kind,index,name,daisy_pin,mcu_pin,table_va,name_evidence
+button,0,Shift,D14,PB7,0x8019c20,cross-referenced UI polling by controls agent
+button,1,Clock,D30,PB15,0x8019c24,cross-referenced UI polling by controls agent
+button,2,Mode,D29,PB14,0x8019c28,cross-referenced UI polling by controls agent
+button,3,Freeze,D27,PG9,0x8019c2c,cross-referenced UI polling by controls agent
+button,4,Bend,D0,PB12,0x8019c30,cross-referenced UI polling by controls agent
+button,5,Break,D1,PC11,0x8019c34,cross-referenced UI polling by controls agent
+button,6,Corrupt,D2,PC10,0x8019c38,cross-referenced UI polling by controls agent
+gate,0,Freeze,D3,PC9,0x8019c3c,cross-referenced UI polling by controls agent
+gate,1,Bend,D10,PB5,0x8019c40,cross-referenced UI polling by controls agent
+gate,2,Break,D9,PB4,0x8019c44,cross-referenced UI polling by controls agent
+gate,3,Corrupt,D8,PG11,0x8019c48,cross-referenced UI polling by controls agent
+gate,4,Clock,D13,PB6,0x8019c4c,cross-referenced UI polling by controls agent
+knob,0,Time,D15,PC0,0x8019c50,cross-referenced UI polling by controls agent
+knob,1,Repeats,D16,PA3,0x8019c54,cross-referenced UI polling by controls agent
+knob,2,Mix,D23,PA4,0x8019c58,cross-referenced UI polling by controls agent
+knob,3,Bend,D24,PA1,0x8019c5c,cross-referenced UI polling by controls agent
+knob,4,Break,D25,PA0,0x8019c60,cross-referenced UI polling by controls agent
+knob,5,Corrupt,D28,PA2,0x8019c64,cross-referenced UI polling by controls agent
+cv,0,Time,D17,PB1,0x8019c68,cross-referenced UI polling by controls agent
+cv,1,Repeats,D18,PA7,0x8019c6c,cross-referenced UI polling by controls agent
+cv,2,Mix,D19,PA6,0x8019c70,cross-referenced UI polling by controls agent
+cv,3,Bend,D20,PC1,0x8019c74,cross-referenced UI polling by controls agent
+cv,4,Break,D21,PC4,0x8019c78,cross-referenced UI polling by controls agent
+cv,5,Corrupt,D22,PA5,0x8019c7c,cross-referenced UI polling by controls agent
+bus,,LED I2C SCL,D11,PB8,instruction immediates,hardware initialization
+bus,,LED I2C SDA,D12,PB9,instruction immediates,hardware initialization
