@@ -170,11 +170,24 @@ struct VesselPitchTintLayer final : TransparentWidget {
 
 struct VesselMalletLink {
     Vessel* module = nullptr;
+    std::shared_ptr<window::Svg> emblem;
     math::Rect orbit;
     math::Rect bowl;
     float strikePadHeight = 0.f;
     // Temporary, UI-only tuning shared by the front/back animation passes.
     std::shared_ptr<float> orbitWidthScale = std::make_shared<float>(1.f);
+
+    VesselMalletLink() {
+        // Own a separate SVG so recoloring never changes the cached gold icon.
+        emblem = std::make_shared<window::Svg>();
+        emblem->loadFile(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
+        if (emblem->handle) {
+            for (NSVGshape* shape = emblem->handle->shapes; shape; shape = shape->next) {
+                if (shape->fill.type == NSVG_PAINT_COLOR) shape->fill.color = 0xff000000u;
+                if (shape->stroke.type == NSVG_PAINT_COLOR) shape->stroke.color = 0xff000000u;
+            }
+        }
+    }
 };
 
 struct VesselOrbitWidthQuantity final : Quantity {
@@ -324,6 +337,19 @@ struct VesselMalletRenderWidget : TransparentWidget {
         nvgRect(args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight);
         nvgFillPaint(args.vg, paint);
         nvgFill(args.vg);
+        if (link->emblem && link->emblem->handle) {
+            const Vec emblemSize = link->emblem->getSize();
+            if (emblemSize.x > 0.f && emblemSize.y > 0.f) {
+                const float scale = .7f * drawWidth / emblemSize.x;
+                // Counter the artwork's playing orientation with a centered
+                // half-turn, keeping the printed emblem upright while rubbing.
+                nvgTranslate(args.vg, .5f * emblemSize.x * scale,
+                    imageY + .5f * (drawHeight + emblemSize.y * scale));
+                nvgScale(args.vg, -scale, -scale);
+                nvgGlobalAlpha(args.vg, opacity);
+                link->emblem->draw(args.vg);
+            }
+        }
         nvgRestore(args.vg);
     }
 
