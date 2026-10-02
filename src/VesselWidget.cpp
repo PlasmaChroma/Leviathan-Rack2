@@ -173,6 +173,38 @@ struct VesselMalletLink {
     math::Rect orbit;
     math::Rect bowl;
     float strikePadHeight = 0.f;
+    // Temporary, UI-only tuning shared by the front/back animation passes.
+    std::shared_ptr<float> orbitWidthScale = std::make_shared<float>(1.f);
+};
+
+struct VesselOrbitWidthQuantity final : Quantity {
+    std::shared_ptr<float> scale;
+    float defaultWidthMm;
+
+    VesselOrbitWidthQuantity(std::shared_ptr<float> scale, float defaultWidthMm)
+        : scale(scale), defaultWidthMm(defaultWidthMm) {}
+    void setValue(float value) override {
+        if (std::isfinite(value)) *scale = clamp(value, .5f, 1.5f);
+    }
+    float getValue() override { return *scale; }
+    float getMinValue() override { return .5f; }
+    float getMaxValue() override { return 1.5f; }
+    float getDefaultValue() override { return 1.f; }
+    float getDisplayValue() override { return getValue() * defaultWidthMm; }
+    void setDisplayValue(float value) override { setValue(value / defaultWidthMm); }
+    std::string getDisplayValueString() override { return string::f("%.1f", getDisplayValue()); }
+    std::string getLabel() override { return "Orbit width"; }
+    std::string getUnit() override { return " mm"; }
+};
+
+struct VesselOrbitWidthSlider final : ui::Slider {
+    VesselOrbitWidthQuantity widthQuantity;
+
+    VesselOrbitWidthSlider(std::shared_ptr<float> scale, float defaultWidthMm)
+        : widthQuantity(scale, defaultWidthMm) {
+        quantity = &widthQuantity;
+        box.size = Vec(240.f, 24.f);
+    }
 };
 
 constexpr float kVesselMalletHeightMm = 34.f;
@@ -226,7 +258,7 @@ struct VesselMalletRenderWidget : TransparentWidget {
         const float depth = std::sin(angle);
         if (rubbing && frontPass != (depth >= 0.f)) return;
 
-        const std::string fullPath = asset::plugin(pluginInstance, "res/Vessel/WoodSmall.png");
+        const std::string fullPath = asset::plugin(pluginInstance, "res/Vessel/PureWoodMallet.png");
         std::shared_ptr<window::Image> source = APP->window->loadImage(fullPath);
         if (!source || source->handle < 0) return;
         int handle = visual_assets::loadRasterMipmapHandle(args.vg, source, fullPath);
@@ -238,7 +270,7 @@ struct VesselMalletRenderWidget : TransparentWidget {
         const Vec center = link->orbit.pos.plus(link->orbit.size.mult(.5f));
         const Vec radius = link->orbit.size.mult(.5f);
         const Vec contact = center.plus(Vec(
-            radius.x * std::cos(angle),
+            radius.x * *link->orbitWidthScale * std::cos(angle),
             radius.y * depth + mm2px(kVesselMalletContactOffsetMm)));
         const float drawHeight = mm2px(kVesselMalletHeightMm);
         const float drawWidth = drawHeight * float(imageWidth) / float(imageHeight);
@@ -522,6 +554,13 @@ struct VesselWidget final : ModuleWidget {
         ModuleWidget::appendContextMenu(menu);
         auto* m = static_cast<Vessel*>(module);
         if (!m) return;
+        if (isDragonKingDebugEnabled()) {
+            menu->addChild(new MenuSeparator);
+            menu->addChild(createMenuLabel("Temporary orbit tuning"));
+            const float defaultWidthMm = malletLink.orbit.size.x / mm2px(1.f);
+            menu->addChild(new VesselOrbitWidthSlider(malletLink.orbitWidthScale, defaultWidthMm));
+            menu->addChild(createMenuLabel(string::f("Double-click to reset to %.1f mm.", defaultWidthMm)));
+        }
         menu->addChild(new MenuSeparator);
         menu->addChild(createSubmenuItem("Processing quality (performance test)", "", [m](Menu* sub) {
             const char* labels[] = {"48 kHz — Economy", "96 kHz — Balanced", "192 kHz — Reference"};
