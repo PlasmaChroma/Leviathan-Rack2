@@ -13,7 +13,10 @@
 /dist
 
 # Local test media and downloaded fixture sets
-/tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/tiamat/
+/tests/fixtures/tiamat/*
+!/tests/fixtures/tiamat/reference_v1.txt
 
 # Durable local listening fixtures generated from the Doorstop corpus.
 # Unlike build/, these are intended to survive normal build and git cleans.

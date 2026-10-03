@@ -14,6 +14,8 @@ Chimera-style waveform drawing, sample editing, enhanced interpolation, independ
 
 Use `Bender` as a provisional implementation prefix/namespace/model slug if a name is needed. It is not a final product naming decision. Final branding and visual artwork remain separate from the DSP contract. Do not reuse another module's IDs or modify its patch behavior.
 
+> **Note:** The module name is going to be **Tiamat**.
+
 ### Fidelity decisions
 
 | Behavior | V1 contract | Reason |
