@@ -1,27 +1,184 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="40.64mm" height="128.5mm" viewBox="0 0 4064 12850">
-<defs><linearGradient id="vtune-edge"><stop stop-color="#ad77e7"/><stop offset="1" stop-color="#54d7d4"/></linearGradient></defs>
-<g id="panel_art"><g id="theme_background"><rect width="4064" height="12850" fill="#000000"/></g>
-<rect x="50" y="50" width="3964" height="12750" rx="90" fill="none" stroke="url(#vtune-edge)" stroke-width="24" opacity="0.65"/>
-<g id="component_anchors" style="display:none">
-<rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="396.1" y="11943.102" width="3271.933" height="1224.054"/>
-<circle id="VESSEL_EXPANDER_LIGHT" cx="320" cy="580" r="10"/>
-<circle id="VELOCITY_PARAM" cx="3014" cy="2200" r="10"/>
-<circle id="SPEED_PARAM" cx="1050" cy="2200" r="10"/>
-<circle id="PRESSURE_PARAM" cx="1050" cy="4300" r="10"/>
-<circle id="SUSTAIN_PARAM" cx="3014" cy="4300" r="10"/>
-<circle id="IMPERFECTION_PARAM" cx="1050" cy="6400" r="10"/>
-<circle id="WIDTH_PARAM" cx="3014" cy="6400" r="10"/>
-</g></g>
-<g id="labels" font-family="Rubik, sans-serif" text-anchor="middle" fill="#e9edf2">
-<text x="2032" y="720" font-size="430" font-weight="700" letter-spacing="30">V.TUNE</text>
-<text x="2032" y="1080" font-size="145" letter-spacing="30" fill="#6bd8d3">VESSEL EXPANDER</text>
-<g id="theme_text_input" font-size="282.222" font-weight="600">
-<text x="3014" y="2900">VELOCITY</text>
-<text x="1050" y="2900">SPEED</text>
-<text x="1050" y="5000">PRESSURE</text>
-<text x="3014" y="5000">SUSTAIN</text>
-<text x="1250" y="7100">IMPERFECTION</text>
-<text x="3014" y="7100">WIDTH</text>
-</g><g id="theme_text_output" font-size="282.222" font-weight="600"></g>
-</g></svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="40.64mm"
+   height="128.5mm"
+   viewBox="0 0 4064 12850"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="VTune.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview10"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="76.880415"
+     inkscape:cy="242.83465"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg10" />
+  <defs
+     id="defs2">
+    <linearGradient
+       id="vtune-edge">
+      <stop
+         stop-color="#ad77e7"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#54d7d4"
+         id="stop2" />
+    </linearGradient>
+  </defs>
+  <g
+     id="panel_art">
+    <g
+       id="theme_background">
+      <rect
+         width="4064"
+         height="12850"
+         fill="#000000"
+         id="rect2" />
+    </g>
+    <rect
+       x="50"
+       y="50"
+       width="3964"
+       height="12750"
+       rx="90"
+       fill="none"
+       stroke="url(#vtune-edge)"
+       stroke-width="24"
+       opacity="0.65"
+       id="rect3" />
+    <g
+       id="component_anchors"
+       style="display:inline;fill:#2a1430;fill-opacity:1">
+      <rect
+         id="BRANDING_LEVIATHAN_LOGO_RASTER"
+         x="396.1"
+         y="11943.102"
+         width="3271.933"
+         height="1224.054" />
+      <circle
+         id="VESSEL_EXPANDER_LIGHT"
+         cx="320"
+         cy="580"
+         r="75"
+         style="fill:#ffbd66" />
+      <circle
+         id="VELOCITY_PARAM"
+         cx="3014"
+         cy="1740.0001"
+         r="75"
+         style="fill:#55dfff" />
+      <circle
+         id="SPEED_PARAM"
+         cx="1050"
+         cy="1740.0001"
+         r="75"
+         style="fill:#55dfff" />
+      <circle
+         id="PRESSURE_PARAM"
+         cx="1050"
+         cy="3515"
+         r="75"
+         style="fill:#55dfff" />
+      <circle
+         id="SUSTAIN_PARAM"
+         cx="3014"
+         cy="3515"
+         r="75"
+         style="fill:#55dfff" />
+      <circle
+         id="IMPERFECTION_PARAM"
+         cx="1050"
+         cy="5290"
+         r="75"
+         style="fill:#55dfff" />
+      <circle
+         id="WIDTH_PARAM"
+         cx="3014"
+         cy="5290"
+         r="75"
+         style="fill:#55dfff" />
+    </g>
+  </g>
+  <g
+     id="labels"
+     font-family="Rubik, sans-serif"
+     text-anchor="middle"
+     fill="#e9edf2">
+    <text
+       x="2032"
+       y="720"
+       font-size="430"
+       font-weight="700"
+       letter-spacing="30"
+       id="text3">V.TUNE</text>
+    <text
+       x="2032"
+       y="1080"
+       font-size="145"
+       letter-spacing="30"
+       fill="#6bd8d3"
+       id="text4">VESSEL EXPANDER</text>
+    <g
+       id="theme_text_input"
+       font-size="282.222"
+       font-weight="600">
+      <text
+         x="3014"
+         y="2440"
+         id="text5"
+         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">VELOCITY</text>
+      <text
+         x="1050"
+         y="2440"
+         id="text6"
+         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SPEED</text>
+      <text
+         x="1050"
+         y="4215"
+         id="text7"
+         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">PRESSURE</text>
+      <text
+         x="3014"
+         y="4216.4106"
+         id="text8"
+         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SUSTAIN</text>
+      <text
+         x="1044.2147"
+         y="5990"
+         id="text9"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198978px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+           sodipodi:role="line"
+           id="tspan10"
+           x="1044.2147"
+           y="5990">FLAWS</tspan></text>
+      <text
+         x="3014"
+         y="5990"
+         id="text10"
+         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">WIDTH</text>
+    </g>
+    <g
+       id="theme_text_output"
+       font-size="282.222"
+       font-weight="600" />
+  </g>
+</svg>
