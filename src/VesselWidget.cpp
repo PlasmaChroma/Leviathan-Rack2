@@ -9,8 +9,18 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <array>
+#include <map>
+#include <nanosvgrast.h>
 
 namespace {
+// Match MALLET_PARAM's persistent ordering.
+const char* const vesselMalletPaths[] = {
+    "res/Vessel/PureWoodMallet.png", "res/Vessel/Suede.png",
+    "res/Vessel/Silicone.png", "res/Vessel/Felt.png"
+};
+const char* const vesselMalletNames[] = {"Wood", "Suede", "Silicone", "Felt"};
+
 NVGcolor mixPitchTint(NVGcolor a, NVGcolor b, float amount) {
     amount = clamp(amount, 0.f, 1.f);
     return nvgRGBAf(
@@ -168,26 +178,90 @@ struct VesselPitchTintLayer final : TransparentWidget {
     }
 };
 
+struct VesselMalletPixels {
+    struct Image {
+        std::vector<std::uint8_t> rgba;
+        int width = 0, height = 0;
+    };
+    std::array<Image, 4> images;
+
+    VesselMalletPixels() {
+        window::Svg emblem;
+        emblem.loadFile(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
+        if (emblem.handle) {
+            for (NSVGshape* shape = emblem.handle->shapes; shape; shape = shape->next) {
+                if (shape->fill.type == NSVG_PAINT_COLOR) shape->fill.color = 0xff000000u;
+                if (shape->stroke.type == NSVG_PAINT_COLOR) shape->stroke.color = 0xff000000u;
+            }
+        }
+        NSVGrasterizer* rasterizer = nsvgCreateRasterizer();
+        for (int i = 0; i < 4; ++i) {
+            auto& image = images[i];
+            if (!visual_assets::decodeRasterRgba8(asset::plugin(pluginInstance, vesselMalletPaths[i]),
+                    &image.rgba, &image.width, &image.height)) continue;
+            if (!rasterizer || !emblem.handle || emblem.handle->width <= 0.f) continue;
+            const float scale = .7f * image.width / emblem.handle->width;
+            const float x = .5f * (image.width - emblem.handle->width * scale);
+            const float y = (i == 3 ? .33f : .5f) * image.height - .5f * emblem.handle->height * scale;
+            std::vector<unsigned char> rune(image.rgba.size(), 0);
+            nsvgRasterize(rasterizer, emblem.handle, x, y, scale,
+                rune.data(), image.width, image.height, image.width * 4);
+            // Black source-over, retaining straight alpha for NanoVG upload.
+            for (std::size_t p = 0; p < rune.size(); p += 4) {
+                const unsigned sa = rune[p + 3], da = image.rgba[p + 3];
+                const unsigned retained = da * (255 - sa);
+                const unsigned alpha = sa * 255 + retained;
+                if (!alpha) continue;
+                for (int c = 0; c < 3; ++c)
+                    image.rgba[p + c] = std::uint8_t((image.rgba[p + c] * retained + alpha / 2) / alpha);
+                image.rgba[p + 3] = std::uint8_t((alpha + 127) / 255);
+            }
+        }
+        if (rasterizer) nsvgDeleteRasterizer(rasterizer);
+    }
+};
+
+struct VesselMalletImages {
+    struct Texture {
+        NVGcontext* owner = nullptr;
+        int handle = -1, width = 0, height = 0;
+    };
+    // CPU composites are prepared once on the UI thread and survive window recreation.
+    const VesselMalletPixels& pixels() const {
+        static const VesselMalletPixels cached;
+        return cached;
+    }
+    std::map<NVGcontext*, std::array<Texture, 4>> textures;
+
+    int imageHandle(NVGcontext* vg, int index) {
+        const auto& image = pixels().images[index];
+        if (image.rgba.empty()) return -1;
+        auto& texture = textures[vg][index];
+        if (texture.owner == vg && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+                vg, texture.handle, image.width, image.height)) return texture.handle;
+        return nvg_gfx_lifecycle::updateOwnedNvgImageRgba(texture.owner, texture.handle,
+            texture.width, texture.height, vg, image.width, image.height,
+            NVG_IMAGE_GENERATE_MIPMAPS, image.rgba.data()) ? texture.handle : -1;
+    }
+    void resetContext(NVGcontext* vg, bool destroy) {
+        // Rack's main-context event also retires its framebuffer context.
+        for (auto& context : textures) for (auto& texture : context.second)
+            nvg_gfx_lifecycle::resetOwnedNvgImage(texture.owner, texture.handle,
+                texture.width, texture.height, vg, destroy && texture.owner == vg);
+        textures.clear();
+    }
+};
+
 struct VesselMalletLink {
     Vessel* module = nullptr;
-    std::shared_ptr<window::Svg> emblem;
+    VesselMalletImages images;
     math::Rect orbit;
     math::Rect bowl;
     float strikePadHeight = 0.f;
     // Temporary, UI-only tuning shared by the front/back animation passes.
     std::shared_ptr<float> orbitWidthScale = std::make_shared<float>(1.f);
 
-    VesselMalletLink() {
-        // Own a separate SVG so recoloring never changes the cached gold icon.
-        emblem = std::make_shared<window::Svg>();
-        emblem->loadFile(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
-        if (emblem->handle) {
-            for (NSVGshape* shape = emblem->handle->shapes; shape; shape = shape->next) {
-                if (shape->fill.type == NSVG_PAINT_COLOR) shape->fill.color = 0xff000000u;
-                if (shape->stroke.type == NSVG_PAINT_COLOR) shape->stroke.color = 0xff000000u;
-            }
-        }
-    }
+    VesselMalletLink() { images.pixels(); }
 };
 
 struct VesselOrbitWidthQuantity final : Quantity {
@@ -250,16 +324,6 @@ struct VesselMalletRenderWidget : TransparentWidget {
     VesselMalletRenderWidget(VesselMalletLink* link, bool frontPass)
         : link(link), frontPass(frontPass) {}
 
-    void onContextCreate(const ContextCreateEvent& e) override {
-        visual_assets::onRasterContextCreate(e.vg);
-        TransparentWidget::onContextCreate(e);
-    }
-
-    void onContextDestroy(const ContextDestroyEvent& e) override {
-        visual_assets::onRasterContextDestroy(e.vg);
-        TransparentWidget::onContextDestroy(e);
-    }
-
     void drawMallet(const DrawArgs& args) {
         if (!link || !link->module || !APP || !APP->window) return;
         const bool rubbing = link->module->visualRubbing.load(std::memory_order_relaxed);
@@ -271,21 +335,11 @@ struct VesselMalletRenderWidget : TransparentWidget {
         const float depth = std::sin(angle);
         if (rubbing && frontPass != (depth >= 0.f)) return;
 
-        // Match MALLET_PARAM's Wood, Suede, Silicone, Felt ordering.
-        static const char* const malletPaths[] = {
-            "res/Vessel/PureWoodMallet.png",
-            "res/Vessel/Suede.png",
-            "res/Vessel/Silicone.png",
-            "res/Vessel/Felt.png"
-        };
         const int mallet = clamp(int(std::round(link->module->params[Vessel::MALLET_PARAM].getValue())), 0, 3);
-        const std::string fullPath = asset::plugin(pluginInstance, malletPaths[mallet]);
-        std::shared_ptr<window::Image> source = APP->window->loadImage(fullPath);
-        if (!source || source->handle < 0) return;
-        int handle = visual_assets::loadRasterMipmapHandle(args.vg, source, fullPath);
-        if (handle < 0) handle = source->handle;
-        int imageWidth = 0, imageHeight = 0;
-        nvgImageSize(args.vg, handle, &imageWidth, &imageHeight);
+        const int handle = link->images.imageHandle(args.vg, mallet);
+        if (handle <= 0) return;
+        const auto& image = link->images.pixels().images[mallet];
+        const int imageWidth = image.width, imageHeight = image.height;
         if (imageWidth <= 0 || imageHeight <= 0) return;
 
         const Vec center = link->orbit.pos.plus(link->orbit.size.mult(.5f));
@@ -345,24 +399,105 @@ struct VesselMalletRenderWidget : TransparentWidget {
         nvgRect(args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight);
         nvgFillPaint(args.vg, paint);
         nvgFill(args.vg);
-        if (link->emblem && link->emblem->handle) {
-            const Vec emblemSize = link->emblem->getSize();
-            if (emblemSize.x > 0.f && emblemSize.y > 0.f) {
-                const float scale = .7f * drawWidth / emblemSize.x;
-                // Place the Felt emblem's center 33% down the artwork.
-                const float emblemOffsetY = mallet == 3 ? -.17f * drawHeight : 0.f;
-                nvgTranslate(args.vg, -.5f * emblemSize.x * scale,
-                    imageY + .5f * (drawHeight - emblemSize.y * scale) + emblemOffsetY);
-                nvgScale(args.vg, scale, scale);
-                nvgGlobalAlpha(args.vg, opacity);
-                link->emblem->draw(args.vg);
-            }
-        }
         nvgRestore(args.vg);
     }
 
     void draw(const DrawArgs& args) override {
         drawMallet(args);
+    }
+};
+
+struct VesselMalletSelector final : app::ParamWidget {
+    int hovered = -1;
+    VesselMalletImages* images = nullptr;
+
+    math::Rect cell(int index) const {
+        const float gap = mm2px(1.f);
+        const Vec size = box.size.minus(Vec(gap, gap)).mult(.5f);
+        return math::Rect(Vec((index % 2) * (size.x + gap),
+            (index / 2) * (size.y + gap)), size);
+    }
+    int cellAt(Vec pos) const {
+        for (int i = 0; i < 4; ++i)
+            if (cell(i).contains(pos)) return i;
+        return -1;
+    }
+    void onHover(const event::Hover& e) override {
+        hovered = cellAt(e.pos);
+        app::ParamWidget::onHover(e);
+    }
+    void onLeave(const event::Leave& e) override {
+        hovered = -1;
+        app::ParamWidget::onLeave(e);
+    }
+    void onButton(const event::Button& e) override {
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+            app::ParamWidget::onButton(e);
+            return;
+        }
+        const int selected = cellAt(e.pos);
+        if (e.action == GLFW_PRESS && selected >= 0) {
+            if (auto* quantity = getParamQuantity()) {
+                const float previous = quantity->getValue();
+                quantity->setValue(float(selected));
+                if (previous != quantity->getValue() && APP && APP->history) {
+                    auto* action = new history::ParamChange;
+                    action->name = "select mallet";
+                    action->moduleId = module->id;
+                    action->paramId = paramId;
+                    action->oldValue = previous;
+                    action->newValue = quantity->getValue();
+                    APP->history->push(action);
+                }
+            }
+        }
+        e.consume(this);
+    }
+    // A second click keeps the chosen tile instead of resetting the parameter.
+    void onDoubleClick(const event::DoubleClick& e) override { e.consume(this); }
+    void draw(const DrawArgs& args) override {
+        auto* quantity = getParamQuantity();
+        const int selected = quantity ? clamp(int(std::round(quantity->getValue())), 0, 3) : 1;
+        for (int i = 0; i < 4; ++i) {
+            const auto r = cell(i);
+            const bool active = selected == i;
+            const bool hover = hovered == i;
+            const NVGcolor color = active ? nvgRGB(74, 222, 214) : nvgRGB(163, 113, 245);
+            nvgBeginPath(args.vg);
+            nvgRoundedRect(args.vg, r.pos.x + 1.f, r.pos.y + 1.f,
+                r.size.x - 2.f, r.size.y - 2.f, mm2px(1.2f));
+            nvgFillColor(args.vg, nvgTransRGBA(color, active ? 32 : hover ? 26 : 9));
+            nvgFill(args.vg);
+            if (active || hover) {
+                nvgStrokeWidth(args.vg, 4.f);
+                nvgStrokeColor(args.vg, nvgTransRGBA(color, hover ? 48 : 30));
+                nvgStroke(args.vg);
+            }
+            nvgStrokeWidth(args.vg, active ? 1.4f : .8f);
+            nvgStrokeColor(args.vg, nvgTransRGBA(color, active ? 230 : hover ? 135 : 45));
+            nvgStroke(args.vg);
+            const int handle = images ? images->imageHandle(args.vg, i) : -1;
+            if (handle > 0) {
+                const auto& image = images->pixels().images[i];
+                const Vec available = r.size.minus(mm2px(Vec(2.f, 4.f)));
+                const float scale = std::max(0.f, std::min(available.x / image.width, available.y / image.height));
+                const Vec size(image.width * scale, image.height * scale);
+                const Vec pos = r.pos.plus(mm2px(Vec(1.f, 1.f))).plus(available.minus(size).mult(.5f));
+                nvgBeginPath(args.vg);
+                nvgRect(args.vg, pos.x, pos.y, size.x, size.y);
+                nvgFillPaint(args.vg, nvgImagePattern(args.vg, pos.x, pos.y, size.x, size.y, 0.f, handle, 1.f));
+                nvgFill(args.vg);
+            }
+            if (APP && APP->window && APP->window->uiFont) {
+                nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+                nvgFontSize(args.vg, mm2px(1.8f));
+                nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+                nvgFillColor(args.vg, active ? nvgRGB(194, 247, 243) : nvgRGB(191, 191, 210));
+                nvgText(args.vg, r.pos.x + .5f * r.size.x,
+                    r.pos.y + r.size.y - mm2px(1.6f), vesselMalletNames[i], nullptr);
+            }
+        }
+        app::ParamWidget::draw(args);
     }
 };
 
@@ -553,7 +688,13 @@ struct VesselWidget final : ModuleWidget {
         addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM));
         addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(point("PITCH_PARAM", 42.5f, 83.5f)), module, Vessel::PITCH_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 83.5f)), module, Vessel::FINE_PARAM));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("MALLET_PARAM", 71.f, 83.5f)), module, Vessel::MALLET_PARAM));
+        math::Rect malletSelectorRect(Vec(59.5f, 79.5f), Vec(18.8f, 36.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "MALLET_SELECTOR", &malletSelectorRect);
+        auto* malletSelector = createParam<VesselMalletSelector>(
+            mm2px(malletSelectorRect.pos), module, Vessel::MALLET_PARAM);
+        malletSelector->box.size = mm2px(malletSelectorRect.size);
+        malletSelector->images = &malletLink.images;
+        addParam(malletSelector);
         math::Rect strikeRect(Vec(3.5f, 24.5f), Vec(36.74f, 51.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "STRIKE_AREA", &strikeRect);
         malletLink.strikePadHeight = mm2px(strikeRect.size.y);
@@ -593,6 +734,14 @@ struct VesselWidget final : ModuleWidget {
         addChild(frontMallet);
     }
 
+    void onContextCreate(const ContextCreateEvent& e) override {
+        malletLink.images.resetContext(e.vg, false);
+        ModuleWidget::onContextCreate(e);
+    }
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        malletLink.images.resetContext(e.vg, true);
+        ModuleWidget::onContextDestroy(e);
+    }
     void appendContextMenu(Menu* menu) override {
         ModuleWidget::appendContextMenu(menu);
         auto* m = static_cast<Vessel*>(module);
