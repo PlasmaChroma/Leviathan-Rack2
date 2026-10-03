@@ -534,7 +534,40 @@ Represent rotation speed as signed revolutions per second `rps`:
 
 This assumes sliding translation along the rim with no separate axial mallet spin or rolling. If mallet spin is added, orbital speed and surface slip must be separate variables. For fixed model parameters the material surface velocity is `Σ φt_j(θ) v_j`, not the total derivative of a moving displacement sample. Do not insert `θdot Σ (∂φt_j/∂θ) q_j` into the friction feedback. The orbit changes which material point is contacted; it is not itself extra material vibration velocity.
 
-Default signed speed range is −2 to +2 rev/s, default +0.4. With SPEED CV patched, multiply the knob value by `clamp(V/5,−1,1)`. Thus 0 V stops, +5 V requests the knob speed, and −5 V reverses it. Unpatched multiplier is 1.
+Current direct SPEED control is unipolar 0–2 rev/s, default 0.4. Patched SPEED CV replaces the knob (or V.Tune value) with `2*clamp(V/10,0,1)` rev/s. The internal engine retains signed-speed support for experiments.
+
+#### Optional rub intensity gesture (feedback prototype, 2026-10-02)
+
+INTENSITY is an appended input ID; existing ports keep their IDs. A held rub pad takes priority over INTENSITY CV; patched INTENSITY takes priority over both direct speed and pressure controls/CVs, including V.Tune. With neither gesture active, independent controls retain their existing behavior, including pressure CV's 0–10 V multiplier. Stored parameters are never overwritten. The pad keeps its quadratic vertical response. CV is clamped to 0–10 V, with nonfinite values treated as zero. The Rub gate is still required for CV; holding the pad engages contact directly.
+
+Intensity now requests effort from a state-responsive virtual player. It replaces the fixed two/five-second contact ramps. The controller observes the previous host frame's mechanical mean bowl energy, independent of output gain, stereo pickup width, and meter scaling. It updates at approximately 1 kHz, filtering energy with a 20 ms time constant and its derivative with 40 ms. On first use it initializes from the existing energy, so a ringing bowl does not need to replay a startup timer.
+
+For filtered energy `E`, readiness is `r=E/(E+0.002)` (joules). Starting speed corresponds to hand slip `0.8*vc`; sustained speed corresponds to `k*vc`, with `k=2` for wood and `1.2` otherwise, smoothly morphed with material. Both convert to revolutions/second using `2*pi*R`, capped at 2 rev/s. Speed is `a*(start+(maximum-start)*r)` for normalized intensity `a`. Nominal pressure is `a*(3+12*r)` N, multiplied by a bounded grip factor.
+
+Grip relaxes when measured energy growth exceeds the soft allowance `a*1.5*(E+0.000002)` watts, and recovers when growth is below it. The integral correction is `0.5*(allowance-growth)/(E+0.000002)` per second, bounded to grip 0–1. This is a heuristic playing technique, not a calibrated human-control or friction law and not a hard energy limiter. The 2 mJ readiness scale is not a requested final energy or the meter's reference. There is no direct energy injection, mechanical state scaling, audio gain envelope, or modification of the friction law. Existing engine smoothing handles speed/pressure changes.
+
+Zero intensity or a released gate requests zero speed/pressure immediately (subject to engine smoothing) and restores grip readiness. Observation continues while intensity is patched. Unpatching restores the direct controls and clears player history; module reset, quality reset, or a fault also clear history. The controller remains allocation-free. Both bowls share the gesture using their mean energy, so a binaural pair is not separately regulated.
+
+Validation, comparison to the historical timed gesture, and limitations are recorded in `Intensity_Controller_Evaluation.md`. The physical response remains material-, pitch-, and decay-dependent; intensity does not promise a monotonic energy target across all combinations. In particular, half-intensity metal/felt did not start a strong resonance within the 20-second test. A Rack audition is still necessary to judge the feel.
+
+#### Energy display (2026-10-02)
+
+The bar continues to observe mechanical mean bowl energy, independent of output
+gain and of the intensity player's feedback state. Display position is
+`clamp(log1p(E / 2e-6) / log1p(0.02 / 2e-6), 0, 1)`. Full scale remains 20 mJ.
+The continuous, approximately linear toe replaces the former piecewise mapping
+with its slope change at -40 dB. It has no hard low-energy cutoff; at 2 uJ the
+position is about 7.5%, at 20 uJ about 26%, and at 2 mJ about 75%.
+
+Mapped position receives a 150 ms exponential smoothing time constant equally
+on rise and fall, evaluated at the existing visual update cadence. This averages
+display position, not physical energy; it removes the former 5 ms attack / 150 ms
+release peak bias. It does not force monotonic growth or hide sustained plateaus.
+Sleep clears the bar. A dim two-pixel residual marker is shown for nonzero raw
+energy below a legible bar width, brightening continuously as the bar grows.
+An awake but empty model does not receive that marker merely because Rub is held.
+No contact controls, audio samples, energy telemetry, or meter full-scale energy
+are changed by this display treatment.
 
 ### 9.2 Normal-load approximation in the first reference engine
 

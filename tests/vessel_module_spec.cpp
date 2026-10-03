@@ -4,6 +4,8 @@
 #include "../src/Vessel.hpp"
 #include "../src/VTune.hpp"
 #include "../src/vessel/SeedProfiles.hpp"
+#include "../src/vessel/RubIntensity.hpp"
+#include "../src/vessel/EnergyMeter.hpp"
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -124,6 +126,17 @@ void tuneExpander() {
     require(std::abs(settings.imperfection - .25) < 1e-12, "V.Tune imperfection was not applied");
     require(std::abs(settings.observerSeparation - vessel::pi/30.0) < 1e-7, "V.Tune width was not applied");
     require(host.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0.f, "V.Tune level did not mute output");
+    cable(host,Vessel::ROTATE_INPUT,10.f);
+    cable(host,Vessel::INTENSITY_INPUT,5.f);
+    run(host,96000); // Allow the gradual contact approach to produce visible travel.
+    require(std::abs(host.audio.engine().rotationAngle()) > .05,
+        "intensity CV does not override V.Tune's zero speed");
+    host.inputs[Vessel::INTENSITY_INPUT].channels = 0;
+    run(host,24000);
+    const double restoredAngle = host.audio.engine().rotationAngle();
+    run(host,1200);
+    require(std::abs(host.audio.engine().rotationAngle()-restoredAngle) < 1e-8,
+        "unplugging intensity does not restore V.Tune speed");
 
     host.rightExpander.module = nullptr;
     tune.leftExpander.module = nullptr;
@@ -169,14 +182,16 @@ void manualPerformancePads() {
         "manual strike pad height does not scale launch velocity");
 
     Vessel slowRotate, fastRotate, gatedRotate;
+    slowRotate.params[Vessel::SPEED_PARAM].setValue(0.f);
+    fastRotate.params[Vessel::SPEED_PARAM].setValue(0.f);
     run(slowRotate); run(fastRotate); run(gatedRotate);
-    slowRotate.manualRotateSpeed.store(.25f);
-    fastRotate.manualRotateSpeed.store(1.f);
-    gatedRotate.manualRotateSpeed.store(0.f);
+    slowRotate.manualRubIntensity.store(.25f);
+    fastRotate.manualRubIntensity.store(1.f);
+    gatedRotate.manualRubIntensity.store(0.f);
     slowRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
     fastRotate.params[Vessel::ROTATE_PARAM].setValue(1.f);
     cable(gatedRotate, Vessel::ROTATE_INPUT, 10.f);
-    run(slowRotate, 6000); run(fastRotate, 6000); run(gatedRotate, 6000);
+    run(slowRotate, 48000); run(fastRotate, 48000); run(gatedRotate, 48000);
     const double slowAngle = std::abs(slowRotate.audio.engine().rotationAngle());
     const double fastAngle = std::abs(fastRotate.audio.engine().rotationAngle());
     require(fastAngle > 2.5 * slowAngle && slowAngle > 0,
@@ -187,19 +202,27 @@ void manualPerformancePads() {
     run(independentPad); run(fullRangeGate); run(stoppedPad);
     independentPad.params[Vessel::SPEED_PARAM].setValue(0.f);
     cable(independentPad, Vessel::SPEED_INPUT, 0.f);
+    cable(independentPad, Vessel::PRESSURE_INPUT, 0.f);
+    cable(independentPad, Vessel::INTENSITY_INPUT, 0.f);
     cable(independentPad, Vessel::ROTATE_INPUT, 10.f);
-    independentPad.manualRotateSpeed.store(1.f);
+    independentPad.manualRubIntensity.store(1.f);
     independentPad.params[Vessel::ROTATE_PARAM].setValue(1.f);
-    fullRangeGate.params[Vessel::SPEED_PARAM].setValue(2.f);
+    fullRangeGate.params[Vessel::SPEED_PARAM].setValue(float(
+        vessel::rubIntensityMaximumSpeed(vessel::seedBowls[0], vessel::seedMallets[1])));
+    fullRangeGate.params[Vessel::PRESSURE_PARAM].setValue(15.f);
+    cable(fullRangeGate, Vessel::INTENSITY_INPUT, 10.f);
     cable(fullRangeGate, Vessel::ROTATE_INPUT, 10.f);
     stoppedPad.params[Vessel::SPEED_PARAM].setValue(2.f);
     cable(stoppedPad, Vessel::ROTATE_INPUT, 10.f);
-    stoppedPad.manualRotateSpeed.store(0.f);
+    stoppedPad.manualRubIntensity.store(0.f);
     stoppedPad.params[Vessel::ROTATE_PARAM].setValue(1.f);
     run(independentPad, 1200); run(fullRangeGate, 1200); run(stoppedPad, 1200);
     require(std::abs(independentPad.audio.engine().rotationAngle()
-        - fullRangeGate.audio.engine().rotationAngle()) < 1e-12,
-        "rub pad does not reach full speed independently of knob, CV and gate");
+        - fullRangeGate.audio.engine().rotationAngle()) < 1e-7,
+        "rub pad does not override knobs, speed/pressure CV, intensity CV and gate");
+    require(std::abs(independentPad.audio.engine().bowl().energy()
+        - fullRangeGate.audio.engine().bowl().energy()) < 1e-8,
+        "rub pad does not apply the coordinated contact pressure");
     // Let the engine's existing speed smoothing settle before checking zero.
     run(stoppedPad, 24000);
     const double stoppedAngle = stoppedPad.audio.engine().rotationAngle();
@@ -262,6 +285,96 @@ void manualPerformancePads() {
     std::cout << "[PASS] Manual pad strike velocity, held rotation speed, 0-10 V speed CV, gate independence and release\n";
 }
 
+void intensityOverride() {
+    static_assert(Vessel::INTENSITY_INPUT == 6, "existing input IDs moved");
+    Vessel easedContact, directContact;
+    for (Vessel* v : {&easedContact, &directContact}) {
+        v->params[Vessel::SPEED_PARAM].setValue(0.f);
+        v->params[Vessel::PRESSURE_PARAM].setValue(0.f);
+        run(*v);
+        cable(*v,Vessel::ROTATE_INPUT,10.f);
+    }
+    cable(easedContact,Vessel::INTENSITY_INPUT,10.f);
+    directContact.params[Vessel::SPEED_PARAM].setValue(float(
+        vessel::rubIntensityMaximumSpeed(vessel::seedBowls[0],vessel::seedMallets[1])));
+    directContact.params[Vessel::PRESSURE_PARAM].setValue(15.f);
+    run(easedContact,4800); run(directContact,4800);
+    require(easedContact.audio.engine().rotationAngle() > 0
+        && easedContact.audio.engine().rotationAngle() < .9*directContact.audio.engine().rotationAngle(),
+        "quiet-bowl intensity does not choose a starting speed");
+    require(easedContact.audio.engine().bowl().energy()
+        < .1*directContact.audio.engine().bowl().energy(),
+        "intensity approach does not soften initial contact");
+    for (double rate : {44100.,48000.,96000.}) {
+        vessel::RubIntensityPlayer quiet, ringing;
+        vessel::RubGesture cold {}, warm {};
+        for (int i = 0; i < int(rate*.1); ++i) {
+            cold = quiet.process(1.,true,0.,.5,.2,1/rate);
+            warm = ringing.process(1.,true,.02,.5,.2,1/rate);
+        }
+        require(cold.speed == .2 && cold.pressure == 3., "quiet bowl waits for a timer or has no starting effort");
+        require(warm.speed > 2*cold.speed && warm.pressure > 4*cold.pressure,
+            "already-ringing bowl does not inform the player's gesture");
+        const double steadyPressure = warm.pressure;
+        for (int i = 0; i < int(rate*.2); ++i)
+            warm = ringing.process(1.,true,.02+.2*i/rate,.5,.2,1/rate);
+        require(warm.pressure < .95*steadyPressure, "rapid energy growth does not relax grip");
+        const auto released = ringing.process(1.,false,.06,.5,.2,1/rate);
+        require(released.speed == 0 && released.pressure == 0, "release retains a contact gesture");
+        const auto zero = ringing.process(0.,true,.06,.5,.2,1/rate);
+        require(zero.speed == 0 && zero.pressure == 0, "zero intensity retains contact effort");
+    }
+    Vessel cv, pad, manual, unplugged, silent;
+    for (Vessel* v : {&cv, &pad, &manual, &unplugged, &silent}) run(*v);
+    cable(cv, Vessel::INTENSITY_INPUT, 5.f);
+    cable(cv, Vessel::SPEED_INPUT, 0.f);
+    cable(cv, Vessel::PRESSURE_INPUT, 0.f);
+    cv.params[Vessel::SPEED_PARAM].setValue(0.f);
+    cv.params[Vessel::PRESSURE_PARAM].setValue(0.f);
+    cable(cv, Vessel::ROTATE_INPUT, 10.f);
+    pad.manualRubIntensity.store(.5f);
+    pad.params[Vessel::ROTATE_PARAM].setValue(1.f);
+    run(cv, 4800); run(pad, 4800);
+    require(cv.audio.engine().rotationAngle() == pad.audio.engine().rotationAngle()
+        && cv.audio.engine().bowl().energy() == pad.audio.engine().bowl().energy(),
+        "intensity CV and pad do not produce identical gestures");
+    cable(silent, Vessel::INTENSITY_INPUT, 10.f);
+    run(silent, 1000);
+    require(silent.audio.engine().contactEngagement() == 0 && silent.rawEnergy.load() == 0,
+        "intensity CV incorrectly replaces the rub gate");
+    // Once disconnected, saved knob/CV behavior exactly matches an unused input.
+    cable(unplugged, Vessel::INTENSITY_INPUT, 10.f); run(unplugged, 100);
+    unplugged.inputs[Vessel::INTENSITY_INPUT].channels = 0;
+    for (Vessel* v : {&manual,&unplugged}) {
+        v->params[Vessel::SPEED_PARAM].setValue(.3f);
+        v->params[Vessel::PRESSURE_PARAM].setValue(5.f);
+        cable(*v, Vessel::PRESSURE_INPUT, 5.f);
+        cable(*v, Vessel::ROTATE_INPUT, 10.f);
+        run(*v, 4800);
+    }
+    require(manual.audio.engine().rotationAngle() == unplugged.audio.engine().rotationAngle()
+        && manual.audio.engine().bowl().energy() == unplugged.audio.engine().bowl().energy(),
+        "unpatched intensity changes independent controls");
+    for (float volts : {-5.f, 0.f, std::numeric_limits<float>::quiet_NaN(), 20.f}) {
+        Vessel bounded, reference;
+        cable(bounded,Vessel::INTENSITY_INPUT,volts);
+        cable(reference,Vessel::INTENSITY_INPUT,volts > 10.f ? 10.f : 0.f);
+        cable(bounded,Vessel::ROTATE_INPUT,10.f); cable(reference,Vessel::ROTATE_INPUT,10.f);
+        run(bounded,4800); run(reference,4800);
+        require(bounded.audio.engine().rotationAngle() == reference.audio.engine().rotationAngle()
+            && bounded.audio.engine().bowl().energy() == reference.audio.engine().bowl().energy(),
+            "intensity CV sanitation/clamping failed");
+    }
+    // Exercise hot changes and restoration with an already moving bowl.
+    cv.inputs[Vessel::INTENSITY_INPUT].channels = 0;
+    run(cv,24000);
+    const double angle = cv.audio.engine().rotationAngle();
+    run(cv,1200);
+    require(std::abs(cv.audio.engine().rotationAngle()-angle) < 1e-8 && !cv.visualFault.load(),
+        "live intensity unplug does not restore zero-speed CV smoothly");
+    std::cout << "[PASS] Intensity/pad priority, shared gesture, clamping, gate independence and fallback\n";
+}
+
 void strikeAftermathVisual() {
     Vessel m;
     run(m, 100);
@@ -290,6 +403,22 @@ void strikeAftermathVisual() {
 }
 
 void independentOutputAndEnergy() {
+    require(vessel::energyMeterPosition(0) == 0
+        && std::abs(vessel::energyMeterPosition(.02)-1.) < 1e-12
+        && vessel::energyMeterPosition(.04) == 1., "energy meter endpoints changed");
+    double previous = 0;
+    for (double energy = 1e-14; energy < .02; energy *= 1.05) {
+        const double position = vessel::energyMeterPosition(energy);
+        require(position > previous, "energy meter has a dead zone or nonmonotonic toe");
+        previous = position;
+    }
+    require(std::abs(vessel::smoothEnergyMeter(0,1,.15)
+        +vessel::smoothEnergyMeter(1,0,.15)-1.) < 1e-12,
+        "energy meter favors rising peaks over falling energy");
+    const double oneStep = vessel::smoothEnergyMeter(0,1,.15);
+    double manySteps = 0;
+    for (int i = 0; i < 30; ++i) manySteps = vessel::smoothEnergyMeter(manySteps,1,.005);
+    require(std::abs(oneStep-manySteps) < 1e-12, "energy meter depends on display update frequency");
     Vessel audible, silent;
     audible.params[Vessel::ROTATE_PARAM].setValue(1); silent.params[Vessel::ROTATE_PARAM].setValue(1);
     silent.params[Vessel::LEVEL_PARAM].setValue(0); silent.params[Vessel::WIDTH_PARAM].setValue(0);
@@ -337,6 +466,10 @@ void audioHeapSafety() {
     trapAllocations = true;
     run(m, 100);
     m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 2000);
+    m.params[Vessel::ROTATE_PARAM].setValue(0);
+    cable(m,Vessel::ROTATE_INPUT,10.f);
+    cable(m,Vessel::INTENSITY_INPUT,5.f); run(m,1000);
+    cable(m,Vessel::INTENSITY_INPUT,10.f); run(m,1000);
     cable(m, Vessel::STRIKE_INPUT, 10); run(m, 1000);
     m.params[Vessel::BOWL_PARAM].setValue(1); m.params[Vessel::MALLET_PARAM].setValue(2);
     m.params[Vessel::BINAURAL_PARAM].setValue(33);
@@ -418,8 +551,8 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
-            std::cout << "Vessel Rack adapter: 9 groups PASS\n";
+        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+            std::cout << "Vessel Rack adapter: 11 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;
     }

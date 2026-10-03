@@ -24,6 +24,7 @@
 <circle id="ROTATE_INPUT" cx="5200" cy="9800" r="10"/>
 <circle id="VOCT_INPUT" cx="900" cy="11050" r="10"/>
 <circle id="PRESSURE_INPUT" cx="2200" cy="11050" r="10"/>
+<circle id="INTENSITY_INPUT" cx="6900" cy="9800" r="10"/>
 <circle id="LEFT_OUTPUT" cx="3900" cy="11050" r="10"/>
 <circle id="RIGHT_OUTPUT" cx="5200" cy="11050" r="10"/>
 </g></g><g id="labels" font-family="Rubik, sans-serif" text-anchor="middle" fill="#e9edf2">
@@ -42,6 +43,7 @@
 <text x="2200" y="10400">VEL</text>
 <text x="3900" y="10400">SPEED</text>
 <text x="5200" y="10400">RUB</text>
+<text x="6900" y="10400" font-size="240">INTENSITY</text>
 <text x="900" y="11650">V/OCT</text>
 <text x="2200" y="11650">PRESS</text>
 </g><g id="theme_text_output" font-size="282.222" font-weight="600">

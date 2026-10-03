@@ -364,7 +364,7 @@ struct VesselPerformanceArea : app::Switch {
         const float topSaturationMargin = mm2px(3.f);
         const float activeHeight = std::max(box.size.y - topSaturationMargin, 1e-6f);
         const float amount = 1.f - clamp((y - topSaturationMargin) / activeHeight, 0.f, 1.f);
-        // Give slow rubbing more travel while retaining zero and full speed.
+        // Give gentle rubbing more travel while retaining zero and full intensity.
         // The strike pad keeps its linear velocity response.
         return kind == Kind::Rotate ? amount * amount : amount;
     }
@@ -375,7 +375,7 @@ struct VesselPerformanceArea : app::Switch {
             if (kind == Kind::Strike)
                 vessel->manualStrikeVelocity.store(currentAmount, std::memory_order_relaxed);
             else
-                vessel->manualRotateSpeed.store(currentAmount, std::memory_order_relaxed);
+                vessel->manualRubIntensity.store(currentAmount, std::memory_order_relaxed);
         }
         refreshPadTooltip();
     }
@@ -383,7 +383,7 @@ struct VesselPerformanceArea : app::Switch {
         const int percent = int(std::lround(100.f * currentAmount));
         return kind == Kind::Strike
             ? string::f("Strike: %d%% Velocity", percent)
-            : string::f("Rub: %d%% Speed", percent);
+            : string::f("Rub: %d%% Intensity", percent);
     }
     void createPadTooltip() {
         if (!settings::tooltips || padTooltip || !APP || !APP->scene) return;
@@ -454,17 +454,21 @@ struct BowlDisplay : TransparentWidget {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
         const float energy = vessel ? vessel->visualEnergy.load(std::memory_order_relaxed) : .55f;
-        const bool ringing = vessel && !vessel->visualSleeping.load(std::memory_order_relaxed);
+        const bool ringing = vessel && !vessel->visualSleeping.load(std::memory_order_relaxed)
+            && vessel->rawEnergy.load(std::memory_order_relaxed) > 0.f;
         const float barHeight = mm2px(3.f);
         nvgBeginPath(args.vg); nvgRoundedRect(args.vg, 0, 0, box.size.x, barHeight, 2);
         nvgFillColor(args.vg, nvgRGB(7, 11, 19)); nvgFill(args.vg);
         nvgStrokeColor(args.vg, nvgRGBA(176, 141, 216, 125)); nvgStrokeWidth(args.vg, .7f); nvgStroke(args.vg);
         if (energy > 0.f || ringing) {
-            // Keep a small tail visible until the physical model goes to sleep.
-            const float width = std::max((box.size.x-2)*energy, ringing ? 2.f : 0.f);
+            // A dim residual-energy marker keeps quiet tails visible without
+            // making mere DSP activity look like a fixed minimum energy level.
+            const float scaledWidth = (box.size.x-2)*energy;
+            const float width = std::max(scaledWidth, ringing ? 2.f : 0.f);
+            const int alpha = ringing ? int(70.f+185.f*std::min(1.f,scaledWidth/2.f)) : 255;
             nvgBeginPath(args.vg); nvgRoundedRect(args.vg, 1, 1, width, barHeight-2, 1);
             nvgFillPaint(args.vg, nvgLinearGradient(args.vg, 0, 0, box.size.x, 0,
-                nvgRGB(163, 113, 245), nvgRGB(74, 222, 214))); nvgFill(args.vg);
+                nvgRGBA(163, 113, 245, alpha), nvgRGBA(74, 222, 214, alpha))); nvgFill(args.vg);
         }
         if (!APP || !APP->window || !APP->window->uiFont) return;
         const float hz = vessel ? vessel->visualFrequency.load(std::memory_order_relaxed) : 261.625565f;
@@ -552,7 +556,8 @@ struct VesselWidget final : ModuleWidget {
             {"SPEED_INPUT", Vessel::SPEED_INPUT, 39.f, 98.f},
             {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 52.f, 98.f},
             {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f},
-            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f}
+            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f},
+            {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 69.f, 98.f}
         };
         for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(input.anchor, input.x, input.y)), module, input.id));

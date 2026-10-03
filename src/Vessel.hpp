@@ -4,6 +4,7 @@
 #include "DebugTerminalMetrics.hpp"
 #include "VesselExpanderProtocol.hpp"
 #include "vessel/DualBowlAdapter.hpp"
+#include "vessel/RubIntensity.hpp"
 #include <atomic>
 
 struct Vessel final : Module {
@@ -14,7 +15,7 @@ struct Vessel final : Module {
         ROTATE_PARAM, SPEED_PARAM, PRESSURE_PARAM, BOWL_PARAM, MALLET_PARAM,
         DECAY_PARAM, IMPERFECTION_PARAM, WIDTH_PARAM, LEVEL_PARAM, BINAURAL_PARAM, PARAMS_LEN };
     enum InputId { VOCT_INPUT, STRIKE_INPUT, VELOCITY_INPUT, ROTATE_INPUT,
-        SPEED_INPUT, PRESSURE_INPUT, INPUTS_LEN };
+        SPEED_INPUT, PRESSURE_INPUT, INTENSITY_INPUT, INPUTS_LEN };
     enum OutputId { LEFT_OUTPUT, RIGHT_OUTPUT, OUTPUTS_LEN };
     enum LightId {
         STRIKE_LIGHT,
@@ -38,7 +39,7 @@ struct Vessel final : Module {
     std::atomic<float> visualInternalRate {0.f};
     std::atomic<bool> visualRateFallback {false};
     std::atomic<float> manualStrikeVelocity {1.f};
-    std::atomic<float> manualRotateSpeed {1.f}; // Normalized full-range pad speed.
+    std::atomic<float> manualRubIntensity {1.f}; // Normalized coordinated pad gesture.
     vessel_expander::TuneMessage tuneMessages[2];
 
     Vessel();
@@ -57,6 +58,10 @@ private:
     double bowlBlend = 1.0, malletBlend = 1.0;
     double pitchOctaves = 0.0, controlElapsed = 0.001, visualElapsed = 0.0;
     double separationHz = 0.0;
+    double intensityMaximumSpeed = 0.0;
+    double intensitySlipScale = 1.2, startIntensitySlipScale = 1.2;
+    vessel::RubIntensityPlayer intensityPlayer;
+    double intensityStartSpeed = 0, intensityEnergy = 0;
     double idleElapsed = 0.0;
     float meter = 0.f, strikeFlash = 0.f;
     float strikeAnimationRemaining = 0.f;

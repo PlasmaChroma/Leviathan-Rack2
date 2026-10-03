@@ -1,5 +1,7 @@
 #include "Vessel.hpp"
 #include "vessel/SeedProfiles.hpp"
+#include "vessel/RubIntensity.hpp"
+#include "vessel/EnergyMeter.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -48,7 +50,8 @@ Vessel::Vessel() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
-        "Rub gate", "Rubbing speed (0-10 V, replaces knob)", "Pressure (0-10 V multiplier)"};
+        "Rub gate", "Rubbing speed (0-10 V, replaces knob)", "Pressure (0-10 V multiplier)",
+        "Rub intensity (0-10 V, overrides speed and pressure; requires Rub gate)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
     configOutput(LEFT_OUTPUT, "Left"); configOutput(RIGHT_OUTPUT, "Right");
     resetRuntime();
@@ -60,6 +63,10 @@ void Vessel::resetRuntime() {
     currentMallet = startMallet = vessel::seedMallets[choice(params[MALLET_PARAM].getValue(), 3)];
     selectedBowl = choice(params[BOWL_PARAM].getValue(), 1);
     selectedMallet = choice(params[MALLET_PARAM].getValue(), 3);
+    intensitySlipScale = startIntensitySlipScale = selectedMallet == 0 ? 2.0 : 1.2;
+    intensityMaximumSpeed = vessel::rubIntensityMaximumSpeed(currentBowl, currentMallet, intensitySlipScale);
+    intensityPlayer = {}; intensityEnergy = 0;
+    intensityStartSpeed = vessel::rubIntensityMaximumSpeed(currentBowl, currentMallet, .8);
     bowlBlend = malletBlend = 1.0;
     pitchOctaves = bound(params[PITCH_PARAM].getValue()+safeValue(inputs[VOCT_INPUT].getVoltage())
         +safeValue(params[FINE_PARAM].getValue())/1200, std::log2(20.0/261.625565), std::log2(2000.0/261.625565));
@@ -71,7 +78,7 @@ void Vessel::resetRuntime() {
     visualStrikeAftermath.store(0.f, std::memory_order_relaxed);
     strikeHigh = manualHigh = rotateHigh = false;
     manualStrikeVelocity.store(1.f, std::memory_order_relaxed);
-    manualRotateSpeed.store(1.f, std::memory_order_relaxed);
+    manualRubIntensity.store(1.f, std::memory_order_relaxed);
     sleeping = true; configured = false; needsConfigure = true;
     visualEnergy.store(0); rawEnergy.store(0); visualFault.store(false); visualSleeping.store(true);
     visualRotationAngle.store(0.f, std::memory_order_relaxed);
@@ -113,7 +120,10 @@ vessel_expander::TuneMessage Vessel::tuneControls() {
 void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune) {
     const int bowl = choice(params[BOWL_PARAM].getValue(), 1), mallet = choice(params[MALLET_PARAM].getValue(), 3);
     if (bowl != selectedBowl) { startBowl = currentBowl; selectedBowl = bowl; bowlBlend = 0; }
-    if (mallet != selectedMallet) { startMallet = currentMallet; selectedMallet = mallet; malletBlend = 0; }
+    if (mallet != selectedMallet) {
+        startMallet = currentMallet; startIntensitySlipScale = intensitySlipScale;
+        selectedMallet = mallet; malletBlend = 0;
+    }
     const bool morph = bowlBlend < 1 || malletBlend < 1;
     bowlBlend = std::min(1.0, bowlBlend+dt/.1); malletBlend = std::min(1.0, malletBlend+dt/.1);
     const auto& b = vessel::seedBowls[selectedBowl]; const auto& m = vessel::seedMallets[selectedMallet];
@@ -137,6 +147,9 @@ void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune)
         currentMallet.regularizationVelocity = mix(startMallet.regularizationVelocity, m.regularizationVelocity, malletBlend);
         needsConfigure = true;
     }
+    intensitySlipScale = mix(startIntensitySlipScale, selectedMallet == 0 ? 2.0 : 1.2, malletBlend);
+    intensityMaximumSpeed = vessel::rubIntensityMaximumSpeed(currentBowl, currentMallet, intensitySlipScale);
+    intensityStartSpeed = vessel::rubIntensityMaximumSpeed(currentBowl, currentMallet, .8);
     const double target = bound(safeValue(params[PITCH_PARAM].getValue())+safeValue(inputs[VOCT_INPUT].getVoltage())
         +safeValue(params[FINE_PARAM].getValue())/1200, std::log2(20.0/261.625565), std::log2(2000.0/261.625565));
     pitchOctaves += -std::expm1(-dt/.0015)*(target-pitchOctaves);
@@ -180,6 +193,7 @@ void Vessel::process(const ProcessArgs& args) {
         activeQuality = quality;
         sleeping = true; configured = false; needsConfigure = true;
         idleElapsed = 0; meter = 0;
+        intensityPlayer = {}; intensityEnergy = 0;
     }
     const double dt = args.sampleTime;
     const vessel_expander::TuneMessage tune = tuneControls();
@@ -192,15 +206,23 @@ void Vessel::process(const ProcessArgs& args) {
     controls.rotate = rotateHigh || manualRotate;
     controls.velocity = manualEvent ? bound(manualStrikeVelocity.load(std::memory_order_relaxed), 0, 1)
         : inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1) : tune.velocity;
-    // The performance pad directly selects the full speed range, independent
-    // of the knob, expander and speed CV, including while a rub gate is high.
-    controls.speed = manualRotate
-        ? 2 * bound(manualRotateSpeed.load(std::memory_order_relaxed), 0, 1)
-        : inputs[SPEED_INPUT].isConnected() ? 2 * bound(inputs[SPEED_INPUT].getVoltage()/10, 0, 1) : tune.speed;
+    controls.speed = inputs[SPEED_INPUT].isConnected()
+        ? 2 * bound(inputs[SPEED_INPUT].getVoltage()/10, 0, 1) : tune.speed;
     controls.pressure = tune.pressure
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
     controlElapsed += dt;
     if (controlElapsed >= .001 || controls.strikeEvent) { updateControls(controlElapsed, tune); controlElapsed = 0; }
+    // Pad > patched intensity > independent controls. The engine's existing
+    // speed/pressure smoothing also handles switching between these sources.
+    if (manualRotate || inputs[INTENSITY_INPUT].isConnected()) {
+        const double amount = manualRotate
+            ? bound(manualRubIntensity.load(std::memory_order_relaxed), 0, 1)
+            : bound(inputs[INTENSITY_INPUT].getVoltage()/10, 0, 1);
+        const auto gesture = intensityPlayer.process(amount, controls.rotate, intensityEnergy,
+            intensityMaximumSpeed, intensityStartSpeed, dt);
+        controls.pressure = gesture.pressure;
+        controls.speed = gesture.speed;
+    } else intensityPlayer = {};
     const bool wake = controls.rotate || (controls.strikeEvent && controls.velocity > 0);
     if (wake) { sleeping = false; idleElapsed = 0; }
     bool fault = false;
@@ -209,6 +231,8 @@ void Vessel::process(const ProcessArgs& args) {
     vessel::DualBowlFrame frame;
     if (!sleeping && !fault) frame = audio.process(controls);
     fault = fault || frame.fault;
+    intensityEnergy = fault || sleeping ? 0 : frame.bowlEnergy;
+    if (fault) intensityPlayer = {};
     if (!sleeping && !controls.rotate && !audio.engine().strikerActive()
         && !audio.rightEngine().strikerActive() && audio.engine().contactEngagement() == 0
         && audio.rightEngine().contactEngagement() == 0 && frame.leftEnergy < 2e-14 && frame.rightEnergy < 2e-14) {
@@ -236,11 +260,8 @@ void Vessel::process(const ProcessArgs& args) {
     visualElapsed += dt;
     if (visualElapsed >= .005 || controls.strikeEvent || fault) {
         const double energy = sleeping ? audio.meanEnergy() : frame.bowlEnergy;
-        const double db = 10*std::log10((std::max(0.0, energy)+2e-20)/.02);
-        // Reserve the bottom 10% for quiet tails; give the audible range more room.
-        const double position = db < -40 ? (db+60)*.005 : .1+(db+40)*.0225;
-        const float target = float(std::max(0.0, std::min(1.0, position)));
-        meter += float(-std::expm1(-visualElapsed/(target > meter ? .005 : .15)))*(target-meter);
+        const double target = vessel::energyMeterPosition(energy);
+        meter = float(vessel::smoothEnergyMeter(meter, target, visualElapsed));
         if (sleeping) meter = 0.f;
         visualEnergy.store(meter, std::memory_order_relaxed); rawEnergy.store(float(energy), std::memory_order_relaxed);
         leftEnergy.store(float(audio.engine().bowl().energy()), std::memory_order_relaxed);
