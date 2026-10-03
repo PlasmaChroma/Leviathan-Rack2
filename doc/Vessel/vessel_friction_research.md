@@ -1,0 +1,142 @@
+# Friction-Excited Singing Bowl Physics: Diagnosis and Model Recommendations
+
+## Real Bowl Behavior (Q1)
+
+Real singing bowls exhibit **stick–slip excitation** driven by puja speed and pressure.  Experiments and models consistently show that at **moderate rubbing speeds** and adequate normal force, the (2,0) mode grows to a steady tone: the vibrational amplitude **builds up exponentially** until nonlinearity saturates it.  Início *et al.* (2006) simulated a symmetric bowl (φ=262 mm, FN=3 N, VT≈0.3 m/s) and observed the bowl’s first mode (“4-node” azimuthal) rising to steady oscillation around 7.5 s.  The mode shape “spins” with the mallet, yielding the characteristic beating at fixed sensor points.  Likewise, Collin *et al.* (2015) report that the **vibration amplitude depends strongly on puja velocity and force** – louder for faster or harder rubbing – up to the point where the stick–slip mechanism changes character.
+
+However, as rubbing velocity increases (or pressure drops), real bowls **lose smooth singing and begin to chatter**.  Collin *et al.* found that increasing the angular speed or *decreasing* the normal force often produces audible **“knocking” chatter** instead of a continuous note.  Inácio *et al.* likewise identify an intermittent regime: at high VT (e.g. 0.5 m/s) and low FN (1 N) the bowl never reaches steady contact.  The vibration amplitude grows until contact breaks, causing a chaotic “burst” and collapse, then rebuilds again cyclically.  In this regime the sound is a mix of sustained ringing and erratic impacts.  Wikipedia’s summary also notes that **beating and chatter** arise under hard/fast mallet strokes or low pressure. 
+
+In short: **real bowls** require sufficient normal force at higher speeds to sustain ringing.  Under realistic conditions, higher speed *eventually* sustains oscillation if force is increased; otherwise the bowl enters stick–slip chatter.  The vessel model’s silence at high speed is inconsistent with this: real bowls either ring (if conditions allow) or chatter (if over-driven), but do not simply go inert.  Any model must capture (a) the growth of the self-excited mode at moderate speed/force and (b) the onset of intermittent contact or “bursting” at extreme parameters.
+
+## Friction Law Assessment (Q2)
+
+Vessel’s current tangential force law,  
+\[
+F_t(s)=N\Bigl[\mu_k + (\mu_s-\mu_k)e^{-(s/v_c)^2}\Bigr]\tanh\frac{s}{\epsilon},
+\] 
+is a **static/kinetic Coulomb model with a Gaussian Stribeck transition and tanh regularization**.  Physically, the *(μ_s–μ_k) e^{-(s/v_c)^2}* factor imposes a velocity-weakening drop from μ_s to μ_k over scale v_c.  This shape is not standard in tribology: more common Stribeck curves use an exponential or linear decay (e.g. **LuGre/Dahl** models) matched to data.  Without calibration, the chosen Gaussian envelope and v_c are effectively arbitrary.  Início *et al.* use a similar decaying form (with a parameter *C* in their Coulomb model) fitted to stick-slip data.  The Vessel form could be defensible if *v_c*, μ_s and μ_k were tuned to measured leather/steel friction curves, but there is no evidence of such calibration.  
+
+Critically, the **regularization** tanh(s/ε) enforces zero friction at zero slip (so-called velocity regularization).  This smooths out the discontinuous jump from static to kinetic friction, but it also means **no true static stick** exists: at s→0, F_t→0 regardless of N and μ_s.  Início’s analysis notes this limitation: a regularized law yields F=0 exactly at zero slip, disabling genuine sticking.  In other words, Vessel’s model never holds at high force without any motion; it effectively precludes the classic static-friction plateau.  This may make startup easier to compute (avoiding infinite forces), but it misses the physics that the puja can “lock” until a threshold.  In practice, this means the model may underpredict the initial force transfer at the onset of rubbing. 
+
+Other friction laws could be more physically grounded.  **LuGre or Dahl models** introduce an internal “bristle” state that yields hysteresis and presliding displacement.  For example, a Dahl model with a differential equation for bristle deflection *z(t)* produces a Coulomb limit at large slip and a force *F=σ_0 z* with *z′ = s - (|s|/δ)z*.  Such models naturally include stick-slip memory and can be tuned to measured curves.  Vessel’s simple law has no memory (force depends only on instantaneous *s*), so it cannot reproduce velocity-dependent hysteresis or microslip effects.  As evidence, Inácio’s use of a small-ε regularization was acceptable because their bowls remained mostly in sliding; they explicitly note that prolonged adherence would violate realism.  If Vessel’s user expects realistic static grip, a Dahl-like model might be warranted.
+
+We have no published friction data for the exact materials (steel vs suede/leather), but typical leather–metal µ_s is on the order of 0.4–0.6 and µ_k around 0.2–0.4.  If Vessel’s parameters were lower (e.g. μ_s=0.2, μ_k=0.1), simply raising μ_k or broadening v_c could boost force at high speeds.  However, any change must be defensible.  Ideally, one should measure or cite tabulated friction curves.  In the absence of that, switching to a standard viscoplastic model (with μ(v) fitted to generic data) could at least be justified by precedent.  Início’s plot of µ(v) (their Fig.6) shows a monotonic decay with a roughly exponential tail.  A Gaussian drop may be physically plausible if calibrated, but the key question is whether the *shape* matters.  The experiment noted that replacing the Gaussian by an exponential (“Stribeck-style”) helped some conditions.  We should systematically compare: e.g. Gaussian vs exp(−|s|/v_c) vs Dahl, all with parameter values anchored by tribology literature.  
+
+In summary: Vessel’s friction law is a reasonable first model, but it **lacks a true static plateau** and has an unverified weakening shape.  We should verify or re-fit μ_s, μ_k, v_c (and ε) to real data.  If that fails to restore high-speed response, a more complex law (e.g. Dahl/LuGre) may be needed.  At minimum, we should test an exponential Stribeck envelope and ensure μ_k is not underestimated. 
+
+## Geometry, Scale, and Contact Kinematics (Q3)
+
+Key geometric conversions appear correct: the linear rim speed *U=2πRr* uses R=0.076 m, giving U≈0.19 m/s at 0.4 Hz and 0.95 m/s at 2 Hz, matching typical bowl experiments.  The modal resonator pairs presumably use orthonormal mode shapes (as in Inácio), so tangential vs radial mode normalization should be valid.  However, a few subtleties merit checking:
+
+- **Local vs transport velocity**:  The friction slip *s = U – v_t* should use the bowl’s *local* tangential velocity *v_t* at the moving contact point.  Because the contact position travels around the rim, one must differentiate the bowl’s displacement in a rotating frame.  In practice, at time *t* the contact angle θ_c(t) = 2πr t; the bowl’s azimuthal motion φ(θ,z,t) evaluated at θ_c moves with time.  If the implementation simply samples mode shapes at θ_c, it should capture the proper *v_t*.  It is worth verifying that the code’s *v_t* is indeed the total derivative ∂φ/∂t at the moving point, not just ∂φ/∂t holding a fixed θ.  Any error here could distort the effective slip at high speeds. 
+
+- **Mallet rotation/rolling**: Real pujas often rotate about the bowl, but they can also roll about their own axis (like a wheel).  If the mallet spins along its length (e.g. a cylindrical stick), the actual tangential surface speed relative to the bowl may be lower than the orbital speed U.  Vessel assumes a single point of contact with velocity U; it neglects any counter-rotation of the mallet.  At very high speeds, friction torque might cause the mallet tip to roll rather than slip fully, reducing *s*.  This effect could explain why physical bowls sometimes sustain tone even at high r: the effective slip stays near a favorable range.  We should consider a simple extension: track the mallet’s rotational speed ω_m about its axis (initially zero) and impose a no-slip condition at the stick–bowl interface to solve for ω_m(t).  However, this adds complexity.  As a first pass, we note it as a possible factor: if vessel experiments with rolling reach realistic sound, then pure slip may not be the culprit for failure. 
+
+- **Normal vs tangential mode coupling**: The vessel model freezes the normal contact, so modal masses and shapes aren’t influenced by N.  In reality, a pressed bowl deforms slightly (changing effective curvature/damping).  Inácio found that contact stiffness significantly affects modal excitation: increasing normal stiffness from 10^5 to 10^7 N/m excited higher modes and changed the sound brightness.  Since Vessel has effectively infinite stiffness (no deformation), it might under-excite some modes at high load.  If tunable, an effective normal compliance could be introduced to broaden resonance coupling.  Even a simple spring between puja and bowl could allow short “kick” phases.  In any case, we should double-check that modal masses and shapes in code correctly account for bowl geometry (e.g. rim coordinate normalization) so that *v_t* and normal velocity are orthogonal components as assumed. 
+
+- **Pressure and area**: The model uses a prescribed normal force *N*.  In reality, increasing N spreads the contact patch and increases frictional energy input.  If our model keeps contact point with constant N, the friction *force* increases linearly with N, which seems physically fine (Coulomb law).  However, with no compliance, larger N does not increase relative deformation at contact.  We should ensure the numeric range of N is sufficient: 15 N on a ~80 mm bowl implies pressure ≲5000 Pa if contact patch ~1 cm² – plausible.  We must also verify that applying higher N does not violate any small-deformation assumption in the code. 
+
+No obvious unit conversions seem off, but **validating the slip calculation** in a small test (for example, comparing v_t from modal superposition versus expected ring speed) is prudent.  If any discrepancy is found, it could explain part of the high-speed issue.  The key is to confirm that *s=U-v_t* truly represents local sliding velocity. 
+
+## Missing Mechanisms (Q4)
+
+The current model omits several physical effects that could be important:
+
+- **Normal compliance and contact dynamics**:  Right now, the bowl is a fixed shell and the puja imposes a fixed normal force.  There is no springiness or rebound.  In reality, as vibrations grow, the contact force can fluctuate (the bowl edge moves, altering normal force) and micro-separation can occur.  Collin *et al.* explicitly observed that *puja periodically loses contact* during chattering.  Vessel’s lack of separation means it cannot reproduce that effect.  Allowing intermittent detachment could enable the model to reach the observed chaotic regime: a small normal-spring plus mass for the mallet would let contact break when radial acceleration exceeds the holding force.  Such a model must explicitly account for contact closure and loss (a non-smooth constraint), which adds complexity but is a known extension (one-body contact with springs).  
+
+- **Tangential compliance (bristle effect)**:  Real surfaces have micro-asperities that deform and recover.  A common friction model (LuGre) uses a “bristle” displacement state to capture presliding stiffness.  Vessel’s law has no memory – friction depends only on instantaneous *s*.  Inácio notes their regularized law “disables true sticking”.  Introducing a small tangential compliance (e.g. Dahl model) would let the contact hold slightly before slipping fully.  This might *delay* the onset of sliding at low speeds, possibly affecting startup thresholds and building up more force.  It could also moderate transitions.  However, since Inácio obtained good results with nearly pure sliding (their ε=10⁻⁴ m/s gave realistic behavior), tangential compliance may be a secondary effect.  Still, it is physically motivated and could be added with minimal computational cost (one extra state variable). 
+
+- **Mallet inertia/dynamics**:  Vessel treats the puja as a prescribed-velocity boundary.  If the mallet and its handle have appreciable mass or rotational inertia, they can absorb energy and alter interaction.  For example, a heavy mallet would require more friction work to accelerate, effectively reducing force transfer.  Conversely, a light mallet might follow the bowl too easily.  Without evidence, it’s not clear this is critical.  But if high-speed failure persists, one could measure whether typical mallets noticeably roll or twist at the tip.  Including mallet inertia would significantly complicate the model, so we flag it as low priority unless experiments indicate its influence. 
+
+- **Variable normal force**:  A skilled player may unconsciously modulate pressure (even tapping) during a rub.  Our model lets the user preset N, but it does not change dynamically.  If the bowl’s vibration pushes the mallet outwards, the actual N would drop.  Conversely, if the player presses with a springy hand, N oscillates.  These feedbacks could affect self-excitation.  A dynamical normal (as part of the compliance model above) would inherently capture such variation.  
+
+- **Frictional heating/lubrication**:  At high speeds, temperature rise or different lubrication (e.g. moisture) could change μ.  We assume negligible in our speed range (≲1 m/s). 
+
+Given evidence, **contact loss and compliance stand out**.  The Collin study shows chattering due to intermittent lift-off.  Inácio’s simulation (with compliance) reproduced chaotic bursts (regime 3) and notes that a slight asymmetry toggles between regimes.  These suggest missing dynamics are key to capturing the high-speed behavior.  Among simpler additions, adding a *normal spring* at the contact is physically defensible (mallet/bowl elasticity) and will introduce one state variable.  Tangential bristle stiffness (Dahl) would address the adhesion issue noted by [64].  We should weigh whether both are needed; the normal spring directly enables separation, which is not currently possible.  Tangential compliance is less critical if we allow separation (stick periods would be bounded by contact anyway). 
+
+We will **not** introduce ad-hoc energy terms or hidden gains – any added energy must come from the work of the puja moving around.  For example, a normal spring only stores and returns work, and Dahl’s stored elastic energy comes from the sliding input.  This respects the directive that all added energy is accounted-for.
+
+## Candidate Models and Tradeoffs (Q5: part 1)
+
+We outline three classes of modifications:
+
+1. **Recalibrated Friction Law**: Retain the existing Stribeck form but adjust parameters using physical data.  For example, measure μ(v) for steel–leather and fit μ_s, μ_k, and v_c.  We might find μ_k is actually higher than currently assumed (boosting high-speed friction) and v_c larger (making the drop more gradual).  This is the cheapest change (no new state variables) and preserves Vessel’s low-speed behavior.  The downside is it may not fully fix contact instability, only delay it.  Broadening the Gaussian (or switching to an exponential decay) could emulate the effect of missing compliance.  However, as noted by preliminary tests, simply broadening tended to “substantially change low-speed behavior” – we must fine-tune.  It’s easily tried first.
+
+2. **Alternative Friction Models**: Implement a state-based law such as Dahl or LuGre with the same prescribed N (no normal compliance yet).  For example, a Dahl model with parameters σ_0 (bristle stiffness) and a saturation level z_max=μ_s N/σ_0.  The equation could be  
+   \[
+   \dot z = s - \frac{|s|}{z_\mathrm{max}}\,z,\quad F_t = \sigma_0 z\quad(\mathrm{clip}\;|F_t|\le\mu_s N),
+   \]  
+   which approximates a Coulomb + Stribeck effect.  LuGre is more elaborate (with damping σ_1 and limiting behavior).  These models capture pre-slip and genuine stick.  They cost one extra integrator per contact and small algebra (still O(1) per sample).  Benefits: smoother onset, avoid discontinuities, can be fit to friction curves.  Potential drawback: if Vas well-defined current, it may not dramatically change the high-speed loss unless μ_k effectively increases via model shape.  We would still calibrate μ_s, μ_k in the context of the new model.
+
+3. **Compliant Normal Contact (Spring + Damping)**: Attach a small normal spring (stiffness K) between puja and bowl rim.  For example, treat the puja end as a massless particle pressed against a spring (stiffness ~10^6–10^7 N/m, comparable to Inácio’s values).  If the bowl vibrates away, the spring can unload (contact loss) when its tension reaches zero.  The friction force then vanishes until re-contact.  The equations would involve the spring deformation δ: *N = K δ*, and δ evolves as the bowl surface moves.  This naturally models transient separation, enabling the chattering regime.  The cost is minimal (one scalar state δ per contact, updated by bowl motion).  Energy accounting is straightforward: spring energy + friction work.  However, adding a spring changes the static equilibrium and could stiffen the system, so K must be chosen carefully (high enough to approximate rigid contact, but low enough to allow micro-separation).  We’d also possibly add a small normal damping for realism and numerical stability.
+
+**Tradeoffs:** 
+- *Calibration only* is simplest to implement and cheapest computationally. If it succeeds, it’s ideal. But it relies on the hope that parameter changes alone suffice.
+- *Dahl/LuGre friction* adds modest cost and complexity (one more ODE), and is conceptually clean for tangential physics. It preserves Vessel’s instantaneous normal contact. We should benchmark Dahl vs current law in offline tests (e.g. startup energy vs speed). 
+- *Normal compliance* addresses contact loss directly and is strongly supported by experiments. Its cost is also low (one more state), but one must be careful with numerical contact handling (collision detection for δ=0, etc.). It does add an implicit assumption of bowl/mallet elasticity not in original spec, which is a new physical parameter (spring K) to justify. Inácio found K around 10^5–10^7 N/m significant, so it is plausible. 
+
+Given the requirement to preserve low-speed and strike behavior, any change should reduce to the current model as a limit. For example, Dahl with very stiff springs and high damping should mimic the original. We will plan prototypes for both Dahl and spring-contact variants, plus a re-tuned vanilla model. 
+
+## Prototype Recommendation (Q5: part 2)
+
+**Proposed first prototype:** Implement a **normal compliance plus Dahl friction** model, since it directly captures the two most critical missing effects (stick-slip and lift-off) with minimal cost. Concretely, at the contact point let *δ(t)* be the gap (positive when pressed, zero at separation). Equations:
+
+- Normal spring: $F_n = K\,\delta$ (for $\delta>0$; else $F_n=0$ when contact lost).  Choose $K \sim 10^6$–$10^7$ N/m (Inácio’s simulations) so that maximal deformation under 10 N is on the order of 10^(-5)–10^(-6) m (consistent with thin metal deformation).  Add a small dashpot $C_n$ if needed to damp oscillations.
+
+- Tangential (Dahl): introduce a bristle variable $z$.  Let slip velocity $s = U - v_t$ while in contact.  Use 
+  \[
+     \dot z = s - \frac{|s|}{z_{\max}} z,\quad
+     F_t = \sigma_0 z,
+  \]
+  with saturation $z_{\max} = \frac{\mu_s N}{\sigma_0}$.  Here $N=F_n=K\delta$.  The parameter $\sigma_0$ (N/m) controls bristle stiffness: choose so that $z_{\max}$ corresponds to the desired static friction force.  For example, set $\mu_s$ and $\mu_k$ to plausible values (e.g. μ_s≈0.4, μ_k≈0.25) and set $\sigma_0 \sim 10^5$–$10^6$ N/m so that at typical N (few N) the force saturates appropriately.  The internal shear length $\delta_{\text{dahl}} = z_{\max}/(\mu_s N) = 1/\sigma_0$ (thus ~1e-6 to 1e-5 m) controls how much displacement occurs before full slip.  One may also include a small viscous term for high-speed damping: $F_t = \sigma_0 z + \sigma_1 \dot z$ (LuGre extension).  
+
+When contact is lost ($\delta=0$), set $s=0$ and hold $z$ (this implements sticking in flight).  On re-contact, resume slip computation. This scheme explicitly accounts for normal force work and tangential energy storage.  It is straightforward to integrate with the existing ModalBank (simply project these forces onto modes as before).
+
+If this two-state prototype turns out too complex initially, a simpler prototype is to try Dahl *without* normal compliance (i.e. prescribe N as before).  That tests the effect of tangential memory in isolation. Conversely, one can test normal spring with the old friction law (Coulomb-without-state) to isolate separation effects.  
+
+**Parameter estimates:**  Without experimental calibration, we propose:
+- $\mu_s=0.4$, $\mu_k=0.2\text{–}0.3$, consistent with leather–steel data.
+- Dahl stiffness $\sigma_0 \approx 10^5$–$10^6$ N/m (implying micro-slip of ~10–100 µm at breakaway).
+- Normal spring $K \approx 10^6$–$10^7$ N/m (so 1 mm of push gives ~10–1000 N).  A dashpot $C_n$ on the order of $10^2$–$10^3$ N·s/m would critically damp a small contact bounce.
+- These ranges are broad; if available evidence (e.g. material stiffness of bowl rim) suggests narrower values, we adjust.  At minimum, tune so that static deflection under default 2.5 N is sub-millimeter.
+
+All new equations conserve energy: the work $F_n\,\dot\delta + F_t\,s$ is taken from the puja’s motion (external work).  No extra “mystery” energy appears.  Numerically, we may need a smaller time step when the spring is very stiff, or use a semi-implicit scheme for stability.
+
+## Discriminating Experiment Plan
+
+To distinguish models and calibrate them, we propose the following suite of tests (in simulation or lab):
+
+1. **Startup from rest:** Vary rub speed (slow ramp to target) and fixed pressure, measure time to reach a set energy (as in Vessel’s CSV experiments).  Do this for speeds 0.2–2 Hz and forces 2–15 N.  Compare the ability to start ringing.  A successfully improved model should ring at all speeds given realistic pressure (e.g. 2.5–15 N), whereas the original did not.
+
+2. **Already-ringing adjustment:** First establish sustained oscillation at moderate speed/pressure.  Then increase speed (or decrease pressure) and observe whether the amplitude falls off (decay) or persists.  Vessel’s current model decays.  We expect realistic models either maintain or transition into chatter.  Record whether contact loss occurs (a high-frequency component spike) as in Inácio’s regime transitions. 
+
+3. **Pressure transitions:** At fixed speed, vary N up and down dynamically and watch amplitude changes.  Real bowls should respond quickly: raising N should raise amplitude (more energy input), and lowering N should damp out (possibly triggering chatter).  The model should show the same monotonic trends or regime shifts.
+
+4. **Release/Re-contact:** If a model allows separation, apply a brief large radial perturbation (like a tap on the bowl) and see if the mallet loses contact (force drops to zero) and then re-engages.  This mimics a “strike”.  Compare how the model’s output vs energy behaves to a struck (impact) input.  Vessel does allow a separate strike, but here test coupling of strike to ongoing rub.
+
+5. **Strike + rub interaction:** Striking the bowl and then rubbing should see co-existence of struck and rubbed modes.  Check if a high-speed rub suppresses an existing strike, as reported by players (if any evidence) or as found in simulation.  Because one requirement is correct strike behavior, ensure any change doesn’t kill the percussive response.
+
+6. **Steady-state chattering:** Intentionally provoke the chatter regime: use a hard mallet analog (set μ_s lower or brake harder) or very low pressure at high speed.  Real bowls produce an irregular crashing sound; the model should likewise produce a broadband “chatter” spectrum (we can analyze spectral content).  Confirm that our normal-spring model indeed yields intermittent contact (force/spike pattern) as Inácio’s Fig.10–12 did.
+
+Each experiment will collect metrics: modal energies, contact force waveforms, and audio spectra.  We will look for qualitative matches: e.g. [33] observed *no continuous tone at 1.1 Hz/low force*; our model should replicate similar thresholds.  We also propose direct comparison to any **user observations or recordings**, if available.  For instance, if the user can record a real bowl at various speeds/pressures, we can match spectrograms or onset times against the model.
+
+As a minimal discriminant test, we can do **parameter sweeps**: produce a 2D map of final energy vs (speed, pressure) for each candidate model.  Vessel’s data (CSV) shows a “no-ring” region at high speed/low pressure.  A correct model should shrink or reshape this region to match reality (which likely has a larger “ring” area).  Plotting these thresholds will guide parameter tuning.
+
+## Acceptance Criteria
+
+- **Energy Balance:** The model must obey energy conservation: the work done by tangential motion minus dissipation equals bowl vibrational energy.  We will compute the energy input $W=\int F_t\,s\,dt$ and verify that bowl energy $E$ changes accordingly (minus damping losses).  No hidden gains (e.g. artificial saturation forces) are allowed.  Energy drift over long runs should be minimal (benchmarks: drift <<0.1% per second).
+
+- **Numerical Stability:** The solution should converge with reasonable time-steps.  If normal springs are stiff, we will demand stable contact integration (no chattering due to integrator error).  Any added states (z, δ) should not require impractically small steps to remain stable.  We will test at, say, 192 kHz as in Vessel’s tests.  No solver faults or protective capping is acceptable for the prototype.
+
+- **Physical Behavior:** The bowl’s response should match known physics: at low speed it rings, at high it chatters; increasing N should always increase amplitude (or at least not reduce it).  There should be no bizarre regime where extra speed *reduces* amplitude in the “normal” regime (except in true chatter mode).  The modal content should remain plausible (no unphysical excitation of ultrahigh modes).  The contact force should not go negative or exceed μ_sN in violation of the model.
+
+- **Sound Preservation:** Under conditions where Vessel’s sound was subjectively good (low-speed rubbing, strikes), the new model should produce similar or improved sound.  This is subjective, but we will verify that the dominant frequencies and amplitude envelope are comparable.  For example, if low-speed rub produced a pure tone, our model should too (no added noise or amplitude error).  We will compare WAV spectrograms of Vessel vs prototype on the same parameters, to ensure timbral consistency.
+
+- **Computational Cost:** The real-time overhead of any extra operations must be low.  The Dahl model adds one multiplication and one state update per contact per sample (trivial).  A normal spring adds similar cost.  We will estimate CPU load: for example, one Dahl + spring contact state plus a few mult/add per mode should not more than double Vessel’s current contact cost.  The prototype must still run comfortably on the target CPU at typical sample rates (e.g. 48–192 kHz).  Excessive multistep solves or nonlinear root-finds would be rejected.  
+
+Meeting these criteria with the prototype would constitute success.  If the model passes all *physical* tests but is 2× slower, it might be acceptable; but if it requires 10× the CPU, we’d need optimizations (e.g. approximations or lower-rate updates). 
+
+## References
+
+Key literature underpinning this analysis includes Collin *et al.* (2015), which experimentally characterized chatter in singing bowls, and Inácio *et al.* (2006), which developed a detailed modal model of bowls and their stick-slip behavior.  The **Standing bell** article (Wikipedia) summarizes field observations and prior studies: it notes that continuous ringing depends on mallet speed and force and that “rattling or chattering” occurs with harder/ faster motion or low contact.  Inácio’s paper also provides insights on friction modeling techniques.  These primary sources form the basis for the above recommendations.  
+
