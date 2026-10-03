@@ -1,10 +1,16 @@
 #include "TiamatBufferEngine.hpp"
 #include "TiamatMacro.hpp"
+#include "TiamatCorrupt.hpp"
 
 namespace tiamat {
 
+void BufferEngine::processCorrupt(Corrupt& effect, const float* input, float* output) noexcept {
+    effect.processBlock(input, output, corrupt_, random_);
+}
+
 void BufferEngine::processBlock(const float* input, float* wet, const BufferBlockInput& block) noexcept {
     if (block.restoreSecondary) events_.restoreSecondaryDefaults();
+    if (block.updateSettings) events_.settings = block.settings;
     if (block.restartRandom) { events_.controls.seed = block.seed; random_.restart(block.seed); }
     events_.normalizeSelection();
     std::array<bool, blockFrames> resets {};

@@ -318,7 +318,11 @@ void testHarmony() {
           "P5 expression/chord budget rejects expansion beyond 1048576 entries");
   }
   {
-    std::ifstream file("doc/Sibyl_v3_Example_Composition.json");
+    std::ifstream file("doc/sibyl/Sibyl_v3_Example_Composition.json");
+    if (!file) {
+      check(false, "P5 companion composition fixture is readable");
+      return;
+    }
     std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     auto example = parseCompositionJson(text, 1);
     check(example.valid, "P5 complete companion expressive-composition fixture compiles");

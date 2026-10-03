@@ -5,6 +5,7 @@
 #include "TiamatEvents.hpp"
 
 namespace tiamat {
+class Corrupt;
 
 struct BufferBlockInput {
     PrimaryControls primary;
@@ -13,10 +14,12 @@ struct BufferBlockInput {
     std::array<bool, blockFrames> clockRises {};
     bool restoreSecondary = false, restartRandom = false;
     std::uint64_t seed = 1;
+    bool updateSettings = false;
+    SecondarySettings settings;
 };
 
 // Headless fixed-rate buffer stage. Output is wet, before Corrupt/mix/Tone;
-// Phase 4 will compose those stages. This is not a host-rate Rack adapter.
+// Core composes those stages. This is not a host-rate Rack adapter.
 class BufferEngine {
 public:
     BufferEngine() = default;
@@ -28,6 +31,8 @@ public:
     std::uint64_t randomState() const noexcept { return random_.state(); }
     std::uint64_t clockBoundaryCount() const noexcept { return boundaries_; }
     void processBlock(const float* input, float* wet, const BufferBlockInput&) noexcept;
+    // Keep Dropout on the same stream, after both Buffer passes.
+    void processCorrupt(Corrupt&, const float* input, float* output) noexcept;
 private:
     Buffer buffer_;
     Clock clock_;

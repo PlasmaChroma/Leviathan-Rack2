@@ -74,6 +74,7 @@ build/src/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cp
 
 TEST_BINS_NON_RACK := \
 	build/tests/tiamat_events_spec \
+	build/tests/tiamat_corrupt_spec \
 	build/tests/tiamat_buffer_spec \
 	build/tests/tiamat_reference_spec \
 	build/tests/vessel_engine_spec \
@@ -376,7 +377,8 @@ define run_test_bin
 	@run_with_test_env() { \
 		DYLD_LIBRARY_PATH="$(RACK_RUNTIME_DIR):$$DYLD_LIBRARY_PATH" "$$1"; \
 	}; \
-	if [ -x "$(1)" ]; then run_with_test_env "$(1)"; \
+	if uname -s | grep -Eqi 'mingw|msys|cygwin' && [ -x "$(1).exe" ]; then run_with_test_env "$(1).exe"; \
+	elif [ -x "$(1)" ]; then run_with_test_env "$(1)"; \
 	elif [ -x "$(1).exe" ]; then \
 		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
 			echo "[SKIP] $(1).exe is a Windows test binary; cannot execute in this Linux shell."; \
@@ -425,7 +427,8 @@ define run_rack_test_bin
 		fi; \
 		return "$$rc"; \
 	}; \
-	if [ -x "$(1)" ]; then run_with_rack_env "$(1)"; \
+	if uname -s | grep -Eqi 'mingw|msys|cygwin' && [ -x "$(1).exe" ]; then run_with_rack_env "$(1).exe"; \
+	elif [ -x "$(1)" ]; then run_with_rack_env "$(1)"; \
 	elif [ -x "$(1).exe" ]; then \
 		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
 			echo "[SKIP] $(1).exe is a Windows Rack-linked test binary; cannot execute in this Linux shell."; \
@@ -454,24 +457,34 @@ CROWNSTEP_MODULE_SOURCES := \
 VESSEL_SOURCES := $(wildcard src/vessel/*.cpp)
 TIAMAT_SOURCES := $(wildcard src/Tiamat/*.cpp)
 TIAMAT_HEADERS := $(wildcard src/Tiamat/*.hpp)
+.PHONY: test-tiamat-transport
+build/tests/tiamat_rate_bridge_spec: tests/tiamat_rate_bridge_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc -I$(RACK_DIR)/dep/include $< $(TIAMAT_SOURCES) -L$(RACK_DIR) -lRack -o $@
+test-tiamat-transport: build/tests/tiamat_rate_bridge_spec
+	$(call run_rack_test_bin,build/tests/tiamat_rate_bridge_spec)
 $(patsubst %.cpp,build/%.cpp.o,$(TIAMAT_SOURCES)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off
 .PHONY: test-tiamat generate-tiamat-fixtures check-tiamat-fixtures
 generate-tiamat-fixtures:
 	python3 tools/tiamat/generate_reference_fixtures.py
 	python3 tools/tiamat/generate_buffer_fixtures.py
 	python3 tools/tiamat/generate_event_fixtures.py
+	python3 tools/tiamat/generate_corrupt_fixtures.py
 check-tiamat-fixtures:
 	python3 tools/tiamat/generate_reference_fixtures.py --check
 	python3 tools/tiamat/generate_buffer_fixtures.py --check
 	python3 tools/tiamat/generate_event_fixtures.py --check
+	python3 tools/tiamat/generate_corrupt_fixtures.py --check
 build/tests/tiamat_reference_spec: tests/tiamat_reference_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/reference_v1.txt | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
 build/tests/tiamat_buffer_spec: tests/tiamat_buffer_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/buffer_v1.txt | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -DTIAMAT_BUFFER_TEST_HOOKS -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
 build/tests/tiamat_events_spec: tests/tiamat_events_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/events_v1.txt | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -DTIAMAT_BUFFER_TEST_HOOKS -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
-test-tiamat: check-tiamat-fixtures build/tests/tiamat_reference_spec build/tests/tiamat_buffer_spec build/tests/tiamat_events_spec
+build/tests/tiamat_corrupt_spec: tests/tiamat_corrupt_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/corrupt_v1.txt | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DTIAMAT_BUFFER_TEST_HOOKS -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
+test-tiamat: check-tiamat-fixtures build/tests/tiamat_reference_spec build/tests/tiamat_buffer_spec build/tests/tiamat_events_spec build/tests/tiamat_corrupt_spec
 	$(call run_test_bin,build/tests/tiamat_reference_spec)
+	$(call run_test_bin,build/tests/tiamat_corrupt_spec)
 	$(call run_test_bin,build/tests/tiamat_buffer_spec)
 	$(call run_test_bin,build/tests/tiamat_events_spec)
 VESSEL_HEADERS := $(wildcard src/vessel/*.hpp)
@@ -519,7 +532,7 @@ build/tools/vessel_characterize: tools/vessel/characterize.cpp $(VESSEL_SOURCES)
 	mkdir -p build/tools
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 test-build: $(TEST_BINS)
-test-build-fast: $(TEST_BINS_NON_RACK) build/tests/adaptive_visual_update_spec
+test-build-fast: $(TEST_BINS_NON_RACK) build/tests/adaptive_visual_update_spec build/tests/tiamat_rate_bridge_spec
 test-build-rack: $(TEST_BINS_RACK)
 
 # Chimera Phase 0 proves a native, Rack-independent C++17 harness before the
@@ -704,8 +717,10 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
+	$(call run_rack_test_bin,build/tests/tiamat_rate_bridge_spec)
 	$(call run_test_bin,build/tests/tiamat_events_spec)
 	$(call run_test_bin,build/tests/tiamat_buffer_spec)
+	$(call run_test_bin,build/tests/tiamat_corrupt_spec)
 	$(call run_test_bin,build/tests/tiamat_reference_spec)
 	$(call run_test_bin,build/tests/vessel_engine_spec)
 	$(call run_test_bin,build/tests/vessel_fast_paths_spec)

@@ -1,7 +1,11 @@
 namespace {
 void testCombinedComposition() {
   using namespace sibyl;
-  std::ifstream file("doc/Sibyl_v3_Example_Composition.json");
+  std::ifstream file("doc/sibyl/Sibyl_v3_Example_Composition.json");
+  if (!file) {
+    check(false, "P6 companion composition fixture is readable");
+    return;
+  }
   std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
   auto parsed = parseCompositionJson(source, 1);
   if (!parsed.valid) {

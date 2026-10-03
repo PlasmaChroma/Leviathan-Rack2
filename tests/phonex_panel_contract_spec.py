@@ -114,7 +114,8 @@ class PhonexPanelContractTest(unittest.TestCase):
 
     def test_widget_uses_split_assets_and_dynamic_anchor_helpers(self):
         self.assertIn('SplitPanelRenderer splitPanel(this, "res/Phonex.panel.svg")', WIDGET)
-        self.assertIn('splitPanel.addLabels("res/Phonex.labels.svg")', WIDGET)
+        self.assertIn('splitPanel.addThemedLabels("res/Phonex.labels.svg",', WIDGET)
+        self.assertIn('"res/Phonex.theme-text-input.svg", "res/Phonex.theme-text-output.svg"', WIDGET)
         self.assertIn("loadPointFromSvgMm(panelPath, id", WIDGET)
         self.assertIn("loadRectFromSvgMm(panelPath, id", WIDGET)
 
