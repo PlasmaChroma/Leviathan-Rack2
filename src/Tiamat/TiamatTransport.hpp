@@ -19,6 +19,7 @@ public:
     Transport(const Transport&) = delete;
     Transport& operator=(const Transport&) = delete;
     Core& core() noexcept { return core_; } // audio owner only
+    const Core& core() const noexcept { return core_; } // audio owner only
     const RateBridge* bridge() const noexcept { return active_; } // audio owner only
     unsigned requestedRate() const noexcept { return requested_.load(std::memory_order_acquire); }
     bool preparationFailed() const noexcept { return preparationFailed_.load(std::memory_order_acquire); }

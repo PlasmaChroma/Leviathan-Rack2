@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="91.44mm" height="128.5mm" viewBox="0 0 91.44 128.5">
+<g id="theme_background"><rect width="91.44" height="128.5" fill="#000000"/></g>
+<path d="M3 13H88.44 M3 76H88.44 M3 95H88.44 M3 108H88.44" stroke="#4d7a80" stroke-width=".25"/>
+<g fill="none" stroke="#29434e" stroke-width=".3"><rect x="3" y="16" width="85.44" height="58" rx="2"/><path d="M30.48 16V74 M60.96 16V74 M3 43H88.44"/></g>
+<g id="labels" fill="#cbe4df" font-family="DejaVu Sans" text-anchor="middle">
+<text x="28" y="9" font-size="5">TIAMAT</text>
+<text x="15.24" y="19" font-size="2.7" data-theme-text="input">TIME</text>
+<text x="45.72" y="19" font-size="2.7" data-theme-text="input">REPEATS</text>
+<text x="76.2" y="19" font-size="2.7" data-theme-text="input">MIX</text>
+<text x="15.24" y="52" font-size="2.7" data-theme-text="input">BEND</text>
+<text x="45.72" y="52" font-size="2.7" data-theme-text="input">BREAK</text>
+<text x="76.2" y="52" font-size="2.7" data-theme-text="input">CORRUPT</text>
+<text x="8" y="80" font-size="1.8" data-theme-text="input">CLOCK</text>
+<text x="23" y="80" font-size="1.8" data-theme-text="input">MODE</text>
+<text x="38" y="80" font-size="1.8" data-theme-text="input">FREEZE</text>
+<text x="53" y="80" font-size="1.8" data-theme-text="input">BEND</text>
+<text x="68" y="80" font-size="1.8" data-theme-text="input">BREAK</text>
+<text x="83" y="80" font-size="1.8" data-theme-text="input">CORRUPT</text>
+<text x="8" y="93" font-size="1.5" data-theme-text="input">EXT</text>
+<text x="23" y="93" font-size="1.5" data-theme-text="input">MICRO</text>
+<text x="38" y="93" font-size="1.5" data-theme-text="input">REQ / ON</text>
+<text x="53" y="93" font-size="1.5" data-theme-text="input">ON</text>
+<text x="17" y="106.5" font-size="1.8" data-theme-text="input">FRZ</text>
+<text x="36" y="106.5" font-size="1.8" data-theme-text="input">BEND</text>
+<text x="55" y="106.5" font-size="1.8" data-theme-text="input">BREAK</text>
+<text x="74" y="106.5" font-size="1.8" data-theme-text="input">CORR</text>
+<text x="12" y="122" font-size="2" data-theme-text="input">IN L</text>
+<text x="27" y="122" font-size="2" data-theme-text="input">IN R</text>
+<text x="46" y="122" font-size="2" data-theme-text="input">CLOCK</text>
+<text x="66" y="122" font-size="2" data-theme-text="output">OUT L</text>
+<text x="81" y="122" font-size="2" data-theme-text="output">OUT R</text>
+<text x="62" y="94.6" font-size="1.4" data-theme-text="input">D</text>
+<text x="67" y="94.6" font-size="1.4" data-theme-text="input">O</text>
+<text x="72" y="94.6" font-size="1.4" data-theme-text="input">X</text>
+<text x="77" y="94.6" font-size="1.4" data-theme-text="input">J</text>
+<text x="82" y="94.6" font-size="1.4" data-theme-text="input">V</text>
+<text x="70" y="11" font-size="1.3" data-theme-text="input">LOST</text>
+<text x="78" y="11" font-size="1.3" data-theme-text="input">LIMIT</text>
+<text x="86" y="11" font-size="1.3" data-theme-text="input">BUSY</text>
+<text x="45.72" y="127" font-size="2">L E V I A T H A N</text>
+</g><g id="component_anchors" style="display:none">
+<circle id="TIME_PARAM" cx="15.24" cy="25" r=".5"/>
+<circle id="TIME_INPUT" cx="15.24" cy="38" r=".5"/>
+<circle id="REPEATS_PARAM" cx="45.72" cy="25" r=".5"/>
+<circle id="REPEATS_INPUT" cx="45.72" cy="38" r=".5"/>
+<circle id="MIX_PARAM" cx="76.2" cy="25" r=".5"/>
+<circle id="MIX_INPUT" cx="76.2" cy="38" r=".5"/>
+<circle id="BEND_PARAM" cx="15.24" cy="58" r=".5"/>
+<circle id="BEND_INPUT" cx="15.24" cy="71" r=".5"/>
+<circle id="BREAK_PARAM" cx="45.72" cy="58" r=".5"/>
+<circle id="BREAK_INPUT" cx="45.72" cy="71" r=".5"/>
+<circle id="CORRUPT_PARAM" cx="76.2" cy="58" r=".5"/>
+<circle id="CORRUPT_INPUT" cx="76.2" cy="71" r=".5"/>
+<circle id="CLOCK_BUTTON" cx="8" cy="84" r=".5"/>
+<circle id="MODE_BUTTON" cx="23" cy="84" r=".5"/>
+<circle id="FREEZE_BUTTON" cx="38" cy="84" r=".5"/>
+<circle id="BEND_BUTTON" cx="53" cy="84" r=".5"/>
+<circle id="BREAK_BUTTON" cx="68" cy="84" r=".5"/>
+<circle id="CORRUPT_BUTTON" cx="83" cy="84" r=".5"/>
+<circle id="FREEZE_INPUT" cx="17" cy="101" r=".5"/>
+<circle id="BEND_GATE_INPUT" cx="36" cy="101" r=".5"/>
+<circle id="BREAK_GATE_INPUT" cx="55" cy="101" r=".5"/>
+<circle id="CORRUPT_GATE_INPUT" cx="74" cy="101" r=".5"/>
+<circle id="LEFT_INPUT" cx="12" cy="115" r=".5"/>
+<circle id="RIGHT_INPUT" cx="27" cy="115" r=".5"/>
+<circle id="CLOCK_INPUT" cx="46" cy="115" r=".5"/>
+<circle id="LEFT_OUTPUT" cx="66" cy="115" r=".5"/>
+<circle id="RIGHT_OUTPUT" cx="81" cy="115" r=".5"/>
+<circle id="EXTERNAL_LIGHT" cx="8" cy="89" r=".5"/>
+<circle id="MICRO_LIGHT" cx="23" cy="89" r=".5"/>
+<circle id="FREEZE_REQUEST_LIGHT" cx="36" cy="89" r=".5"/>
+<circle id="FREEZE_ACTIVE_LIGHT" cx="40" cy="89" r=".5"/>
+<circle id="BEND_LIGHT" cx="53" cy="89" r=".5"/>
+<circle id="BREAK_LIGHT" cx="68" cy="89" r=".5"/>
+<circle id="DECIMATE_LIGHT" cx="62" cy="92" r=".5"/>
+<circle id="DROPOUT_LIGHT" cx="67" cy="92" r=".5"/>
+<circle id="DESTROY_LIGHT" cx="72" cy="92" r=".5"/>
+<circle id="DJ_LIGHT" cx="77" cy="92" r=".5"/>
+<circle id="VINYL_LIGHT" cx="82" cy="92" r=".5"/>
+<circle id="CLOCK_LOST_LIGHT" cx="70" cy="7" r=".5"/>
+<circle id="CAPACITY_LIGHT" cx="78" cy="7" r=".5"/>
+<circle id="FAULT_LIGHT" cx="86" cy="7" r=".5"/>
+</g></svg>

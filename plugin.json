@@ -305,6 +305,14 @@
       "hidden": false
     },
     {
+      "slug": "Tiamat",
+      "name": "Tiamat",
+      "description": "Stereo clocked memory manipulation, evolving Freeze and five Corrupt textures.",
+      "tags": ["Delay", "Effect", "Distortion"],
+      "capabilities": {"polyphony": 1},
+      "hidden": false
+    },
+    {
       "slug": "VTune",
       "name": "V.Tune",
       "description": "Performance and voicing controls for Vessel.",

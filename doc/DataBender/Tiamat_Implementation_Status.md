@@ -1,6 +1,6 @@
 # Tiamat implementation status
 
-2026-10-03: Phases 1–4 and the Phase 5 host transport are implemented and headlessly validated. Product name and source directory are **Tiamat**
+2026-10-03: Phases 1–4, the Phase 5 host transport, and Phase 5b Rack integration are implemented. Product name and source directory are **Tiamat**
 and `src/Tiamat` (case intentional). The implementation follows the phased
 contract in [Data_Bender_ImplementationSpec.md](Data_Bender_ImplementationSpec.md).
 
@@ -311,16 +311,61 @@ behavior. No artifacts were deleted to conceal that mixed-toolchain condition.
 
 ## Next phases and remaining decisions
 
-Phase 5b is next: connect the prepared transport to a Rack module/widget,
-add the UI command mailbox/status snapshots, canonical persistence and prepared
-full-reset replacement, panel/menu assets, and installed validation. The
-host-rate bridge and rate-change retirement are now implemented.
+Phase 5b now registers the Tiamat model, provides the Rack module/widget,
+bounded command queue/status snapshots, canonical persistence, prepared
+full-reset replacement and a functional 18 HP panel/menu. Live Rack audition,
+DAW window reopen checks, CPU/block-cost measurement and final artwork remain.
 
-No integrated callback emulation exists in the reference evidence. Panel
-width/art direction remain deferred; branding is
-settled as Tiamat. Waveform/display work stays outside v1.
+No integrated callback emulation exists in the reference evidence. The 18 HP
+panel is functional artwork pending in-Rack review; branding is settled as
+Tiamat. Waveform/display work stays outside v1.
 
 The specification's evidence links currently use paths predating its move to
 `doc/DataBender`: firmware evidence actually lives in `../../firmware/Data_Bender`
 and the Windows build guide is `../windows_build_from_wsl.md`. This phase read
 those actual files without changing the user's in-progress specification.
+
+## Phase 5b: Rack integration
+
+- `TiamatRuntime.hpp`: one preparation worker per module owns allocation,
+  clearing, bridge preparation and retirement. Full reset/patch load swaps a
+  cleared Core at a block boundary (or abandons the old partial block during a
+  rate change). Audio waits silently if preparation is incomplete. Commands
+  carry reset generations; obsolete commands are reclaimed even while waiting
+  so repeated loads cannot fill the queue with superseded work. No widget is
+  needed for preparation to continue. Control callers serialize through a
+  mutex; audio uses bounded queues and fixed-size SPSC status snapshots.
+- `TiamatModule.hpp/.cpp`: six primary knobs/CVs, six action buttons, clock and
+  four gate inputs, mono-per-port stereo audio with L-to-R normaling, direct
+  bypass, effective tooltips and mode/effect/Freeze/clock/fault lights. Level
+  gate contributions light Bend/Break without changing their stored flags.
+- `TiamatPersistence.hpp/.cpp`: schema/algorithm 1, canonical secondary values,
+  independent mode flags and full-width uint64 seed strings. Malformed values
+  default or clamp before narrowing. No Freeze request, audio, transient clock,
+  filter or RNG position is saved. Primary knobs use Rack serialization.
+- `TiamatWidget.cpp`: secondary sliders and behavior switches, decimal/hex seed
+  entry, restart, secondary defaults and fault recovery. Shared Rack/repository
+  graphics components; no module-specific GPU resources. `res/Tiamat.svg` is
+  the editable 18 HP master, with generated outlined labels, separate themed
+  input/output text and background, panel and atlas.
+- `tests/tiamat_module_spec.cpp`: Rack-linked persistence, uint64/malformed
+  input, independent flags, momentary/level controls, bypass/channel normaling,
+  reset/rate-change adoption, overflow recovery and concurrent menu/reset/audio
+  coverage. Thread-local C++ allocator guards detect process allocation or
+  deletion; externally linked Rack DLL C allocations are not instrumented.
+- `tests/tiamat_runtime_spec.cpp`: verifies nonempty recorded memory, full
+  clearing of both memory planes after reset, and repeated concurrent reset,
+  setting and sample-rate replacements. Both new tests join `test-fast` and
+  `test-tiamat-module`; the original core tests remain Rack-independent.
+
+Validation: native `make -j10 test-fast dist` with the installed Rack runtime
+passed, including the two new Tiamat tests; the existing summary reports
+109,950 checks and zero failures. Windows `plugin.dll` linked and
+`dist/Leviathan-2.9.3-win-x64.vcvplugin` contains the Tiamat model and six SVG
+assets. Final log: `build/tiamat-phase5b-final.log`. `git diff --check` passes.
+WSL GCC
+ASan/UBSan with leak detection and GCC TSAN (`setarch x86_64 -R`) passed the
+runtime reset/settings/rate replacement test with locally instrumented Speex.
+Logs: `build/tiamat-phase5b-asan.log`, `build/tiamat-phase5b-tsan.log`.
+The functional panel master was rasterized and visually checked; this is not
+an in-Rack widget/audio smoke test. No installation, staging or commits.

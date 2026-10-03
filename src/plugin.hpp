@@ -56,6 +56,7 @@ extern Model* modelPhonex;
 extern Model* modelChimera;
 extern Model* modelVessel;
 extern Model* modelVTune;
+extern Model* modelTiamat;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.
