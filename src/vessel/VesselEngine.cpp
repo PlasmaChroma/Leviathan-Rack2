@@ -83,9 +83,10 @@ double VesselEngine::strikerEnergy() const noexcept {
     return active_ ? 0.5*activeMallet_.mass*strikerVelocity_*strikerVelocity_
         + strikePotential(compression_, activeMallet_.stiffness) : 0.0;
 }
-bool VesselEngine::strike(double normalizedVelocity) noexcept {
-    if (!std::isfinite(normalizedVelocity) || normalizedVelocity <= 0.0) return false;
-    const double launch = std::min(normalizedVelocity, 1.0); // relative approach, m/s
+bool VesselEngine::strike(double normalizedVelocity, double velocityScale) noexcept {
+    if (!std::isfinite(normalizedVelocity) || normalizedVelocity <= 0.0
+        || !std::isfinite(velocityScale) || velocityScale <= 0.0 || velocityScale > 2.0) return false;
+    const double launch = std::min(normalizedVelocity, 1.0) * velocityScale; // relative approach, m/s
     double before = 0.0;
     if (!active_) {
         activeMallet_ = mallet_;

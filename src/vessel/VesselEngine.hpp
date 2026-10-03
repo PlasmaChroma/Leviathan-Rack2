@@ -72,7 +72,7 @@ public:
     void setAuditEnabled(bool enabled) noexcept { audit_ = enabled; }
     // Oracle switch for offline equivalence checks; copied with the engine.
     void setFastTailEnabled(bool enabled) noexcept { fastTail_ = enabled; }
-    bool strike(double normalizedVelocity) noexcept;
+    bool strike(double normalizedVelocity, double velocityScale = 1.0) noexcept;
     bool setRotation(bool engaged, double revolutionsPerSecond, double pressure) noexcept;
     EngineFrame step() noexcept;
 

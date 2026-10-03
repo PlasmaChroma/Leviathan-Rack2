@@ -126,7 +126,7 @@ HostFrame HostRateAdapter::process(const HostControls& controls) noexcept {
     const double speed = std::isfinite(controls.speed) ? std::max(-2.0, std::min(2.0, controls.speed)) : 0.0;
     const double pressure = std::isfinite(controls.pressure) ? std::max(0.0, std::min(15.0, controls.pressure)) : 0.0;
     engine_.setRotation(controls.rotate, speed, pressure);
-    if (controls.strikeEvent) engine_.strike(controls.velocity);
+    if (controls.strikeEvent) engine_.strike(controls.velocity, controls.strikeVelocityScale);
     for (unsigned i = 0; i < decimator_.factor(); ++i) {
         const auto frame = engine_.step();
         output.fault = output.fault || frame.fault;

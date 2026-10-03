@@ -39,6 +39,7 @@ struct HostControls {
     // Already detected at host rate; a held gate is not an event here.
     bool strikeEvent = false;
     double velocity = 0.5;
+    double strikeVelocityScale = 1.0;
     bool rotate = false;
     double speed = 0.4, pressure = 2.5;
 };

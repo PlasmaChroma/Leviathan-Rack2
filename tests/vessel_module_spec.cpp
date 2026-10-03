@@ -39,6 +39,25 @@ void run(Vessel& m, int samples = 1, float rate = 48000) {
 }
 void cable(Vessel& m, int input, float volts, int channels = 1) { m.inputs[input].channels = channels; m.inputs[input].setVoltage(volts); }
 
+void feltStrikeLevel() {
+    for (int bowl = 0; bowl < 2; ++bowl) for (int mallet = 0; mallet < 4; ++mallet) {
+        Vessel m;
+        m.params[Vessel::BOWL_PARAM].setValue(float(bowl));
+        m.params[Vessel::MALLET_PARAM].setValue(float(mallet));
+        run(m, 6000); // Finish material morph before measuring launch work.
+        cable(m, Vessel::VELOCITY_INPUT, 10);
+        cable(m, Vessel::STRIKE_INPUT, 10);
+        run(m);
+        const double speed = mallet == 3 ? 2.0 : 1.0;
+        const double expected = .5 * vessel::seedMallets[mallet].mass * speed * speed;
+        require(std::abs(m.audio.engine().ledger().launchWork - expected) < 1e-10,
+            "material strike boost missing or applied to a non-Felt mallet");
+        run(m, 24000);
+        require(m.audio.engine().ledger().solverFaults == 0, "boosted strike solver fault");
+    }
+    std::cout << "[PASS] Felt strike boost at full velocity, both bowls, other mallets unchanged\n";
+}
+
 void gatesAndControls() {
     Vessel m;
     m.outputs[Vessel::LEFT_OUTPUT].channels = 16; m.outputs[Vessel::RIGHT_OUTPUT].channels = 16;
@@ -546,7 +565,7 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+        try { feltStrikeLevel(); gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
             std::cout << "Vessel Rack adapter: 11 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;

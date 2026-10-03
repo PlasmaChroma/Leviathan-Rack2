@@ -211,6 +211,8 @@ void Vessel::process(const ProcessArgs& args) {
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
     controlElapsed += dt;
     if (controlElapsed >= .001 || controls.strikeEvent) { updateControls(controlElapsed, tune); controlElapsed = 0; }
+    // Give soft Felt strikes more energy without changing rubbing or output gain.
+    controls.strikeVelocityScale = selectedMallet == 3 ? 2.0 : 1.0;
     // Pad > patched intensity > independent controls. The engine's existing
     // speed/pressure smoothing also handles switching between these sources.
     if (manualRotate || inputs[INTENSITY_INPUT].isConnected()) {

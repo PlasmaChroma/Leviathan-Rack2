@@ -271,7 +271,15 @@ struct VesselMalletRenderWidget : TransparentWidget {
         const float depth = std::sin(angle);
         if (rubbing && frontPass != (depth >= 0.f)) return;
 
-        const std::string fullPath = asset::plugin(pluginInstance, "res/Vessel/PureWoodMallet.png");
+        // Match MALLET_PARAM's Wood, Suede, Silicone, Felt ordering.
+        static const char* const malletPaths[] = {
+            "res/Vessel/PureWoodMallet.png",
+            "res/Vessel/Suede.png",
+            "res/Vessel/Silicone.png",
+            "res/Vessel/Felt.png"
+        };
+        const int mallet = clamp(int(std::round(link->module->params[Vessel::MALLET_PARAM].getValue())), 0, 3);
+        const std::string fullPath = asset::plugin(pluginInstance, malletPaths[mallet]);
         std::shared_ptr<window::Image> source = APP->window->loadImage(fullPath);
         if (!source || source->handle < 0) return;
         int handle = visual_assets::loadRasterMipmapHandle(args.vg, source, fullPath);
@@ -323,6 +331,14 @@ struct VesselMalletRenderWidget : TransparentWidget {
         nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
         nvgTranslate(args.vg, renderedTip.x, renderedTip.y);
         nvgRotate(args.vg, tilt);
+        if (!rubbing) {
+            // Flip artwork and rune about their shared center without moving
+            // the strike animation's original footprint.
+            const float centerY = imageY + .5f * drawHeight;
+            nvgTranslate(args.vg, 0.f, centerY);
+            nvgScale(args.vg, -1.f, -1.f);
+            nvgTranslate(args.vg, 0.f, -centerY);
+        }
         const NVGpaint paint = nvgImagePattern(
             args.vg, -.5f * drawWidth, imageY, drawWidth, drawHeight, 0.f, handle, opacity);
         nvgBeginPath(args.vg);
@@ -333,9 +349,10 @@ struct VesselMalletRenderWidget : TransparentWidget {
             const Vec emblemSize = link->emblem->getSize();
             if (emblemSize.x > 0.f && emblemSize.y > 0.f) {
                 const float scale = .7f * drawWidth / emblemSize.x;
-                // Center the upright emblem on the mallet artwork.
+                // Place the Felt emblem's center 33% down the artwork.
+                const float emblemOffsetY = mallet == 3 ? -.17f * drawHeight : 0.f;
                 nvgTranslate(args.vg, -.5f * emblemSize.x * scale,
-                    imageY + .5f * (drawHeight - emblemSize.y * scale));
+                    imageY + .5f * (drawHeight - emblemSize.y * scale) + emblemOffsetY);
                 nvgScale(args.vg, scale, scale);
                 nvgGlobalAlpha(args.vg, opacity);
                 link->emblem->draw(args.vg);
