@@ -10,7 +10,7 @@ struct VTune final : Module {
         SUSTAIN_PARAM,
         IMPERFECTION_PARAM,
         WIDTH_PARAM,
-        LEVEL_PARAM,
+        LEVEL_PARAM, // Retired; retain the saved parameter ID.
         PARAMS_LEN
     };
     enum InputId { INPUTS_LEN };

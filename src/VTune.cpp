@@ -44,6 +44,6 @@ void VTune::process(const ProcessArgs&) {
     message->sustain = finiteBound(params[SUSTAIN_PARAM].getValue(), -2.f, 2.f, 0.f);
     message->imperfection = finiteBound(params[IMPERFECTION_PARAM].getValue(), 0.f, 2.f, 1.f);
     message->width = finiteBound(params[WIDTH_PARAM].getValue(), 0.f, 1.f, .7f);
-    message->level = finiteBound(params[LEVEL_PARAM].getValue(), 0.f, 2.f, 1.f);
+    message->level = 1.f; // Reserved legacy field; output level now lives on Vessel.
     vessel->rightExpander.messageFlipRequested = true;
 }

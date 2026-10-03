@@ -258,6 +258,8 @@ struct VesselMalletLink {
     math::Rect orbit;
     math::Rect bowl;
     float strikePadHeight = 0.f;
+    // Shared UI envelope keeps the front/back passes in sync through release.
+    float rubFade = 0.f;
     // Temporary, UI-only tuning shared by the front/back animation passes.
     std::shared_ptr<float> orbitWidthScale = std::make_shared<float>(1.f);
 
@@ -326,9 +328,10 @@ struct VesselMalletRenderWidget : TransparentWidget {
 
     void drawMallet(const DrawArgs& args) {
         if (!link || !link->module || !APP || !APP->window) return;
-        const bool rubbing = link->module->visualRubbing.load(std::memory_order_relaxed);
         const float aftermath = clamp(
             link->module->visualStrikeAftermath.load(std::memory_order_relaxed), 0.f, 1.f);
+        const bool rubbing = link->module->visualRubbing.load(std::memory_order_relaxed)
+            || (link->rubFade > 0.f && aftermath <= 0.f);
         if (!rubbing && (aftermath <= 0.f || !frontPass)) return;
         float angle = link->module->visualRotationAngle.load(std::memory_order_relaxed);
         if (!std::isfinite(angle)) angle = 0.f;
@@ -353,7 +356,8 @@ struct VesselMalletRenderWidget : TransparentWidget {
             * kVesselMalletTipFraction * kVesselMalletTipPenetration;
         Vec renderedTip = contact.plus(Vec(0.f, tipPenetration));
         float tilt = 0.f;
-        float opacity = 1.f;
+        // Smoothstep needs no transcendental work and reverses cleanly on retrigger.
+        float opacity = link->rubFade * link->rubFade * (3.f - 2.f * link->rubFade);
         const float imageY = -drawHeight;
         if (!rubbing) {
             const float elapsed = (1.f - aftermath)
@@ -651,6 +655,11 @@ struct VesselWidget final : ModuleWidget {
         visual_assets::SplitPanelRenderer panel(this, "res/Vessel.panel.svg");
         panel.addThemedLabels("res/Vessel.labels.svg", "res/Vessel.theme-text-input.svg", "res/Vessel.theme-text-output.svg");
         panel.addCompactLeviathanLogoBranding();
+        panel.addPerfectWaveBranding();
+        addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+        addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+        addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+        addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
         if (widget::FramebufferWidget* conduits =
                 visual_assets::createPlasmaConduitLayer(panel.panelPath(), box.size)) {
             addChild(conduits);
@@ -688,6 +697,7 @@ struct VesselWidget final : ModuleWidget {
         addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM));
         addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(point("PITCH_PARAM", 42.5f, 83.5f)), module, Vessel::PITCH_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 83.5f)), module, Vessel::FINE_PARAM));
+        addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("LEVEL_PARAM", 22.f, 111.7f)), module, Vessel::LEVEL_PARAM));
         math::Rect malletSelectorRect(Vec(59.5f, 79.5f), Vec(18.8f, 36.f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "MALLET_SELECTOR", &malletSelectorRect);
         auto* malletSelector = createParam<VesselMalletSelector>(
@@ -712,8 +722,7 @@ struct VesselWidget final : ModuleWidget {
             {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 22.f, 98.f},
             {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 39.f, 98.f},
             {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 52.f, 98.f},
-            {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f},
-            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f}
+            {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f}
         };
         for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(input.anchor, input.x, input.y)), module, input.id));
@@ -772,6 +781,15 @@ struct VesselWidget final : ModuleWidget {
         layerTiming.beginCycle(enabled);
         const auto start = debug_terminal::debugTimerStart(enabled);
         auto* vessel = static_cast<Vessel*>(module);
+        const float frameTime = APP && APP->window
+            ? clamp(float(APP->window->getLastFrameDuration()), 0.f, .1f) : 1.f / 60.f;
+        const bool rubbing = vessel && vessel->visualRubbing.load(std::memory_order_relaxed);
+        if (rubbing)
+            malletLink.rubFade = std::min(1.f, malletLink.rubFade + frameTime / .12f);
+        else if (vessel && vessel->visualStrikeAftermath.load(std::memory_order_relaxed) > 0.f)
+            malletLink.rubFade = 0.f; // A new strike replaces the released rubbing mallet.
+        else
+            malletLink.rubFade = std::max(0.f, malletLink.rubFade - frameTime / .20f);
         const bool crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
         if (metalBowlRaster) metalBowlRaster->setVisible(!crystalSelected);
         if (crystalBowlRaster) crystalBowlRaster->setVisible(crystalSelected);

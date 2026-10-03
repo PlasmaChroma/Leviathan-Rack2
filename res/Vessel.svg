@@ -25,12 +25,12 @@
      inkscape:zoom="2.4193418"
      inkscape:cx="153.76083"
      inkscape:cy="242.83464"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="panel_art"
+     inkscape:window-width="1356"
+     inkscape:window-height="1211"
+     inkscape:window-x="26"
+     inkscape:window-y="26"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg20"
      showgrid="false" />
   <defs
      id="defs2">
@@ -94,17 +94,31 @@
        style="display:none;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1">
       <path
          id="strike_velocity_conduit"
-         d="M 900,9800 L 2200,9800" />
+         d="M 900,9920 H 2200" />
       <path
          id="speed_rub_conduit"
-         d="m 3790.0002,9800 h 1300" />
+         d="m 3790.0002,9920 h 1300" />
       <path
          id="coarse_fine_conduit"
-         d="M 4064,8350 L 5404.9644,8350" />
+         d="M 3973.995,8470 H 5314.9594" />
     </g>
     <g
        id="component_anchors"
        style="display:inline">
+      <rect
+         id="BRANDING_WAVE_LEFT_RASTER"
+         x="1173.644"
+         y="12338.190"
+         width="1306.748"
+         height="511.810"
+         style="fill:#2a1430;fill-opacity:1" />
+      <rect
+         id="BRANDING_WAVE_RIGHT_RASTER"
+         x="5647.708"
+         y="12338.190"
+         width="1306.748"
+         height="511.810"
+         style="fill:#2a1430;fill-opacity:1" />
       <rect
          id="BRANDING_LEVIATHAN_LOGO_RASTER"
          x="2428.0334"
@@ -147,6 +161,13 @@
          width="3674"
          height="5100"
          style="fill:#2a1430;fill-opacity:1" />
+      <rect
+         id="MALLET_SELECTOR"
+         x="5950"
+         y="8070.0005"
+         width="2044.0426"
+         height="3971.8298"
+         style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20" />
       <circle
          id="VTUNE_EXPANDER_LIGHT"
          cx="7808"
@@ -156,80 +177,73 @@
       <circle
          id="BINAURAL_PARAM"
          cx="902.39893"
-         cy="8350"
+         cy="8470"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="BOWL_PARAM"
-         cx="2400.0198"
-         cy="8350"
+         cx="2309.981"
+         cy="8470"
          r="75"
          style="fill:#ff70cb;fill-opacity:1" />
       <circle
          id="PITCH_PARAM"
-         cx="4064"
-         cy="8350"
+         cx="3973.9941"
+         cy="8470"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="FINE_PARAM"
-         cx="5404.9644"
-         cy="8350"
+         cx="5314.9585"
+         cy="8470"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
-      <rect
-         id="MALLET_SELECTOR"
-         x="5950"
-         y="7950"
-         width="2044.0426"
-         height="3971.8298"
-         style="fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20" />
       <circle
          id="STRIKE_INPUT"
          cx="900"
-         cy="9800"
+         cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="VELOCITY_INPUT"
          cx="2200"
-         cy="9800"
+         cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="INTENSITY_INPUT"
          cx="3770.0276"
-         cy="9800"
+         cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="ROTATE_INPUT"
          cx="5070.0278"
-         cy="9800"
+         cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="VOCT_INPUT"
          cx="900"
-         cy="11050"
+         cy="11170"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
-         id="PRESSURE_INPUT"
+         id="LEVEL_PARAM"
          cx="2200"
-         cy="11050"
+         cy="11170"
          r="75"
-         style="fill:#70e69c;fill-opacity:1" />
+         style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="LEFT_OUTPUT"
          cx="3770.0276"
-         cy="11050"
+         cy="11170"
          r="75"
          style="fill:#ffbd66;fill-opacity:1" />
       <circle
          id="RIGHT_OUTPUT"
          cx="5070.0278"
-         cy="11050"
+         cy="11170"
          r="75"
          style="fill:#ffbd66;fill-opacity:1" />
     </g>
@@ -257,67 +271,69 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUB</text>
       <text
          x="902.39893"
-         y="9200"
+         y="9319.9775"
          id="text7"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">ΔHz</text>
       <text
-         x="2400.0198"
-         y="7850"
+         x="2309.981"
+         y="7969.9775"
          id="text8"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CRYSTAL</text>
       <text
-         x="2400.0198"
-         y="9200"
+         x="2309.981"
+         y="9319.9775"
          id="text9"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">METAL</text>
       <text
-         x="4064"
-         y="9200"
+         x="3973.9941"
+         y="9379.9551"
          id="text10"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
            sodipodi:role="line"
-           id="tspan1">FREQ</tspan></text>
+           id="tspan1"
+           x="3973.9941"
+           y="9379.9551">FREQ</tspan></text>
       <text
-         x="5404.9644"
-         y="9200"
+         x="5314.9585"
+         y="9319.9775"
          id="text11"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
       <text
          x="6963.2725"
-         y="7850.0005"
+         y="7969.978"
          id="text12"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MALLET</text>
       <text
          x="900"
-         y="10400"
+         y="10579.955"
          id="text13"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22223372px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">STRIKE</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">STRIKE</text>
       <text
          x="2200"
-         y="10400"
+         y="10579.955"
          id="text14"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22223372px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">VEL</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
       <text
          x="3770.0276"
-         y="10400"
+         y="10579.955"
          font-size="240"
          id="text15"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INTENSITY</text>
       <text
          x="5070.0278"
-         y="10400"
+         y="10579.955"
          id="text16"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUB</text>
       <text
          x="900"
-         y="11650"
+         y="11829.955"
          id="text17"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22223372px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">V/OCT</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
       <text
          x="2200"
-         y="11650"
+         y="11829.955"
          id="text18"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22223372px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">PRESS</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">LEVEL</text>
     </g>
     <g
        id="theme_text_output"
@@ -325,12 +341,12 @@
        font-weight="600">
       <text
          x="3770.0276"
-         y="11650"
+         y="11829.955"
          id="text19"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">L</text>
       <text
          x="5070.0278"
-         y="11650"
+         y="11829.955"
          id="text20"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">R</text>
     </g>

@@ -10,14 +10,13 @@
     <rect x="50" y="50" width="3964" height="12750" rx="90" fill="none" stroke="url(#vtune-edge)" stroke-width="24" opacity="0.65" />
     <g id="component_anchors" style="display:none">
       <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="396.1" y="11943.102" width="3271.933" height="1224.054" />
-      <circle id="VESSEL_EXPANDER_LIGHT" cx="320" cy="580" r="10"/>
-      <circle id="VELOCITY_PARAM" cx="1050" cy="2200" r="10" />
-      <circle id="SPEED_PARAM" cx="3014" cy="2200" r="10" />
+      <circle id="VESSEL_EXPANDER_LIGHT" cx="320" cy="580" r="10" />
+      <circle id="VELOCITY_PARAM" cx="3014" cy="2200" r="10" />
+      <circle id="SPEED_PARAM" cx="1050" cy="2200" r="10" />
       <circle id="PRESSURE_PARAM" cx="1050" cy="4300" r="10" />
       <circle id="SUSTAIN_PARAM" cx="3014" cy="4300" r="10" />
       <circle id="IMPERFECTION_PARAM" cx="1050" cy="6400" r="10" />
       <circle id="WIDTH_PARAM" cx="3014" cy="6400" r="10" />
-      <circle id="LEVEL_PARAM" cx="2032" cy="8500" r="10" />
     </g>
   </g>
 </svg>

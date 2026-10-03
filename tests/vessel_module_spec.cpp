@@ -106,6 +106,18 @@ void tuningAndMorph() {
 }
 
 void tuneExpander() {
+    Vessel standalone;
+    Vessel retiredPressure;
+    cable(standalone, Vessel::ROTATE_INPUT, 10.f);
+    cable(retiredPressure, Vessel::ROTATE_INPUT, 10.f);
+    cable(retiredPressure, Vessel::PRESSURE_INPUT, 0.f);
+    run(standalone, 96000);
+    run(retiredPressure, 96000);
+    require(standalone.audio.engine().rotationAngle() == retiredPressure.audio.engine().rotationAngle()
+        && standalone.audio.engine().bowl().energy() == retiredPressure.audio.engine().bowl().energy(),
+        "retired pressure cable still changes rubbing");
+    require(std::abs(standalone.audio.engine().rotationAngle()) > .05,
+        "Rub gate with no intensity or expander must rotate using defaults");
     Vessel host;
     VTune tune;
     Model vesselModel, tuneModel;
@@ -144,12 +156,23 @@ void tuneExpander() {
     require(std::abs(settings.decayMultiplier - 4.0) < 1e-12, "V.Tune sustain was not applied");
     require(std::abs(settings.imperfection - .25) < 1e-12, "V.Tune imperfection was not applied");
     require(std::abs(settings.observerSeparation - vessel::pi/30.0) < 1e-7, "V.Tune width was not applied");
-    require(host.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0.f, "V.Tune level did not mute output");
+    require(host.params[Vessel::LEVEL_PARAM].getValue() == 1.f,
+        "retired V.Tune level overrides Vessel level");
     cable(host,Vessel::ROTATE_INPUT,10.f);
     cable(host,Vessel::INTENSITY_INPUT,5.f);
     run(host,96000); // Allow the gradual contact approach to produce visible travel.
     require(std::abs(host.audio.engine().rotationAngle()) > .05,
         "intensity CV does not override V.Tune's zero speed");
+    host.params[Vessel::LEVEL_PARAM].setValue(0.f);
+    run(host, 100);
+    require(host.outputs[Vessel::LEFT_OUTPUT].getVoltage() == 0.f
+        && host.outputs[Vessel::RIGHT_OUTPUT].getVoltage() == 0.f
+        && host.audio.engine().bowl().energy() > 0,
+        "Vessel level must mute output without stopping the connected model");
+    host.params[Vessel::LEVEL_PARAM].setValue(1.5f);
+    run(host, 100);
+    require(host.params[Vessel::LEVEL_PARAM].getValue() == 1.5f,
+        "V.Tune overwrites Vessel level adjustment");
     host.inputs[Vessel::INTENSITY_INPUT].channels = 0;
     run(host,24000);
     const double restoredAngle = host.audio.engine().rotationAngle();
@@ -157,13 +180,20 @@ void tuneExpander() {
     require(std::abs(host.audio.engine().rotationAngle()-restoredAngle) < 1e-8,
         "unplugging intensity does not restore V.Tune speed");
 
+    tune.params[VTune::SPEED_PARAM].setValue(.6f);
+    tune.params[VTune::LEVEL_PARAM].setValue(1.f);
+    tune.process(args);
+    host.tuneMessages[1] = host.tuneMessages[0];
+    run(host, 48000);
     host.rightExpander.module = nullptr;
     tune.leftExpander.module = nullptr;
-    host.params[Vessel::DECAY_PARAM].setValue(-1.f);
-    host.params[Vessel::IMPERFECTION_PARAM].setValue(1.5f);
-    host.params[Vessel::WIDTH_PARAM].setValue(.6f);
-    host.params[Vessel::ROTATE_PARAM].setValue(1.f);
-    run(host, 100);
+    const double detachedAngle = host.audio.engine().rotationAngle();
+    run(host, 12000);
+    require(std::abs(host.audio.engine().rotationAngle() - detachedAngle) > .05,
+        "detaching V.Tune must retain gate-driven rotation with unpatched intensity");
+    require(std::abs(host.params[Vessel::SPEED_PARAM].getValue() - .6f) < 1e-6
+        && host.params[Vessel::PRESSURE_PARAM].getValue() == 7.f,
+        "last expander speed/pressure were not retained");
     tune.process(args);
     require(host.lights[Vessel::VTUNE_LINK_LIGHT].getBrightness() == 0.f
         && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f
@@ -171,10 +201,19 @@ void tuneExpander() {
         && tune.lights[VTune::VESSEL_READY_LIGHT].getBrightness() == 0.f,
         "expander connection LEDs did not clear after disconnection");
     const auto& fallback = host.audio.engine().settings();
-    require(std::abs(fallback.decayMultiplier - .5) < 1e-12
-        && std::abs(fallback.imperfection - 1.5) < 1e-12
-        && std::abs(fallback.observerSeparation - vessel::pi/10.0) < 1e-7,
-        "Vessel did not restore saved fallback controls after V.Tune disconnection");
+    require(std::abs(fallback.decayMultiplier - 4.0) < 1e-12
+        && std::abs(fallback.imperfection - .25) < 1e-12
+        && std::abs(fallback.observerSeparation - vessel::pi/30.0) < 1e-7,
+        "Vessel did not retain V.Tune settings after disconnection");
+    json_t* saved = host.paramsToJson();
+    Vessel restored;
+    restored.paramsFromJson(saved); json_decref(saved);
+    cable(restored, Vessel::ROTATE_INPUT, 10.f);
+    run(restored, 96000);
+    require(std::abs(restored.params[Vessel::SPEED_PARAM].getValue() - .6f) < 1e-6
+        && restored.params[Vessel::PRESSURE_PARAM].getValue() == 7.f
+        && std::abs(restored.audio.engine().rotationAngle()) > .05,
+        "retained V.Tune controls must survive saving without an expander");
     modelVessel = nullptr;
     modelVTune = nullptr;
     std::cout << "[PASS] V.Tune publishing, takeover and Vessel fallback restoration\n";
