@@ -1,4 +1,5 @@
 #include "Vessel.hpp"
+#include "vessel/PitchColorMap.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/PlasmaConduit.hpp"
@@ -31,32 +32,14 @@ NVGcolor mixPitchTint(NVGcolor a, NVGcolor b, float amount) {
 }
 
 NVGcolor vesselPitchTint(float frequency) {
-    // Aparmita's original A4=440 color-derived bands, represented by their
-    // geometric centers. Fold by octaves, then interpolate between centers so
-    // pitch sweeps remain continuous instead of stepping across seven colors.
-    static const float centers[] = {100.25f, 112.50f, 119.32f, 127.25f, 141.72f, 155.71f, 171.21f};
-    static const NVGcolor colors[] = {
-        nvgRGB(255, 56, 72),   // Root
-        nvgRGB(255, 124, 35),  // Sacral
-        nvgRGB(255, 220, 50),  // Solar plexus
-        nvgRGB(40, 224, 110),  // Heart
-        nvgRGB(50, 180, 255),  // Throat
-        nvgRGB(80, 90, 245),   // Third eye
-        nvgRGB(200, 70, 235)   // Crown
-    };
-    float folded = std::isfinite(frequency) ? std::max(frequency, 1.f) : 261.625565f;
-    while (folded < 92.09f) folded *= 2.f;
-    while (folded >= 184.17f) folded *= 0.5f;
-    if (folded < centers[0]) {
-        const float previousCenter = centers[6] * 0.5f;
-        return mixPitchTint(colors[6], colors[0], (folded - previousCenter) / (centers[0] - previousCenter));
+    const auto weights = vessel_pitch_color::weights(std::isfinite(frequency) ? frequency : 261.625565f);
+    float r = 0.f, g = 0.f, b = 0.f;
+    for (int i = 0; i < vessel_pitch_color::count; ++i) {
+        r += weights[i] * vessel_pitch_color::colors[i][0];
+        g += weights[i] * vessel_pitch_color::colors[i][1];
+        b += weights[i] * vessel_pitch_color::colors[i][2];
     }
-    for (int i = 0; i < 6; ++i) {
-        if (folded < centers[i + 1])
-            return mixPitchTint(colors[i], colors[i + 1], (folded - centers[i]) / (centers[i + 1] - centers[i]));
-    }
-    const float nextRootCenter = centers[0] * 2.f;
-    return mixPitchTint(colors[6], colors[0], (folded - centers[6]) / (nextRootCenter - centers[6]));
+    return nvgRGBAf(r / 255.f, g / 255.f, b / 255.f, 1.f);
 }
 
 struct VesselTintMask final : TransparentWidget {

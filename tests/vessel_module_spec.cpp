@@ -105,6 +105,57 @@ void tuningAndMorph() {
     std::cout << "[PASS] Smoothed octave/fine tuning, live material morph, rate continuity and nonfinite CV\n";
 }
 
+void bodyMapTelemetry() {
+    Vessel host;
+    VTune tune;
+    Model vesselModel;
+    Model* previousModel = modelVessel;
+    modelVessel = &vesselModel;
+    host.model = &vesselModel;
+    host.rightExpander.module = &tune;
+    tune.leftExpander.module = &host;
+    Module::ProcessArgs args; args.sampleRate = 48000; args.sampleTime = 1.f / 48000.f;
+    host.visualFrequency.store(528.f);
+    tune.process(args);
+    require(tune.bodyFrequencyHz.load() == 528.f, "body map does not publish Vessel display frequency");
+    host.visualFrequency.store(127.25f); // Exact heart center in the bowl's color map.
+    for (int i = 0; i < 96000; ++i) tune.process(args);
+    require(tune.lights[VTune::CHAKRA_HEART_LIGHT].getBrightness() > .999f,
+        "chakra LED does not follow the shared bowl frequency map");
+    for (int i = VTune::CHAKRA_ROOT_LIGHT; i < VTune::LIGHTS_LEN; ++i)
+        if (i != VTune::CHAKRA_HEART_LIGHT)
+            require(tune.lights[i].getBrightness() < .001f, "unrelated chakra LED remains lit");
+    host.visualFrequency.store(std::numeric_limits<float>::quiet_NaN());
+    for (int i = 0; i < 300; ++i) tune.process(args);
+    require(tune.bodyFrequencyHz.load() == 0.f, "body map retained invalid frequency");
+    host.visualFrequency.store(174.f);
+    for (int i = 0; i < 300; ++i) tune.process(args);
+    require(tune.bodyFrequencyHz.load() == 174.f, "body map failed to recover");
+    tune.processBypass(args);
+    require(tune.bodyFrequencyHz.load() == 0.f, "bypass retained body map telemetry");
+    for (int i = VTune::CHAKRA_ROOT_LIGHT; i < VTune::LIGHTS_LEN; ++i)
+        require(tune.lights[i].getBrightness() == 0.f, "bypassed chakra LED remains lit");
+    tune.process(args);
+    require(tune.bodyFrequencyHz.load() == 174.f, "unbypass failed to republish");
+    tune.leftExpander.module = nullptr;
+    Module::ExpanderChangeEvent changed; changed.side = 0;
+    tune.onExpanderChange(changed);
+    require(tune.bodyFrequencyHz.load() == 0.f, "detach retained body map telemetry");
+    tune.bodyMapMode.store(2); tune.bodyMapOpacity.store(.85f);
+    json_t* saved = tune.dataToJson();
+    VTune restored; restored.dataFromJson(saved); json_decref(saved);
+    require(restored.bodyMapMode.load() == 2 && restored.bodyMapOpacity.load() == .85f
+        && restored.bodyFrequencyHz.load() == 0.f, "body map persistence or transient state failed");
+    saved = json_object(); restored.dataFromJson(saved);
+    require(restored.bodyMapMode.load() == 0 && restored.bodyMapOpacity.load() == vtune_body::kDefaultOpacity,
+        "old patch body map defaults failed");
+    json_object_set_new(saved, "bodyMapSchema", json_integer(99));
+    restored.dataFromJson(saved); json_decref(saved);
+    require(restored.bodyMapMode.load() == 3, "unknown body map schema should disable highlights");
+    modelVessel = previousModel;
+    std::cout << "[PASS] Body map frequency bridge, invalid values, bypass, detach and persistence\n";
+}
+
 void tuneExpander() {
     Vessel standalone;
     Vessel retiredPressure;
@@ -604,7 +655,7 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { feltStrikeLevel(); gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+        try { bodyMapTelemetry(); feltStrikeLevel(); gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
             std::cout << "Vessel Rack adapter: 11 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;

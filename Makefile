@@ -508,8 +508,14 @@ build/tests/vessel_host_rate_spec: tests/vessel_host_rate_spec.cpp $(VESSEL_SOUR
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_dual_bowl_spec: tests/vessel_dual_bowl_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
-build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/src/VTune.cpp.o build/src/VTuneBodyMapModule.cpp.o build/src/VTuneBodyMapWidget.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/tests/vtune_body_map_core_spec: tests/vtune_body_map_core_spec.cpp $(wildcard src/vtune/*.hpp) src/vessel/PitchColorMap.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Werror -pedantic -Isrc $< -o $@
+.PHONY: test-vtune-body-map
+test-vtune-body-map: build/tests/vtune_body_map_core_spec
+	$(call run_test_bin,build/tests/vtune_body_map_core_spec)
+build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 test-vessel: check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
 	$(call run_test_bin,build/tests/vessel_engine_spec)
 	$(call run_test_bin,build/tests/vessel_fast_paths_spec)

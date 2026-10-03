@@ -1,0 +1,212 @@
+{
+  "package": "VTune_BodyMap",
+  "prepared": "2026-10-03",
+  "full_rack_build_performed": false,
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 17521,
+      "sha256": "ba858d204f89124125258c24ab2f48f4ab0517e775afc1a712050c296abbb0f4"
+    },
+    {
+      "path": "VTune_BodyMap_Preview.html",
+      "bytes": 329583,
+      "sha256": "ace0545266078ae633bc45c671c327f7d4108002a26f0c14e503bf1bf5a81467"
+    },
+    {
+      "path": "docs/AGENT_HANDOFF.md",
+      "bytes": 3586,
+      "sha256": "7d2b9728f99ac8e57612b8866c72f0eb457013516d2d56629ffe8839dc75ec75"
+    },
+    {
+      "path": "docs/INTEGRATION.md",
+      "bytes": 12031,
+      "sha256": "28dc379cd75e817dec3513f3ed339417a8adea7c9fce2ed11e221a5917949b6c"
+    },
+    {
+      "path": "docs/VERIFICATION.md",
+      "bytes": 4984,
+      "sha256": "bdf543b1abd4c3b295403c67c6aadec10ec53296a9a1604a64a1b9c2dce45ec8"
+    },
+    {
+      "path": "integration/Makefile.additions.mk",
+      "bytes": 712,
+      "sha256": "186ec81a52ea89bdd56aba0bc65c50f2975617503dc19a4453a91289ed76f9c9"
+    },
+    {
+      "path": "integration/VTune.integration.patch",
+      "bytes": 3409,
+      "sha256": "a2567629a9db20ec05fef0c1631bac5f5f21718fc89204d908bff3c95b6974d3"
+    },
+    {
+      "path": "reference/Sound+Body.md",
+      "bytes": 7958,
+      "sha256": "4c5cc8e40678bce049f98deab410843c8feb5a07bccfd756b118ead3b3b1ce71"
+    },
+    {
+      "path": "reference/VFOutline.png",
+      "bytes": 17965,
+      "sha256": "5bef9525495d5014cbdac28c2c0854e549bb9328507edfbdbda4a884d6836ef1"
+    },
+    {
+      "path": "res/VTune/body-map/asset_manifest.json",
+      "bytes": 2257,
+      "sha256": "2c57e1bee2426bb655c4b7b67fadae2dad1ce6a716df6fef5344b10950ef4fe3"
+    },
+    {
+      "path": "res/VTune/body-map/band_0.png",
+      "bytes": 26676,
+      "sha256": "510313301c578fc6a2938eaef761a757b2499d1033e71c3cd6438f0bec2e1d43"
+    },
+    {
+      "path": "res/VTune/body-map/band_1.png",
+      "bytes": 31074,
+      "sha256": "f948ca74da73d100a834ad31cbaa74fce7e0e69dc1100be733bfffaf8399858b"
+    },
+    {
+      "path": "res/VTune/body-map/band_2.png",
+      "bytes": 33712,
+      "sha256": "b4cf3f2bca10830f28f736fb53b997dd433efa9464458d33bddadce92661ecf1"
+    },
+    {
+      "path": "res/VTune/body-map/band_3.png",
+      "bytes": 24273,
+      "sha256": "f878f2e7a52a7f42504419fc3d129f234244b72c27dec48c8a1f43338e942d50"
+    },
+    {
+      "path": "res/VTune/body-map/band_4.png",
+      "bytes": 10569,
+      "sha256": "6bdda8d6c0e8d7cc1d0555d2e4f3c20f8565f043d4c54fdfa1fcd6e552a44904"
+    },
+    {
+      "path": "res/VTune/body-map/band_5.png",
+      "bytes": 9111,
+      "sha256": "88997cfeb0716a6d2cdc76a1b54d72174f65fc833bcf154e3483377eb31de099"
+    },
+    {
+      "path": "res/VTune/body-map/band_6.png",
+      "bytes": 9621,
+      "sha256": "9db48735e479efe8e82b9dc2b5d346494f069b7c539f13b665a991aa1567ff4f"
+    },
+    {
+      "path": "res/VTune/body-map/body_backing.png",
+      "bytes": 14627,
+      "sha256": "31a67f0325080ded4a2250cf0930d99c929d906f2708f089748802cd549348c9"
+    },
+    {
+      "path": "res/VTune/body-map/body_outline.png",
+      "bytes": 37138,
+      "sha256": "d94691db1869740efd71371ba1e84881ed6ca5bb1ac63ec3eb575dc72722f220"
+    },
+    {
+      "path": "res/VTune/body-map/definition.json",
+      "bytes": 13817,
+      "sha256": "ca525ed5e2449815ed378ad0a887fe6482beb6374c37369ef6707a2ae1922845"
+    },
+    {
+      "path": "res/VTune/body-map/opaque_reference.png",
+      "bytes": 38600,
+      "sha256": "e623e47a74faf28ebb25b16b8dc7f76d32c879c5338e4b2293404351fc7a2788"
+    },
+    {
+      "path": "res/VTune/body-map/silhouette_debug.png",
+      "bytes": 7212,
+      "sha256": "c28464eb6e96a948ee212778c45db4f3ab802b243eb33f4e705b4738c66506c5"
+    },
+    {
+      "path": "res/VTune/body-map/tone_0.png",
+      "bytes": 4618,
+      "sha256": "1970e27f55ca3d529d86ed1e2d945e83ff0ce024dd3d2b9476864efc6792b772"
+    },
+    {
+      "path": "res/VTune/body-map/tone_1.png",
+      "bytes": 5547,
+      "sha256": "30ea995b7e0b011bcfec34ab71249bd16bba081c701de9f0ed6b3d92c14d23a1"
+    },
+    {
+      "path": "res/VTune/body-map/tone_2.png",
+      "bytes": 5829,
+      "sha256": "fc7c36a1d69b3fce378d6c2f461fb90f9213c93bb56b19b09e4f2b9b6cf96c9d"
+    },
+    {
+      "path": "res/VTune/body-map/tone_3.png",
+      "bytes": 5792,
+      "sha256": "e37bf0a8dcd2710a84bc835fd2c454dd24831b51c032136eacea45a233d647db"
+    },
+    {
+      "path": "res/VTune/body-map/tone_4.png",
+      "bytes": 4654,
+      "sha256": "127d62b8237b98c55ba0ca98684ee43f34ab16bdabfa71c5c0c8bb90a742b249"
+    },
+    {
+      "path": "res/VTune/body-map/tone_5.png",
+      "bytes": 4315,
+      "sha256": "0abf529f19ef13898d35b843f388975138eb6827042101cdaedcef3f2138ac53"
+    },
+    {
+      "path": "res/VTune/body-map/tone_6.png",
+      "bytes": 4740,
+      "sha256": "d2acd97c863564f3423c6f52cea570987f15f61c522f4524694453f6f85936ab"
+    },
+    {
+      "path": "src/VTuneBodyMapModule.cpp",
+      "bytes": 3879,
+      "sha256": "e844825eb4b587c042419ca9fab1e80318b04941d9dac1f847c8fad289f9268d"
+    },
+    {
+      "path": "src/VTuneBodyMapWidget.cpp",
+      "bytes": 7738,
+      "sha256": "286dca4b11f17bbfdd63ca9bd4c95c43696cc1d6f0a6d0d632603230a85d1b20"
+    },
+    {
+      "path": "src/vtune/BodyMapCore.hpp",
+      "bytes": 4313,
+      "sha256": "c855610eeb8dcdc4558fc7e82b7d4491914efe72f81c8f2d04692674d6841a7d"
+    },
+    {
+      "path": "src/vtune/BodyMapData.hpp",
+      "bytes": 2174,
+      "sha256": "63e818107350ff6828977c1619937b2050efaa88360d3e7a0d225f5690c67bf2"
+    },
+    {
+      "path": "src/vtune/BodyMapWidget.hpp",
+      "bytes": 1217,
+      "sha256": "c4192f073cb5e95156ed4c6248a7cf83b3e643c18688fb8181988cc5dec1b02a"
+    },
+    {
+      "path": "tests/body_map_assets_test.py",
+      "bytes": 1369,
+      "sha256": "e364a589c7934d008ee3db5589119a66c2e46941683d045e700677864d30ce9e"
+    },
+    {
+      "path": "tests/body_map_core_test.cpp",
+      "bytes": 3964,
+      "sha256": "2f4eef0a014a23746aa99a34f3a54084b01a4b8995e597986cafd253e6982c27"
+    },
+    {
+      "path": "tests/preview_test.py",
+      "bytes": 2560,
+      "sha256": "157974cde5c783c1ce576aa56eeac5edbbfbf5711e330ac234703cb02a61511a"
+    },
+    {
+      "path": "tools/build_assets.py",
+      "bytes": 6735,
+      "sha256": "eaba57c96968bde789ed856192e07a361cd9743e721a46407c7bb1c5f5719cea"
+    },
+    {
+      "path": "tools/build_preview.py",
+      "bytes": 12311,
+      "sha256": "cbfe5f00afc1153d29ed26c009a07fa085d6b8e3694f7a416e71a020f3a58249"
+    },
+    {
+      "path": "tools/create_definition.py",
+      "bytes": 6384,
+      "sha256": "80144d3836b848d78b3cdb1aad05c10e7a93cc819d924b945106012088792444"
+    },
+    {
+      "path": "tools/requirements.txt",
+      "bytes": 19,
+      "sha256": "e79c838f0145e856600087e542fde2d5638f34b0bdf10be1a8b9e2c35efb97bf"
+    }
+  ]
+}

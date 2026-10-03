@@ -1,5 +1,6 @@
 #include "VTune.hpp"
 #include "VesselExpanderProtocol.hpp"
+#include "vessel/PitchColorMap.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,8 @@ bool isVessel(const Module* module) {
 
 VTune::VTune() {
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+    for (int i = 0; i < vessel_pitch_color::count; ++i)
+        configLight(CHAKRA_ROOT_LIGHT + i, vessel_pitch_color::names[i]);
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
     configParam(SPEED_PARAM, 0.f, 2.f, .4f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
@@ -25,7 +28,8 @@ VTune::VTune() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
 }
 
-void VTune::process(const ProcessArgs&) {
+void VTune::process(const ProcessArgs& args) {
+    updateBodyMapFrequency(args.sampleTime);
     Module* vessel = leftExpander.module;
     const bool linked = isVessel(vessel) && vessel->rightExpander.module == this;
     const bool ready = linked && vessel->rightExpander.producerMessage;

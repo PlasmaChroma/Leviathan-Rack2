@@ -9,6 +9,7 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
@@ -30,7 +31,7 @@
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg10" />
+     inkscape:current-layer="labels" />
   <defs
      id="defs2">
     <linearGradient
@@ -42,6 +43,28 @@
          offset="1"
          stop-color="#54d7d4"
          id="stop2" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient36"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.9969081,0,0,0.9969081,-4054.4431,-883.02093)"
+       x1="5285.1714"
+       y1="1485.2018"
+       x2="6945.7134"
+       y2="1489.1353" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
     </linearGradient>
   </defs>
   <g
@@ -68,6 +91,13 @@
     <g
        id="component_anchors"
        style="display:inline;fill:#2a1430;fill-opacity:1">
+      <rect
+         id="VF_OUTLINE_RASTER"
+         x="100"
+         y="6200"
+         width="3864"
+         height="5640"
+         style="stroke:#55dfff;stroke-width:20" />
       <rect
          id="BRANDING_LEVIATHAN_LOGO_RASTER"
          x="396.1"
@@ -123,20 +153,6 @@
      font-family="Rubik, sans-serif"
      text-anchor="middle"
      fill="#e9edf2">
-    <text
-       x="2032"
-       y="720"
-       font-size="430"
-       font-weight="700"
-       letter-spacing="30"
-       id="text3">V.TUNE</text>
-    <text
-       x="2032"
-       y="1080"
-       font-size="145"
-       letter-spacing="30"
-       fill="#6bd8d3"
-       id="text4">VESSEL EXPANDER</text>
     <g
        id="theme_text_input"
        font-size="282.222"
@@ -180,5 +196,21 @@
        id="theme_text_output"
        font-size="282.222"
        font-weight="600" />
+    <text
+       id="reworked_module_title_text"
+       x="2041.7898"
+       y="452.52466"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient36);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan11">V.Tune</tspan></text>
+    <text
+       id="reworked_module_description"
+       x="2035.5984"
+       y="815.24359"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff;stroke-width:1"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan12">vessel tuning utility</tspan></text>
   </g>
 </svg>
