@@ -50,7 +50,7 @@ Vessel::Vessel() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
-        "Rub gate", "Rubbing speed (0-10 V, replaces knob)", "Pressure (0-10 V multiplier)",
+        "Rub gate", "Retired speed input (unused)", "Pressure (0-10 V multiplier)",
         "Rub intensity (0-10 V, overrides speed and pressure; requires Rub gate)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
     configOutput(LEFT_OUTPUT, "Left"); configOutput(RIGHT_OUTPUT, "Right");
@@ -206,8 +206,7 @@ void Vessel::process(const ProcessArgs& args) {
     controls.rotate = rotateHigh || manualRotate;
     controls.velocity = manualEvent ? bound(manualStrikeVelocity.load(std::memory_order_relaxed), 0, 1)
         : inputs[VELOCITY_INPUT].isConnected() ? bound(inputs[VELOCITY_INPUT].getVoltage()/10, 0, 1) : tune.velocity;
-    controls.speed = inputs[SPEED_INPUT].isConnected()
-        ? 2 * bound(inputs[SPEED_INPUT].getVoltage()/10, 0, 1) : tune.speed;
+    controls.speed = tune.speed;
     controls.pressure = tune.pressure
         * (inputs[PRESSURE_INPUT].isConnected() ? bound(inputs[PRESSURE_INPUT].getVoltage()/10, 0, 1) : 1);
     controlElapsed += dt;

@@ -56,9 +56,17 @@ static void run(const char* group, int bowl, int material, double speed,
     if (!engine.configure(seedBowls[bowl], mallet, settings, rate))
         throw std::runtime_error("configuration rejected");
     engine.setAuditEnabled(true);
+    RubIntensityPlayer player;
     if (primed) {
         engine.setRotation(true, .4, pressure);
-        for (int i = 0; i < int(8*rate); ++i) engine.step();
+        for (int i = 0; i < int(8*rate); ++i) {
+            if (!std::strncmp(group,"intensity-player",16)) {
+                const auto gesture = player.process(1.,true,engine.bowl().energy(),speed,
+                    rubIntensityMaximumSpeed(seedBowls[bowl],mallet,.8),1/rate);
+                engine.setRotation(true,gesture.speed,gesture.pressure);
+            }
+            engine.step();
+        }
     }
     const double initialEnergy = engine.totalEnergy();
     const auto initialLedger = engine.ledger();
@@ -67,7 +75,6 @@ static void run(const char* group, int bowl, int material, double speed,
     double peak = 0, maxChi = 0;
     const int samples = int(seconds*rate), lastSecond = samples-int(rate);
     RubIntensityAttack attack;
-    RubIntensityPlayer player;
     double transfer = 0, slidingLoss = 0, slipSq = 0, loadSum = 0, handSum = 0;
     const int traceSamples = int(rate*.1);
     for (int i = 0; i < samples; ++i) {
@@ -144,6 +151,12 @@ int main(int argc, char** argv) {
                 run(group,0,m,speed,2.5,2);
                 run(group,0,m,speed,2.5,4);
             }
+        } else if (!std::strcmp(group,"intensity-player-hold")) {
+            for (int bowl : {0,1}) for (double amount : {0.,.05,.1,.2})
+                run(group,bowl,0,rubIntensityMaximumSpeed(seedBowls[bowl],seedMallets[0],2.),15*amount,1,false,30,192000,true);
+        } else if (!std::strcmp(group,"intensity-player-low")) {
+            for (int bowl : {0,1}) for (double amount : {.05,.1,.2,.5,1.})
+                run(group,bowl,0,rubIntensityMaximumSpeed(seedBowls[bowl],seedMallets[0],2.),15*amount,1,false,20);
         } else if (!std::strcmp(group,"intensity-player-rates")) {
             for (int bowl : {0,1}) for (double rate : {96000.,384000.})
                 run(group,bowl,0,rubIntensityMaximumSpeed(seedBowls[bowl],seedMallets[0],2.),15,1,false,12,rate);

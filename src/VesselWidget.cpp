@@ -364,9 +364,8 @@ struct VesselPerformanceArea : app::Switch {
         const float topSaturationMargin = mm2px(3.f);
         const float activeHeight = std::max(box.size.y - topSaturationMargin, 1e-6f);
         const float amount = 1.f - clamp((y - topSaturationMargin) / activeHeight, 0.f, 1.f);
-        // Give gentle rubbing more travel while retaining zero and full intensity.
-        // The strike pad keeps its linear velocity response.
-        return kind == Kind::Rotate ? amount * amount : amount;
+        // Both pads use linear vertical travel; intensity shaping lives in DSP.
+        return amount;
     }
     void publishAmount(float y) {
         dragY = clamp(y, 0.f, box.size.y);
@@ -553,11 +552,10 @@ struct VesselWidget final : ModuleWidget {
         const InputPlacement inputs[] = {
             {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 9.f, 98.f},
             {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 22.f, 98.f},
-            {"SPEED_INPUT", Vessel::SPEED_INPUT, 39.f, 98.f},
+            {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 39.f, 98.f},
             {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 52.f, 98.f},
             {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f},
-            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f},
-            {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 69.f, 98.f}
+            {"PRESSURE_INPUT", Vessel::PRESSURE_INPUT, 22.f, 110.5f}
         };
         for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(
             mm2px(point(input.anchor, input.x, input.y)), module, input.id));

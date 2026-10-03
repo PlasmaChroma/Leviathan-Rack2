@@ -15,6 +15,12 @@ inline double rubIntensityMaximumSpeed(const BowlDescriptor& bowl, const MalletD
 
 struct RubGesture { double speed, pressure; };
 
+// Give quiet playing useful contact effort without a discontinuous minimum.
+// UI/CV position stays linear; this shared response has exact zero/full endpoints.
+inline double rubIntensityEffort(double amount) noexcept {
+    return amount/(.15+.85*amount);
+}
+
 // Caller provides a finite normalized amount and cached maximum speed.
 inline RubGesture rubIntensity(double amount, double maximumSpeed) noexcept {
     return {amount*maximumSpeed, amount*15.0};
@@ -34,6 +40,7 @@ struct RubIntensityPlayer {
         if (!initialized) { energy = std::max(0.,measuredEnergy); initialized = true; }
         elapsed += dt;
         if (elapsed >= .001) {
+            const double effort = rubIntensityEffort(amount);
             const double h = elapsed;
             elapsed = 0;
             const double previous = energy;
@@ -45,10 +52,10 @@ struct RubIntensityPlayer {
             // Relax grip when the measured relative growth outpaces effort.
             // This is soft feedback, not a hard energy/rate limiter. The 2 uJ
             // floor permits startup without division by near-zero energy.
-            const double allowedGrowth = amount*1.5*(energy+.000002);
+            const double allowedGrowth = effort*1.5*(energy+.000002);
             grip = std::max(0.,std::min(1.,grip+h*.5*(allowedGrowth-growth)/(energy+.000002)));
-            gesture.speed = amount*(startSpeed+(maximumSpeed-startSpeed)*readiness);
-            gesture.pressure = amount*(3.+12.*readiness)*grip;
+            gesture.speed = effort*(startSpeed+(maximumSpeed-startSpeed)*readiness);
+            gesture.pressure = effort*(3.+12.*readiness)*grip;
         }
         if (!engaged || amount <= 0) { gesture = {}; grip = 1; }
         return gesture;

@@ -194,7 +194,7 @@ void manualPerformancePads() {
     run(slowRotate, 48000); run(fastRotate, 48000); run(gatedRotate, 48000);
     const double slowAngle = std::abs(slowRotate.audio.engine().rotationAngle());
     const double fastAngle = std::abs(fastRotate.audio.engine().rotationAngle());
-    require(fastAngle > 2.5 * slowAngle && slowAngle > 0,
+    require(fastAngle > slowAngle && slowAngle > 0,
         "manual rotate pad height does not scale speed");
     require(std::abs(gatedRotate.audio.engine().rotationAngle()) > 0,
         "manual speed scale incorrectly affects the external rotate gate");
@@ -242,39 +242,17 @@ void manualPerformancePads() {
             && visualPhaseError < .08,
         "mallet visual phase does not follow the active bowl rotation");
 
-    Vessel negativeSpeedCv, zeroSpeedCv, halfSpeedCv, fullSpeedCv;
-    for (Vessel* vessel : {&negativeSpeedCv, &zeroSpeedCv, &halfSpeedCv, &fullSpeedCv}) {
-        vessel->params[Vessel::SPEED_PARAM].setValue(0.f);
-        cable(*vessel, Vessel::ROTATE_INPUT, 10.f);
+    // The removed Speed CV slot remains inert, even in older patch data.
+    Vessel retiredSpeed, knobOnly;
+    for (Vessel* v : {&retiredSpeed, &knobOnly}) {
+        v->params[Vessel::SPEED_PARAM].setValue(.3f);
+        cable(*v,Vessel::ROTATE_INPUT,10.f);
     }
-    cable(negativeSpeedCv, Vessel::SPEED_INPUT, -5.f);
-    cable(zeroSpeedCv, Vessel::SPEED_INPUT, 0.f);
-    cable(halfSpeedCv, Vessel::SPEED_INPUT, 5.f);
-    cable(fullSpeedCv, Vessel::SPEED_INPUT, 10.f);
-    run(negativeSpeedCv, 1200); run(zeroSpeedCv, 1200); run(halfSpeedCv, 1200); run(fullSpeedCv, 1200);
-    const double negativeCvAngle = std::abs(negativeSpeedCv.audio.engine().rotationAngle());
-    const double zeroCvAngle = std::abs(zeroSpeedCv.audio.engine().rotationAngle());
-    const double halfCvAngle = std::abs(halfSpeedCv.audio.engine().rotationAngle());
-    const double fullCvAngle = std::abs(fullSpeedCv.audio.engine().rotationAngle());
-    require(std::abs(negativeCvAngle-zeroCvAngle) < 1e-12 && halfCvAngle > zeroCvAngle
-            && fullCvAngle-zeroCvAngle > 1.9 * (halfCvAngle-zeroCvAngle),
-        "speed CV does not override a zero knob with the full 0-10 V speed range");
-    Vessel knobReference, overRangeCv;
-    knobReference.params[Vessel::SPEED_PARAM].setValue(2.f);
-    cable(knobReference, Vessel::ROTATE_INPUT, 10.f);
-    cable(overRangeCv, Vessel::ROTATE_INPUT, 10.f);
-    cable(overRangeCv, Vessel::SPEED_INPUT, 20.f);
-    run(knobReference, 1200); run(overRangeCv, 1200);
-    require(std::abs(fullCvAngle - std::abs(knobReference.audio.engine().rotationAngle())) < 1e-12
-        && std::abs(fullCvAngle - std::abs(overRangeCv.audio.engine().rotationAngle())) < 1e-12,
-        "10 V speed CV does not match full knob speed or over-range CV is not clamped");
-    // Unplugging CV restores the saved knob, including its zero setting.
-    fullSpeedCv.inputs[Vessel::SPEED_INPUT].channels = 0;
-    run(fullSpeedCv, 24000);
-    const double unpluggedAngle = fullSpeedCv.audio.engine().rotationAngle();
-    run(fullSpeedCv, 1200);
-    require(std::abs(fullSpeedCv.audio.engine().rotationAngle() - unpluggedAngle) < 1e-8,
-        "unplugging speed CV does not restore the zero knob setting");
+    cable(retiredSpeed,Vessel::SPEED_INPUT,10.f);
+    run(retiredSpeed,4800); run(knobOnly,4800);
+    require(retiredSpeed.audio.engine().rotationAngle() == knobOnly.audio.engine().rotationAngle()
+        && retiredSpeed.audio.engine().bowl().energy() == knobOnly.audio.engine().bowl().energy(),
+        "retired speed input still affects direct controls");
     slowRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     fastRotate.params[Vessel::ROTATE_PARAM].setValue(0.f);
     run(slowRotate, 2000); run(fastRotate, 2000);
@@ -282,11 +260,28 @@ void manualPerformancePads() {
         "manual rotate pad remains latched after release");
     require(!fastRotate.visualRubbing.load(std::memory_order_relaxed),
         "mallet visual remains active after rub release");
-    std::cout << "[PASS] Manual pad strike velocity, held rotation speed, 0-10 V speed CV, gate independence and release\n";
+    std::cout << "[PASS] Manual pad strike velocity, held rotation speed, retired speed input, gate independence and release\n";
 }
 
 void intensityOverride() {
     static_assert(Vessel::INTENSITY_INPUT == 6, "existing input IDs moved");
+    require(vessel::rubIntensityEffort(0.) == 0. && vessel::rubIntensityEffort(1.) == 1.,
+        "intensity effort curve changes zero/full endpoints");
+    double lastEffort = 0;
+    for (int i = 1; i <= 1000; ++i) {
+        const double amount = i/1000.;
+        const double effort = vessel::rubIntensityEffort(amount);
+        require(effort > lastEffort && effort >= amount && effort <= 1.,
+            "intensity effort curve loses low-end boost, monotonicity, or bounds");
+        lastEffort = effort;
+    }
+    Vessel lowIntensity;
+    lowIntensity.params[Vessel::MALLET_PARAM].setValue(0.f);
+    cable(lowIntensity,Vessel::ROTATE_INPUT,10.f);
+    cable(lowIntensity,Vessel::INTENSITY_INPUT,1.f);
+    run(lowIntensity,20*48000);
+    require(lowIntensity.rawEnergy.load() > .00001f && !lowIntensity.visualFault.load(),
+        "1 V intensity cannot build wood-bowl resonance");
     Vessel easedContact, directContact;
     for (Vessel* v : {&easedContact, &directContact}) {
         v->params[Vessel::SPEED_PARAM].setValue(0.f);

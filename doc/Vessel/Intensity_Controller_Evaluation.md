@@ -1,5 +1,40 @@
 # Intensity feedback prototype — 2026-10-02
 
+## Low-end effort revision — 2026-10-03
+
+The original proportional effort made sub-20% control positions largely
+ineffective. The shared pad/CV controller now uses `u=a/(0.15+0.85*a)` before
+computing speed, pressure and permitted growth. This changes playing effort,
+not mouse position, audio gain, or the friction law. Zero and full intensity
+are unchanged; the continuous curve has no minimum pressure or discontinuity.
+
+Pure wood, default settings, 192 kHz audit, 20 seconds from silence:
+
+| Input | Metal final-second mean, before → after | Crystal before → after |
+|---|---:|---:|
+| 0.5 V / 5% | 0.002 → 0.083 microjoules | 0.003 → 166 microjoules |
+| 1 V / 10% | 0.008 → 877 microjoules | 0.012 → 472 microjoules |
+| 2 V / 20% | 0.031 → 4524 microjoules | 0.556 → 5574 microjoules |
+
+At 1 V, first passage through 1 mJ was about 13.1 s (metal) and 11.2 s
+(crystal); at 2 V, 5.9 and 4.4 s. The low range builds gently, not instantly.
+Full-intensity results exactly matched the previous mapping in this audit.
+Metal/wood at 0.5 V still did not start strong resonance from silence.
+
+For sustain, the controller first played at full intensity for eight seconds,
+then used the lower input for 30 seconds. Final-second mean energies at
+0.5/1/2 V were 0.186/1.822/5.373 mJ (metal) and 0.210/0.340/13.095 mJ
+(crystal). Thus 0.5 V can maintain a quiet already-started wood bowl even where
+it cannot start it. Zero instead decayed to 0.00000073/0.000045 mJ. This is
+material-dependent resonance and hysteresis, not a guaranteed energy setpoint.
+
+The native Rack suite includes a 20-second 1 V wood-startup regression, shared
+pad/CV behavior, endpoint and monotonic effort checks, and zero/gate release.
+Reproduce the offline checks with `intensity-player-low` and
+`intensity-player-hold`; CSVs are named `intensity-low-before`,
+`intensity-low-after`, and `intensity-low-hold` in the experiment directory.
+The following sections document the earlier unshaped feedback prototype.
+
 The timed gestures created a weak initial phase followed by resonance onset that
 could still feel abrupt. The new virtual player chooses startup speed from the
 mallet's useful friction region, advances toward sustained speed as mechanical
@@ -63,7 +98,7 @@ probe_rub_startup intensity-ramp intensity-timer-trace.csv
 ```
 
 The summary is emitted to stdout; the optional second argument receives the
-contact trace. For feedback runs, summary speed/pressure columns are nominal
-ceilings and the slope column is evaluated there, not at the varying live
-controls. Use the traces for actual hand speed/load. CSV evidence is stored in
+contact trace. For feedback runs, summary speed is the nominal maximum; pressure is the unshaped request
+`15*a` (use it to recover input intensity, not actual pressure or a ceiling).
+The slope column is evaluated at those nominal values, not the live controls. Use the traces for actual hand speed/load. CSV evidence is stored in
 `experiments/2026-10-02-rub-startup/` under the corresponding names.

@@ -27,11 +27,10 @@
       <circle id="MALLET_PARAM" cx="7100" cy="8350" r="10" />
       <circle id="STRIKE_INPUT" cx="900" cy="9800" r="10" />
       <circle id="VELOCITY_INPUT" cx="2200" cy="9800" r="10" />
-      <circle id="SPEED_INPUT" cx="3900" cy="9800" r="10" />
+      <circle id="INTENSITY_INPUT" cx="3900" cy="9800" r="10" />
       <circle id="ROTATE_INPUT" cx="5200" cy="9800" r="10" />
       <circle id="VOCT_INPUT" cx="900" cy="11050" r="10" />
       <circle id="PRESSURE_INPUT" cx="2200" cy="11050" r="10" />
-      <circle id="INTENSITY_INPUT" cx="6900" cy="9800" r="10" />
       <circle id="LEFT_OUTPUT" cx="3900" cy="11050" r="10" />
       <circle id="RIGHT_OUTPUT" cx="5200" cy="11050" r="10" />
     </g>
