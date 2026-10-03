@@ -82,7 +82,8 @@ struct WriterState {
 };
 struct MacroState {
     float rate = 1.f, slew = 1.f, silence = 0.f;
-    unsigned extraExponent = 0, slice = 0;
+    float randomPosition = 0.f;
+    unsigned extraExponent = 0;
 };
 struct CorruptRoutingState {
     Effect primary = Effect::Decimate, retained = Effect::Decimate;

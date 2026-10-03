@@ -73,6 +73,8 @@ build/src/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/src/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cpp)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/tiamat_events_spec \
+	build/tests/tiamat_buffer_spec \
 	build/tests/tiamat_reference_spec \
 	build/tests/vessel_engine_spec \
 	build/tests/vessel_fast_paths_spec \
@@ -456,12 +458,22 @@ $(patsubst %.cpp,build/%.cpp.o,$(TIAMAT_SOURCES)): FLAGS += -fno-fast-math -fno-
 .PHONY: test-tiamat generate-tiamat-fixtures check-tiamat-fixtures
 generate-tiamat-fixtures:
 	python3 tools/tiamat/generate_reference_fixtures.py
+	python3 tools/tiamat/generate_buffer_fixtures.py
+	python3 tools/tiamat/generate_event_fixtures.py
 check-tiamat-fixtures:
 	python3 tools/tiamat/generate_reference_fixtures.py --check
+	python3 tools/tiamat/generate_buffer_fixtures.py --check
+	python3 tools/tiamat/generate_event_fixtures.py --check
 build/tests/tiamat_reference_spec: tests/tiamat_reference_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/reference_v1.txt | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
-test-tiamat: check-tiamat-fixtures build/tests/tiamat_reference_spec
+build/tests/tiamat_buffer_spec: tests/tiamat_buffer_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/buffer_v1.txt | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DTIAMAT_BUFFER_TEST_HOOKS -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
+build/tests/tiamat_events_spec: tests/tiamat_events_spec.cpp $(TIAMAT_SOURCES) $(TIAMAT_HEADERS) tests/fixtures/tiamat/events_v1.txt | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DTIAMAT_BUFFER_TEST_HOOKS -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Isrc $< $(TIAMAT_SOURCES) -o $@
+test-tiamat: check-tiamat-fixtures build/tests/tiamat_reference_spec build/tests/tiamat_buffer_spec build/tests/tiamat_events_spec
 	$(call run_test_bin,build/tests/tiamat_reference_spec)
+	$(call run_test_bin,build/tests/tiamat_buffer_spec)
+	$(call run_test_bin,build/tests/tiamat_events_spec)
 VESSEL_HEADERS := $(wildcard src/vessel/*.hpp)
 .PHONY: test-vessel generate-vessel-profiles check-vessel-profiles
 generate-vessel-profiles:
@@ -692,6 +704,8 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
+	$(call run_test_bin,build/tests/tiamat_events_spec)
+	$(call run_test_bin,build/tests/tiamat_buffer_spec)
 	$(call run_test_bin,build/tests/tiamat_reference_spec)
 	$(call run_test_bin,build/tests/vessel_engine_spec)
 	$(call run_test_bin,build/tests/vessel_fast_paths_spec)

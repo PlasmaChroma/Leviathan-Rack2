@@ -1,4 +1,5 @@
 #include "TiamatControls.hpp"
+#include "TiamatMath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,7 @@ MappedControls ControlMapper::map(const PrimaryControls& p, const ControlVoltage
 ToneCoefficients outputToneCoefficients() noexcept {
     const float angle = (6.283185307179586f * 38000.f) / coefficientRate;
     const float b = 2.f - std::cos(angle);
-    const float c = b - std::sqrt(std::fma(b, b, -1.f));
+    const float c = b - std::sqrt(multiplyAdd(b, b, -1.f));
     return {1.f - c, c};
 }
 

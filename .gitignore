@@ -17,6 +17,8 @@
 !/tests/fixtures/tiamat/
 /tests/fixtures/tiamat/*
 !/tests/fixtures/tiamat/reference_v1.txt
+!/tests/fixtures/tiamat/buffer_v1.txt
+!/tests/fixtures/tiamat/events_v1.txt
 
 # Durable local listening fixtures generated from the Doorstop corpus.
 # Unlike build/, these are intended to survive normal build and git cleans.
