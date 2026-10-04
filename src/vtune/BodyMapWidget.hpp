@@ -5,7 +5,6 @@
 #include <string>
 
 struct VTune;
-struct SmallApertureLight;
 namespace vtune_body {
 
 // Replace the existing static body widget with this widget, preserving its
@@ -20,7 +19,7 @@ class BodyMapWidget final : public rack::widget::TransparentWidget {
     float opacity_ = kDefaultOpacity;
     std::array<std::string, kLayerCount + 2> paths_;
     std::array<bool, kLayerCount + 2> failed_{};
-    std::array<SmallApertureLight*, 7> chakraLights_{};
+    std::array<rack::app::ModuleLightWidget*, 7> chakraLights_{};
     void drawImage(const DrawArgs& args, std::size_t slot,
                    const FitRect& rect, float opacity);
 public:

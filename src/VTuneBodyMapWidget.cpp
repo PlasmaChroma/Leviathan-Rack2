@@ -2,6 +2,7 @@
 #include "VTune.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/ApertureLight.hpp"
+#include "visual/ApertureLightTransfer.hpp"
 #include "vessel/PitchColorMap.hpp"
 #include <cmath>
 #include <cstdio>
@@ -22,6 +23,49 @@ const char* modeName(Mode mode) {
 }
 }
 
+// A rimless, self-lit point over the illustration. Reuse Aperture's cached
+// brightness response, with no socket or opaque lens obscuring the anatomy.
+struct ChakraGlowLight final : rack::app::ModuleLightWidget {
+    NVGcolor tint = nvgRGB(255, 255, 255);
+    ChakraGlowLight() { box.size = rack::math::Vec(14.f, 14.f); }
+    float brightness() {
+        auto* light = getLight(0);
+        return light ? unit(light->getBrightness()) : 0.f;
+    }
+    void drawBackground(const DrawArgs& args) override {
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, 7.f, 7.f, 1.5f);
+        nvgFillColor(args.vg, nvgTransRGBA(tint, 24));
+        nvgFill(args.vg);
+    }
+    void drawLight(const DrawArgs& args) override {
+        const auto response = aperture_light::transferFromBrightness(brightness());
+        if (response.core < kDrawEpsilon) return;
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, 7.f, 7.f, 4.3f);
+        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, 1.2f, 4.3f,
+            nvgRGBAf(tint.r, tint.g, tint.b, response.core),
+            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
+        nvgFill(args.vg);
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, 7.f, 7.f, 1.4f);
+        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, .3f, 1.4f,
+            nvgRGBAf(.7f + .3f * tint.r, .7f + .3f * tint.g, .7f + .3f * tint.b, response.hot),
+            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
+        nvgFill(args.vg);
+    }
+    void drawHalo(const DrawArgs& args) override {
+        const float glow = aperture_light::transferFromBrightness(brightness()).glow;
+        if (glow < kDrawEpsilon || args.fb) return;
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, 7.f, 7.f, 9.5f);
+        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, 1.4f, 9.5f,
+            nvgRGBAf(tint.r, tint.g, tint.b, .55f * glow * rack::settings::haloBrightness),
+            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
+        nvgFill(args.vg);
+    }
+};
+
 BodyMapWidget::BodyMapWidget(VTune* module) : module_(module) {
     for (std::size_t i = 0; i < kBandCount; ++i)
         paths_[i] = rack::asset::plugin(pluginInstance, kBands[i].asset);
@@ -30,14 +74,14 @@ BodyMapWidget::BodyMapWidget(VTune* module) : module_(module) {
     paths_[kBackingSlot] = rack::asset::plugin(pluginInstance, "res/VTune/body-map/body_backing.png");
     paths_[kOutlineSlot] = rack::asset::plugin(pluginInstance, "res/VTune/body-map/body_outline.png");
     for (int i = 0; i < vessel_pitch_color::count; ++i) {
-        auto* light = rack::createLight<SmallApertureLight>(rack::math::Vec(), module,
+        // Trial the smaller aperture; retain ChakraGlowLight above for comparison.
+        auto* light = rack::createLight<TinyApertureLight>(rack::math::Vec(), module,
             VTune::CHAKRA_ROOT_LIGHT + i);
         const auto& rgb = vessel_pitch_color::colors[i];
         light->baseColor = light->activeColor = nvgRGB(rgb[0], rgb[1], rgb[2]);
         light->baseColors.clear();
         light->addBaseColor(light->baseColor);
         light->invalidateStaticBackgroundCache();
-        light->invalidateBloomCache();
         chakraLights_[i] = light;
         addChild(light);
     }
@@ -46,7 +90,7 @@ BodyMapWidget::BodyMapWidget(VTune* module) : module_(module) {
 void BodyMapWidget::step() {
     // Normalized source-canvas positions keep the LEDs attached to the body,
     // including when the SVG rectangle or aspect-fit margins change.
-    static const float spineY[] = {.829f, .729f, .587f, .471f, .313f, .134f, .045f};
+    static const float spineY[] = {.854f, .754f, .612f, .471f, .313f, .134f, .045f};
     const FitRect body = aspectFit(box.size.x, box.size.y);
     for (int i = 0; i < vessel_pitch_color::count; ++i) {
         auto* light = chakraLights_[i];
