@@ -1,6 +1,6 @@
 #include "Vessel.hpp"
 #include "vessel/PitchColorMap.hpp"
-#include "NvgGraphicsLifecycle.hpp"
+#include "NvgOwnedImage.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/VisualAssets.hpp"
@@ -45,10 +45,7 @@ NVGcolor vesselPitchTint(float frequency) {
 struct VesselTintMask final : TransparentWidget {
     std::string sourcePath;
     std::vector<std::uint8_t> pixels;
-    NVGcontext* imageVg = nullptr;
-    int imageHandle = -1;
-    int cachedWidth = 0;
-    int cachedHeight = 0;
+    nvg_gfx_lifecycle::OwnedImage image;
     int sourceWidth = 0;
     int sourceHeight = 0;
     bool decodeAttempted = false;
@@ -59,9 +56,12 @@ struct VesselTintMask final : TransparentWidget {
     }
 
     void onContextDestroy(const ContextDestroyEvent& e) override {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-            imageVg, imageHandle, cachedWidth, cachedHeight, e.vg, imageVg == e.vg);
+        image.reset();
         TransparentWidget::onContextDestroy(e);
+    }
+    void onContextCreate(const ContextCreateEvent& e) override {
+        image.reset();
+        TransparentWidget::onContextCreate(e);
     }
 
     bool ensurePixels() {
@@ -82,17 +82,11 @@ struct VesselTintMask final : TransparentWidget {
         return true;
     }
 
-    bool ensureImage(NVGcontext* vg) {
-        if (!ensurePixels()) return false;
-        if (imageVg == vg && imageHandle > 0
-            && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, sourceWidth, sourceHeight)) return true;
-        return nvg_gfx_lifecycle::updateOwnedNvgImageRgba(
-            imageVg, imageHandle, cachedWidth, cachedHeight, vg,
-            sourceWidth, sourceHeight, NVG_IMAGE_GENERATE_MIPMAPS, pixels.data());
-    }
-
     void draw(const DrawArgs& args) override {
-        if (!ensureImage(args.vg) || sourceWidth <= 0 || sourceHeight <= 0) return;
+        if (!ensurePixels()) return;
+        const int imageHandle = image.ensure(args.vg, sourceWidth, sourceHeight,
+            NVG_IMAGE_GENERATE_MIPMAPS, pixels.data());
+        if (imageHandle <= 0) return;
         const float aspect = float(sourceWidth) / float(sourceHeight);
         float drawWidth = box.size.x;
         float drawHeight = drawWidth / aspect;
@@ -205,32 +199,22 @@ struct VesselMalletPixels {
 };
 
 struct VesselMalletImages {
-    struct Texture {
-        NVGcontext* owner = nullptr;
-        int handle = -1, width = 0, height = 0;
-    };
     // CPU composites are prepared once on the UI thread and survive window recreation.
     const VesselMalletPixels& pixels() const {
         static const VesselMalletPixels cached;
         return cached;
     }
-    std::map<NVGcontext*, std::array<Texture, 4>> textures;
+    std::map<NVGcontext*, std::array<nvg_gfx_lifecycle::OwnedImage, 4>> textures;
 
     int imageHandle(NVGcontext* vg, int index) {
         const auto& image = pixels().images[index];
         if (image.rgba.empty()) return -1;
         auto& texture = textures[vg][index];
-        if (texture.owner == vg && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
-                vg, texture.handle, image.width, image.height)) return texture.handle;
-        return nvg_gfx_lifecycle::updateOwnedNvgImageRgba(texture.owner, texture.handle,
-            texture.width, texture.height, vg, image.width, image.height,
-            NVG_IMAGE_GENERATE_MIPMAPS, image.rgba.data()) ? texture.handle : -1;
+        return texture.ensure(vg, image.width, image.height,
+            NVG_IMAGE_GENERATE_MIPMAPS, image.rgba.data());
     }
-    void resetContext(NVGcontext* vg, bool destroy) {
-        // Rack's main-context event also retires its framebuffer context.
-        for (auto& context : textures) for (auto& texture : context.second)
-            nvg_gfx_lifecycle::resetOwnedNvgImage(texture.owner, texture.handle,
-                texture.width, texture.height, vg, destroy && texture.owner == vg);
+    void resetContext() {
+        // Each image retires through its own context lease, including FB images.
         textures.clear();
     }
 };
@@ -588,6 +572,21 @@ struct VesselStrikeArea final : VesselPerformanceArea {
 struct VesselRotateArea final : VesselPerformanceArea {
     VesselRotateArea() : VesselPerformanceArea(Kind::Rotate) {}
 };
+struct BinauralBandLabel final : TransparentWidget {
+    Vessel* vessel = nullptr;
+    void draw(const DrawArgs& args) override {
+        if (!vessel || !APP || !APP->window || !APP->window->uiFont) return;
+        const float hz = vessel->params[Vessel::BINAURAL_PARAM].getValue();
+        if (!std::isfinite(hz) || hz < .5f) return;
+        const char* band = hz < 4.f ? "DELTA" : hz < 8.f ? "THETA"
+            : hz < 13.f ? "ALPHA" : hz < 30.f ? "BETA" : "GAMMA";
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 9.f);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGB(181, 213, 220));
+        nvgText(args.vg, box.size.x * .5f, box.size.y * .5f, band, nullptr);
+    }
+};
 struct BowlDisplay : TransparentWidget {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
@@ -676,8 +675,17 @@ struct VesselWidget final : ModuleWidget {
         malletLink.bowl = math::Rect(mm2px(bowlRasterRect.pos), mm2px(bowlRasterRect.size));
         addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
             mm2px(point("VTUNE_EXPANDER_LIGHT", 78.08f, 5.8f)), module, Vessel::VTUNE_LINK_LIGHT));
-        addParam(createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 83.5f)), module, Vessel::BINAURAL_PARAM));
-        addParam(createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM));
+        auto* binauralKnob = createParamCentered<Eclipse2Knob>(mm2px(point("BINAURAL_PARAM", 12.f, 83.5f)), module, Vessel::BINAURAL_PARAM);
+        addParam(binauralKnob);
+        auto* bandLabel = new BinauralBandLabel();
+        bandLabel->vessel = module;
+        bandLabel->box.size = Vec(mm2px(16.f), mm2px(3.f));
+        bandLabel->box.pos = Vec(binauralKnob->box.pos.x + .5f * binauralKnob->box.size.x - .5f * bandLabel->box.size.x,
+            binauralKnob->box.pos.y - mm2px(4.f));
+        addChild(bandLabel);
+        auto* bowlSwitch = createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM);
+        bowlSwitch->invertDisplay = true;
+        addParam(bowlSwitch);
         addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(point("PITCH_PARAM", 42.5f, 83.5f)), module, Vessel::PITCH_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FINE_PARAM", 55.25f, 83.5f)), module, Vessel::FINE_PARAM));
         addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("LEVEL_PARAM", 22.f, 111.7f)), module, Vessel::LEVEL_PARAM));
@@ -727,11 +735,11 @@ struct VesselWidget final : ModuleWidget {
     }
 
     void onContextCreate(const ContextCreateEvent& e) override {
-        malletLink.images.resetContext(e.vg, false);
+        malletLink.images.resetContext();
         ModuleWidget::onContextCreate(e);
     }
     void onContextDestroy(const ContextDestroyEvent& e) override {
-        malletLink.images.resetContext(e.vg, true);
+        malletLink.images.resetContext();
         ModuleWidget::onContextDestroy(e);
     }
     void appendContextMenu(Menu* menu) override {

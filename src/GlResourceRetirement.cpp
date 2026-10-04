@@ -57,6 +57,7 @@ struct ResourceContext {
           case ObjectKind::Shader: glDeleteShader(entry.name); break;
           case ObjectKind::Texture: glDeleteTextures(1, &entry.name); break;
           case ObjectKind::Query: glDeleteQueries(1, &entry.name); break;
+          case ObjectKind::NvgImage: nvgDeleteImage(vg, int(entry.name)); break;
         }
       }
     }

@@ -22,7 +22,8 @@ using ContextLease = std::shared_ptr<ResourceContext>;
 ContextLease acquireResourceContext(NVGcontext* vg);
 bool resourceContextMatches(const ContextLease& lease, NVGcontext* vg);
 bool resourceContextIsCurrent(const ContextLease& lease);
-enum class ObjectKind { Buffer, Program, Shader, Texture, Query };
+// NvgImage names belong to the lease's NanoVG context, not the GL texture namespace.
+enum class ObjectKind { Buffer, Program, Shader, Texture, Query, NvgImage };
 void retireObject(const ContextLease& lease, ObjectKind kind, GLuint name);
 void retireFramebuffer(const ContextLease& lease, NVGLUframebuffer* framebuffer);
 } // namespace gl_lifecycle

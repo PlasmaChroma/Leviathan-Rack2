@@ -39,10 +39,9 @@ int main() {
         const auto w=evaluate(f,Mode::Report);
         assert(near(reportSum(w),1.f));
         int active=0;
-        for (std::size_t i=0;i<kLayerCount;++i) {
+        for (std::size_t i=0;i<kBandCount;++i) {
             assert(std::isfinite(w[i]) && w[i]>=0.f && w[i]<=1.f);
-            if (i<kBandCount && w[i]>1e-5f) ++active;
-            if (i>=kBandCount) assert(w[i]==0.f);
+            if (w[i]>1e-5f) ++active;
         }
         assert(active>=1 && active<=2);
         ++samples;
@@ -53,24 +52,15 @@ int main() {
         assert(near(mid[i],.5f) && near(mid[i+1],.5f));
         const auto lo=evaluate(b*(1.f-1e-6f),Mode::Report);
         const auto hi=evaluate(b*(1.f+1e-6f),Mode::Report);
-        for (std::size_t k=0; k<kLayerCount; ++k) assert(near(lo[k],hi[k],1e-4f));
+        for (std::size_t k=0; k<kBandCount; ++k) assert(near(lo[k],hi[k],1e-4f));
     }
     assert(evaluate(20.f,Mode::Report)[0]==1.f);
     assert(evaluate(2000.f,Mode::Report)[6]==1.f);
     for (float bad : {0.f,-1.f,19.99f,2000.01f,
             std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}) {
-        assert(sum(evaluate(bad,Mode::Combined))==0.f);
+        assert(sum(evaluate(bad,Mode::Report))==0.f);
     }
-    for (std::size_t i=0; i<kToneCount; ++i) {
-        const float f=kTones[i].frequencyHz;
-        assert(near(evaluate(f,Mode::Symbolic)[kBandCount+i],1.f));
-        for (float cents : {-71.f,71.f})
-            assert(evaluate(f*std::exp2(cents/1200.f),Mode::Symbolic)[kBandCount+i]==0.f);
-    }
-    assert(sum(evaluate(220.f,Mode::Symbolic))==0.f);
     assert(sum(evaluate(528.f,Mode::Off))==0.f);
-    assert(near(reportSum(evaluate(528.f,Mode::Combined)),kCombinedReportGain));
-    assert(near(evaluate(528.f,Mode::Combined)[kBandCount+2],kCombinedSymbolicGain));
     assert(sanitizeMode(100)==Mode::Report && sanitizeMode(-1)==Mode::Report);
     assert(sanitizeMode(1)==Mode::Report && sanitizeMode(2)==Mode::Report);
     assert(sanitizeMode(3)==Mode::Off);
@@ -79,7 +69,7 @@ int main() {
     const auto target=evaluate(45.f,Mode::Report);
     for(int i=0;i<30;++i) a.advance(target,1.0/30.0);
     for(int i=0;i<144;++i) b.advance(target,1.0/144.0);
-    for(std::size_t i=0;i<kLayerCount;++i) assert(near(a.weights()[i],b.weights()[i]));
+    for(std::size_t i=0;i<kBandCount;++i) assert(near(a.weights()[i],b.weights()[i]));
     // Leap: no invented intervening-band activity.
     Animation leap; leap.snap(evaluate(25.f,Mode::Report));
     leap.advance(evaluate(1500.f,Mode::Report),1.0/60.0);
@@ -96,5 +86,5 @@ int main() {
     assert(aspectFit(0.f,100.f).width==0.f);
     assert(aspectFit(std::numeric_limits<float>::infinity(),100.f).width==0.f);
     std::cout << "PASS: " << samples << " frequency sweep samples; boundaries, invalid values, "
-                 "symbolic supports, modes, frame-rate independence, jump/disconnect fades, and aspect fit.\n";
+                 "saved mode migration, frame-rate independence, jump/disconnect fades, and aspect fit.\n";
 }

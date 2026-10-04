@@ -8,7 +8,7 @@ constexpr std::uint32_t kMagic = 0x5654554eu; // "VTUN"
 constexpr std::uint32_t kVersion = 1u;
 
 struct TuneMessage {
-    std::uint32_t magic = kMagic;
+    std::uint32_t magic = 0; // Valid only after the sender publishes.
     std::uint32_t version = kVersion;
     float velocity = 0.5f;
     float speed = 0.4f;

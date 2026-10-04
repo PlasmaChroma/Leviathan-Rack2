@@ -8,6 +8,7 @@
 #undef PRIVATE
 #include "../src/visual/AdaptiveGlSurface.hpp"
 #include "../src/GlResourceRetirement.hpp"
+#include "../src/NvgOwnedImage.hpp"
 #define NANOVG_GL2
 #include <nanovg_gl.h>
 #include <cstdio>
@@ -113,6 +114,40 @@ int main() {
   auto lease = gl_lifecycle::acquireResourceContext(vg);
   check(lease && scene.children.size() == 1, "one scene service installed");
   check(lease == gl_lifecycle::acquireResourceContext(vg), "context service reused");
+  unsigned char imagePixels[16] = {};
+  for (int i = 0; i < 100; ++i) {
+    auto* owned = new nvg_gfx_lifecycle::OwnedImage;
+    const int image = owned->ensure(vg, 2, 2, 0, imagePixels);
+    check(image > 0 && owned->ensure(vg, 2, 2, 0, imagePixels) == image, "owned image created and reused");
+    const GLuint texture = nvglImageHandleGL2(vg, image);
+    glfwMakeContextCurrent(nullptr);
+    delete owned;
+    glfwMakeContextCurrent(native);
+    check(glIsTexture(texture), "image destruction queues cleanup without a current context");
+    service(scene);
+    check(glIsTexture(texture), "owned image survives its last draw frame");
+    ++testFrame;
+    glfwMakeContextCurrent(nullptr); service(scene);
+    glfwMakeContextCurrent(native);
+    check(glIsTexture(texture), "owned image retirement waits for owning context");
+    service(scene);
+    check(!glIsTexture(texture), "removed instance image reclaimed on the following frame");
+  }
+  check(gl_lifecycle::resourceRetirementStats().pendingObjects == 0, "100 image removals leave no queued resources");
+  window.fbVg = nvgCreateGL2(NVG_ANTIALIAS);
+  check(window.fbVg != nullptr, "framebuffer NanoVG context created");
+  {
+    nvg_gfx_lifecycle::OwnedImage mainImage, framebufferImage;
+    const int mainHandle = mainImage.ensure(vg, 2, 2, 0, imagePixels);
+    const int fbHandle = framebufferImage.ensure(window.fbVg, 2, 2, 0, imagePixels);
+    const GLuint mainTexture = nvglImageHandleGL2(vg, mainHandle);
+    const GLuint fbTexture = nvglImageHandleGL2(window.fbVg, fbHandle);
+    framebufferImage.reset(); ++testFrame; service(scene);
+    check(glIsTexture(mainTexture) && !glIsTexture(fbTexture), "FB image retired through its own NanoVG context");
+  }
+  ++testFrame; service(scene);
+  NVGcontext* oldFb = window.fbVg; window.fbVg = nullptr;
+  service(scene); nvgDeleteGL2(oldFb);
   NVGLUframebuffer* splitRead = nvgluCreateFramebuffer(vg, 8, 8, 0);
   check(splitRead != nullptr, "split-binding fixture allocated");
   GLint expectedRead = 0, expectedRenderbuffer = 0;
@@ -247,6 +282,10 @@ int main() {
   const int abandonedImage = abandoned->image;
   gl_lifecycle::retireFramebuffer(lease, abandoned);
   const auto beforeLoss = gl_lifecycle::resourceRetirementStats();
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  nvg_gfx_lifecycle::OwnedImage recreatedImage;
+  const int oldImage = recreatedImage.ensure(vg, 2, 2, 0, imagePixels);
+  const GLuint oldImageTexture = nvglImageHandleGL2(vg, oldImage);
   GLuint disposable = 0; glGenTextures(1, &disposable); glBindTexture(GL_TEXTURE_2D, disposable);
   gl_lifecycle::retireObject(lease, gl_lifecycle::ObjectKind::Texture, disposable);
   rack::widget::Widget::ContextCreateEvent createEvent; createEvent.vg = vg;
@@ -265,10 +304,17 @@ int main() {
   check(glIsTexture(disposable), "abandoned context never deletes names in replacement lifetime");
   auto replacement = gl_lifecycle::acquireResourceContext(vg);
   check(replacement != lease, "replacement lifetime gets distinct lease");
+  const int newImage = recreatedImage.ensure(vg, 2, 2, 0, imagePixels);
+  check(newImage > 0 && newImage != oldImage, "owned image recreated after same-pointer context event");
+  check(glIsTexture(oldImageTexture), "expired image lease never deletes old names in replacement context");
+  nvgDeleteImage(vg, oldImage); // Synthetic loss uses the same real driver context.
+  const GLuint newImageTexture = nvglImageHandleGL2(vg, newImage);
+  recreatedImage.reset();
   gl_lifecycle::retireObject(replacement, gl_lifecycle::ObjectKind::Texture, disposable);
   rack::widget::Widget::ContextDestroyEvent destroyEvent; destroyEvent.vg = vg;
   scene.onContextDestroy(destroyEvent);
   check(!glIsTexture(disposable), "context-destroy event drains pending resources");
+  check(!glIsTexture(newImageTexture), "context-destroy event drains pending NanoVG images");
 
   while (!scene.children.empty()) {
     auto* child = scene.children.front(); scene.removeChild(child); delete child;

@@ -1,5 +1,7 @@
 # V.Tune — frequency-driven body highlights
 
+**Production status (2026-10-04):** This directory preserves the original design kit and source artwork. The current plugin uses the seven broad body bands plus independent Tiny aperture chakra lights; the symbolic/combined modes and custom glow experiment have been retired. Production source lives in `src/vtune` and `src/VTuneBodyMapWidget.cpp`. Generate its band table with `python3 tools/vtune/generate_body_map_data.py` from the repository root. Only `band_0.png` through `band_6.png`, `body_backing.png`, and `body_outline.png` belong in the production `res/VTune/body-map` folder. The kit's preview, example code, tone masks, and audit images remain historical/reference material.
+
 Implementation kit for Leviathan / VCV Rack. Prepared 2026-10-03 against the publicly retrievable `expander` branch interfaces, the supplied `Sound+Body.md`, and the supplied 788 × 1002 body outline.
 
 **What is implemented:** frequency-to-layer evaluation, soft spatial masks registered to the exact uploaded image, a NanoVG/Rack widget, Vessel-to-V.Tune display telemetry, context-menu options and persistence, an integration patch, deterministic asset generation, standalone tests, and an offline interactive preview.

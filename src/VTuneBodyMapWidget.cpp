@@ -2,79 +2,30 @@
 #include "VTune.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/ApertureLight.hpp"
-#include "visual/ApertureLightTransfer.hpp"
 #include "vessel/PitchColorMap.hpp"
 #include <cmath>
 #include <cstdio>
 
 namespace vtune_body {
 namespace {
-constexpr std::size_t kBackingSlot = kLayerCount;
-constexpr std::size_t kOutlineSlot = kLayerCount + 1;
+constexpr std::size_t kBackingSlot = kBandCount;
+constexpr std::size_t kOutlineSlot = kBandCount + 1;
 constexpr float kDrawEpsilon = 1.f / 1024.f;
 const char* modeName(Mode mode) {
     switch (mode) {
         case Mode::Report: return "Body shading on";
-        case Mode::Symbolic:
-        case Mode::Combined: return "Body shading on";
         case Mode::Off: return "Body shading off (chakra LEDs only)";
     }
     return "Body shading on";
 }
 }
 
-// A rimless, self-lit point over the illustration. Reuse Aperture's cached
-// brightness response, with no socket or opaque lens obscuring the anatomy.
-struct ChakraGlowLight final : rack::app::ModuleLightWidget {
-    NVGcolor tint = nvgRGB(255, 255, 255);
-    ChakraGlowLight() { box.size = rack::math::Vec(14.f, 14.f); }
-    float brightness() {
-        auto* light = getLight(0);
-        return light ? unit(light->getBrightness()) : 0.f;
-    }
-    void drawBackground(const DrawArgs& args) override {
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 7.f, 7.f, 1.5f);
-        nvgFillColor(args.vg, nvgTransRGBA(tint, 24));
-        nvgFill(args.vg);
-    }
-    void drawLight(const DrawArgs& args) override {
-        const auto response = aperture_light::transferFromBrightness(brightness());
-        if (response.core < kDrawEpsilon) return;
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 7.f, 7.f, 4.3f);
-        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, 1.2f, 4.3f,
-            nvgRGBAf(tint.r, tint.g, tint.b, response.core),
-            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
-        nvgFill(args.vg);
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 7.f, 7.f, 1.4f);
-        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, .3f, 1.4f,
-            nvgRGBAf(.7f + .3f * tint.r, .7f + .3f * tint.g, .7f + .3f * tint.b, response.hot),
-            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
-        nvgFill(args.vg);
-    }
-    void drawHalo(const DrawArgs& args) override {
-        const float glow = aperture_light::transferFromBrightness(brightness()).glow;
-        if (glow < kDrawEpsilon || args.fb) return;
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 7.f, 7.f, 9.5f);
-        nvgFillPaint(args.vg, nvgRadialGradient(args.vg, 7.f, 7.f, 1.4f, 9.5f,
-            nvgRGBAf(tint.r, tint.g, tint.b, .55f * glow * rack::settings::haloBrightness),
-            nvgRGBAf(tint.r, tint.g, tint.b, 0.f)));
-        nvgFill(args.vg);
-    }
-};
-
 BodyMapWidget::BodyMapWidget(VTune* module) : module_(module) {
     for (std::size_t i = 0; i < kBandCount; ++i)
         paths_[i] = rack::asset::plugin(pluginInstance, kBands[i].asset);
-    for (std::size_t i = 0; i < kToneCount; ++i)
-        paths_[kBandCount + i] = rack::asset::plugin(pluginInstance, kTones[i].asset);
     paths_[kBackingSlot] = rack::asset::plugin(pluginInstance, "res/VTune/body-map/body_backing.png");
     paths_[kOutlineSlot] = rack::asset::plugin(pluginInstance, "res/VTune/body-map/body_outline.png");
     for (int i = 0; i < vessel_pitch_color::count; ++i) {
-        // Trial the smaller aperture; retain ChakraGlowLight above for comparison.
         auto* light = rack::createLight<TinyApertureLight>(rack::math::Vec(), module,
             VTune::CHAKRA_ROOT_LIGHT + i);
         const auto& rgb = vessel_pitch_color::colors[i];
@@ -90,7 +41,7 @@ BodyMapWidget::BodyMapWidget(VTune* module) : module_(module) {
 void BodyMapWidget::step() {
     // Normalized source-canvas positions keep the LEDs attached to the body,
     // including when the SVG rectangle or aspect-fit margins change.
-    static const float spineY[] = {.854f, .754f, .612f, .471f, .313f, .134f, .045f};
+    static const float spineY[] = {.854f, .754f, .612f, .471f, .313f, .164f, .075f};
     const FitRect body = aspectFit(box.size.x, box.size.y);
     for (int i = 0; i < vessel_pitch_color::count; ++i) {
         auto* light = chakraLights_[i];
@@ -154,9 +105,9 @@ void BodyMapWidget::draw(const DrawArgs& args) {
         // Keep this a soft, ordinary panel illustration. No additive blending,
         // per-frame blur or framebuffer. Images are loaded lazily into the
         // shared texture cache; subsequent frames reuse those textures.
-        if (blackBodyBacking) drawImage(args, kBackingSlot, rect, 1.f);
+        drawImage(args, kBackingSlot, rect, 1.f);
         const auto& weights = animation_.weights();
-        for (std::size_t i = 0; i < kLayerCount; ++i)
+        for (std::size_t i = 0; i < kBandCount; ++i)
             drawImage(args, i, rect, opacity_ * weights[i]);
         drawImage(args, kOutlineSlot, rect, 1.f);
         nvgRestore(args.vg);
@@ -227,9 +178,9 @@ struct BodyMenu final : rack::ui::MenuItem {
             std::snprintf(text, sizeof(text), "Vessel target center: %.2f Hz", double(hz));
             menu->addChild(rack::createMenuLabel(text));
             const auto values = evaluate(hz, sanitizeMode(module->bodyMapMode.load(std::memory_order_relaxed)));
-            for (std::size_t i = 0; i < kLayerCount; ++i) {
+            for (std::size_t i = 0; i < kBandCount; ++i) {
                 if (values[i] < .05f) continue;
-                const char* label = i < kBandCount ? kBands[i].label : kTones[i-kBandCount].label;
+                const char* label = kBands[i].label;
                 menu->addChild(rack::createMenuLabel(label));
             }
         }

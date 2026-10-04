@@ -146,6 +146,13 @@ void bodyMapTelemetry() {
     VTune restored; restored.dataFromJson(saved); json_decref(saved);
     require(restored.bodyMapMode.load() == 0 && restored.bodyMapOpacity.load() == .85f
         && restored.bodyFrequencyHz.load() == 0.f, "body map persistence or transient state failed");
+    for (int legacyMode : {1, 2, 3}) {
+        saved = json_pack("{s:i,s:i,s:f}", "bodyMapSchema", 1, "bodyMapMode", legacyMode, "bodyMapOpacity", .35);
+        restored.dataFromJson(saved); json_decref(saved);
+        require(restored.bodyMapMode.load() == (legacyMode == 3 ? 3 : 0)
+            && std::abs(restored.bodyMapOpacity.load() - .35f) < 1e-6f,
+            "retired modes must migrate to shading while Off and intensity survive");
+    }
     saved = json_object(); restored.dataFromJson(saved);
     require(restored.bodyMapMode.load() == 0 && restored.bodyMapOpacity.load() == vtune_body::kDefaultOpacity,
         "old patch body map defaults failed");
@@ -154,6 +161,60 @@ void bodyMapTelemetry() {
     require(restored.bodyMapMode.load() == 3, "unknown body map schema should disable highlights");
     modelVessel = previousModel;
     std::cout << "[PASS] Body map frequency bridge, invalid values, bypass, detach and persistence\n";
+}
+
+void tuneConnectionFreshness() {
+    Model vesselModel, tuneModel;
+    auto* oldVesselModel = modelVessel; auto* oldTuneModel = modelVTune;
+    modelVessel = &vesselModel; modelVTune = &tuneModel;
+    Vessel host; VTune first, second;
+    host.model = &vesselModel; first.model = second.model = &tuneModel;
+    host.params[Vessel::SPEED_PARAM].setValue(.9f);
+    host.params[Vessel::PRESSURE_PARAM].setValue(8.f);
+    run(host);
+    auto connect = [&](VTune& tune) {
+        host.setExpanderModule(&tune, 1);
+        tune.setExpanderModule(&host, 0);
+    };
+    auto detach = [&](VTune& tune) {
+        host.setExpanderModule(nullptr, 1);
+        tune.setExpanderModule(nullptr, 0);
+    };
+    Module::ProcessArgs args; args.sampleRate = 48000; args.sampleTime = 1.f/48000;
+    auto publish = [&](VTune& tune) {
+        tune.process(args);
+        require(host.rightExpander.messageFlipRequested, "missing fresh publication");
+        std::swap(host.rightExpander.producerMessage, host.rightExpander.consumerMessage);
+        host.rightExpander.messageFlipRequested = false;
+        run(host);
+    };
+    connect(first); first.setBypassed(true);
+    first.processBypass(args); run(host, 100);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .9f
+        && host.params[Vessel::PRESSURE_PARAM].getValue() == 8.f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f,
+        "never-published bypassed expander overwrote retained controls or reported ready");
+    first.setBypassed(false); run(host);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .9f, "unbypass accepted an unpublished buffer");
+    first.params[VTune::SPEED_PARAM].setValue(.7f); publish(first);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .7f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 1.f, "fresh controls not accepted");
+    first.setBypassed(true); first.processBypass(args); run(host);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .7f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f, "bypass failed to retain controls");
+    detach(first);
+    host.params[Vessel::SPEED_PARAM].setValue(1.1f);
+    connect(second); run(host);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == 1.1f, "replacement accepted previous neighbor's message");
+    second.params[VTune::SPEED_PARAM].setValue(.6f); publish(second);
+    detach(second); run(host);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .6f, "detach lost last published controls");
+    connect(second); run(host);
+    require(host.params[Vessel::SPEED_PARAM].getValue() == .6f
+        && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f, "reattach reused old publication");
+    detach(second);
+    modelVessel = oldVesselModel; modelVTune = oldTuneModel;
+    std::cout << "[PASS] Fresh expander publication, initial bypass, unbypass, replacement and reattachment\n";
 }
 
 void tuneExpander() {
@@ -655,8 +716,8 @@ int main() {
     int result = 0;
     {
         rack::engine::Engine engine; context.engine = &engine;
-        try { bodyMapTelemetry(); feltStrikeLevel(); gatesAndControls(); tuningAndMorph(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
-            std::cout << "Vessel Rack adapter: 11 groups PASS\n";
+        try { bodyMapTelemetry(); feltStrikeLevel(); gatesAndControls(); tuningAndMorph(); tuneConnectionFreshness(); tuneExpander(); manualPerformancePads(); intensityOverride(); strikeAftermathVisual(); independentOutputAndEnergy(); patchAndReset(); audioHeapSafety(); dualControls(); qualityMenuState();
+            std::cout << "Vessel Rack adapter: 14 groups PASS\n";
         } catch (const std::exception& error) { std::cerr << "[FAIL] " << error.what() << '\n'; result = 1; }
         context.engine = nullptr;
     }

@@ -45,6 +45,7 @@ struct Vessel final : Module {
     Vessel();
     void process(const ProcessArgs& args) override;
     void onReset(const ResetEvent& event) override;
+    void onExpanderChange(const ExpanderChangeEvent& event) override;
     void processBypass(const ProcessArgs& args) override;
     json_t* dataToJson() override;
     void dataFromJson(json_t* root) override;

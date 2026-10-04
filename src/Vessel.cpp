@@ -96,12 +96,12 @@ vessel_expander::TuneMessage Vessel::tuneControls() {
     tune.width = float(bound(params[WIDTH_PARAM].getValue(), 0, 1));
     tune.level = float(bound(params[LEVEL_PARAM].getValue(), 0, 2));
 
-    const Module* right = rightExpander.module;
+    Module* right = rightExpander.module;
     const bool linked = right && right->model == modelVTune && right->leftExpander.module == this;
     const auto* message = linked && rightExpander.consumerMessage
         ? reinterpret_cast<const vessel_expander::TuneMessage*>(rightExpander.consumerMessage)
         : nullptr;
-    const bool ready = message && vessel_expander::isValid(*message);
+    const bool ready = message && !right->isBypassed() && vessel_expander::isValid(*message);
     lights[VTUNE_LINK_LIGHT].setBrightness(linked && !ready ? 1.f : 0.f);
     lights[VTUNE_READY_LIGHT].setBrightness(ready ? 1.f : 0.f);
     if (!ready) {
@@ -292,6 +292,16 @@ void Vessel::onReset(const ResetEvent& event) {
     Module::onReset(event);
     requestedQuality.store(int(vessel::ProcessingQuality::Balanced), std::memory_order_relaxed);
     pendingReset.store(true, std::memory_order_release);
+}
+void Vessel::onExpanderChange(const ExpanderChangeEvent& event) {
+    Module::onExpanderChange(event);
+    if (event.side != 1) return;
+    // Rack dispatches connection changes between engine processing blocks.
+    // Neither buffer may carry settings from a previous neighbor into a new link.
+    for (auto& message : tuneMessages) message.magic = 0;
+    rightExpander.messageFlipRequested = false;
+    lights[VTUNE_LINK_LIGHT].setBrightness(0.f);
+    lights[VTUNE_READY_LIGHT].setBrightness(0.f);
 }
 void Vessel::processBypass(const ProcessArgs& args) {
     // Retain the ongoing contacts/tail when bypass is lifted; bypass is output mute.

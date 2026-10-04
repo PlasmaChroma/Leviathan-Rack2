@@ -7,8 +7,9 @@
 
 namespace vtune_body {
 
-enum class Mode : int { Report = 0, Symbolic = 1, Combined = 2, Off = 3 };
-using Weights = std::array<float, kLayerCount>;
+// Keep saved Off=3; retired values 1/2 migrate through sanitizeMode().
+enum class Mode : int { Report = 0, Off = 3 };
+using Weights = std::array<float, kBandCount>;
 
 inline Mode sanitizeMode(int value) noexcept {
     // Retired Symbolic/Combined selections migrate to full-strength body shading.
@@ -32,28 +33,16 @@ inline Weights evaluate(float hz, Mode mode) noexcept {
     Weights out{};
     if (!validFrequency(hz) || mode == Mode::Off)
         return out;
-    if (mode == Mode::Report || mode == Mode::Combined) {
-        const float gain = mode == Mode::Combined ? kCombinedReportGain : 1.f;
-        float previous = 1.f;
-        for (std::size_t i = 0; i + 1 < kBandCount; ++i) {
-            const float distanceOctaves = std::log2(hz / kBands[i].highHz);
-            const float boundary = smoothstep01(
-                (distanceOctaves + kBoundaryHalfWidthOctaves)
-                / (2.f * kBoundaryHalfWidthOctaves));
-            out[i] = gain * std::max(0.f, previous - boundary);
-            previous = boundary;
-        }
-        out[kBandCount - 1] = gain * previous;
+    float previous = 1.f;
+    for (std::size_t i = 0; i + 1 < kBandCount; ++i) {
+        const float distanceOctaves = std::log2(hz / kBands[i].highHz);
+        const float boundary = smoothstep01(
+            (distanceOctaves + kBoundaryHalfWidthOctaves)
+            / (2.f * kBoundaryHalfWidthOctaves));
+        out[i] = std::max(0.f, previous - boundary);
+        previous = boundary;
     }
-    if (mode == Mode::Symbolic || mode == Mode::Combined) {
-        const float gain = mode == Mode::Combined ? kCombinedSymbolicGain : 1.f;
-        for (std::size_t i = 0; i < kToneCount; ++i) {
-            const float cents = std::abs(1200.f * std::log2(hz / kTones[i].frequencyHz));
-            // Deliberately finite support, not unconditional nearest-tone choice.
-            // This width is a UI tolerance, not a measured biological bandwidth.
-            out[kBandCount + i] = gain * smoothstep01(1.f - cents / kToneSupportCents);
-        }
-    }
+    out[kBandCount - 1] = previous;
     return out;
 }
 
@@ -66,12 +55,12 @@ public:
     const Weights& weights() const noexcept { return current_; }
     void reset() noexcept { current_.fill(0.f); }
     void snap(const Weights& target) noexcept {
-        for (std::size_t i = 0; i < kLayerCount; ++i) current_[i] = unit(target[i]);
+        for (std::size_t i = 0; i < kBandCount; ++i) current_[i] = unit(target[i]);
     }
     void advance(const Weights& target, double dt) noexcept {
         if (!std::isfinite(dt) || dt <= 0.0) return;
         const float a = static_cast<float>(-std::expm1(-dt / kSmoothingSeconds));
-        for (std::size_t i = 0; i < kLayerCount; ++i) {
+        for (std::size_t i = 0; i < kBandCount; ++i) {
             current_[i] += a * (unit(target[i]) - current_[i]);
             current_[i] = unit(current_[i]);
             if (current_[i] < 1e-6f && target[i] == 0.f) current_[i] = 0.f;

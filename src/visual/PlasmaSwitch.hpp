@@ -17,6 +17,7 @@ void resetPlasmaSwitchDrawMetrics();
 PlasmaSwitchDrawMetrics getPlasmaSwitchDrawMetrics();
 
 struct PlasmaSwitch : app::Switch {
+	bool invertDisplay = false;
 	float displayValue = 0.f;
 	bool displayValueInitialized = false;
 	float pulseAmount = 0.5f;

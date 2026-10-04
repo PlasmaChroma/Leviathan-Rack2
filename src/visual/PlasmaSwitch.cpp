@@ -311,7 +311,7 @@ void PlasmaSwitch::step() {
 	app::Switch::step();
 	const double nowSec = system::getTime();
 	engine::ParamQuantity* pq = getParamQuantity();
-	const float target = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+	const float target = ((!pq || pq->getValue() > 0.5f) != invertDisplay) ? 1.f : 0.f;
 	const bool targetChanged = target != lastVisualTarget;
 	const bool updateDue = nextVisualUpdateSec <= 0.0 || nowSec >= nextVisualUpdateSec || nowSec < lastVisualUpdateSec;
 	if (!targetChanged && !updateDue) {
@@ -366,7 +366,7 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 void PlasmaSwitch::drawVisual(const DrawArgs& args) {
 	if (!displayValueInitialized) {
 		engine::ParamQuantity* pq = getParamQuantity();
-		displayValue = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+		displayValue = ((!pq || pq->getValue() > 0.5f) != invertDisplay) ? 1.f : 0.f;
 		displayValueInitialized = true;
 	}
 

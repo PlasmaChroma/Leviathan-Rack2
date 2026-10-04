@@ -513,6 +513,7 @@ build/tests/vtune_body_map_core_spec: tests/vtune_body_map_core_spec.cpp $(wildc
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Werror -pedantic -Isrc $< -o $@
 .PHONY: test-vtune-body-map
 test-vtune-body-map: build/tests/vtune_body_map_core_spec
+	python3 tools/vtune/generate_body_map_data.py --check
 	$(call run_test_bin,build/tests/vtune_body_map_core_spec)
 build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
@@ -1257,7 +1258,7 @@ test-gl-batch: build/tests/adaptive_gl_batch_spec
 test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
 	$(call run_rack_test_bin,build/tests/gl_surface_lifecycle_spec)
 
-build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp | build/tests
+build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp src/NvgOwnedImage.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/gl_surface_lifecycle_spec.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 
