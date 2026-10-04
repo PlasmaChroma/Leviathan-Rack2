@@ -1,5 +1,7 @@
 # Recovered DSP equations and implementation boundaries
 
+**Continuation:** [RACK_RECONSTRUCTION.md](RACK_RECONSTRUCTION.md) adds instruction-checked SAM/Noise/Chaos, calibration, interaction/phase/FM, Sub/CV, output and capture definitions. Section 3 gives the exact SAM control, reference and detector schedules; twelve complete SAM callbacks now check nonzero/silent inputs and all eight outputs. Its scope/status supersedes the unresolved-path list at the end of this initial specification.
+
 This document translates selected SP67 paths into implementation-oriented notation. It is not the original source and not a complete module emulator. All addresses apply only to the hash in `REPORT.md`. The Python probes in `reference/sp67_reference.py` implement the stated subset.
 
 ## 1. Numeric conventions
@@ -248,7 +250,7 @@ Slow ADC slots 4 and 5 participate in:
 fmIndex = 60 * normalizedControl^4
 ```
 
-This yields a strongly compressed lower part of the knob range. It is an FM-index mapping, not the Partials-radius curve. The external/internal FM source combination and signed phase increments remain incomplete.
+This yields a strongly compressed lower part of the knob range. It is an FM-index mapping, not the Partials-radius curve. The current continuation's section 4 and `phase_step()` define the checked internal cross-FM sources, signed truncation-based wrap, even-phase pull and Follow/Sync integration. Physical external-CV summing remains outside the digital definition.
 
 A repeatedly observed soft clip is:
 
@@ -257,10 +259,20 @@ x = min(1.5, max(-1.5,x))
 y = x * (1 - 0.14814814925193787*x*x)
 ```
 
-Output conversion includes different fixed-point scales on different digital lanes. Do not apply a universal voltage scale or identical clipping path to all eight outputs without completing the lane trace.
+Output conversion includes different fixed-point scales on different digital lanes. The completed digital lane trace is in reconstruction section 8: preserve per-side FMA rounding and separate Sub/CV scaling. This does not establish a universal jack-voltage scale.
 
-## 10. Explicitly absent from the reference model
+## 10. Scope of the initial probes and current continuation
 
-The executable probes do not model: full audio callback state ordering; calibrated ADC conversion; complete carrier/sub/even phase relationships; through-zero or extreme FM; Sync and Follow; button debounce and long-press timing; capture start/stop and clock timeout; full Noise or Chaos equations; all Sub/CV modes; exact save-state persistence; analog gain, clipping or noise; converter clocking; bootloader/update behavior.
+The initial `sp67_reference.py` probes remain intentionally narrower than the
+continuation. `sp67_extended.py` and the original-instruction tests now define
+Noise/Chaos, digital calibration/control paths, phase relationships, Follow/Sync,
+all Sub/CV modes, capture/timeout, selected button/long-hold combinations,
+settings codecs and file behavior. Complete SAM, SAO and Noise/Chaos callbacks
+check integration on explicit finite trajectories. Consult
+[CODEX_HANDOFF.md](CODEX_HANDOFF.md) for subsystem-to-test mappings rather than
+treating this initial file's omissions as the current implementation boundary.
 
-These omissions should stay visible in any Codex handoff. The probes are useful building blocks and regression references, not an opaque package to be relabeled a finished emulator.
+Remaining limits include the complete composed gesture/persistence state
+machine, broader extreme and long-duration trajectories, physical panel/CV and
+output gain, actual media/flash/converter timing and the missing bootloader.
+The current models and fixtures are not a finished whole-board emulator.

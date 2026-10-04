@@ -1,5 +1,48 @@
 # Tools, artifact map and reproduction
 
+## 2026-10-04 continuation
+
+The current DSP definition is `docs/RACK_RECONSTRUCTION.md`. New files:
+
+* `reference/sp67_extended.py`: float32/FMA translations for Noise, Chaos,
+  phase/cross-FM, interaction modes, planar Array deltas and auxiliary outputs.
+* `reference/sp67_arm.py`: hash-checked, bounded original-instruction execution.
+* `reference/sp67_file_fixture.py`: explicit in-memory file-operation substitutions
+  for connected original parser/loader/save tests; substituted functions are
+  excluded from instruction coverage. This does not emulate FatFs or media.
+* `tests/test_arm_differential.py`: original-instruction test groups, exact state
+  comparisons except explicitly tolerance-based standard-synthesis comparisons.
+  The current group count is recorded in `analysis/continuation_tests.json`.
+* `analysis/continuation_tests.json`: counts, error and executed addresses.
+* `analysis/continuation_status.json`: resolved contracts and remaining work.
+* `docs/CODEX_HANDOFF.md`: current subsystem-to-definition/test map, runtime and
+  storage requirements, host-policy boundaries, and reconciliation of all 15
+  original behavioral questions. The original `analysis/open_questions.json`
+  remains historical; it is not the current list of unsolved digital paths.
+* `SHA256SUMS.continuation.txt`: current bundle manifest; the original manifest
+  remains a record of the initial delivery.
+
+Run from the bundle root, preferably in a separate Python environment:
+
+```sh
+python -m pip install -r requirements-analysis.txt
+python tests/test_reference.py
+python tests/test_arm_differential.py --report analysis/continuation_tests.json
+python scripts/continuation_manifest.py --check
+```
+
+The differential suite requires Unicorn 2.1.4 and fails if it is absent; it
+does not silently skip. No Capstone, Java, Ghidra, Rack runtime or compiler is
+required. Float32/float64 FMA use the host C library (`libm` or Windows UCRT).
+The M7 versus MAX CPU-profile limitation and exact scope are described in the
+specification. Firmware, tables and original ELF remain unchanged. No full
+Rack plugin build was needed for this analysis-only change.
+
+If intentionally changing the bundle, inspect the changes and regenerate its
+current manifest with `python scripts/continuation_manifest.py`. The original
+combined HTML/Markdown and ZIP are historical snapshots and are not regenerated
+by this continuation.
+
 ## Quick start
 
 From the extracted bundle root:
@@ -26,11 +69,11 @@ The script currently loads `/usr/lib/x86_64-linux-gnu/libLLVM-19.so`. Adjust tha
 | Path | Contents / caveat |
 |---|---|
 | `README.md` | Starting point and scope |
-| `docs/REPORT.md` | Main integrated analysis |
-| `docs/DSP_SPEC.md` | Instruction-derived equations |
+| `docs/REPORT.md` | Historical initial integrated analysis; use the continuation for current coverage |
+| `docs/DSP_SPEC.md` | Initial equations plus pointers to current instruction-checked definitions |
 | `docs/ARRAY_FORMAT.md` | Memory descriptors, RIFF format, save/read behavior |
 | `docs/CONTROL_IO_MAP.md` | Interface semantics and partially recovered routing |
-| `docs/CODEX_HANDOFF.md` | Staged implementation and validation plan |
+| `docs/CODEX_HANDOFF.md` | Current implementation contract, evidence map and original-question reconciliation |
 | `docs/SOURCES.md` | External sources, provenance and limits |
 | `Spectraphon_SP67_Analysis.html` | Combined report, readable offline |
 | `firmware/sp67.bin` | Exact copy of uploaded bytes |
@@ -43,7 +86,7 @@ The script currently loads `/usr/lib/x86_64-linux-gnu/libLLVM-19.so`. Adjust tha
 | `analysis/dsp_regions.csv` | Important blocks inside the large DSP function |
 | `analysis/memory_map_curated.csv` | Working RAM and external-memory map |
 | `analysis/findings.json` | Structured findings and confidence |
-| `analysis/open_questions.json` | Unresolved questions, evidence needed |
+| `analysis/open_questions.json` | Historical 15-question inventory; reconciled in the current handoff |
 | `analysis/vector_table.csv` | All 166 vector words |
 | `analysis/function_candidates.csv` | Heuristic entry/size/FP-count inventory |
 | `analysis/call_graph.csv` | Direct and boundary edges; not a complete indirect call graph |
@@ -78,4 +121,10 @@ A manual correction removes a false boundary at `0x080336f4`: the WAV initialize
 
 ## Reproduction scope
 
-Table bytes, hashes, ELF payload mapping and script output can be reproduced directly from the upload. Mathematical translations can be reviewed against the listed addresses. Exact dynamic behavior, analog levels and physical file acceptance need evidence outside this bundle. Keep those two categories separate when evaluating test results.
+Table bytes, hashes, ELF payload mapping and script output can be reproduced
+directly from the upload. The differential suite additionally executes bounded
+original-instruction paths and complete callbacks with explicit RAM/register
+and file fixtures, comparing exact state or stated numerical tolerances. This
+establishes the reported digital contracts; analog levels, physical file
+acceptance, successful peripherals and complete whole-board behavior still need
+additional evidence. Keep those scopes separate when evaluating test results.

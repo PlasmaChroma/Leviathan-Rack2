@@ -1,0 +1,40 @@
+{
+  "scope": "Selected component checks, not full firmware or Rack equivalence",
+  "passed": true,
+  "compiler_target": "x86_64-w64-mingw32",
+  "compiler_version": "g++.exe (Rev5, Built by MSYS2 project) 16.1.0",
+  "symbolic_audit": "PASS: 6 binary-checked read kernels match the four-tap quadratic exactly.",
+  "compiler_flags": [
+    "-std=c++17",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-pedantic",
+    "-ffp-contract=off"
+  ],
+  "tests": {
+    "test_components": "PASS: Hadamard identity, component sanity, exact-table header.",
+    "test_delay_read": "PASS: 4100 interpolation basis cases, DC/ramp, ring wrap, minimum delay, float32 coordinates, NaN fallback, nonlinear tracking, crossfade, stereo attenuation.",
+    "test_color_feedback": "PASS: 8192 Color instruction-slice comparisons (8192 bit-identical outputs), all Color state words/envelopes, 128 Halo ring/allpass instruction-slice comparisons, Halo branch mapping/DC rejection, final shaping/mix.",
+    "test_modulation": "PASS: binary-checked modulation initialization; 23182 RNG updates, 900025 position steps, 30 counter cases, all bit-identical; 2/2 boundary turns.",
+    "test_events": "PASS: 13824 expiry arbitration cases, 64 request-consumption cases, 17424 reverse-window cases: complete memory writes and restart flags match binary-checked slices; interrupted-fade regression.",
+    "test_hold_control": "PASS: 243 Hold transport cases, 14112 retarget cases, 336 raw Hold polls, 640 clock-prefix cases; all fixture memory/exit results match binary-checked slices; local Hold entry/fade/exit and raw chord regressions."
+  },
+  "color_trace_generation": "PASS: generated 15 DSP/event slices, all binary-checked.",
+  "source_sha256": {
+    "reconstruction/delay_read_components.hpp": "9eb5db97cb4277defaf25913daee9b1b3f1a4dab37c3ac1bfc7c62e6c3ac5b0c",
+    "tests/test_delay_read.cpp": "e09f188cbaba28ee4b8d75ddd6eb8c4cf5b7fde4515942d0c4d068b13322c812",
+    "tools/audit_delay_reads.py": "7d3bc1c3a26adc4b3c6f13d0f014f6af101aed3f3974e044825dbd5a7bac6314",
+    "tools/test_rack_components.py": "beb911452444890fa763ee5e75a88eaa13d2a030560b7ea93715f0b81cd66913",
+    "tools/generate_color_trace.py": "257b6eb7b2c54c2a9bd5a6e49c62fc33046a9defecff4e7f359457c6060fb129",
+    "reconstruction/color_feedback_components.hpp": "339302f9542a40f2ad1e88bf6952a316786807241ce0ac9c4d94f5c3a8f7db85",
+    "tests/test_color_feedback.cpp": "db8e9853c37a8bc2d1a2f524005f9dc8811e4d059cfd9801ad2b1d2396ce86da",
+    "reconstruction/modulation_components.hpp": "3ee8df4721e5ae6199a66fd6d62b8d5839a2864113676a2615c2e17ef5e4ac0f",
+    "tests/test_modulation.cpp": "fce57648ac992d250b2146340d6c18a1af0cd4421b363b05715d4436605d74b1",
+    "tests/instruction_machine.hpp": "df74651de8966bd3409365dbba4223c801233e342ce7d2d2573be8de4dca3485",
+    "reconstruction/event_components.hpp": "21d375910de75d5bd64c0c952647888748788cd61e6d8f50d0310272a86b7702",
+    "tests/test_events.cpp": "a7cdf0be1e8599f3afbb914b61596bb3f34cb9d839a7db26bc3b69550193904e",
+    "reconstruction/hold_control_components.hpp": "3767e2e0980ee94aab7f246568befe302a70cf6f1a108095acf92bc4cfc8dfd8",
+    "tests/test_hold_control.cpp": "ed3476248743dd34e18fde072793b55b569dd3daedf0cb7a1fcc36bf5863f64b"
+  }
+}

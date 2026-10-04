@@ -1,5 +1,7 @@
 # Spectraphon SP67 — firmware and DSP reconstruction
 
+**Historical initial analysis:** [RACK_RECONSTRUCTION.md](RACK_RECONSTRUCTION.md) supplies the 2026-10-04 instruction-tested definitions and current gap status. All statements below about absent ARM execution or unresolved Noise/Chaos, phase, capture and output paths describe the initial pass, not current coverage. [CODEX_HANDOFF.md](CODEX_HANDOFF.md) reconciles all 15 original behavioral questions and maps current subsystems to executable evidence. The initial report is retained for provenance.
+
 **Analysis date:** 28 September 2026  
 **Input:** the user's `sp67.dat`, 178,932 bytes  
 **SHA-256:** `b50a87b9bd4f6ad90007918a16e8a4d033e2236c863faec55f5585abe34927d9`  

@@ -4,7 +4,17 @@
 
 Start with **REPORT.html** for the readable engineering report, or **REPORT.md** for an editor/agent-friendly version. **CODEX_HANDOFF.md** identifies what is already verified and what still needs tracing.
 
+**Rack-focused continuation (2026-10-04):** [analysis/RACK_RECONSTRUCTION.md](analysis/RACK_RECONSTRUCTION.md) maps delay-head fields, the four-tap quadratic read kernel, nonlinear time tracking, crossfade timing, input attenuation, and host-adaptation constraints. Selected reference components are in `reconstruction/delay_read_components.hpp`; `tools/audit_delay_reads.py` checks six instruction slices symbolically against the binary. This remains a partial reconstruction, not a complete Rack engine.
+
+The next [Color/Halo routing pass](analysis/COLOR_HALO_ROUTING.md) reconstructs Color's feedback, tap morphing and envelope compensation, maps all eight Halo writes, and distinguishes its two nonlinear curves. `reconstruction/color_feedback_components.hpp` is checked against bounded instruction sequences by the expanded `tools/test_rack_components.py` runner.
+
+The [modulation scheduler pass](analysis/MODULATION_SCHEDULER.md) adds the shared random generator, delay-expiry-driven velocity changes, asymmetric velocity resets, position boundary turns, startup values and exact unity-ratio counter synchronization. `reconstruction/modulation_components.hpp` has bitwise differential checks against five more bounded instruction slices.
+
+The [event transition pass](analysis/EVENT_TRANSITIONS.md) joins expiry arbitration with modulation updates and reconstructs request consumption and reverse-position windows. `reconstruction/event_components.hpp` preserves pending/fading status handling, Hold/Flip priority, cached Hold reads and existing gains on head changes. Native tests compare 31,312 event cases against three additional bounded instruction slices. Physical-input acquisition, Hold retargeting and full-frame integration remain open.
+
 ## Most useful files
+
+Latest continuation: [Hold and raw inputs](analysis/HOLD_AND_INPUTS.md) adds Hold entry/exit requests, offset motion and wrapping, shared token-update rules, raw Hold polling, and clock qualification. Its four bounded instruction slices pass 15,331 native differential cases. The UI callback is traced to TIM2; accepted-clock processing, physical port mapping and complete frame integration remain open. Earlier remaining-work lists are superseded by this pass where noted.
 
 | Path | Purpose |
 |---|---|

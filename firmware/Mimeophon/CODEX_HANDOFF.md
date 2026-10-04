@@ -2,6 +2,16 @@
 
 ## Objective
 
+Latest pass: [analysis/HOLD_AND_INPUTS.md](analysis/HOLD_AND_INPUTS.md) closes local Hold transport and retargeting, validates the raw Hold poll and clock-qualification prefix, and statically traces Flip's secondary gesture/save path. Four more bounded slices pass 15,331 differential cases. See `reconstruction/hold_control_components.hpp` and `tests/test_hold_control.cpp`. Continue with the accepted-clock handler, TIM2 clock-tree cadence, secondary UI/persistence behavior and frame integration. Hold offsets continue drifting during fades; retargeting skips wrapping when status is 2; either fading pair suppresses both token updates. Do not re-derive these stages from older remaining-work lists below.
+
+Continuation on 2026-10-04: read [analysis/RACK_RECONSTRUCTION.md](analysis/RACK_RECONSTRUCTION.md) before repeating the delay-head/read-kernel work below. It adds field-offset evidence, six symbolically audited read kernels, finite-input C++ reference helpers and native tests. Full event arbitration, complete routing, and CPU/hardware equivalence remain open. `analysis/delay_read_audit.json` is the new symbolic check record; the original validation record describes the earlier extraction pass.
+
+The subsequent [Color/Halo pass](analysis/COLOR_HALO_ROUTING.md) closes the finite Color core, envelope multiplier, eight Halo write destinations and final wet-shaper equations. Its reference components pass 8,192 Color and 128 Halo-tail comparisons against byte-checked, host-executed instruction slices. These are bounded tests, not CPU or hardware equivalence.
+
+The [modulation pass](analysis/MODULATION_SCHEDULER.md) recovers startup, shared LCG ordering, expiry-triggered velocity changes, asymmetric limit resets, per-frame position turns and exact unity-ratio counter synchronization. Five additional instruction slices check `reconstruction/modulation_components.hpp`; exact counts are in `analysis/continuation_validation.json`. Continue with clock/Hold/Flip event arbitration, exceptional-value guards and frame integration. Do not substitute independent random generators, a sine LFO, overshoot reflection or epsilon-based unity detection.
+
+The [event pass](analysis/EVENT_TRANSITIONS.md) now covers the entire sample expiry prefix through both random updates, request consumption for both head pairs, and the selected-head reverse stage. Its 31,312 native differential cases compare all fixture memory writes and the transient restart flags. Expiry suppresses requests for non-idle pairs but still advances RNG; reverse windows can overwrite a fading status; request consumption retains gains. Remaining event work is physical-input/clock acquisition, Hold's retargeting window and integration with downstream status writes. Preserve the cached Hold value separately from live Hold reads. See `reconstruction/event_components.hpp` and `tests/test_events.cpp`.
+
 Continue from a completely decoded application image toward a testable understanding of the DSP. Do not spend the first phase reimplementing a generic FSK modem or estimating tables from the front-panel manual: the bytes and several key structures are already recovered.
 
 Read `REPORT.md`, `analysis/artifact_status.json`, `analysis/validation_results.json`, and `tables/table_manifest.json` before writing DSP replacement code.

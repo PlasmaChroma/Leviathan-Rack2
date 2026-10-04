@@ -24,17 +24,30 @@ def signed32(x: int) -> int:
 
 # Native fmaf avoids the double-rounding ambiguity of f32(a*b+c).
 _fmaf=None
-for libname in (ctypes.util.find_library('m'), None):
+for libname in (ctypes.util.find_library('m'), 'ucrtbase.dll', None):
     try:
         lib=ctypes.CDLL(libname); fun=lib.fmaf
         fun.argtypes=(ctypes.c_float,ctypes.c_float,ctypes.c_float);fun.restype=ctypes.c_float
         _fmaf=fun;break
-    except (OSError,AttributeError): pass
+    except (OSError,AttributeError,TypeError): pass
 
 def fma32(a: float,b: float,c: float) -> float:
     if _fmaf is None:
         raise RuntimeError('A C library providing fmaf is required for this exact float32 helper')
     return float(_fmaf(f32(a),f32(b),f32(c)))
+
+_fma64=None
+if _fmaf is not None:
+    try:
+        _fma64=lib.fma
+        _fma64.argtypes=(ctypes.c_double,ctypes.c_double,ctypes.c_double)
+        _fma64.restype=ctypes.c_double
+    except AttributeError: pass
+
+def fma64(a: float,b: float,c: float) -> float:
+    if _fma64 is None:
+        raise RuntimeError('A C library providing fma is required for this exact float64 helper')
+    return float(_fma64(a,b,c))
 
 @functools.lru_cache(maxsize=16)
 def table(name: str) -> tuple[float,...]:
