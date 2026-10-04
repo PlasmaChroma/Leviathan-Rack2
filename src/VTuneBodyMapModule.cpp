@@ -84,7 +84,7 @@ void VTune::dataFromJson(json_t* root) {
     if (json_is_integer(mode)) {
         const json_int_t value = json_integer_value(mode);
         if (value >= int(vtune_body::Mode::Report) && value <= int(vtune_body::Mode::Off))
-            bodyMapMode.store(static_cast<int>(value), std::memory_order_relaxed);
+            bodyMapMode.store(int(vtune_body::sanitizeMode(static_cast<int>(value))), std::memory_order_relaxed);
     }
     const json_t* opacity = json_object_get(root, "bodyMapOpacity");
     if (json_is_number(opacity)) {

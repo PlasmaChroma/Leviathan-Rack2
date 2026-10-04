@@ -11,8 +11,8 @@ enum class Mode : int { Report = 0, Symbolic = 1, Combined = 2, Off = 3 };
 using Weights = std::array<float, kLayerCount>;
 
 inline Mode sanitizeMode(int value) noexcept {
-    return value >= int(Mode::Report) && value <= int(Mode::Off)
-        ? static_cast<Mode>(value) : Mode::Report;
+    // Retired Symbolic/Combined selections migrate to full-strength body shading.
+    return value == int(Mode::Off) ? Mode::Off : Mode::Report;
 }
 inline float unit(float x) noexcept {
     return std::isfinite(x) ? std::max(0.f, std::min(1.f, x)) : 0.f;

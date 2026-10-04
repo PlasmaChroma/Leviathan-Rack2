@@ -72,6 +72,8 @@ int main() {
     assert(near(reportSum(evaluate(528.f,Mode::Combined)),kCombinedReportGain));
     assert(near(evaluate(528.f,Mode::Combined)[kBandCount+2],kCombinedSymbolicGain));
     assert(sanitizeMode(100)==Mode::Report && sanitizeMode(-1)==Mode::Report);
+    assert(sanitizeMode(1)==Mode::Report && sanitizeMode(2)==Mode::Report);
+    assert(sanitizeMode(3)==Mode::Off);
     // Equal wall-clock times give the same interpolation at different UI FPS.
     Animation a,b;
     const auto target=evaluate(45.f,Mode::Report);

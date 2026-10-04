@@ -144,7 +144,7 @@ void bodyMapTelemetry() {
     tune.bodyMapMode.store(2); tune.bodyMapOpacity.store(.85f);
     json_t* saved = tune.dataToJson();
     VTune restored; restored.dataFromJson(saved); json_decref(saved);
-    require(restored.bodyMapMode.load() == 2 && restored.bodyMapOpacity.load() == .85f
+    require(restored.bodyMapMode.load() == 0 && restored.bodyMapOpacity.load() == .85f
         && restored.bodyFrequencyHz.load() == 0.f, "body map persistence or transient state failed");
     saved = json_object(); restored.dataFromJson(saved);
     require(restored.bodyMapMode.load() == 0 && restored.bodyMapOpacity.load() == vtune_body::kDefaultOpacity,

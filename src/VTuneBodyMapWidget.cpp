@@ -14,12 +14,12 @@ constexpr std::size_t kOutlineSlot = kLayerCount + 1;
 constexpr float kDrawEpsilon = 1.f / 1024.f;
 const char* modeName(Mode mode) {
     switch (mode) {
-        case Mode::Report: return "Report regions (illustrative)";
-        case Mode::Symbolic: return "Solfeggio (symbolic)";
-        case Mode::Combined: return "Combined (illustrative + symbolic)";
-        case Mode::Off: return "Off (outline only)";
+        case Mode::Report: return "Body shading on";
+        case Mode::Symbolic:
+        case Mode::Combined: return "Body shading on";
+        case Mode::Off: return "Body shading off (chakra LEDs only)";
     }
-    return "Report regions (illustrative)";
+    return "Body shading on";
 }
 }
 
@@ -205,12 +205,13 @@ struct BodyMenu final : rack::ui::MenuItem {
     VTune* module = nullptr;
     rack::ui::Menu* createChildMenu() override {
         auto* menu = new rack::ui::Menu;
-        for (Mode choice : {Mode::Report, Mode::Symbolic, Mode::Combined, Mode::Off}) {
+        for (Mode choice : {Mode::Report, Mode::Off}) {
             auto* item = new ModeItem;
             item->module = module; item->choice = choice; item->text = modeName(choice);
             menu->addChild(item);
         }
         menu->addChild(new rack::ui::MenuSeparator);
+        menu->addChild(rack::createMenuLabel("Body shading intensity"));
         for (float value : {.35f, kDefaultOpacity, .85f}) {
             auto* item = new OpacityItem;
             item->module = module; item->choice = value;
@@ -219,6 +220,7 @@ struct BodyMenu final : rack::ui::MenuItem {
         }
         menu->addChild(new rack::ui::MenuSeparator);
         menu->addChild(rack::createMenuLabel("Sound+Body associations, not measured organ activity"));
+        menu->addChild(rack::createMenuLabel("Chakra LEDs follow the bowl color independently"));
         const float hz = module ? module->bodyFrequencyHz.load(std::memory_order_relaxed) : 0.f;
         if (validFrequency(hz)) {
             char text[96];
