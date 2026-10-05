@@ -1,0 +1,98 @@
+Shared Memory allocation
+[shmem 61019 250]
+
+0 SCP Scan Pot
+1 LEN Length Pot/CV
+2 VPO v/oct
+3 PI  Pitch
+4 LYC Layer CV
+5 LYP Layer Pot
+6 DW Dry/Wet
+7 SCC Scan CV
+8 HOL Hold
+9 SPR Spray
+10 DIR DIrection
+11 DUB Overdub
+12 INT Intensity
+13 MOD Mod
+14 TEX Texture
+15 DEV Deviation
+
+20 capture button
+21 capture CV
+22 strike button
+23 strike CV
+24 shift
+25
+26
+
+Shared Memory allocation
+[shmem 61019 250]
+
+30 playLayer
+31 recLayer
+32 layersCoupled
+33 record
+34 recordAccum
+35 triggerGrain
+36 followMode
+37 phaseShift
+38 HOL Hold
+39 SPR Spray
+
+
+
+
+Shared Memory allocation
+[shmem 61019 250]
+
+100 Position in ms
+101 Length in ms
+102 pitch in Hz
+103 pitch in midi notes
+104 N/a
+105 n/a
+106 n/a
+107 n/a
+108 n/a
+109 n/a
+110 position in LEDs
+111 length in LEDs
+112 n/a
+113 n/a
+114 n/a
+115 n/a
+
+249 recording position 
+
+
+Arbhar Controls
+
+Input (analog)
+Dry/Wet (Pot + CV)  dw   0 6
+Output (analog)
+Sense (analog)
+Hold (Pot only)    hol   1 0
+Dub (Pot + CV)    dub   1 3
+Deviation (Pot + CV)  dev   1 7
+Texture (Pot + CV)   tex   1 6
+Direction (Pot + CV)   dir  1 2
+Pitch (Pot only)     pi   0 3
+Intensity (Pot + CV)   int   1 4
+Length (Pot + CV)    len   0 1
+Layer (Pot only)     lyp   0 5
+Spray (Pot + CV)    spr   1 1
+Scan (Pot only)     scp   0 0
+
+Scan CV        scc   0 7
+Layer CV      lyc    0 4
+v/oct CV      vpo    0 2
+Mod CV      mod    1 5
+
+Shift
+Capture
+Strike
+
+Switch AB		pin 23
+Switch XY		pin 26
+

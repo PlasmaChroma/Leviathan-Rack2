@@ -1,0 +1,8 @@
+#N canvas 513 218 590 456 12;
+#X obj 88 181 dac~;
+#X obj 92 67 osc~ 880;
+#X obj 91 125 main_out_stereo~ 0.2 -0.5;
+#X connect 1 0 2 0;
+#X connect 1 0 2 1;
+#X connect 2 0 0 0;
+#X connect 2 1 0 1;

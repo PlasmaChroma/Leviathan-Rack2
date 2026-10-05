@@ -1,0 +1,890 @@
+[
+  {
+    "address": 65844,
+    "text": "/lib/ld-uClibc.so.0"
+  },
+  {
+    "address": 69005,
+    "text": "__register_frame_info"
+  },
+  {
+    "address": 69027,
+    "text": "strftime"
+  },
+  {
+    "address": 69036,
+    "text": "__errno_location"
+  },
+  {
+    "address": 69053,
+    "text": "memcpy"
+  },
+  {
+    "address": 69060,
+    "text": "strlen"
+  },
+  {
+    "address": 69067,
+    "text": "_ITM_deregisterTMCloneTable"
+  },
+  {
+    "address": 69095,
+    "text": "_ITM_registerTMCloneTable"
+  },
+  {
+    "address": 69121,
+    "text": "memmove"
+  },
+  {
+    "address": 69129,
+    "text": "pthread_create"
+  },
+  {
+    "address": 69144,
+    "text": "memset"
+  },
+  {
+    "address": 69151,
+    "text": "abort"
+  },
+  {
+    "address": 69157,
+    "text": "vsnprintf"
+  },
+  {
+    "address": 69167,
+    "text": "__deregister_frame_info"
+  },
+  {
+    "address": 69191,
+    "text": "_ZNSt6localeD1Ev"
+  },
+  {
+    "address": 69208,
+    "text": "_ZSt20__throw_length_errorPKc"
+  },
+  {
+    "address": 69238,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_assignERKS4_"
+  },
+  {
+    "address": 69308,
+    "text": "_ZNSt14overflow_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 69387,
+    "text": "_ZNSt16invalid_argumentC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 69468,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcj"
+  },
+  {
+    "address": 69537,
+    "text": "_ZNSt6thread15_M_start_threadESt10unique_ptrINS_6_StateESt14default_deleteIS1_EEPFvvE"
+  },
+  {
+    "address": 69623,
+    "text": "_ZSt9terminatev"
+  },
+  {
+    "address": 69639,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag"
+  },
+  {
+    "address": 69742,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE5clearESt12_Ios_Iostate"
+  },
+  {
+    "address": 69802,
+    "text": "_ZNSt13runtime_errorD2Ev"
+  },
+  {
+    "address": 69827,
+    "text": "_ZNSt8ios_baseD2Ev"
+  },
+  {
+    "address": 69846,
+    "text": "_ZTISt9exception"
+  },
+  {
+    "address": 69863,
+    "text": "_ZdlPvj"
+  },
+  {
+    "address": 69871,
+    "text": "_ZNSt13runtime_errorC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 69949,
+    "text": "_ZNSt6chrono3_V212system_clock3nowEv"
+  },
+  {
+    "address": 69986,
+    "text": "__aeabi_atexit"
+  },
+  {
+    "address": 70001,
+    "text": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EERKS8_SA_"
+  },
+  {
+    "address": 70078,
+    "text": "_ZNSt13runtime_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 70156,
+    "text": "_ZTISt14overflow_error"
+  },
+  {
+    "address": 70179,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEj"
+  },
+  {
+    "address": 70243,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EOS4_"
+  },
+  {
+    "address": 70304,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv"
+  },
+  {
+    "address": 70354,
+    "text": "_ZNKSt13runtime_error4whatEv"
+  },
+  {
+    "address": 70383,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKc"
+  },
+  {
+    "address": 70448,
+    "text": "_ZTVSt15basic_streambufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 70493,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_replaceEjjPKcj"
+  },
+  {
+    "address": 70566,
+    "text": "_ZNSt16invalid_argumentD1Ev"
+  },
+  {
+    "address": 70594,
+    "text": "_ZNSt8ios_base4InitD1Ev"
+  },
+  {
+    "address": 70618,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 70664,
+    "text": "__cxa_throw"
+  },
+  {
+    "address": 70676,
+    "text": "_ZTVN10__cxxabiv117__class_type_infoE"
+  },
+  {
+    "address": 70714,
+    "text": "_ZTVN10__cxxabiv120__si_class_type_infoE"
+  },
+  {
+    "address": 70755,
+    "text": "__cxa_begin_catch"
+  },
+  {
+    "address": 70773,
+    "text": "_ZTISt13runtime_error"
+  },
+  {
+    "address": 70795,
+    "text": "_ZSt4cerr"
+  },
+  {
+    "address": 70805,
+    "text": "_ZdlPv"
+  },
+  {
+    "address": 70812,
+    "text": "_ZNSt14overflow_errorD1Ev"
+  },
+  {
+    "address": 70838,
+    "text": "_ZNSt8ios_baseC2Ev"
+  },
+  {
+    "address": 70857,
+    "text": "_ZNSt6thread6_StateD2Ev"
+  },
+  {
+    "address": 70881,
+    "text": "__cxa_allocate_exception"
+  },
+  {
+    "address": 70906,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode"
+  },
+  {
+    "address": 70974,
+    "text": "__gxx_personality_v0"
+  },
+  {
+    "address": 70995,
+    "text": "_ZTINSt6thread6_StateE"
+  },
+  {
+    "address": 71018,
+    "text": "__cxa_end_cleanup"
+  },
+  {
+    "address": 71036,
+    "text": "_ZNSt13runtime_errorD1Ev"
+  },
+  {
+    "address": 71061,
+    "text": "_ZTVSt13basic_filebufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 71104,
+    "text": "_ZSt16__ostream_insertIcSt11char_traitsIcEERSt13basic_ostreamIT_T0_ES6_PKS3_i"
+  },
+  {
+    "address": 71182,
+    "text": "_ZNSt12__basic_fileIcED1Ev"
+  },
+  {
+    "address": 71209,
+    "text": "_ZTISt16invalid_argument"
+  },
+  {
+    "address": 71234,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERjj"
+  },
+  {
+    "address": 71302,
+    "text": "_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_PKc"
+  },
+  {
+    "address": 71358,
+    "text": "_Znwj"
+  },
+  {
+    "address": 71364,
+    "text": "_ZTVSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 71407,
+    "text": "_ZTVSt9basic_iosIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 71445,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE4initEPSt15basic_streambufIcS1_E"
+  },
+  {
+    "address": 71514,
+    "text": "_ZNSt8ios_base4InitC1Ev"
+  },
+  {
+    "address": 71538,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEEC1Ev"
+  },
+  {
+    "address": 71584,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 71642,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_mutateEjjPKcj"
+  },
+  {
+    "address": 71713,
+    "text": "_ZTTSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 71756,
+    "text": "_ZSt4cout"
+  },
+  {
+    "address": 71766,
+    "text": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_RKS8_"
+  },
+  {
+    "address": 71845,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6insertEjPKc"
+  },
+  {
+    "address": 71911,
+    "text": "_ZNSt13basic_fstreamIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 71957,
+    "text": "__cxa_end_catch"
+  },
+  {
+    "address": 71973,
+    "text": "_ZSt19__throw_logic_errorPKc"
+  },
+  {
+    "address": 72002,
+    "text": "__cxa_free_exception"
+  },
+  {
+    "address": 72023,
+    "text": "__aeabi_unwind_cpp_pr0"
+  },
+  {
+    "address": 72046,
+    "text": "__aeabi_unwind_cpp_pr1"
+  },
+  {
+    "address": 72069,
+    "text": "__aeabi_ldivmod"
+  },
+  {
+    "address": 72085,
+    "text": "sem_wait"
+  },
+  {
+    "address": 72094,
+    "text": "sem_trywait"
+  },
+  {
+    "address": 72106,
+    "text": "sem_post"
+  },
+  {
+    "address": 72115,
+    "text": "sem_unlink"
+  },
+  {
+    "address": 72126,
+    "text": "shm_open"
+  },
+  {
+    "address": 72135,
+    "text": "localtime"
+  },
+  {
+    "address": 72145,
+    "text": "ftruncate64"
+  },
+  {
+    "address": 72157,
+    "text": "sem_close"
+  },
+  {
+    "address": 72167,
+    "text": "__uClibc_main"
+  },
+  {
+    "address": 72181,
+    "text": "sem_open"
+  },
+  {
+    "address": 72190,
+    "text": "munmap"
+  },
+  {
+    "address": 72197,
+    "text": "signal"
+  },
+  {
+    "address": 72204,
+    "text": "sem_timedwait"
+  },
+  {
+    "address": 72218,
+    "text": "mmap64"
+  },
+  {
+    "address": 72225,
+    "text": "shm_unlink"
+  },
+  {
+    "address": 72236,
+    "text": "libstdc++.so.6"
+  },
+  {
+    "address": 72251,
+    "text": "libgcc_s.so.1"
+  },
+  {
+    "address": 72265,
+    "text": "libc.so.0"
+  },
+  {
+    "address": 72275,
+    "text": "GCC_3.5"
+  },
+  {
+    "address": 72283,
+    "text": "GLIBCXX_3.4.9"
+  },
+  {
+    "address": 72297,
+    "text": "CXXABI_ARM_1.3.3"
+  },
+  {
+    "address": 72314,
+    "text": "CXXABI_1.3.9"
+  },
+  {
+    "address": 72327,
+    "text": "GLIBCXX_3.4.22"
+  },
+  {
+    "address": 72342,
+    "text": "CXXABI_1.3"
+  },
+  {
+    "address": 72353,
+    "text": "GLIBCXX_3.4.19"
+  },
+  {
+    "address": 72368,
+    "text": "GLIBCXX_3.4.21"
+  },
+  {
+    "address": 72383,
+    "text": "GLIBCXX_3.4"
+  },
+  {
+    "address": 79840,
+    "text": "fff?"
+  },
+  {
+    "address": 79886,
+    "text": "L?0@-"
+  },
+  {
+    "address": 114044,
+    "text": "vector::_M_realloc_insert"
+  },
+  {
+    "address": 114072,
+    "text": "basic_string::_M_construct null not valid"
+  },
+  {
+    "address": 114116,
+    "text": "basic_string::append"
+  },
+  {
+    "address": 114140,
+    "text": ": erase triggered"
+  },
+  {
+    "address": 114160,
+    "text": ": erase completed"
+  },
+  {
+    "address": 114184,
+    "text": " started running"
+  },
+  {
+    "address": 114204,
+    "text": "Left"
+  },
+  {
+    "address": 114212,
+    "text": "Right"
+  },
+  {
+    "address": 114220,
+    "text": "/LubadhShM_"
+  },
+  {
+    "address": 114232,
+    "text": "/LubadhSem_"
+  },
+  {
+    "address": 114244,
+    "text": "2.1.0"
+  },
+  {
+    "address": 114252,
+    "text": "EraseTrigger"
+  },
+  {
+    "address": 114268,
+    "text": "EraseFlag"
+  },
+  {
+    "address": 114280,
+    "text": "Samples_"
+  },
+  {
+    "address": 114292,
+    "text": "EoD_"
+  },
+  {
+    "address": 114300,
+    "text": "PreviewBuffer"
+  },
+  {
+    "address": 114316,
+    "text": "PresetArray"
+  },
+  {
+    "address": 114328,
+    "text": "PresetToLoad"
+  },
+  {
+    "address": 114344,
+    "text": "PresetStatus"
+  },
+  {
+    "address": 114360,
+    "text": "LoadToChannels"
+  },
+  {
+    "address": 114376,
+    "text": "PresetInitLoad"
+  },
+  {
+    "address": 114392,
+    "text": "PresetTrigLoad"
+  },
+  {
+    "address": 114408,
+    "text": "PresetCopied"
+  },
+  {
+    "address": 114424,
+    "text": "PresetMap"
+  },
+  {
+    "address": 114436,
+    "text": "PresetName"
+  },
+  {
+    "address": 114448,
+    "text": "PresetSlot"
+  },
+  {
+    "address": 114472,
+    "text": "samples/"
+  },
+  {
+    "address": 114484,
+    "text": "load/"
+  },
+  {
+    "address": 114492,
+    "text": "saved/"
+  },
+  {
+    "address": 114500,
+    "text": "FileLoadStatus"
+  },
+  {
+    "address": 114516,
+    "text": "MapFileTree"
+  },
+  {
+    "address": 114528,
+    "text": "SampleFileTree"
+  },
+  {
+    "address": 114544,
+    "text": "FileToLoad"
+  },
+  {
+    "address": 114556,
+    "text": "ImportFile"
+  },
+  {
+    "address": 114568,
+    "text": "LoadedLength"
+  },
+  {
+    "address": 114584,
+    "text": "Preview"
+  },
+  {
+    "address": 114592,
+    "text": "PreviewTrigger"
+  },
+  {
+    "address": 114608,
+    "text": "FileToPreview"
+  },
+  {
+    "address": 114624,
+    "text": "PreviewStatus"
+  },
+  {
+    "address": 114640,
+    "text": "PreviewChannels"
+  },
+  {
+    "address": 114656,
+    "text": ".raw"
+  },
+  {
+    "address": 114664,
+    "text": "SampleSave"
+  },
+  {
+    "address": 114676,
+    "text": "SampleSaveLength"
+  },
+  {
+    "address": 114696,
+    "text": "SampleSaveStatus"
+  },
+  {
+    "address": 114716,
+    "text": "autosave/"
+  },
+  {
+    "address": 114728,
+    "text": "audio/"
+  },
+  {
+    "address": 114736,
+    "text": "settings/"
+  },
+  {
+    "address": 114748,
+    "text": ".dat"
+  },
+  {
+    "address": 114756,
+    "text": ".hjson"
+  },
+  {
+    "address": 114764,
+    "text": "tracker.txt"
+  },
+  {
+    "address": 114776,
+    "text": "AutosaveStart"
+  },
+  {
+    "address": 114792,
+    "text": "AutosaveData"
+  },
+  {
+    "address": 114808,
+    "text": "Shared memory: error unmapping object "
+  },
+  {
+    "address": 114848,
+    "text": ": internal error"
+  },
+  {
+    "address": 114872,
+    "text": " error code "
+  },
+  {
+    "address": 114888,
+    "text": "Shared memory: error when unlinking shared memory "
+  },
+  {
+    "address": 114940,
+    "text": ": permission denied"
+  },
+  {
+    "address": 114960,
+    "text": ": file error"
+  },
+  {
+    "address": 114976,
+    "text": "Shared memory: could not open "
+  },
+  {
+    "address": 115008,
+    "text": ": invalid name"
+  },
+  {
+    "address": 115024,
+    "text": ": too many files open"
+  },
+  {
+    "address": 115048,
+    "text": ": filename too long"
+  },
+  {
+    "address": 115068,
+    "text": ": error code "
+  },
+  {
+    "address": 115084,
+    "text": "Shared memory: could not create shared memory object "
+  },
+  {
+    "address": 115140,
+    "text": " of size "
+  },
+  {
+    "address": 115156,
+    "text": " bytes"
+  },
+  {
+    "address": 115164,
+    "text": ": larger than maximum file size"
+  },
+  {
+    "address": 115196,
+    "text": ": interrupted by signal"
+  },
+  {
+    "address": 115220,
+    "text": "Shared memory: error mapping memory object "
+  },
+  {
+    "address": 115264,
+    "text": ": permissions/file error"
+  },
+  {
+    "address": 115292,
+    "text": ": locking error"
+  },
+  {
+    "address": 115308,
+    "text": ": too large"
+  },
+  {
+    "address": 115320,
+    "text": ": filesystem does not support mamory mapping"
+  },
+  {
+    "address": 115368,
+    "text": ": no memory available or too many mappings"
+  },
+  {
+    "address": 115412,
+    "text": ": file sealed or execution denied"
+  },
+  {
+    "address": 115448,
+    "text": "Shared memory: error when closing file "
+  },
+  {
+    "address": 115488,
+    "text": " with descriptor "
+  },
+  {
+    "address": 115508,
+    "text": "N3shm9FileErrorE"
+  },
+  {
+    "address": 115540,
+    "text": "N3shm11MemoryErrorE"
+  },
+  {
+    "address": 115572,
+    "text": "N3shm13_SharedMemoryILj1EEE"
+  },
+  {
+    "address": 115608,
+    "text": "N3shm6ObjectIbEE"
+  },
+  {
+    "address": 115640,
+    "text": "N3shm13_SharedMemoryILj118008000EEE"
+  },
+  {
+    "address": 115684,
+    "text": "N3shm5ArrayIfLj29502000EEE"
+  },
+  {
+    "address": 115940,
+    "text": "*NSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlN6lubadh11_ChannelIDsEE0_S4_EEEEEE"
+  },
+  {
+    "address": 116032,
+    "text": "Failed to open Semaphore "
+  },
+  {
+    "address": 116060,
+    "text": "initial value too big"
+  },
+  {
+    "address": 116084,
+    "text": "invalid name"
+  },
+  {
+    "address": 116100,
+    "text": "permission denied"
+  },
+  {
+    "address": 116120,
+    "text": "too many files open"
+  },
+  {
+    "address": 116140,
+    "text": "insufficient memory"
+  },
+  {
+    "address": 116160,
+    "text": "Semaphore "
+  },
+  {
+    "address": 116172,
+    "text": ": internal error (destructor)"
+  },
+  {
+    "address": 116204,
+    "text": ": permission denied to unlink"
+  },
+  {
+    "address": 116236,
+    "text": ": invalid name"
+  },
+  {
+    "address": 116252,
+    "text": "internal error (wait)"
+  },
+  {
+    "address": 116276,
+    "text": "interrupted by signal"
+  },
+  {
+    "address": 116300,
+    "text": ": internal error (post)"
+  },
+  {
+    "address": 116324,
+    "text": ": internal error (wait_for/until)"
+  },
+  {
+    "address": 116360,
+    "text": "[INFO]"
+  },
+  {
+    "address": 116368,
+    "text": "[WARNING]"
+  },
+  {
+    "address": 116380,
+    "text": "[ERROR]"
+  },
+  {
+    "address": 116388,
+    "text": "YYYY-MM-DD "
+  },
+  {
+    "address": 116400,
+    "text": "%Y-%m-%d "
+  },
+  {
+    "address": 116412,
+    "text": "HH:MM:SS"
+  },
+  {
+    "address": 116424,
+    "text": "%H:%M:%S"
+  },
+  {
+    "address": 116436,
+    "text": "%lld"
+  },
+  {
+    "address": 116444,
+    "text": "Failed to log message with error: "
+  },
+  {
+    "address": 116480,
+    "text": "log.txt"
+  }
+]

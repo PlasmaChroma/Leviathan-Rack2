@@ -1,0 +1,2 @@
+#N canvas 0 351 450 300 12;
+#X obj 77 83 slot_selector;

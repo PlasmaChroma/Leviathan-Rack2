@@ -1,0 +1,543 @@
+#ARB
+/*
+    Instruō arbhar V2 Configuration (REVISION 1)
+    ---------------------------------------------------------------------------------------------
+    arbhar's user interface has been developed with live performance in mind, giving direct and 
+    immediate control over all parameters of the granular playback engine. However, there are 
+    various audio-processing parameters, as well as control approaches, that might not need
+    immediate influence. Nevertheless, these parameters allow for changes to abhar's 
+    configuration that will enable particular workflow and performances approaches.
+
+    This configuration file will outline these parameters, give an overview of the possible 
+    parameter settings, and allow for saving user configurations.
+
+    Please note that a valid arbhar preset file has to have the #ARB identification at the 
+    beginning of the file (identical to the identification at the top of this file).
+*/
+
+
+{
+    /*
+    ---------------------------------------------------------------------------------------------
+    Preset Name
+    ---------------------------------------------------------------------------------------------
+    The preset name is optional. Use it for your own purpose to identify different preset 
+    configurations.
+    */
+	
+   PRESET_NAME: "arbhar Classic"
+    
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Load Mode: Presets, Layers, and Scenes
+    ---------------------------------------------------------------------------------------------
+    arbhar can load Presets, Layers, and Scenes.
+   
+    'Load Preset' will load all parameters defined in the configuration file and ignore any 
+    audio files that are present in the _arbhar_scene directory. The parameters will set arbhar 
+    to the defined configuration and may change the control behaviour of arbhar drastically, but 
+    all content in the layers will be preserved. This option is equal to only having a 
+    configuration file in the directory.
+
+    'Load Layers' will load the first 6 audio files present in the _arbhar_scene directory, 
+    and ignore all the parameters defined in the configuration file. The control behaviour of the 
+    arbhar will remain the same, but the audio files in the layers will be replaced. This 
+    option is equal to having audio files in the directory, but no configuration file.
+
+    'Load Scene' will load all parameters defined in this configuration file and
+    The first 6 audio files present in the _arbhar_scene directory.
+
+        0 - Load Nothing
+        1 - Load Preset 
+        2 - Load Layers
+        3 - Load Scene (Preset and Layers) (Default)
+    */
+
+   PARAMETER: LoadConfiguration: 3
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Mod CV Input Configuration
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the target of the Mod CV Input and replaces the hardware configuration set by 
+    the physical switches on the module. 
+
+    If an older arbhar hardware revision is used, the V2 firmware disables the functionality of 
+    the Hardware Configuration Switches entirely. For this reason, newer hardware revisions do 
+    not have the Hardware Configuration Switches installed.
+
+    Panning: Sets the curated distribution amount of the stereo panning.
+    Hold:    Sets the duration of the Hold parameter.
+    Reverb:  Sets the curated controls of the stereo reverb.
+    Delay:   Sets the curated controls of the feedback/delay.
+
+        0 - None
+        1 - Panning (Default)
+        2 - Hold
+        3 - Reverb
+        4 - Delay
+    */
+
+   PARAMETER: ModCV: 3
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Mod Parameter Default Values
+    ---------------------------------------------------------------------------------------------
+    arbhar can access all available Mod parameters simultaneously. 
+
+    However, as only one parameter can be controlled via the Mod CV Input, a control voltage 
+    value can be defined (use floating-point values between 5 and -5). This will enable the user to 
+    measure a control voltage source and enter it as a Mod parameter default value. Set value in 
+    volts.
+ 
+        Panning - 0 (Default)
+        Hold - 0 (Default)
+        Reverb - 0 (Default)
+        Delay - 0 (Default
+    */
+  
+   PARAMETER: PanningDefaultValue: 0
+   PARAMETER: HoldDefaultValue: 0
+   PARAMETER: ReverbDefaultValue: 0
+   PARAMETER: DelayDefaultValue: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Mono and Stereo Capture Modes
+    ---------------------------------------------------------------------------------------------
+    arbhar can function in both mono or stereo input configurations.
+
+        0 - Mono (Default)
+        1 - Stereo
+    */
+
+   PARAMETER: InputMode: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Phase Switch
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the phase relationship of the audio outputs. 
+
+    By default, arbhar's Output 2 is phase-inverted from Output 1. If mono input/mono output 
+    patching is desired, set the Phase Switch to mono. If mono input/stereo output patching is 
+    desired, set the Phase Switch to Stereo. If stereo input/stereo output patching is desired, 
+    set the Phase Switch to stereo.
+
+        0 - Mono (Default)
+        1 - Stereo
+    */
+
+   PARAMETER: PhaseSwitch: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Onset Input Analog Emulation
+    ---------------------------------------------------------------------------------------------
+    arbhar allows for analog emulation for the Onset Input. 
+
+    Because arbhar's top input incorporates analogue limiting and it's Onset Input does not, 
+    analog emulation can be enabled for the Onset Input, so that both inputs affect the input 
+    signal similarly in Stereo Capture Mode. If the user has a lárachd module, the Enhance I/O 
+    can be used instead of arbhar's analog emulation.
+
+        0 - Disable
+        1 - Enable (Default)
+    */
+
+   PARAMETER: AnalogueEmulation: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Capture Mode: Momentary, Latching, and Retrigger
+    ---------------------------------------------------------------------------------------------
+    arbhar can set 1 of 3 captures modes: Momentary, Latching, and Retrigger. 
+   
+    Momentary Capture Mode will record for as long as the signal present at the Capture Gate
+    Input is held HIGH. This is best used with gate signals. 
+
+    Latching Capture Mode will start recording when a hard-edge signal is received at the Capture 
+    Gate Input and will continue recording until another hard-edge signal is received. This is 
+    best used with trigger signals. 
+
+    Retrigger Capture Mode will restart recording with every hard-edge signal received at the 
+    Capture Gate Input, but will not interfere with the capture state.
+
+        0 - Latching 
+        1 - Momentary (Default)
+        2 - Retrigger
+    */
+
+   PARAMETER: CaptureCvMode: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Onset Control Modes
+    ---------------------------------------------------------------------------------------------
+    arbhar features 7 Onset Detection modes that analyse the incoming audio for significant 
+    spectral changes in order to estimate the start of new sonic events.
+ 
+        alpha:   Onset detection of an audio signal triggers recording. With every generated 
+                 grain, a trigger signal is generated at the Gate Output.
+        beta:    Onset detection of an audio signal triggers recording. A gate signal is
+                 generated at the Gate Output and is held HIGH for a duration set by the
+                 Hold parameter.
+        gamma:   With every generated grain, a trigger signal is generated at the Gate 
+                 Output. An additional trigger signal is generated upon Onset analysis.
+        delta:   A gate signal is generated at the Gate Output and is held HIGH for a
+                 duration set by the Hold parameter.
+        epsilon: Pressing the Strike Button will generate a trigger signal at the Gate 
+                 Output.
+        zeta:    In Follow Mode, a trigger signal with generate at the Gate Output at 
+                 the end of layer playback.
+
+        Note:    In Stereo Capture Mode, the link between the onset detection and the capture 
+                 triggering is disabled (i.e. alpha and beta become gamma and delta, but do 
+                 not change visually).
+
+        1 - alpha (Default)
+        2 - beta
+        3 - gamma
+        4 - delta
+        5 - epsilon
+        6 - zeta
+    */
+
+   PARAMETER: OnsetMode: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Strike Button to Trigger Gate Signal
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the Strike Button to generate a trigger signal at the Gate Output when 
+    pressed.
+
+    If this feature is disabled, pressing the Strike Button will not generate a trigger signal at 
+    the Gate Output. If this feature is enabled, pressing the Strike Button will generate a 
+    trigger signal at the Gate Output.
+
+        0 - Disable (Default)
+        1 - Enable
+    */
+
+   PARAMETER: StrikeButtonToTrigger: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode
+    ---------------------------------------------------------------------------------------------
+    arbhar can be set to either Scan Mode or Follow Mode. 
+
+    In Scan Mode, the Scan Knob will move through the layer, setting the Scan parameter at any 
+    position to freeze audio playback.
+    
+    In Follow Mode the Scan Knob becomes a speed control for the grains to progress through the 
+    recorded material. This mode allows for changing playback speed of layers independent of 
+    pitch control. The Scan Knob controls from 20x speed (fully anticlockwise) to a 1/20th in 
+    speed (fully clockwise).
+
+        0 - Disable (Default)
+        1 - Enable
+    */
+
+   PARAMETER: FollowMode: 0
+  
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode Speed Control
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the behaviour of the playback speed control (Scan Knob) in Follow Mode.
+
+    Unidirectional sets the playback position to move forward only. If the Scan Knob is set to 
+    its fully anticlockwise position, the playback speed will be at its slowest rate. If the Scan 
+    Knob is set to its fully clockwise position, the playback speed will be at its fastest rate.
+
+    Bidirectional sets the playback position to move forward or reverse. If the Scan Knob is set 
+    to its centre position, playback speed will be at its slowest rate. If the Scan knob is set 
+    to its fully clockwise position, playback speed will be at its fastest rate in the forward 
+    direction. If the Scan Knob is set to its fully anticlockwise position, playback speed will
+    be at its fastest rate in the reverse direction.
+
+    Inverted Unidirectional sets the playback position to move forward only. If the Scan Knob is
+    set to its fully anticlockwise position, the playback speed will be at its fastest rate. If 
+    the Scan Knob is set to its fully clockwise position, the playback speed will be at its 
+    slowest rate. This is identical to Unidirectional, but the behavior of the Scan Knob is 
+    inverted.
+
+        0 - Unidirectional
+        1 - Bidirectional (Default)
+        2 - Inverted Unidirectional
+    */
+
+   PARAMETER: FollowSpeedDirection: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode Speed and Offset
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the behaviour of the Scan Knob and Scan CV Input while in Follow Mode. 
+
+    The Scan Knob and Scan CV Input can be set to control playback speed, Scan offset, or both.
+
+        0 - The Scan Knob and Scan CV Input both control the Follow Mode playback speed
+        1 - The Scan Knob controls the playback speed and the Scan CV Input controls an offset 
+            between the record and playheads (Default)
+    /*	
+
+   PARAMETER: FollowScanOffsetWithScanCV: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode Offset Amount
+    ---------------------------------------------------------------------------------------------
+    arbhar can set a Scan offset in Follow Mode if Follow Mode's playback speed is set to be 
+    controlled by the Scan Knob and Scan CV Input. Set value in ms.
+
+        0 – 0 ms (Default)
+    /*	
+
+   PARAMETER: FollowScanOffset: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode Looping
+    ---------------------------------------------------------------------------------------------
+    arbhar can enable or disable looped playback of the playheads in Follow Mode.
+    
+    An end-of-cycle (EOC) trigger signal can be internally routed to retrigger playback from the 
+    start of the layer or the defined offset value. This is the same EOC trigger that is 
+    available in Onset Control Mode 6 (zeta) 
+    
+        0 - Disable
+        1 - Enable (Default)
+    /*	
+
+   PARAMETER: FollowLoop: 1
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Follow Mode Loop Length
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the Hold duration as the length of the looped playback in Follow Mode. 
+
+    The end-of-cycle (EOC) trigger signal can be triggered at the Follow Mode Offset Amount and 
+    Looped for the Hold duration. This is the same EOC trigger that is available in Onset Control 
+    Mode 6 (zeta) 
+
+        0 - Disable
+        1 - Enable (Default)
+    /*	
+
+   PARAMETER: FollowSetLoopLengthWithHold: 1    
+  
+    
+    /*
+    ---------------------------------------------------------------------------------------------
+    Random Timing of Grains
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the random timing of grains.    
+
+    Randomized timing of internally triggered grains can be applied by turning the Intensity Knob 
+    from its centre position to its fully clockwise position.
+
+        0 - Disable
+        1 - Enable (Default)
+    */
+
+   PARAMETER: RandomTimingWithRandomIntensity: 1
+    
+    
+    /*
+    ---------------------------------------------------------------------------------------------
+    Random Volume of Grains
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the random volume of grains.
+
+    Randomized volume of internally triggered grains can be applied by turning the Intensity Knob 
+    from its centre position to its fully clockwise position.
+        
+        0 - Disable (Default)
+        1 - Enable
+    */
+
+   PARAMETER: RandomAmpWithRandomIntensity: 0
+ 
+ 
+ 
+    /*
+    ---------------------------------------------------------------------------------------------
+    Accumulative Capture Mode
+    ---------------------------------------------------------------------------------------------
+    arbhar can be set to Accumulative Capture Mode.
+
+    This mode allows for the consecutive collage of different recordings within different 
+    locations of a layer. When enabled, pressing the Capture Button will pause the record head, 
+    rather than reset it to the start of the layer.
+        
+        0 - Disable (Default)
+        1 - Enable
+    */
+
+   PARAMETER: AccumlativeCaptureMode: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Activate Capture on Button Up
+    ---------------------------------------------------------------------------------------------
+    arbhar can bet set to record on a button down action or a button up action.    
+
+    By default Capture is activated upon pressing the Capture Button down. This parameter can 
+    changed so that Capture is activated upon the release of the Capture Button. This 
+    behaviour might be more appropriate for certain use cases, including working with the 
+    Accumulative Capture Mode or when working with the built-in Condenser Microphone minimising 
+    the recording of button noises.
+
+        0 - Disable (Default)
+        1 - Enable
+
+    Note: This parameter might be overwritten by the Capture Button Controls as Gate 
+          parameter.
+
+    */
+
+   PARAMETER: ActivateCaptureOnButtonUp: 0
+  
+  
+    /*
+    ---------------------------------------------------------------------------------------------
+    Capture Button Controls as Gate
+    ---------------------------------------------------------------------------------------------
+    arbhar's Capture Button can be set to Latching or Momentary functionality.
+
+    Latching functionality will activate recording when the Capture Button is pressed and
+    deactivate recording when the Capture Button is pressed again.
+
+    Momentary functionality will activate recording as long as the Capture Button is pressed and 
+    will deactivate recording when the Capture Button is released. This behaviour might be more 
+    appropriate for certain use cases, including capturing shorter samples when using the 
+    Accumulative Capture Mode.
+
+        0 - Latching (Default)
+        1 - Momentary
+
+    Note: This parameter might overwrite the 'Activate Capture On Button Up' parameter.
+    */
+
+   PARAMETER: CaptureButtonMode: 0
+  
+  
+    /*
+    ---------------------------------------------------------------------------------------------
+    Linking Accumulative Capture Mode and Capture Button Controls as Gate Functionality
+    ---------------------------------------------------------------------------------------------
+    arbhar can be set to link Accumulative Capture Mode and Capture Button Controls as Gate
+    functionality.
+
+    This allows for linking the Capture Button Controls as Gate feature to be activated when the 
+    Accumulative Capture Mode is activated.
+
+        0 - Disable (Default)
+        1 - Enable
+
+    Note: This parameter might overwrite the 'Activate Capture On Button Up' and 
+          'Capture Button Controls as Gate' parameters.
+    */
+
+   PARAMETER: LinkAccumlativeCaptureModeToCaptureButtonMode: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Trigger Delay on Strike Input
+    ---------------------------------------------------------------------------------------------
+    arbhar can be set to apply a trigger delay to the Strike Input.    
+
+    This defines the time added to the Strike Input latency. Adjusting this delay can improve the 
+    response to devices that produce both a trigger signal and a control voltage signal, 
+    especially if the trigger signal occurs before the control voltage signal has been set. Set 
+    time in ms.
+  
+        0 - 0 ms (Default)
+    */
+
+   PARAMETER: StrikeCvDelay: 0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    Centre frequency of Wavetable Oscillator
+    ---------------------------------------------------------------------------------------------
+    arbhar can set the centre frequency of the Wavetable Oscillator. Set value in Hz.    
+
+        Middle C - 130.813 Hz (Default)
+    */
+
+   PARAMETER: WavetableCentreFrequency: 130.813
+
+
+  /*
+    ---------------------------------------------------------------------------------------------
+    Set Quantised Random Pitch Deviation Table in semitones.
+    ---------------------------------------------------------------------------------------------
+    arbhar can set customised pitch deviation offsets available by clockwise Pitch Deviation Knob 
+    settings. Set values in semitones.    
+
+    At each stage of the clockwise Pitch Deviation Knob setting, a pair of the numbers in the 
+    list, as well as the 'original' pitch (set by the Pitch Knob) will be used by the Pitch 
+    Deviation parameter. 
+
+    For example, looking at the first stage (of 12 semitones) defined in the default pitch 
+    deviation table, a transposition of 1 semitone up (1), 2 semitones down (-2), as well as the 
+    'original' pitch (0, set by the Pitch Knob) will become possible pitches for the generated 
+    grains. 
+
+    To give another example, the 8th stage (the numbers 7 and -5) will give the interval of a 
+    perfect fifth (7 semitones) up, the interval of a perfect fourth (5 semitones) down and the 
+    'original' pitch (0, set by the Pitch Knob).
+    
+    The user can choose how many stages (pairs of transpositions) are defined, and the number of 
+    stages will be distributed across the clockwise Pitch Deviation Knob range.
+    
+    Define pairs of pitch deviations.  
+        Chromatic:     1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12 Default)
+        Major:         2 -1 4 -3 5 -7 7 -5 9 -8 11 -10 12 -12
+        Natural Minor: 2 -1 3 -4 5 -7 7 -5 8 -9 10 -10 12 -12
+    */
+
+  PARAMETER: QuantiseTable: 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12
+
+
+
+  _______________________________________________________________________________________________
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    PARAMETER HEADER TEMPLATE
+    ---------------------------------------------------------------------------------------------
+    Description of features:
+        0 - option one (default)
+        1 - option two
+    */
+
+    PARAMETER: feature: 0
+
+
+}

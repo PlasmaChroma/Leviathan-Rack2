@@ -1,0 +1,23 @@
+{
+  "0x6f8": "gensym",
+  "0x704": "__cxa_finalize",
+  "0x710": "midi_reader_bang",
+  "0x71c": "read",
+  "0x728": "outlet_free",
+  "0x734": "pd_new",
+  "0x740": "class_addbang",
+  "0x74c": "clock_delay",
+  "0x758": "clock_new",
+  "0x764": "__gmon_start__",
+  "0x770": "open",
+  "0x77c": "clock_unset",
+  "0x788": "strncpy",
+  "0x794": "post",
+  "0x7a0": "outlet_new",
+  "0x7ac": "class_new",
+  "0x7b8": "class_addmethod",
+  "0x7c4": "clock_free",
+  "0x7d0": "close",
+  "0x7dc": "pd_error",
+  "0x7e8": "atom_string"
+}

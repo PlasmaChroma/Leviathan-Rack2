@@ -1,0 +1,1294 @@
+{
+  "input": "arbhar_updater_2-13.gz",
+  "sha256": "1414f35d8d0e3ca8d4cb0871a8c61f3957001caf3b106d30df0514ca9f404637",
+  "files": [
+    {
+      "path": "aaaab.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "additionalScripts_inputLevelFix.sh",
+      "size": 1096,
+      "sha256": "7126808d3667cdb9a8bcb769eb5401d4bc40840ff105cd52f65c05b146466dc6",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "alsa-setup-preV1-7.state",
+      "size": 2405,
+      "sha256": "83e40e44925e8b29ea5fdcffceae2aea62f856a0b84279f18c9ba8c89e225bd5",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "alsa-setup-V1-7.state",
+      "size": 2399,
+      "sha256": "9fd7a9916ba69a01ad4876e701886fba626bbfc5ca19e2922ee7328839dca2da",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbharCalibrationCheck.pd",
+      "size": 16711,
+      "sha256": "5e92063c21cbbd866571cb6ff9055d35420cd481445c6c48f47a3f58f4aabbdc",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbharControls_corrupted.pd",
+      "size": 29113,
+      "sha256": "d9abb24fd6db2f35e79de82b752f34f89c98c61a417d708de15f58e12e2e9be1",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbharControls.pd",
+      "size": 22969,
+      "sha256": "52acbe9a4f0b34372e3aca3a56c6554ef4649c312e12ea8da72f6ddcad10c5d1",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_feedback.pd",
+      "size": 3561,
+      "sha256": "1b09926b258cfd2458c640b22e3bf103234aa51bb5490242c6c1c275279cb702",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbharFiles.pd",
+      "size": 5346,
+      "sha256": "dc89d21b37f227fadfcb018f55af331b0783494ec8bb901f50c26a4a2fc9d9b5",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_gain~.pd",
+      "size": 133,
+      "sha256": "900e20c42e81128bdfb975711e4ab00d237ac3a88a6b9c91c05f8df119ef292a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_gpio~.c_changes?",
+      "size": 145372,
+      "sha256": "454992460873dd54a4c4f21bf7ffb5c4667ccb27780a9fc6002d6fefae278405",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_gpio~.pd_linux",
+      "size": 179492,
+      "sha256": "0ae07ca37403f805972cf88aedfd57296e689f4e93dbf1a60626adf09ee2be5f",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbharGrainCore.pd",
+      "size": 7310,
+      "sha256": "9e273af9bd3147f04c709d8c984549db1f3c87285a1816de6202eeca6b0e0587",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_hardware_Tester.pd",
+      "size": 20004,
+      "sha256": "db28466cfd5614fa03425cc6dba6d419c2f8246fc8709e6f3ce4fa9a3e0f9357",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_in1_gain~.pd",
+      "size": 133,
+      "sha256": "900e20c42e81128bdfb975711e4ab00d237ac3a88a6b9c91c05f8df119ef292a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_in2_gain~.pd",
+      "size": 136,
+      "sha256": "1da8c9727ed4b754a2565fd126dba6c91927822cd4e6a1faad55eff0b03ae4e9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbharLoader.pd",
+      "size": 4260,
+      "sha256": "6e89e74403cdf2c3ea2e1d5ae52d1d3e3cd8136f1571a2e4084c3c5ab5e11d89",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbharMain.pd",
+      "size": 35383,
+      "sha256": "bd6d9933f42a58b735395a27dec52807732c6dd5938f374b0e5ed0037e1aeab0",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_midi_reader.pd_linux",
+      "size": 7452,
+      "sha256": "73156a9b2a14948770d0d478a8ff01d340d588ede64b4fc7eeb30f44fffcd9b7",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_play~.pd_linux",
+      "size": 135568,
+      "sha256": "0ae8ae0ac13ae5952940d0deda17a44b76f1fcb16a40630f7ede3243ce09f8ae",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_play_with_buffers",
+      "size": 52108,
+      "sha256": "d5144a07f490dba49a7a8bad3fa50c31d78a4cbc353cd2efdc990a2db62cecd9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_PresetConfigurationToolClockedMode.html",
+      "size": 111708,
+      "sha256": "d8876960f3d199d1cf1a769875c8f686fb675f9867740484a927729e7e05a29d",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_preset_editor_clockedMode.html",
+      "size": 62445,
+      "sha256": "7ab429fb25aff4a0f6d5d96d55f8e7b06a71312a6813cf80dfd5815cc465ae49",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_Preset_Editor.html",
+      "size": 258553,
+      "sha256": "ea87ca99ae8ebb9268ec6e932c44703c1a826dc06105056cd35232898705d2eb",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_Preset_Editor.html.zip",
+      "size": 143047,
+      "sha256": "ede72d22e9d9a3ffad36478cdea091f954439c385053eeed79f77625d6bb7531",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_Preset_Editor_v1-1.html",
+      "size": 103303,
+      "sha256": "eecc9bf9772bda27723822428b0d78be341eb15f39b6d2ca770c80ad249b362f",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbharRecorder.pd",
+      "size": 3664,
+      "sha256": "e175415206a7f8ddde24097b02372a9ccaed7395da887c09d03cfa761c4eaa16",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_rec~.pd_linux",
+      "size": 117924,
+      "sha256": "69458b92c4774745b6b2fa1ffc620e6d0467a84f3e6de732b3a50af6f84fc3ad",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbharReverb.pd",
+      "size": 10501,
+      "sha256": "383975e75c0c99957d38dcda1ecac39077661617ce77a47f315a9c07c5f54168",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_shmem-help.pd",
+      "size": 4160,
+      "sha256": "8b0e8c5c077207f2e539097b36e5fc3e0f72273d362aef6002f315ebd72706d3",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_shmem.pd_linux",
+      "size": 17528,
+      "sha256": "7dc8db8d1c02d5bfb532fbb91f637f638feaef6bfb9336367047b6361cfb9d1f",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_ShMemRec~_test2.pd",
+      "size": 1257,
+      "sha256": "10a7f32139f281f17212a971d33c6a67f15b832e56e664b74fcdcb23e59369ad",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_ShMemRec~_test.pd",
+      "size": 2078,
+      "sha256": "a6c69b76ffb993005b2b171c0d59b493ada3390dfe58478c926bdcc4bc287708",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_shmem_tester.pd",
+      "size": 100,
+      "sha256": "3a41e429e59fed2591647c051d1a70504378f5991f5f7551cd809c94273dd06e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_stereo_test.pd",
+      "size": 25572,
+      "sha256": "22cf321bffe9ad21438e1b3f29f6b79f84fb67133227041bbd04112811a03b8e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_structure.md",
+      "size": 1222,
+      "sha256": "e59964a8c43ef08464b0a3e6761d19a48a405809a4f4daa2c2837f168e6f5855",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbhar_v2_2-13",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "arbharWavetable.pd",
+      "size": 4123,
+      "sha256": "c6792079c1b422e428d07e7f69c0a25a727310c8b8f53fcf316db92d81029f9d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "arbhar_wtosc~.pd_linux",
+      "size": 113164,
+      "sha256": "be4302094e52c6abebe524eebca701e9b9d614ce2553dc538a8103099ade49b2",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "awaitingPocessing.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "awaitingProcessing.pd",
+      "size": 3767,
+      "sha256": "a976d1185b4aa5ddfd9875a6dfdce69b124e4c676e0d7969ed357003677cd30e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "awaitingProcessing.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "BETA -- arbhar V2 Preset Configuration Tool - incl. Clocked Mode_files/css2",
+      "size": 2200,
+      "sha256": "9dec2f77524df68c0c07089bb4dcd21ef55363a13c101147dadb15fc43ea703a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "BETA -- arbhar V2 Preset Configuration Tool - incl. Clocked Mode.html",
+      "size": 111785,
+      "sha256": "8e5778a864ffdd6e2002d36f7b12464248b74dac3254f64b4fa2fa466be32606",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "calibrationDataFile.txt",
+      "size": 267,
+      "sha256": "97ad11155d7bef976805813d59b624220042fb7a3bfaf7c516791a2f1316af77",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "calibrationData.pd",
+      "size": 4726,
+      "sha256": "d4c325037d703f0f627e65e83fc04618eac3a45f34b50803f8056a6232198275",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkButtonsOnStartup.sh",
+      "size": 703,
+      "sha256": "0ae163174f95017bed0bc9665a2e7e6440369dd913466e8ae3f4d17b58d1b04b",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForCalibratedFile.sh",
+      "size": 293,
+      "sha256": "c1c4524c4ebc0c814ed0cbe314686b6fbf44f6dd9830e6f3f203a0ef70bf63e8",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForImportingInternalScenesFromUSB.sh",
+      "size": 699,
+      "sha256": "31240dd80c825b21e68e31b947f5b949dc88884a54629558433fabd69b4d2406",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForMidiDevice.pd",
+      "size": 1542,
+      "sha256": "4e344dd115e07b8ab02047afb09e34ceea890d4ebb3b95a2184e03f016d5c120",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForPresetEditor.sh",
+      "size": 334,
+      "sha256": "f156715cdb9e259f04a7cb6ff1d15024581404221f4e4baa2b842e6daf2ca178",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "checkForUpdateFile.sh",
+      "size": 769,
+      "sha256": "ea09f54b860ca19f20504c89e674c687cefeb9ec0ad95fe4c63579ceb94d94ae",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForUpdateFile.sh.save",
+      "size": 770,
+      "sha256": "c439beb59acb821a356bae4235fa035b09f6189ca90ae67cfb9f7a039b96196d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForUSB.sh",
+      "size": 144,
+      "sha256": "4eecf658d3dfedcda2cd479a88d7d20fda76e576b444489ed8b7ee12e72a0623",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkForUserPreset.sh",
+      "size": 903,
+      "sha256": "3e8127acd318cdf794c853a82effb81ff2d6c0fb2eeb3713f77d79108c351c8c",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkLogFileSize.sh",
+      "size": 507,
+      "sha256": "0bc2e80887302f339126b3ddd56424c8c97eae162da7f6290e101be9bcabbcde",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "checkVersionOfUpdaterFile.sh",
+      "size": 672,
+      "sha256": "242bbcc209b4dacc4cc51f14881e9e1fb946a0b25f5381e9069c89d005819eb1",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "classic_mode.txt",
+      "size": 14415,
+      "sha256": "7de04cc6780895a96e7af91ae923e758202ff5385132e1bce18cd957b55f4cb0",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "clockedModePresetTextAddition.txt",
+      "size": 2938,
+      "sha256": "bfa25542b47e99deb5dd19f5e8363227ac00cab5cc5c5748b50a86e7025d0177",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "combineFilesLR.sh",
+      "size": 1340,
+      "sha256": "ff5069e53376750d273aed1df7deb2d0a15386d8a71b253e97d2d5550d8cdb5e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "combineFiles.sh",
+      "size": 651,
+      "sha256": "968a36be9d8e2dee3c4638d8e040614e59e00ac84ef76a94237ca354afcf9c75",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "comport_AMA0.pd",
+      "size": 451,
+      "sha256": "97f8d1828582c890bc95810ec930d6a906b77fe463fab9333b237133cf408ef3",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "comport.pd_linux",
+      "size": 65816,
+      "sha256": "2acb7db715c2bdd35c29fef2ecdbdd341da8a99f121d238550182f8fb9dab020",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "comport_tester.pd",
+      "size": 789,
+      "sha256": "9ed6dec316a031de8a98a1daf47a75393782bb8f8d9daedcdcb64721f3a6f642",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "configurationDataInitFile.txt",
+      "size": 26858,
+      "sha256": "53ac7ac9db04a2c90e4bf729258a642d4f8a893bea8825902c304cfdf5293e03",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "configurationDataInitFile.txt.bkup",
+      "size": 22554,
+      "sha256": "4949a4ff0352be168e7740fdfc66f964a878aea18984f1b8a47926068d901b1f",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "configurationData.pd",
+      "size": 5709,
+      "sha256": "3f874b9c8a788cb97eaaf576d506d323e85e585f41039d76b7f6620087b44714",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "connectMidi.sh",
+      "size": 285,
+      "sha256": "f3bfd71809c4ded962eeb58686a5bda5b86005da6bfee6f195f8d3d5e2e67b4a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "controlViaTcp.pd",
+      "size": 2754,
+      "sha256": "7ed84cfb53e737c4684b2d5ff4ba7c5be5d27a3c0d5a9c2d3ad370c708ee25ea",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "convertAudiofilesToRaw.sh",
+      "size": 1079,
+      "sha256": "b27a669d3fa37571f7c4be265dc9b1c0f11172f9897dac10d926e5d57841b5a5",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "convertToPreview.sh",
+      "size": 416,
+      "sha256": "4acef35074f3b8ec5c41e2e8f7294e79222af6b2f6f2e5c56ecdf840ea149986",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "convertToRaw4Preview.sh",
+      "size": 4003,
+      "sha256": "5c06152c0408a2ca4c31099b03c272d15f1a78a5aaac20db7197753f0ef6040d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "convertToRaw.sh",
+      "size": 3387,
+      "sha256": "51c4dd8483ec87b6a2f7d58f0d818af4b994d5c4402d865a2b40b0b78b483d64",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "copyFactoryPresetFilesToInternalScenes.sh",
+      "size": 560,
+      "sha256": "b80c91c9c340101ca64c8dd5b702f34c17641e387141af1804d48edd22ede3cb",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "copyUserPresetFilesToInternalScenes.sh",
+      "size": 5137,
+      "sha256": "dc4e4d1ba2a03bcbff42de103a9cd74adde40a3106c4082792ed4c30fb36d79b",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "createCalibratedFile.sh",
+      "size": 637,
+      "sha256": "05d2fa742d7434c022472aa184470e3e4cda4ce5339dfbe5dc76cbf0c78a44b7",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "createEmptyRaw.sh",
+      "size": 203,
+      "sha256": "e7d9efc6e02ed0613a46e375c17a43577fbcdbad90ab4c1d1979bdc8d4c3b36f",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "createLocalSceneDirectory.sh",
+      "size": 259,
+      "sha256": "984d1e8d38c85d73f774b36221c5d39241afed85d7977c462379bba9a750e4f7",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "createWavFromRaw.sh",
+      "size": 310,
+      "sha256": "a438d5ecbc7d858076c5908aa646e11fdc7735202b4ce0de5f9f912677715895",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "eeprom.pd",
+      "size": 3440,
+      "sha256": "c9094243aaf0c2b409e839049765035b257a0ba976f00544c008f324a229ad6e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "enableClockedModeScript.sh",
+      "size": 1902,
+      "sha256": "f3b97f8a7df776eac41371c5b7e277a9741a4a36da193dbadbffbc480b65a915",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "exportLogFile.sh",
+      "size": 198,
+      "sha256": "8cd1b136e438f08cfb87c91e5c020443b447db48ea8315405dfb14c64bd4a9ce",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "extractParameterValues.sh",
+      "size": 159,
+      "sha256": "f1a64e5774a7464a45dd57a5c3376869529ca59e770c6c3bab1b17877a855f8d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/3_preset.txt",
+      "size": 3709,
+      "sha256": "f0b49543b0f2e5010b09074bf2ea012082d51746e906df01e4099e6416fbf2fa",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/2_preset.txt",
+      "size": 3670,
+      "sha256": "ef7c87f5ad7d5285e3da21341bee727159cbac30548ca80277bc77110734e411",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/5_preset.txt",
+      "size": 3674,
+      "sha256": "71586ce96c19921db7085603fb941a5864f0248a55aa61d4abab6d65e9596a13",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/4_preset.txt",
+      "size": 3682,
+      "sha256": "adf4bcb5fbb44940c0744ead4ef241df6fc4ed19a163daa6a5121ddeb6017843",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/1_preset.txt",
+      "size": 3710,
+      "sha256": "627dcda00af50f9f8e2204da69d3f6895c02d68f31b3308936ab256fd8797436",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "_factoryPresets/6_preset.txt",
+      "size": 3741,
+      "sha256": "11af5ab8bff6ddc12f03aad9991713ec56130c0348154bb3c1b6483e8bfe8d83",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/zeta_preset.txt",
+      "size": 3741,
+      "sha256": "11af5ab8bff6ddc12f03aad9991713ec56130c0348154bb3c1b6483e8bfe8d83",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/alpha_preset.txt",
+      "size": 3710,
+      "sha256": "627dcda00af50f9f8e2204da69d3f6895c02d68f31b3308936ab256fd8797436",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/beta_preset.txt",
+      "size": 3670,
+      "sha256": "ef7c87f5ad7d5285e3da21341bee727159cbac30548ca80277bc77110734e411",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/delta_preset.txt",
+      "size": 3682,
+      "sha256": "adf4bcb5fbb44940c0744ead4ef241df6fc4ed19a163daa6a5121ddeb6017843",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/epsilon_preset.txt",
+      "size": 3674,
+      "sha256": "71586ce96c19921db7085603fb941a5864f0248a55aa61d4abab6d65e9596a13",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryPresets/gamma_preset.txt",
+      "size": 3709,
+      "sha256": "f0b49543b0f2e5010b09074bf2ea012082d51746e906df01e4099e6416fbf2fa",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "factoryResetScript.sh",
+      "size": 1584,
+      "sha256": "8466e7c012bad55f3c83348fe211cca11b7a7e9f1461bff951aea1f81af14d1d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "fft_tester.pd",
+      "size": 30,
+      "sha256": "2cf3218a8158e769976b0fb2da7638a6bc7ba3d659309150981736ca94af743a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "fftwObject~.pd_linux",
+      "size": 25564,
+      "sha256": "993e28f296a02b778bbbe430d601338ad88f313753a8f9cc79712f3585086bf4",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "fftwTest-help.pd",
+      "size": 5565,
+      "sha256": "a92714a525215a3114087b5fb0c967a54cd7bb3aa699a92f18dca8c8dfceee37",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "file_detectNewOrMod.pd",
+      "size": 8390,
+      "sha256": "88997f3c294095ae04c6c5cce267a5638831d864b9038451217d7186ff543e95",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "fileStructure.pd",
+      "size": 8646,
+      "sha256": "931c960da43bf88b8d3cb90eafb183b4da3ae3fba8e1665abb0ca0ec44d9a10e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "findPresetFiles.sh",
+      "size": 1432,
+      "sha256": "5ba091b8f3e4a3279b89946b46ee0ea84fac5967692473b0984cced3a9dd7527",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "follow_mode.txt",
+      "size": 14415,
+      "sha256": "937df20b413d3fd0a1252fc9d97fec82802f60694d5cf87efce0572c615e424d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "getCalibrationValues.sh",
+      "size": 111,
+      "sha256": "8e9cc35ea2bebeb5664b8f85535b3927244d66619bb97fd560f722877e803b3a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "getPdCpuUsage.sh",
+      "size": 410,
+      "sha256": "316912572b84ccf9fdb69d79af2fab512b9795a89a61c82f7e8e72ec22078580",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "hv_tanh~.pd",
+      "size": 549,
+      "sha256": "e903f8662edfbe2eaf13a2309008bfca7efa8cf22b48be382f6ad508fce770f8",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "importInternalSceneFromUSB.sh",
+      "size": 2306,
+      "sha256": "4b9e6dde85a71b0a4b7d7860f0dd681dadd8ca36f8673938b41899a38c1bae74",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "layer_control_tester.pd",
+      "size": 57,
+      "sha256": "e24cdb2605af6475d7f1712b78a2c814489652e3cd5fc1ddd17d8ea8f5ee6f9c",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadArbharV2.sh",
+      "size": 2754,
+      "sha256": "e6d456c9f61a16ee42c3710696f68aeec08e6b47a15f4c625edae8094659b441",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "loadFileToShMem2.pd",
+      "size": 40051,
+      "sha256": "41b0ffaf306545e6fa1cd3d9c32b702e0ca76657db39300f05eec3184e4a9651",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadFileToShMem.pd",
+      "size": 2833,
+      "sha256": "9591f0db58a1e4b57620104b794a3e3c5e247e31051ec9dad5ea220f62818c83",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadMidiObservation.sh",
+      "size": 63,
+      "sha256": "30e01249a843eeff73ec2984393690e07328d8dfa673614a0816591bb3174aa3",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadPresetOnStartup.txt",
+      "size": 12564,
+      "sha256": "369521a5fc922311ee7aaa0f6e69276003c244fba3a7871dba72ce8b25656504",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadSceneFromLocal.sh",
+      "size": 842,
+      "sha256": "b386363c79be83d2f4984a44f81b9dfe06c1d7b0c11d5b5b153f66e23758b12d",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "loadSceneFromUSB.sh",
+      "size": 2396,
+      "sha256": "91571a0237398f6a82dd56564a1b0c1704bc6f68350171deb8ae36903092bbc9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "main_out_stereo~.pd_linux",
+      "size": 107428,
+      "sha256": "7a964f8c6855d5d4dc9d1fb0b3b10f4607bcb3f0859f2744ee5797b47ededf63",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "main_out_stereo_Tester.pd",
+      "size": 194,
+      "sha256": "5c32e78a6d36f6c92bfd900b32d5723dca65c9c37c0228223a5701f7615a5ceb",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "makeDirectorySystem.sh",
+      "size": 1960,
+      "sha256": "34471a9d399c2c79afcc585b096c98ab1fdd71078c16b6423560d27676a3c6c1",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Makefile",
+      "size": 1529,
+      "sha256": "bcd15ae8e343b626b5b5d1a50160ab33eff80c192bb31b8942dde60cec21af0c",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "makeVersionFile.sh",
+      "size": 92,
+      "sha256": "969c1c3cc3768a5ddbc3ae7b6d6653eae9177f0aa9fc5aad93901e1114c1a575",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midiControllerMapping_default.txt",
+      "size": 76,
+      "sha256": "e49cd191f45b42210609e3131d7707896f774bb5cb8c96157a092419cc0befbc",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midiControllerMapping.txt",
+      "size": 228,
+      "sha256": "3aa46bbd5ef15a3a98d7ac1c5844976c853179e2ca6454b1b30d3750ebc4eb60",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midi_controller_simulator.pd",
+      "size": 1786,
+      "sha256": "0bf5f583fd350ba3cd45b0ecd83e4a77d316905e02861cca40f6f618fd229362",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midiControllerToShMem.pd",
+      "size": 3279,
+      "sha256": "780c4097429b438005a8706bd2b24f2fc8acb88496e13a831bdc4288da952523",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midi_fifo.pd_linux",
+      "size": 12372,
+      "sha256": "d546af51a3e13234498530e713a0e59d6ba19162d186525edc6eecb331634cf5",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midi_fifo_reader.pd",
+      "size": 221,
+      "sha256": "60e6f8184b0b83360854c4f5b6f12fef4ace054527b3a2752b1531080d395025",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midi_reader.pd_linux",
+      "size": 8288,
+      "sha256": "009d06362fdfe86f6bf458620f6625aeb9c3313a0401749ace3ec53172bc408f",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midi_stuff/midi_proxy.c",
+      "size": 7148,
+      "sha256": "24844fd12b1bf9c296f8a1607e122ec32b86f97f74ea9ba619138748c094d0da",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midi_stuff/midi_proxy",
+      "size": 13020,
+      "sha256": "183391dc752e30b7005a487ebf9e11ed95b47cc432c02df50dbe553c796e7c03",
+      "original_mode": "0o755",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midi_stuff/33-midiusb.rules",
+      "size": 299,
+      "sha256": "3938cf99bcc0916dbcf4082e3180d5c28a0b26756d457ad9d6d95a43219be2b6",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midi_stuff/further_setup_commands",
+      "size": 198,
+      "sha256": "a7886724b9e68e8589f36eaf5ba0d00c80bec161bde83d0040de374e97839540",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midi_stuff/further_setup_commands.save",
+      "size": 457,
+      "sha256": "301f2034e940843dc552a8bbc082715b6ce5f9c9ab6b68f8136985dd0f85823b",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midi_stuff/kill_midi_proxy.sh",
+      "size": 20,
+      "sha256": "adcc793bd3a6c9d0ba1249cae6d400ab22309f60562ae58d3b979f8ce1fa7f83",
+      "original_mode": "0o755",
+      "mtime": 1753205266
+    },
+    {
+      "path": "midiToControlList.pd",
+      "size": 3024,
+      "sha256": "95eb4c77715922260291ead8f4b7bd89989e7f1a5f5a96ccc519fe99a91138e5",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "midiToShmem.pd",
+      "size": 917,
+      "sha256": "a7e54f72dedcf2034b3ac46193544a7d6fa3f2eed8acc34334b473c449c3d03d",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "mountusb.sh",
+      "size": 1345,
+      "sha256": "195cccb9c43bec58bb1ecdd319d24d322cdb7129788daef81f840f27c7d0dd35",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "orderOfStartupScripts.txt",
+      "size": 628,
+      "sha256": "dd9ad2734871bdd6fcc13bfb8c5a8a2ece6cd5808968c5de33240017abf8fb97",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Pin_Adc_Control_Info/midi controls",
+      "size": 264,
+      "sha256": "beb4c346e59fdddaa4814c9e4f0eeab991dec73229bd0319e7264d2497935785",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Pin_Adc_Control_Info/shmem allocations",
+      "size": 1764,
+      "sha256": "781f9b08a781c19c1f3c406d0ceba9ff25aa20d844bb75a8af8e6c73a0154899",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Pin_Adc_Control_Info/gpio pins used",
+      "size": 508,
+      "sha256": "5fd0546cbd5a8a155977024b1ecfdf00618b3c070449e147953bec4b529705c9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Pin_Adc_Control_Info/serial messages",
+      "size": 570,
+      "sha256": "1bed83825d81ee16f4e45f6f1a04bf0f546abe60d4f2dc5d1394adb8929f8b04",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "presetStructure",
+      "size": 154,
+      "sha256": "5cccb5088db2b06fbbb975d54b17edfa83204da519897dfdfe5908996e593925",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "raw_play~.pd_linux",
+      "size": 107692,
+      "sha256": "5ce7c9fa3e9c63297c2175f85b7e5d12b9f03950aeba9175eb235e5a19673af1",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "raw_play~_test.pd",
+      "size": 431,
+      "sha256": "1bbd9779f1a9bcd440530a3e8afb5fbfe0428ac8a83494c5ea8dd3afc9aeac1a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "README.md",
+      "size": 364,
+      "sha256": "56a00266b0b07871bdbdbaa74b1c915ea89d6d5382d36c2a8056c640ad3d83df",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "rebootArbhar.pd",
+      "size": 99,
+      "sha256": "5ecec6f4c02357f9605022e944a29474506734e836cbf76a83f8660daa0a824a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "renameFiles.sh",
+      "size": 253,
+      "sha256": "b603c99f404ce92f4a9cd8ffa36c4d85af3d677924b9b018bb03025932741a7e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "rev3adapt~.pd",
+      "size": 15039,
+      "sha256": "0abbdcb7188196ac639db878aa7c7edb4f8008dafbb11a84b7cb6b1c40afe62a",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "saveSceneToLocal.sh",
+      "size": 274,
+      "sha256": "d61aa0bb86e7fdfdba1db6ffe25af3d415689631707080429e36b3ec925ade25",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "saveSceneToUSB.sh",
+      "size": 2022,
+      "sha256": "476b7a24e82af5d82af5366e46c39676a3de3f3b296a230661251552c14c186a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "send_to_pd_usb_add.sh",
+      "size": 163,
+      "sha256": "cbe5816b9e8628498e73235e27b4319993dd54e53200a32fed9155263b6d81b6",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "send_to_pd_usb_remove.sh",
+      "size": 162,
+      "sha256": "7e41a13d678e8c97aa081856545cd2e734e3b40347760becb4bc8c7d21d110b5",
+      "original_mode": "0o755",
+      "mtime": 1753205257
+    },
+    {
+      "path": "send_to_pd_usb.sh",
+      "size": 332,
+      "sha256": "ae2764d5b6c0e7e2973b750897d8caf34297543e947c1ca9da604e253c362491",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "setCpuSpeed.sh",
+      "size": 1412,
+      "sha256": "5dfff0ba68409a0e0a8ae8a92dfe95f5d032308f5360b193fdc46f50de49104b",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shell.pd_linux",
+      "size": 13100,
+      "sha256": "e254d0a6139c9c855d8e905cb4d33092f1c2030a7e6e864874aed18bbb11b4d9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shell_working.pd_linux",
+      "size": 13648,
+      "sha256": "06ea317e0037e30b6c81d644a83291677e76410f4b6a334dcd67d75d611c2ddf",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shmem_copy.pd",
+      "size": 1606,
+      "sha256": "c5c6ea4726534e065c6e5b290f0cb208f955767ca75f4cc8f71da3d2d9203efa",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shmem-help.pd",
+      "size": 4667,
+      "sha256": "43dff08aa63030481940b94a9ad3b5fade6b77023d7e78db1bcc4120a9baed3c",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shmemMaxTester.pd",
+      "size": 495,
+      "sha256": "1c81647446e7b73706e53ab130cafe3b3253942fbe84cc9b6de103b8191b204c",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shmem.pd_linux",
+      "size": 12544,
+      "sha256": "a51abea830c6e77358931ad2299c70370242ca0c1c1829472eba9dad43106967",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "shmem-tester.pd",
+      "size": 1449,
+      "sha256": "e3de4ed90ab01687868c341b6bfdc62d92735ab70703a68a93c0777b5bc6e12f",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "shmem_test.pd",
+      "size": 305,
+      "sha256": "1a9678da8a2827b18777051b62eabe857ab7c45909eb96b078f4358fc3f712e6",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "slot_selector_tester.pd",
+      "size": 56,
+      "sha256": "3c3a47fc5e1a5ede9cb23c3450023fff3b7f7e00eff3dbd89fff95902efb0a47",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "soxSplitTester.sh",
+      "size": 570,
+      "sha256": "0ef4a0924553716c94e891c2752b682bcba1b7f1efee3ce314266ef5f0c77d84",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "soxTester.sh",
+      "size": 319,
+      "sha256": "b0c5c2628857937c45df90bd13ed67085a8619955c7f5366e5bd301c3b5b75d3",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "soxTriggers.pd",
+      "size": 652,
+      "sha256": "6ce75b8aa48c2f58522c098a3ec754b81d8a73b173be3d5ae2e2500e8ae58eda",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "stereo_in~.pd_linux",
+      "size": 107820,
+      "sha256": "ce41edf32a4b1458cfd8ddca6835872215018ac51a46054cd7be56a32c4a8b36",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "stereo_mode.txt",
+      "size": 14415,
+      "sha256": "b61a9aedfafd44c83800f1ce86cc637f6c231befdbd88a2061b8b8e07063bb8e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "tanh_approx~.pd_linux",
+      "size": 107408,
+      "sha256": "3162cd6b184fbad582949d98d96feada9911cee4d15301b7edca18255197e1f9",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "terminal.pd_linux",
+      "size": 8044,
+      "sha256": "9ea1de43d599e10a9fd6783d9163c707a2a9e4493d560333d5ea329594a57440",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "test_comport.pd",
+      "size": 424,
+      "sha256": "e6d768d87e94e7be5516483674b5bb6eb8cc02b2b272d412822805210b7ea999",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "testFiddleLoadtime.pd",
+      "size": 156,
+      "sha256": "211cba9b849b1f592ef8c2aac9616317e164bca9f2eac65ec2195bee1b7a33d5",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "testFormatString.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "test_git_repro",
+      "size": 5,
+      "sha256": "f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "test_serialMidi.pd",
+      "size": 1419,
+      "sha256": "1f88b45c677348006bc3ac18d7e36416bff2935b6bdc14fa72587e91d03e98ad",
+      "original_mode": "0o644",
+      "mtime": 1753205257
+    },
+    {
+      "path": "testSomthing.pd",
+      "size": 115,
+      "sha256": "d4fb7facfbd58f4a76b3658b9d6e9eaeae5c554f198827928b3654571e2a9b67",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "testSortingFileNames.sh",
+      "size": 304,
+      "sha256": "ba88da3c0de7d1e37792b4bc7b4817c0001526ec53872dbc357c8f162737de40",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "testSoundfileSampleratePlaybeck.pd",
+      "size": 1118,
+      "sha256": "719dc0fb3ed72b89e3c3b0627239ef0ec55da161cf036759ea855649a3823a6e",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "test_txt_parsing.pd",
+      "size": 2506,
+      "sha256": "970675d73a899f8b6617f865f5b30456a84760c81afa8ab09d0f6e8e8094c57a",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "test_txt_preset.txt",
+      "size": 209,
+      "sha256": "c475646848bf8add62e8e1f7a98917977e7ed000b9fd7b921a3890e5483b043c",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "todo",
+      "size": 254,
+      "sha256": "3e7468feed34a42ea24c6b86ab7702351c62683a353d6040da1ec7a2320e35e4",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "unmountusb.sh",
+      "size": 863,
+      "sha256": "e426659f31343e1acf1fccf4a0f477eb6950b6f53e9925ea0ca30889246b7856",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "Untitled-1.pd",
+      "size": 699,
+      "sha256": "bf8b96b1eab3975701eb838c50fbae23fe9c748ca569498480b6c9bd6dd71291",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    },
+    {
+      "path": "updateOldPresetFiles.sh",
+      "size": 716,
+      "sha256": "a6c828dea94b9956d3d7311c92f65e5819f6b2fab4af382553db9ff964ccddc4",
+      "original_mode": "0o644",
+      "mtime": 1753205266
+    }
+  ]
+}

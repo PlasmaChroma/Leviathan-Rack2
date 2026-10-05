@@ -1,0 +1,12 @@
+{
+  "routine": "calculateFollowSpeed",
+  "binary": "arbhar_gpio~.pd_linux",
+  "VA": "0x3f10",
+  "binary_sha256": "0ae07ca37403f805972cf88aedfd57296e689f4e93dbf1a60626adf09ee2be5f",
+  "comparisons": 12288,
+  "failures": 0,
+  "max_absolute_error": 2.182713028986427e-06,
+  "tolerance": 1e-05,
+  "max_instructions_per_call": 33,
+  "scope": "Restricted finite-input ARM/VFP instruction-text interpreter; NOT real ARM execution or firmware/hardware equivalence."
+}

@@ -1,0 +1,149 @@
+  0: #X obj 42 17 inlet~
+  1: #X obj 37 528 hv_tanh~
+  2: #X obj 346 581 outlet~
+  3: #X obj 38 595 delwrite~ intfb 1000
+  4: #X obj 344 459 delread4~ intfb
+  5: #X obj 344 434 line~
+  6: #X obj 344 391 pack 0 50
+  7: #X obj 37 570 hip~ 60
+  8: #X obj 365 207 *
+  9: #X obj 145 446 line~
+ 10: #X obj 147 416 pack 0 250
+ 11: #X obj 171 18 inlet~
+ 12: #X obj 500 580 outlet~
+ 13: #X obj 469 200 inlet
+ 14: #X obj 342 277 f
+ 15: #X obj 32 482 *~ 1
+ 16: #X obj 356 147 expr if ($f1 < 0 \, 101 + $f1 * 0.1 \, 1) \; if ($f1 >= 0 \, $f1 * 1 \, 1)
+ 17: #X obj 130 522 *~
+ 18: #X obj 344 484 hv_tanh~
+ 19: #X obj 158 117 expr if ($f1 >= 0 \, $f1 \, -1) \; if ($f1 < 0 \, $f1 * -1 \, -1)
+ 20: #X obj 157 185 sel -1
+ 21: #X obj 250 167 sel -1
+ 22: #X obj 161 295 expr if ($f1 < 20 \, 0 \, 0.99)
+ 23: #X obj 147 383 +
+ 24: #X obj 147 350 t b f
+ 25: #X obj 134 317 expr if ($f1 < 20 \, 0 \, 0.67)
+ 26: #X obj 141 223 0
+ 27: #X obj 222 202 0
+ 28: #X obj 342 308 * 0.125
+ 29: #X obj 410 258 1
+ 30: #X obj 37 549 lop~ 12000
+ 31: #X obj 193 531 hv_tanh~
+ 32: #X obj 193 573 hip~ 60
+ 33: #X obj 193 552 lop~ 12000
+ 34: #X obj 195 596 delwrite~ intfb2 1000
+ 35: #X obj 257 523 *~
+ 36: #X obj 469 424 line~
+ 37: #X obj 469 474 hv_tanh~
+ 38: #X obj 469 449 delread4~ intfb2
+ 39: #X obj 287 10 block~ 16 1 2
+ 40: #X obj 469 223 t f f
+ 41: #X obj 469 246 expr 1 - $f1
+ 42: #X obj 59 435 *~ 1
+ 43: #X obj 498 536 *~
+ 44: #X obj 345 559 *~
+ 45: #X obj 428 556 *~
+ 46: #X obj 343 525 *~
+ 47: #X obj 599 418 expr if ($f1 < 5 \, $f1 * 0.2 \, 1)
+ 48: #X obj 599 441 pack 0 150
+ 49: #X obj 599 474 line~
+ 50: #X obj 494 512 *~
+ 51: #X obj 373 264 0.25
+ 52: #X obj 217 51 r modCVfeedback2
+ 53: #X obj 670 168 t b f
+ 54: #X obj 684 219 r modCVfeedback
+ 55: #X obj 683 247 +
+ 56: #X obj 683 267 s modCVfeedback2
+ 57: #X obj 670 191 1
+ 58: #X obj 669 144 +
+ 59: #X obj 633 86 shmem 61019 250
+ 60: #X obj 663 14 r midiCtl
+ 61: #X obj 664 38 t b b
+ 62: #X obj 741 85 shmem 61019 250
+ 63: #X msg 741 60 memread 207
+ 64: #X msg 633 61 memread 206
+ 65: #X obj 682 117 * -1
+
+EDGES:
+0:0 #X obj 42 17 inlet~ -> 15:0 #X obj 32 482 *~ 1
+1:0 #X obj 37 528 hv_tanh~ -> 30:0 #X obj 37 549 lop~ 12000
+4:0 #X obj 344 459 delread4~ intfb -> 17:0 #X obj 130 522 *~
+4:0 #X obj 344 459 delread4~ intfb -> 18:0 #X obj 344 484 hv_tanh~
+5:0 #X obj 344 434 line~ -> 4:0 #X obj 344 459 delread4~ intfb
+6:0 #X obj 344 391 pack 0 50 -> 5:0 #X obj 344 434 line~
+6:0 #X obj 344 391 pack 0 50 -> 36:0 #X obj 469 424 line~
+7:0 #X obj 37 570 hip~ 60 -> 3:0 #X obj 38 595 delwrite~ intfb 1000
+8:0 #X obj 365 207 * -> 14:0 #X obj 342 277 f
+9:0 #X obj 145 446 line~ -> 17:1 #X obj 130 522 *~
+9:0 #X obj 145 446 line~ -> 35:1 #X obj 257 523 *~
+10:0 #X obj 147 416 pack 0 250 -> 9:0 #X obj 145 446 line~
+11:0 #X obj 171 18 inlet~ -> 31:0 #X obj 193 531 hv_tanh~
+11:0 #X obj 171 18 inlet~ -> 42:0 #X obj 59 435 *~ 1
+13:0 #X obj 469 200 inlet -> 40:0 #X obj 469 223 t f f
+14:0 #X obj 342 277 f -> 28:0 #X obj 342 308 * 0.125
+15:0 #X obj 32 482 *~ 1 -> 1:0 #X obj 37 528 hv_tanh~
+16:0 #X obj 356 147 expr if ($f1 < 0 \, 101 + $f1 * 0.1 \, 1) \; if ($f1 >= 0 \, $f1 * 1 \, 1) -> 8:0 #X obj 365 207 *
+16:1 #X obj 356 147 expr if ($f1 < 0 \, 101 + $f1 * 0.1 \, 1) \; if ($f1 >= 0 \, $f1 * 1 \, 1) -> 8:1 #X obj 365 207 *
+17:0 #X obj 130 522 *~ -> 1:0 #X obj 37 528 hv_tanh~
+18:0 #X obj 344 484 hv_tanh~ -> 46:0 #X obj 343 525 *~
+19:0 #X obj 158 117 expr if ($f1 >= 0 \, $f1 \, -1) \; if ($f1 < 0 \, $f1 * -1 \, -1) -> 20:0 #X obj 157 185 sel -1
+19:1 #X obj 158 117 expr if ($f1 >= 0 \, $f1 \, -1) \; if ($f1 < 0 \, $f1 * -1 \, -1) -> 21:0 #X obj 250 167 sel -1
+20:0 #X obj 157 185 sel -1 -> 26:0 #X obj 141 223 0
+20:0 #X obj 157 185 sel -1 -> 51:0 #X obj 373 264 0.25
+20:1 #X obj 157 185 sel -1 -> 25:0 #X obj 134 317 expr if ($f1 < 20 \, 0 \, 0.67)
+21:0 #X obj 250 167 sel -1 -> 27:0 #X obj 222 202 0
+21:0 #X obj 250 167 sel -1 -> 29:0 #X obj 410 258 1
+21:1 #X obj 250 167 sel -1 -> 22:0 #X obj 161 295 expr if ($f1 < 20 \, 0 \, 0.99)
+22:0 #X obj 161 295 expr if ($f1 < 20 \, 0 \, 0.99) -> 23:0 #X obj 147 383 +
+23:0 #X obj 147 383 + -> 10:0 #X obj 147 416 pack 0 250
+24:0 #X obj 147 350 t b f -> 23:0 #X obj 147 383 +
+24:1 #X obj 147 350 t b f -> 23:1 #X obj 147 383 +
+25:0 #X obj 134 317 expr if ($f1 < 20 \, 0 \, 0.67) -> 24:0 #X obj 147 350 t b f
+26:0 #X obj 141 223 0 -> 25:0 #X obj 134 317 expr if ($f1 < 20 \, 0 \, 0.67)
+27:0 #X obj 222 202 0 -> 22:0 #X obj 161 295 expr if ($f1 < 20 \, 0 \, 0.99)
+28:0 #X obj 342 308 * 0.125 -> 6:0 #X obj 344 391 pack 0 50
+28:0 #X obj 342 308 * 0.125 -> 47:0 #X obj 599 418 expr if ($f1 < 5 \, $f1 * 0.2 \, 1)
+29:0 #X obj 410 258 1 -> 28:1 #X obj 342 308 * 0.125
+30:0 #X obj 37 549 lop~ 12000 -> 7:0 #X obj 37 570 hip~ 60
+31:0 #X obj 193 531 hv_tanh~ -> 33:0 #X obj 193 552 lop~ 12000
+32:0 #X obj 193 573 hip~ 60 -> 34:0 #X obj 195 596 delwrite~ intfb2 1000
+33:0 #X obj 193 552 lop~ 12000 -> 32:0 #X obj 193 573 hip~ 60
+35:0 #X obj 257 523 *~ -> 31:0 #X obj 193 531 hv_tanh~
+36:0 #X obj 469 424 line~ -> 38:0 #X obj 469 449 delread4~ intfb2
+37:0 #X obj 469 474 hv_tanh~ -> 50:0 #X obj 494 512 *~
+38:0 #X obj 469 449 delread4~ intfb2 -> 37:0 #X obj 469 474 hv_tanh~
+38:0 #X obj 469 449 delread4~ intfb2 -> 35:0 #X obj 257 523 *~
+40:0 #X obj 469 223 t f f -> 41:0 #X obj 469 246 expr 1 - $f1
+40:1 #X obj 469 223 t f f -> 44:1 #X obj 345 559 *~
+40:1 #X obj 469 223 t f f -> 43:1 #X obj 498 536 *~
+41:0 #X obj 469 246 expr 1 - $f1 -> 42:1 #X obj 59 435 *~ 1
+41:0 #X obj 469 246 expr 1 - $f1 -> 45:1 #X obj 428 556 *~
+42:0 #X obj 59 435 *~ 1 -> 15:0 #X obj 32 482 *~ 1
+43:0 #X obj 498 536 *~ -> 12:0 #X obj 500 580 outlet~
+44:0 #X obj 345 559 *~ -> 2:0 #X obj 346 581 outlet~
+45:0 #X obj 428 556 *~ -> 12:0 #X obj 500 580 outlet~
+46:0 #X obj 343 525 *~ -> 45:0 #X obj 428 556 *~
+46:0 #X obj 343 525 *~ -> 44:0 #X obj 345 559 *~
+47:0 #X obj 599 418 expr if ($f1 < 5 \, $f1 * 0.2 \, 1) -> 48:0 #X obj 599 441 pack 0 150
+48:0 #X obj 599 441 pack 0 150 -> 49:0 #X obj 599 474 line~
+49:0 #X obj 599 474 line~ -> 46:1 #X obj 343 525 *~
+49:0 #X obj 599 474 line~ -> 50:1 #X obj 494 512 *~
+50:0 #X obj 494 512 *~ -> 43:0 #X obj 498 536 *~
+51:0 #X obj 373 264 0.25 -> 28:1 #X obj 342 308 * 0.125
+52:0 #X obj 217 51 r modCVfeedback2 -> 16:0 #X obj 356 147 expr if ($f1 < 0 \, 101 + $f1 * 0.1 \, 1) \; if ($f1 >= 0 \, $f1 * 1 \, 1)
+52:0 #X obj 217 51 r modCVfeedback2 -> 19:0 #X obj 158 117 expr if ($f1 >= 0 \, $f1 \, -1) \; if ($f1 < 0 \, $f1 * -1 \, -1)
+53:0 #X obj 670 168 t b f -> 57:0 #X obj 670 191 1
+53:1 #X obj 670 168 t b f -> 55:1 #X obj 683 247 +
+54:0 #X obj 684 219 r modCVfeedback -> 55:0 #X obj 683 247 +
+55:0 #X obj 683 247 + -> 56:0 #X obj 683 267 s modCVfeedback2
+57:0 #X obj 670 191 1 -> 40:0 #X obj 469 223 t f f
+58:0 #X obj 669 144 + -> 53:0 #X obj 670 168 t b f
+59:0 #X obj 633 86 shmem 61019 250 -> 58:0 #X obj 669 144 +
+60:0 #X obj 663 14 r midiCtl -> 61:0 #X obj 664 38 t b b
+61:0 #X obj 664 38 t b b -> 64:0 #X msg 633 61 memread 206
+61:1 #X obj 664 38 t b b -> 63:0 #X msg 741 60 memread 207
+62:0 #X obj 741 85 shmem 61019 250 -> 65:0 #X obj 682 117 * -1
+63:0 #X msg 741 60 memread 207 -> 62:0 #X obj 741 85 shmem 61019 250
+64:0 #X msg 633 61 memread 206 -> 59:0 #X obj 633 86 shmem 61019 250
+65:0 #X obj 682 117 * -1 -> 58:1 #X obj 669 144 +

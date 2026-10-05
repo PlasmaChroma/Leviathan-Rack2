@@ -1,0 +1,2450 @@
+[
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 112960,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 113356,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 113596,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 113804,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 114340,
+    "size": 2864,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 92120,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 92516,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZZN6lubadh11Application14runCalibrationEvENKUlRNS_7ChannelEE_clES2_.isra.0",
+    "address": 162436,
+    "size": 292,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::Application::runCalibration()::{lambda(lubadh::Channel&)#1}::operator()(lubadh::Channel&) const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 92756,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 92964,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 93500,
+    "size": 2756,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 98816,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 99212,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 99628,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 99836,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 100372,
+    "size": 2756,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 106120,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 106516,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 106932,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 107140,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 107676,
+    "size": 2756,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 119760,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 120156,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 120572,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 120780,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 121316,
+    "size": 2756,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt13__adjust_heapIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiS9_NS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_T0_SM_T1_T2_.isra.0",
+    "address": 126648,
+    "size": 396,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__adjust_heap<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, int, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZNSt6vectorIZN6lubadhL14fillSpeedTableERNS0_6PresetERKSt5arrayIfLj4096EEE5NotchSaIS7_EE12emplace_backIJS7_EEERS7_DpOT_",
+    "address": 127044,
+    "size": 240,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch& std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> >::emplace_back<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch>(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch&&)"
+  },
+  {
+    "name": "_ZSt16__insertion_sortIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEENS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_.isra.0",
+    "address": 127284,
+    "size": 208,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__insertion_sort<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>) [clone .isra.0]"
+  },
+  {
+    "name": "_ZSt16__introsort_loopIN9__gnu_cxx17__normal_iteratorIPZN6lubadhL14fillSpeedTableERNS2_6PresetERKSt5arrayIfLj4096EEE5NotchSt6vectorIS9_SaIS9_EEEEiNS0_5__ops15_Iter_comp_iterIZNS2_L14fillSpeedTableES4_S8_EUlRKS9_SI_E_EEEvT_SL_T0_T1_",
+    "address": 127492,
+    "size": 536,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "void std::__introsort_loop<__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}> >(__gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, __gnu_cxx::__normal_iterator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch*, std::vector<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch, std::allocator<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch> > >, int, __gnu_cxx::__ops::_Iter_comp_iter<lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::{lambda(lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&, lubadh::fillSpeedTable(lubadh::Preset&, std::array<float, 4096u> const&)::Notch const&)#1}>)"
+  },
+  {
+    "name": "_ZZ4mainENKUlbE0_clEb.isra.0",
+    "address": 308664,
+    "size": 112,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "main::{lambda(bool)#2}::operator()(bool) const [clone .isra.0]"
+  },
+  {
+    "name": "_ZNK6lubadhUlvE_clEv.isra.0",
+    "address": 155880,
+    "size": 2760,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::{lambda()#1}::operator()() const [clone .isra.0]"
+  },
+  {
+    "name": "_ZNK6lubadh3Tap9get_xfadeERSt6vectorIfSaIfEEj.part.0",
+    "address": 308992,
+    "size": 840,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "lubadh::Tap::get_xfade(std::vector<float, std::allocator<float> >&, unsigned int) const [clone .part.0]"
+  },
+  {
+    "name": "_ZN6lubadh3ADCC2Efi",
+    "address": 442604,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::ADC::ADC(float, int)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9resetLoopEv",
+    "address": 231076,
+    "size": 100,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::resetLoop()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9FileSaver7processEv",
+    "address": 236876,
+    "size": 716,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileSaver::process()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManagerC2Ev",
+    "address": 313960,
+    "size": 1744,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::TapManager()"
+  },
+  {
+    "name": "_ZN6lubadh11TapeFlutter7processEfj",
+    "address": 328388,
+    "size": 584,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeFlutter::process(float, unsigned int)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager6newestEv",
+    "address": 318968,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::newest() const"
+  },
+  {
+    "name": "_ZN6lubadh11Application5setupEv",
+    "address": 176188,
+    "size": 508,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::setup()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel17setRecordLoopModeENS_8LoopModeE",
+    "address": 240480,
+    "size": 652,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setRecordLoopMode(lubadh::LoopMode)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel7setTimeEib",
+    "address": 227908,
+    "size": 1516,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setTime(int, bool)"
+  },
+  {
+    "name": "_ZN6lubadh3Tap7_set_idEjj",
+    "address": 311676,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::_set_id(unsigned int, unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh11Application14interpretJacksEv",
+    "address": 165040,
+    "size": 644,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::interpretJacks()"
+  },
+  {
+    "name": "_ZN6lubadh7ChannelC1ENS_11_ChannelIDsERNS_11ApplicationE",
+    "address": 249156,
+    "size": 4172,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::Channel(lubadh::_ChannelIDs, lubadh::Application&)"
+  },
+  {
+    "name": "_ZN6lubadh12PlaybackModeC1ERNS_7ChannelE",
+    "address": 225384,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::PlaybackMode::PlaybackMode(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh4Fade4moveEf",
+    "address": 310012,
+    "size": 140,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::move(float)"
+  },
+  {
+    "name": "_ZN6lubadh10TapeFilterD1Ev",
+    "address": 261440,
+    "size": 64,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::TapeFilter::~TapeFilter()"
+  },
+  {
+    "name": "_ZN6lubadh4Fade8set_stepEf",
+    "address": 310004,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::set_step(float)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoader4initEv",
+    "address": 234640,
+    "size": 212,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::init()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager8coactiveEj",
+    "address": 317756,
+    "size": 36,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::coactive(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardwareD2Ev",
+    "address": 442408,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::~LubadhHardware()"
+  },
+  {
+    "name": "_ZN6lubadh11Application13checkCapTouchEv",
+    "address": 162932,
+    "size": 148,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::checkCapTouch()"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngineC1ERNS_11ApplicationEf",
+    "address": 220624,
+    "size": 1136,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::AudioEngine(lubadh::Application&, float)"
+  },
+  {
+    "name": "_ZN6lubadh9AntiAlias9setCutoffEf",
+    "address": 307648,
+    "size": 48,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AntiAlias::setCutoff(float)"
+  },
+  {
+    "name": "_ZNK6lubadh9TapEngine10num_activeEv",
+    "address": 313852,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::num_active() const"
+  },
+  {
+    "name": "_ZNK6lubadh9TapEngine9is_activeEv",
+    "address": 313796,
+    "size": 56,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::is_active() const"
+  },
+  {
+    "name": "_ZN6lubadh11ApplicationC1Ev",
+    "address": 172000,
+    "size": 196,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::Application()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel16setTapTempoSpeedEf",
+    "address": 226148,
+    "size": 164,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setTapTempoSpeed(float)"
+  },
+  {
+    "name": "_ZN6lubadh3ADC12interpretValEi",
+    "address": 442628,
+    "size": 56,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::ADC::interpretVal(int)"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngineD2Ev",
+    "address": 221760,
+    "size": 612,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::~AudioEngine()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager5resetEv",
+    "address": 316676,
+    "size": 792,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::reset()"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine15set_buffer_sizeEj",
+    "address": 222736,
+    "size": 44,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::set_buffer_size(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh12TapeInFilter7processERSt6vectorIfSaIfEE",
+    "address": 324724,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeInFilter::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh12TapeInFilterC2Ev",
+    "address": 324640,
+    "size": 84,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeInFilter::TapeInFilter()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoaderC2ERS0_",
+    "address": 245804,
+    "size": 756,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::FileLoader(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel20interpretButtonPressEi",
+    "address": 258500,
+    "size": 2700,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::interpretButtonPress(int)"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine11recordInputERNS_7ChannelERKNS_3TapERNS1_11InputBufferEff",
+    "address": 292888,
+    "size": 1008,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::recordInput(lubadh::Channel&, lubadh::Tap const&, lubadh::Channel::InputBuffer&, float, float)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11InputBufferC1Ev",
+    "address": 231924,
+    "size": 132,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::InputBuffer::InputBuffer()"
+  },
+  {
+    "name": "_ZN6lubadh7OnePoleC2Ev",
+    "address": 307356,
+    "size": 20,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OnePole::OnePole()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager8activateEij",
+    "address": 320608,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::activate(int, unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh11TapeAllpassC1Ev",
+    "address": 326820,
+    "size": 68,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeAllpass::TapeAllpass()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9FileSaver4saveEv",
+    "address": 234284,
+    "size": 92,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileSaver::save()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoaderD1Ev",
+    "address": 266796,
+    "size": 308,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::~PresetLoader()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager12activate_newEijb",
+    "address": 323240,
+    "size": 788,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::activate_new(int, unsigned int, bool)"
+  },
+  {
+    "name": "_ZN6lubadh11Application5startEv",
+    "address": 189832,
+    "size": 556,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::start()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11snapSpeedToEf",
+    "address": 226076,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::snapSpeedTo(float)"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware11serialWriteEhh",
+    "address": 444820,
+    "size": 384,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::serialWrite(unsigned char, unsigned char)"
+  },
+  {
+    "name": "_ZN6lubadh12FirstRecModeC1ERNS_7ChannelE",
+    "address": 225316,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::FirstRecMode::FirstRecMode(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh11TapeFlutterD2Ev",
+    "address": 261504,
+    "size": 144,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::TapeFlutter::~TapeFlutter()"
+  },
+  {
+    "name": "main",
+    "address": 128028,
+    "size": 27852,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "main"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel12PresetLoader6activeEv",
+    "address": 233308,
+    "size": 252,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::active() const"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel12PresetLoader18breakLoadAnimationEv",
+    "address": 233948,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::breakLoadAnimation() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11FilePreview7processERSt6vectorIfSaIfEE",
+    "address": 235096,
+    "size": 432,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh10TapeFilter7processERSt6vectorIfSaIfEE",
+    "address": 324900,
+    "size": 956,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeFilter::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh7TapeAge10setTapeAgeEf",
+    "address": 326040,
+    "size": 164,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeAge::setTapeAge(float)"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine6updateEv",
+    "address": 312496,
+    "size": 440,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::update()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9AudioData2atEi",
+    "address": 231176,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::at(int)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoaderC1ERS0_",
+    "address": 247184,
+    "size": 1456,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::PresetLoader(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel11FilePreview6activeEv",
+    "address": 234276,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::active() const"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager11num_enginesEv",
+    "address": 318928,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::num_engines() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11FilePreviewD1Ev",
+    "address": 266372,
+    "size": 200,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::~FilePreview()"
+  },
+  {
+    "name": "_ZN6lubadh6Button13interpretGPIOEb",
+    "address": 222784,
+    "size": 84,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Button::interpretGPIO(bool)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11FilePreviewC2ERS0_",
+    "address": 246560,
+    "size": 624,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::FilePreview(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh11ApplicationD2Ev",
+    "address": 172196,
+    "size": 120,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::~Application()"
+  },
+  {
+    "name": "_ZN6lubadh11TapeFlutter7processERSt6vectorIfSaIfEE",
+    "address": 327744,
+    "size": 644,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeFlutter::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh11Application15triggerClkPulseERNS_7ChannelEi",
+    "address": 171800,
+    "size": 44,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::triggerClkPulse(lubadh::Channel&, int)"
+  },
+  {
+    "name": "_ZN6lubadh3Tap10unset_stepEv",
+    "address": 311084,
+    "size": 20,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::unset_step()"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager10any_activeEj",
+    "address": 318448,
+    "size": 144,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::any_active(unsigned int) const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoaderD1Ev",
+    "address": 266572,
+    "size": 224,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::~FileLoader()"
+  },
+  {
+    "name": "_ZN4idsp9MonoPlate8_processERf",
+    "address": 300736,
+    "size": 3016,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "idsp::MonoPlate::_process(float&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader18breakLoadAnimationEv",
+    "address": 234040,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::breakLoadAnimation() const"
+  },
+  {
+    "name": "_ZN6lubadh11EraseButton13interpretGPIOEb",
+    "address": 222956,
+    "size": 780,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::EraseButton::interpretGPIO(bool)"
+  },
+  {
+    "name": "_ZN6lubadh4Fade5resetEv",
+    "address": 309952,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::reset()"
+  },
+  {
+    "name": "_ZN6lubadh11Application13checkClkPulseERNS_7ChannelE",
+    "address": 171844,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::checkClkPulse(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader6statusEv",
+    "address": 233976,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::status() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12checkClkDivsEv",
+    "address": 225868,
+    "size": 136,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::checkClkDivs()"
+  },
+  {
+    "name": "_ZN6lubadh11Application8readADCsEi",
+    "address": 164240,
+    "size": 380,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::readADCs(int)"
+  },
+  {
+    "name": "_ZN6lubadh8CapTouch7processEfjbb",
+    "address": 224544,
+    "size": 296,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::CapTouch::process(float, unsigned int, bool, bool)"
+  },
+  {
+    "name": "_ZNK6lubadh3TapeqERKS0_",
+    "address": 311688,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::operator==(lubadh::Tap const&) const"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel12PresetLoader6statusEv",
+    "address": 233296,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::status() const"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager6activeEj",
+    "address": 317588,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::active(unsigned int) const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader18resetBreakLoadFlagEv",
+    "address": 233956,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::resetBreakLoadFlag()"
+  },
+  {
+    "name": "_ZN6lubadh14OverdubRecModeC2ERNS_7ChannelE",
+    "address": 225356,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OverdubRecMode::OverdubRecMode(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh12PlaybackMode20interpretButtonPressEi",
+    "address": 239008,
+    "size": 268,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::PlaybackMode::interpretButtonPress(int)"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware4initEv",
+    "address": 442724,
+    "size": 2076,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::init()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12processSpeedEj",
+    "address": 226312,
+    "size": 132,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::processSpeed(unsigned int)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel12PresetLoader6inMenuEv",
+    "address": 233924,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::inMenu() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9AudioData5eraseEv",
+    "address": 231632,
+    "size": 280,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::erase()"
+  },
+  {
+    "name": "_ZN6lubadh3Tap12trigger_fadeENS0_8FadeTypeEijbb",
+    "address": 320620,
+    "size": 2188,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::trigger_fade(lubadh::Tap::FadeType, int, unsigned int, bool, bool)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8doRetrigEv",
+    "address": 229536,
+    "size": 532,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::doRetrig()"
+  },
+  {
+    "name": "_ZN6lubadh13EmptyDeckMode20interpretButtonPressEi",
+    "address": 238704,
+    "size": 124,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::EmptyDeckMode::interpretButtonPress(int)"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware7readPinEj",
+    "address": 442564,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::readPin(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader4loadEv",
+    "address": 232800,
+    "size": 236,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::load()"
+  },
+  {
+    "name": "_ZN6lubadh4FadeC1Ev",
+    "address": 309832,
+    "size": 56,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::Fade()"
+  },
+  {
+    "name": "_ZN6lubadh3ADC10hasChangedEv",
+    "address": 442684,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::ADC::hasChanged()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel17setClockDivisionsENS_14ClockDivisionsE",
+    "address": 242464,
+    "size": 280,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setClockDivisions(lubadh::ClockDivisions)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9FileSaver8SaveDataD2Ev",
+    "address": 266312,
+    "size": 60,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileSaver::SaveData::~SaveData()"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware7cleanupEv",
+    "address": 442440,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::cleanup()"
+  },
+  {
+    "name": "_ZN6lubadh11TapeFlutterC2Ev",
+    "address": 324032,
+    "size": 608,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeFlutter::TapeFlutter()"
+  },
+  {
+    "name": "_ZN6lubadh8CapTouch7processERSt6vectorIfSaIfEEbb",
+    "address": 224160,
+    "size": 384,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::CapTouch::process(std::vector<float, std::allocator<float> >&, bool, bool)"
+  },
+  {
+    "name": "_ZN6lubadh9AntiAlias7processERSt6vectorIfSaIfEE",
+    "address": 307696,
+    "size": 112,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AntiAlias::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11FilePreview4initEv",
+    "address": 241700,
+    "size": 764,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::init()"
+  },
+  {
+    "name": "_ZN6lubadh6ButtonC1Ev",
+    "address": 223736,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Button::Button()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel9AudioData11interpolateERKNS_3TapE",
+    "address": 231240,
+    "size": 180,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::interpolate(lubadh::Tap const&) const"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager8kill_allEjb",
+    "address": 322944,
+    "size": 156,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::kill_all(unsigned int, bool)"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager4killEjjb",
+    "address": 323100,
+    "size": 140,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::kill(unsigned int, unsigned int, bool)"
+  },
+  {
+    "name": "_ZN5Clock6onTickEv",
+    "address": 441060,
+    "size": 116,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Clock::onTick()"
+  },
+  {
+    "name": "_ZNK6lubadh9TapEngine8coactiveEv",
+    "address": 313764,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::coactive() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9AudioData3addEjRSt6vectorIfSaIfEERKS2_IiSaIiEERKS4_",
+    "address": 231420,
+    "size": 212,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::add(unsigned int, std::vector<float, std::allocator<float> >&, std::vector<int, std::allocator<int> > const&, std::vector<float, std::allocator<float> > const&)"
+  },
+  {
+    "name": "_ZN6lubadh6Biquad10initFilterEf",
+    "address": 304576,
+    "size": 944,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Biquad::initFilter(float)"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager6activeEj",
+    "address": 317564,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::active(unsigned int)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager10num_activeEv",
+    "address": 318712,
+    "size": 164,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::num_active() const"
+  },
+  {
+    "name": "_ZN6lubadh11SoftClipper9setParamsEff",
+    "address": 327648,
+    "size": 96,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::SoftClipper::setParams(float, float)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10roundSpeedEf",
+    "address": 226444,
+    "size": 132,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::roundSpeed(float) const"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader6activeEv",
+    "address": 233988,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::active() const"
+  },
+  {
+    "name": "_ZN6lubadh3Tap10deactivateEv",
+    "address": 310324,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::deactivate()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11InputBuffer5resetEv",
+    "address": 232536,
+    "size": 264,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::InputBuffer::reset()"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager11active_listEv",
+    "address": 317828,
+    "size": 384,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::active_list()"
+  },
+  {
+    "name": "_ZN6lubadh11Application13interpretADCsEv",
+    "address": 164620,
+    "size": 152,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::interpretADCs()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel16updateMonitoringEv",
+    "address": 229424,
+    "size": 112,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::updateMonitoring()"
+  },
+  {
+    "name": "_ZN6lubadh12FirstRecMode20interpretButtonPressEi",
+    "address": 239276,
+    "size": 1204,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::FirstRecMode::interpretButtonPress(int)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager13any_availableEv",
+    "address": 318592,
+    "size": 120,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::any_available() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8LinkDataC2ENS_11_ChannelIDsE",
+    "address": 245192,
+    "size": 612,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::LinkData::LinkData(lubadh::_ChannelIDs)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel13setBufferSizeEj",
+    "address": 242744,
+    "size": 936,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setBufferSize(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh4Fade8activateEi",
+    "address": 309888,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::activate(int)"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardwareC2Ev",
+    "address": 444800,
+    "size": 20,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::LubadhHardware()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11InputBuffer5inputERSt6vectorIfSaIfEE",
+    "address": 232056,
+    "size": 60,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::InputBuffer::input(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh7ChannelD1Ev",
+    "address": 201696,
+    "size": 1576,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Channel::~Channel()"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager8coactiveEj",
+    "address": 317792,
+    "size": 36,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::coactive(unsigned int) const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoader4loadEv",
+    "address": 241132,
+    "size": 568,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::load()"
+  },
+  {
+    "name": "_ZN6lubadh3Tap4moveEfff",
+    "address": 310752,
+    "size": 316,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::move(float, float, float)"
+  },
+  {
+    "name": "_ZN6lubadh6BiquadC2Ev",
+    "address": 308076,
+    "size": 244,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Biquad::Biquad()"
+  },
+  {
+    "name": "_ZN6lubadh3Tap6updateEv",
+    "address": 311200,
+    "size": 476,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::update()"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine7processEiRSt6vectorIS1_IfSaIfEESaIS3_EES6_",
+    "address": 299588,
+    "size": 1092,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::process(int, std::vector<std::vector<float, std::allocator<float> >, std::allocator<std::vector<float, std::allocator<float> > > >&, std::vector<std::vector<float, std::allocator<float> >, std::allocator<std::vector<float, std::allocator<float> > > >&)"
+  },
+  {
+    "name": "_ZN6lubadh3Tap13transfer_dataERKS0_",
+    "address": 310636,
+    "size": 48,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::transfer_data(lubadh::Tap const&)"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine6activeEv",
+    "address": 313700,
+    "size": 16,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::active()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader6inMenuEv",
+    "address": 234016,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::inMenu() const"
+  },
+  {
+    "name": "_ZN6lubadh11TapeAllpass7processERSt6vectorIfSaIfEE",
+    "address": 326888,
+    "size": 436,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeAllpass::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel12PresetLoader9getPresetEv",
+    "address": 233968,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::getPreset() const"
+  },
+  {
+    "name": "_ZN6lubadh3Tap8set_stepEf",
+    "address": 311068,
+    "size": 16,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::set_step(float)"
+  },
+  {
+    "name": "_ZN6lubadh10TapeFilterC2Ev",
+    "address": 324756,
+    "size": 144,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeFilter::TapeFilter()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel13flashSpeedLEDEbf",
+    "address": 227660,
+    "size": 48,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::flashSpeedLED(bool, float)"
+  },
+  {
+    "name": "_ZN6lubadh11Application5runIOEv",
+    "address": 169364,
+    "size": 320,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::runIO()"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager6oldestEv",
+    "address": 319020,
+    "size": 236,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::oldest() const"
+  },
+  {
+    "name": "_ZN6lubadh4Fade10deactivateEv",
+    "address": 309940,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Fade::deactivate()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel13blinkSpeedLEDEff",
+    "address": 227708,
+    "size": 56,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::blinkSpeedLED(float, float)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader4exitEv",
+    "address": 233036,
+    "size": 260,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::exit()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoader18resetBreakLoadFlagEv",
+    "address": 234048,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::resetBreakLoadFlag()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12initHardwareEv",
+    "address": 225412,
+    "size": 148,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::initHardware()"
+  },
+  {
+    "name": "_ZN6lubadh3TapC2Ev",
+    "address": 310152,
+    "size": 172,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::Tap()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9AudioDataC2ERS0_",
+    "address": 248640,
+    "size": 516,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::AudioData(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8setOchanEPS0_",
+    "address": 225560,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setOchan(lubadh::Channel*)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel9AudioData2atEi",
+    "address": 231208,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::at(int) const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel13pulseSpeedLEDEb",
+    "address": 227764,
+    "size": 20,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::pulseSpeedLED(bool)"
+  },
+  {
+    "name": "_ZNK6lubadh9TapEngine6activeEv",
+    "address": 313716,
+    "size": 16,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::active() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12setSlewSpeedEf",
+    "address": 226004,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setSlewSpeed(float)"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager8coactiveEv",
+    "address": 317612,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::coactive()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel11InputBuffer11interpolateEf",
+    "address": 232116,
+    "size": 140,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::InputBuffer::interpolate(float) const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11setPotSpeedEi",
+    "address": 226576,
+    "size": 412,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setPotSpeed(int)"
+  },
+  {
+    "name": "_ZN6lubadh14TapeSaturation7processERSt6vectorIfSaIfEEf",
+    "address": 326536,
+    "size": 216,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeSaturation::process(std::vector<float, std::allocator<float> >&, float)"
+  },
+  {
+    "name": "_ZN6lubadh11Application15saveCalibrationERSt5arrayINS_16VpOctCalibrationELj2EE",
+    "address": 172316,
+    "size": 964,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::saveCalibration(std::array<lubadh::VpOctCalibration, 2u>&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11killAllTapsEv",
+    "address": 230680,
+    "size": 180,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::killAllTaps()"
+  },
+  {
+    "name": "_ZN6lubadh8CapTouchC1ERKNS_7ChannelE",
+    "address": 224088,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::CapTouch::CapTouch(lubadh::Channel const&)"
+  },
+  {
+    "name": "_ZN6lubadh7OnePole9processAPERSt6vectorIfSaIfEE",
+    "address": 307552,
+    "size": 96,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OnePole::processAP(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZNK6lubadh3Tap9is_fadingEv",
+    "address": 311104,
+    "size": 44,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::is_fading() const"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine8kill_allEjb",
+    "address": 322808,
+    "size": 136,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::kill_all(unsigned int, bool)"
+  },
+  {
+    "name": "_ZN6lubadh3Tap5resetEv",
+    "address": 310352,
+    "size": 168,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::reset()"
+  },
+  {
+    "name": "_ZN6lubadh11SoftClipperC2Ev",
+    "address": 327324,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::SoftClipper::SoftClipper()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoader4exitEv",
+    "address": 234852,
+    "size": 244,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::exit()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel18setRecordSpeedModeENS_9ParamModeE",
+    "address": 236540,
+    "size": 336,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setRecordSpeedMode(lubadh::ParamMode)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8killTapsEb",
+    "address": 230452,
+    "size": 228,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::killTaps(bool)"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine5resetEv",
+    "address": 312936,
+    "size": 764,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::reset()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8tempoTapEv",
+    "address": 225568,
+    "size": 300,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::tempoTap()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9FileSaverC1ERS0_",
+    "address": 244652,
+    "size": 540,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileSaver::FileSaver(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZNK6lubadh3Tap9get_xfadeERSt6vectorIfSaIfEE",
+    "address": 311176,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::get_xfade(std::vector<float, std::allocator<float> >&) const"
+  },
+  {
+    "name": "_ZN6lubadh11Application13updateDisplayEv",
+    "address": 169952,
+    "size": 1848,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::updateDisplay()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader7processEv",
+    "address": 256260,
+    "size": 572,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::process()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader9getFolderEv",
+    "address": 234060,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::getFolder() const"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine4stopEv",
+    "address": 222556,
+    "size": 180,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::stop()"
+  },
+  {
+    "name": "_ZN6lubadh11Application13interpretLinkEv",
+    "address": 163080,
+    "size": 1160,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::interpretLink()"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine8activateEi",
+    "address": 320344,
+    "size": 264,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::activate(int)"
+  },
+  {
+    "name": "_ZN6lubadh11Application14runCalibrationEv",
+    "address": 173280,
+    "size": 2816,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::runCalibration()"
+  },
+  {
+    "name": "_ZN6lubadh7TapeAge7processERSt6vectorIfSaIfEEf",
+    "address": 326204,
+    "size": 308,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeAge::process(std::vector<float, std::allocator<float> >&, float)"
+  },
+  {
+    "name": "_ZN6lubadh6Biquad10initFilterEff",
+    "address": 305520,
+    "size": 1712,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Biquad::initFilter(float, float)"
+  },
+  {
+    "name": "_ZNK6lubadh3Tap9is_fadingENS0_8FadeTypeE",
+    "address": 311148,
+    "size": 16,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::is_fading(lubadh::Tap::FadeType) const"
+  },
+  {
+    "name": "_ZN6lubadh7OnePole9processHPERSt6vectorIfSaIfEE",
+    "address": 307460,
+    "size": 92,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OnePole::processHP(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10isPosLegalEi",
+    "address": 227856,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::isPosLegal(int) const"
+  },
+  {
+    "name": "_ZNK6lubadh3Tap9get_xfadeERSt6vectorIfSaIfEEj",
+    "address": 311164,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::get_xfade(std::vector<float, std::allocator<float> >&, unsigned int) const"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine8coactiveEv",
+    "address": 313732,
+    "size": 32,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::coactive()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel20setLoopingParametersEbb",
+    "address": 226988,
+    "size": 672,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setLoopingParameters(bool, bool)"
+  },
+  {
+    "name": "_ZN6lubadh11Application4stopEv",
+    "address": 162904,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::stop()"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngineC1Ev",
+    "address": 311728,
+    "size": 768,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::TapEngine()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8setStateENS_12_StateLabelsE",
+    "address": 237592,
+    "size": 1112,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setState(lubadh::_StateLabels)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager10any_activeEv",
+    "address": 318212,
+    "size": 236,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::any_active() const"
+  },
+  {
+    "name": "_ZN6lubadh7TapeAgeC1Ev",
+    "address": 325856,
+    "size": 184,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeAge::TapeAge()"
+  },
+  {
+    "name": "_ZN6lubadh11Application11initDisplayEv",
+    "address": 169684,
+    "size": 268,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::initDisplay()"
+  },
+  {
+    "name": "_ZN6lubadh13EmptyDeckModeC2ERNS_7ChannelE",
+    "address": 225288,
+    "size": 28,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::EmptyDeckMode::EmptyDeckMode(lubadh::Channel&)"
+  },
+  {
+    "name": "_ZN6lubadh3Tap9resetFadeENS0_8FadeTypeE",
+    "address": 310684,
+    "size": 68,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::resetFade(lubadh::Tap::FadeType)"
+  },
+  {
+    "name": "_ZN6lubadh11Application9readJacksEv",
+    "address": 164920,
+    "size": 120,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::readJacks()"
+  },
+  {
+    "name": "_ZN6lubadh11Application16interpretButtonsEv",
+    "address": 165684,
+    "size": 3680,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::interpretButtons()"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine5startEv",
+    "address": 222372,
+    "size": 184,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::start()"
+  },
+  {
+    "name": "_ZN6lubadh3Tap13transfer_dataERKS0_NS0_8FadeTypeE",
+    "address": 310520,
+    "size": 116,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::transfer_data(lubadh::Tap const&, lubadh::Tap::FadeType)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader4initEv",
+    "address": 233560,
+    "size": 364,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::init()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel9AudioData9eraseFlagEv",
+    "address": 231912,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::AudioData::eraseFlag() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11blinkRecLEDEffi",
+    "address": 227784,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::blinkRecLED(float, float, int)"
+  },
+  {
+    "name": "_ZN6lubadh14TapeSaturationC2Ev",
+    "address": 326512,
+    "size": 24,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeSaturation::TapeSaturation()"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware8writePinEjb",
+    "address": 442588,
+    "size": 16,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::writePin(unsigned int, bool)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel12PresetLoader13force_replaceERNS_6PresetE",
+    "address": 256832,
+    "size": 920,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::PresetLoader::force_replace(lubadh::Preset&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel21setPlaybackRetrigModeENS_10RetrigModeE",
+    "address": 235528,
+    "size": 280,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setPlaybackRetrigMode(lubadh::RetrigMode)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10FileLoader7processEv",
+    "address": 243680,
+    "size": 972,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::process()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11InputBuffer13setBufferSizeEj",
+    "address": 232256,
+    "size": 280,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::InputBuffer::setBufferSize(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh11SoftClipper7processERSt6vectorIfSaIfEE",
+    "address": 327336,
+    "size": 312,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::SoftClipper::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel19setPlaybackLoopModeENS_8LoopModeE",
+    "address": 236264,
+    "size": 276,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setPlaybackLoopMode(lubadh::LoopMode)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager6activeEv",
+    "address": 317516,
+    "size": 48,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::active() const"
+  },
+  {
+    "name": "_ZN6lubadh14OverdubRecMode20interpretButtonPressEi",
+    "address": 238828,
+    "size": 180,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OverdubRecMode::interpretButtonPress(int)"
+  },
+  {
+    "name": "_ZN6lubadh7OnePole9processLPERSt6vectorIfSaIfEE",
+    "address": 307376,
+    "size": 84,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::OnePole::processLP(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel18getDisplayPositionEv",
+    "address": 230860,
+    "size": 216,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::getDisplayPosition() const"
+  },
+  {
+    "name": "_ZN6lubadh6BiquadD2Ev",
+    "address": 328972,
+    "size": 64,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "lubadh::Biquad::~Biquad()"
+  },
+  {
+    "name": "_ZN6lubadh9TapEngine7_set_idEj",
+    "address": 313892,
+    "size": 68,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapEngine::_set_id(unsigned int)"
+  },
+  {
+    "name": "_ZNSt6vectorIPN6lubadh7ChannelESaIS2_EE17_M_realloc_insertIJRKS2_EEEvN9__gnu_cxx17__normal_iteratorIPS2_S4_EEDpOT_",
+    "address": 263052,
+    "size": 280,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "void std::vector<lubadh::Channel*, std::allocator<lubadh::Channel*> >::_M_realloc_insert<lubadh::Channel* const&>(__gnu_cxx::__normal_iterator<lubadh::Channel**, std::vector<lubadh::Channel*, std::allocator<lubadh::Channel*> > >, lubadh::Channel* const&)"
+  },
+  {
+    "name": "_ZN6lubadh7Channel20setPlaybackTrackModeENS_9ParamModeE",
+    "address": 235808,
+    "size": 456,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::setPlaybackTrackMode(lubadh::ParamMode)"
+  },
+  {
+    "name": "_ZN6lubadh6Biquad7processERKSt6vectorIfSaIfEERS3_",
+    "address": 307808,
+    "size": 268,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Biquad::process(std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager6activeEv",
+    "address": 317468,
+    "size": 48,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::active()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel10FileLoader7getFileEv",
+    "address": 234068,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileLoader::getFile() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel19processPresetUpdateERNS_6PresetE",
+    "address": 253328,
+    "size": 2932,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::processPresetUpdate(lubadh::Preset&)"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager10num_activeEj",
+    "address": 318876,
+    "size": 52,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::num_active(unsigned int) const"
+  },
+  {
+    "name": "_ZN6lubadh3Tap8activateEi",
+    "address": 319256,
+    "size": 1088,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Tap::activate(int)"
+  },
+  {
+    "name": "_ZN6lubadh13TapeCompander7processERSt6vectorIfSaIfEE",
+    "address": 326752,
+    "size": 68,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapeCompander::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh11Application12readAutosaveEv",
+    "address": 176696,
+    "size": 13136,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::readAutosave()"
+  },
+  {
+    "name": "_ZN6lubadh11Application11readButtonsEv",
+    "address": 164772,
+    "size": 148,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::readButtons()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel10tempoClockEv",
+    "address": 257752,
+    "size": 748,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::tempoClock()"
+  },
+  {
+    "name": "_ZNK6lubadh7Channel9FileSaver6activeEv",
+    "address": 234376,
+    "size": 40,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FileSaver::active() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel8doResyncEv",
+    "address": 230068,
+    "size": 384,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::doResync()"
+  },
+  {
+    "name": "_ZN6lubadh14LubadhHardware7readMCPEj",
+    "address": 442468,
+    "size": 96,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::LubadhHardware::readMCP(unsigned int)"
+  },
+  {
+    "name": "_ZN6lubadh11Application19checkForCalibrationEv",
+    "address": 176096,
+    "size": 92,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Application::checkForCalibration()"
+  },
+  {
+    "name": "_ZNK6lubadh10TapManager8coactiveEv",
+    "address": 317684,
+    "size": 72,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::coactive() const"
+  },
+  {
+    "name": "_ZN6lubadh7Channel9modeResetEv",
+    "address": 234416,
+    "size": 224,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::modeReset()"
+  },
+  {
+    "name": "_ZN6lubadh11AudioEngine14processChannelERNS_7ChannelEiRSt6vectorIfSaIfEES6_",
+    "address": 293896,
+    "size": 5692,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::AudioEngine::processChannel(lubadh::Channel&, int, std::vector<float, std::allocator<float> >&, std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh6Biquad7processERSt6vectorIfSaIfEE",
+    "address": 307232,
+    "size": 124,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Biquad::process(std::vector<float, std::allocator<float> >&)"
+  },
+  {
+    "name": "_ZN6lubadh10TapManager6updateEv",
+    "address": 315704,
+    "size": 972,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::TapManager::update()"
+  },
+  {
+    "name": "_ZN6lubadh7Channel11FilePreview4stopEv",
+    "address": 234076,
+    "size": 200,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "lubadh::Channel::FilePreview::stop()"
+  }
+]

@@ -1,0 +1,16 @@
+#N canvas 537 179 895 617 12;
+#X obj 97 433 shell;
+#X msg 247 380 sox -b 24 -e floating-point -t raw -c 1 -r 48k /mnt/ramdisk/0l_auto /home/pi/_autosave/1l_layer_test.wav;
+#X floatatom 68 90 5 0 0 0 - - - 0;
+#X obj 68 114 t f f;
+#X obj 65 179 pack 0 0;
+#X obj 100 144 + 1;
+#X msg 61 233 sox -b 32 -e floating-point -t raw -c 1 -r 48k /mnt/ramdisk/\$1l_auto -b 32 -e floating-point -t raw -c 1 -r 48k /mnt/ramdisk/\$1r_auto --channels 2 --combine merge /home/pi/_autosave/\$2_layer_test.wav;
+#X obj 61 303 print;
+#X connect 1 0 0 0;
+#X connect 2 0 3 0;
+#X connect 3 0 4 0;
+#X connect 3 1 5 0;
+#X connect 4 0 6 0;
+#X connect 5 0 4 1;
+#X connect 6 0 7 0;

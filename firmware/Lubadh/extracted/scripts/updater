@@ -1,0 +1,73 @@
+#lubadh updater script
+echo "running updater script"
+cp scripts/S98lubadh /etc/init.d/
+sh core/mountusb
+if ( grep "/media/usb" /proc/mounts > /dev/null )
+then
+    echo "usb detected"
+    ls /media/usb/firmware -p | grep -v / | sort -r > .version
+    read -r latest < .version
+    if [ -f "/media/usb/firmware/$latest" ]
+    then
+        echo "found latest tarball"
+        echo "removing any local tarball"
+        rm /root/lubadh-v*
+        echo "importing tarball from usb"
+        cp /media/usb/firmware/$latest /root/
+        rm /media/usb/firmware/*
+
+    else
+        mkdir /media/usb/firmware
+    fi
+else
+    echo "no usb detected, using local tarball"
+fi
+
+rm /media/usb/presets/Broken-Tape.txt
+rm /media/usb/presets/Classic.txt
+rm /media/usb/presets/Clean.txt
+rm /media/usb/presets/Clockable.txt
+rm /media/usb/presets/Melontron.txt
+rm /media/usb/presets/Multi-Tape.txt
+rm /media/usb/presets/Octave-Delay.txt
+rm /media/usb/presets/SequencingMono.txt
+rm /media/usb/presets/SequencingPoly.txt
+rm /media/usb/presets/Tape-Looper.txt
+rm /media/usb/presets/PresetLoader.txt
+
+rm presets/factory/Broken-Tape.txt
+rm presets/factory/Classic.txt
+rm presets/factory/Clean.txt
+rm presets/factory/Clockable.txt
+rm presets/factory/Melontron.txt
+rm presets/factory/Multi-Tape.txt
+rm presets/factory/Octave-Delay.txt
+rm presets/factory/SequencingMono.txt
+rm presets/factory/SequencingPoly.txt
+rm presets/factory/Tape-Looper.txt
+rm presets/factory/PresetLoader.txt
+
+rm presets/Broken-Tape.txt
+rm presets/Classic.txt
+rm presets/Clean.txt
+rm presets/Clockable.txt
+rm presets/Melontron.txt
+rm presets/Multi-Tape.txt
+rm presets/Octave-Delay.txt
+rm presets/SequencingMono.txt
+rm presets/SequencingPoly.txt
+rm presets/Tape-Looper.txt
+rm presets/PresetLoader.txt
+
+rm -rf presets
+
+sh core/unmountusb
+
+echo "extracting local tarball"
+
+rm scripts/launcher
+rm scripts/launchScript
+
+tar --overwrite -xvf lubadh-*
+
+echo "that's all folks"

@@ -1,0 +1,172 @@
+
+/mnt/data/arbhar_re/extracted/arbhar_midi_reader.pd_linux:	file format elf32-littlearm
+
+Disassembly of section .init:
+
+000003a4 <_init>:
+     3a4: e92d4008     	push	{r3, lr}
+     3a8: eb000017     	bl	0x40c <call_weak_fn>    @ imm = #0x5c
+     3ac: e8bd8008     	pop	{r3, pc}
+
+Disassembly of section .plt:
+
+000003b0 <.plt>:
+     3b0: e52de004     	str	lr, [sp, #-0x4]!
+     3b4: e59fe004     	ldr	lr, [pc, #0x4]          @ 0x3c0 <.plt+0x10>
+     3b8: e08fe00e     	add	lr, pc, lr
+     3bc: e5bef008     	ldr	pc, [lr, #0x8]!
+     3c0: 40 0c 01 00  	.word	0x00010c40
+     3c4: e28fc600     	add	r12, pc, #0, #12
+     3c8: e28cca10     	add	r12, r12, #16, #20
+     3cc: e5bcfc40     	ldr	pc, [r12, #0xc40]!
+     3d0: e28fc600     	add	r12, pc, #0, #12
+     3d4: e28cca10     	add	r12, r12, #16, #20
+     3d8: e5bcfc38     	ldr	pc, [r12, #0xc38]!
+     3dc: e28fc600     	add	r12, pc, #0, #12
+     3e0: e28cca10     	add	r12, r12, #16, #20
+     3e4: e5bcfc30     	ldr	pc, [r12, #0xc30]!
+     3e8: e28fc600     	add	r12, pc, #0, #12
+     3ec: e28cca10     	add	r12, r12, #16, #20
+     3f0: e5bcfc28     	ldr	pc, [r12, #0xc28]!
+     3f4: e28fc600     	add	r12, pc, #0, #12
+     3f8: e28cca10     	add	r12, r12, #16, #20
+     3fc: e5bcfc20     	ldr	pc, [r12, #0xc20]!
+     400: e28fc600     	add	r12, pc, #0, #12
+     404: e28cca10     	add	r12, r12, #16, #20
+     408: e5bcfc18     	ldr	pc, [r12, #0xc18]!
+
+Disassembly of section .text:
+
+0000040c <call_weak_fn>:
+     40c: e59f3014     	ldr	r3, [pc, #0x14]         @ 0x428 <call_weak_fn+0x1c>
+     410: e59f2014     	ldr	r2, [pc, #0x14]         @ 0x42c <call_weak_fn+0x20>
+     414: e08f3003     	add	r3, pc, r3
+     418: e7932002     	ldr	r2, [r3, r2]
+     41c: e3520000     	cmp	r2, #0
+     420: 012fff1e     	bxeq	lr
+     424: eaffffef     	b	0x3e8 <.plt+0x38>       @ imm = #-0x44
+     428: e4 0b 01 00  	.word	0x00010be4
+     42c: 34 00 00 00  	.word	0x00000034
+
+00000430 <deregister_tm_clones>:
+     430: e59f002c     	ldr	r0, [pc, #0x2c]         @ 0x464 <deregister_tm_clones+0x34>
+     434: e59f302c     	ldr	r3, [pc, #0x2c]         @ 0x468 <deregister_tm_clones+0x38>
+     438: e08f0000     	add	r0, pc, r0
+     43c: e08f3003     	add	r3, pc, r3
+     440: e1530000     	cmp	r3, r0
+     444: e59f3020     	ldr	r3, [pc, #0x20]         @ 0x46c <deregister_tm_clones+0x3c>
+     448: e08f3003     	add	r3, pc, r3
+     44c: 012fff1e     	bxeq	lr
+     450: e59f2018     	ldr	r2, [pc, #0x18]         @ 0x470 <deregister_tm_clones+0x40>
+     454: e7933002     	ldr	r3, [r3, r2]
+     458: e3530000     	cmp	r3, #0
+     45c: 012fff1e     	bxeq	lr
+     460: e12fff13     	bx	r3
+     464: 00 0c 01 00  	.word	0x00010c00
+     468: fc 0b 01 00  	.word	0x00010bfc
+     46c: b0 0b 01 00  	.word	0x00010bb0
+     470: 28 00 00 00  	.word	0x00000028
+
+00000474 <register_tm_clones>:
+     474: e59f0038     	ldr	r0, [pc, #0x38]         @ 0x4b4 <register_tm_clones+0x40>
+     478: e59f3038     	ldr	r3, [pc, #0x38]         @ 0x4b8 <register_tm_clones+0x44>
+     47c: e08f0000     	add	r0, pc, r0
+     480: e08f3003     	add	r3, pc, r3
+     484: e0431000     	sub	r1, r3, r0
+     488: e59f302c     	ldr	r3, [pc, #0x2c]         @ 0x4bc <register_tm_clones+0x48>
+     48c: e1a01141     	asr	r1, r1, #2
+     490: e08f3003     	add	r3, pc, r3
+     494: e0811fa1     	add	r1, r1, r1, lsr #31
+     498: e1b010c1     	asrs	r1, r1, #1
+     49c: 012fff1e     	bxeq	lr
+     4a0: e59f2018     	ldr	r2, [pc, #0x18]         @ 0x4c0 <register_tm_clones+0x4c>
+     4a4: e7933002     	ldr	r3, [r3, r2]
+     4a8: e3530000     	cmp	r3, #0
+     4ac: 012fff1e     	bxeq	lr
+     4b0: e12fff13     	bx	r3
+     4b4: bc 0b 01 00  	.word	0x00010bbc
+     4b8: b8 0b 01 00  	.word	0x00010bb8
+     4bc: 68 0b 01 00  	.word	0x00010b68
+     4c0: 38 00 00 00  	.word	0x00000038
+
+000004c4 <__do_global_dtors_aux>:
+     4c4: e59f304c     	ldr	r3, [pc, #0x4c]         @ 0x518 <__do_global_dtors_aux+0x54>
+     4c8: e59f204c     	ldr	r2, [pc, #0x4c]         @ 0x51c <__do_global_dtors_aux+0x58>
+     4cc: e08f3003     	add	r3, pc, r3
+     4d0: e08f2002     	add	r2, pc, r2
+     4d4: e5d33000     	ldrb	r3, [r3]
+     4d8: e3530000     	cmp	r3, #0
+     4dc: 112fff1e     	bxne	lr
+     4e0: e59f3038     	ldr	r3, [pc, #0x38]         @ 0x520 <__do_global_dtors_aux+0x5c>
+     4e4: e92d4010     	push	{r4, lr}
+     4e8: e7923003     	ldr	r3, [r2, r3]
+     4ec: e3530000     	cmp	r3, #0
+     4f0: 0a000002     	beq	0x500 <__do_global_dtors_aux+0x3c> @ imm = #0x8
+     4f4: e59f3028     	ldr	r3, [pc, #0x28]         @ 0x524 <__do_global_dtors_aux+0x60>
+     4f8: e79f0003     	ldr	r0, [pc, r3]
+     4fc: ebffffb3     	bl	0x3d0 <.plt+0x20>       @ imm = #-0x134
+     500: ebffffca     	bl	0x430 <deregister_tm_clones> @ imm = #-0xd8
+     504: e59f301c     	ldr	r3, [pc, #0x1c]         @ 0x528 <__do_global_dtors_aux+0x64>
+     508: e3a02001     	mov	r2, #1
+     50c: e08f3003     	add	r3, pc, r3
+     510: e5c32000     	strb	r2, [r3]
+     514: e8bd8010     	pop	{r4, pc}
+     518: 6c 0b 01 00  	.word	0x00010b6c
+     51c: 28 0b 01 00  	.word	0x00010b28
+     520: 24 00 00 00  	.word	0x00000024
+     524: 3c 0b 01 00  	.word	0x00010b3c
+     528: 2c 0b 01 00  	.word	0x00010b2c
+
+0000052c <frame_dummy>:
+     52c: eaffffd0     	b	0x474 <register_tm_clones> @ imm = #-0xc0
+
+00000530 <midi_reader_free>:
+     530: e12fff1e     	bx	lr
+
+00000534 <midi_reader_new>:
+     534: e59f3020     	ldr	r3, [pc, #0x20]         @ 0x55c <midi_reader_new+0x28>
+     538: e92d4010     	push	{r4, lr}
+     53c: e79f0003     	ldr	r0, [pc, r3]
+     540: ebffffa5     	bl	0x3dc <.plt+0x2c>       @ imm = #-0x16c
+     544: e1a04000     	mov	r4, r0
+     548: e59f0010     	ldr	r0, [pc, #0x10]         @ 0x560 <midi_reader_new+0x2c>
+     54c: e08f0000     	add	r0, pc, r0
+     550: ebffffa7     	bl	0x3f4 <.plt+0x44>       @ imm = #-0x164
+     554: e1a00004     	mov	r0, r4
+     558: e8bd8010     	pop	{r4, pc}
+     55c: 00 0b 01 00  	.word	0x00010b00
+     560: 80 00 00 00  	.word	0x00000080
+
+00000564 <midi_reader_setup>:
+     564: e59f004c     	ldr	r0, [pc, #0x4c]         @ 0x5b8 <midi_reader_setup+0x54>
+     568: e52de004     	str	lr, [sp, #-0x4]!
+     56c: e08f0000     	add	r0, pc, r0
+     570: e24dd00c     	sub	sp, sp, #12
+     574: ebffff92     	bl	0x3c4 <.plt+0x14>       @ imm = #-0x1b8
+     578: e59f103c     	ldr	r1, [pc, #0x3c]         @ 0x5bc <midi_reader_setup+0x58>
+     57c: e59fc03c     	ldr	r12, [pc, #0x3c]        @ 0x5c0 <midi_reader_setup+0x5c>
+     580: e3a0e000     	mov	lr, #0
+     584: e59f2038     	ldr	r2, [pc, #0x38]         @ 0x5c4 <midi_reader_setup+0x60>
+     588: e08f1001     	add	r1, pc, r1
+     58c: e3a03024     	mov	r3, #36
+     590: e7912002     	ldr	r2, [r1, r2]
+     594: e791100c     	ldr	r1, [r1, r12]
+     598: e58de004     	str	lr, [sp, #0x4]
+     59c: e58de000     	str	lr, [sp]
+     5a0: ebffff96     	bl	0x400 <.plt+0x50>       @ imm = #-0x1a8
+     5a4: e59f301c     	ldr	r3, [pc, #0x1c]         @ 0x5c8 <midi_reader_setup+0x64>
+     5a8: e08f1003     	add	r1, pc, r3
+     5ac: e5810000     	str	r0, [r1]
+     5b0: e28dd00c     	add	sp, sp, #12
+     5b4: e49df004     	ldr	pc, [sp], #4
+     5b8: 74 00 00 00  	.word	0x00000074
+     5bc: 70 0a 01 00  	.word	0x00010a70
+     5c0: 30 00 00 00  	.word	0x00000030
+     5c4: 2c 00 00 00  	.word	0x0000002c
+     5c8: 94 0a 01 00  	.word	0x00010a94
+
+Disassembly of section .fini:
+
+000005cc <_fini>:
+     5cc: e92d4008     	push	{r3, lr}
+     5d0: e8bd8008     	pop	{r3, pc}

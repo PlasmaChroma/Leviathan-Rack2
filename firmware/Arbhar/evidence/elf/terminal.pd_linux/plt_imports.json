@@ -1,0 +1,21 @@
+{
+  "0x5d4": "gensym",
+  "0x5e0": "__cxa_finalize",
+  "0x5ec": "pd_new",
+  "0x5f8": "fgets",
+  "0x604": "class_addbang",
+  "0x610": "strcat",
+  "0x61c": "strcpy",
+  "0x628": "__gmon_start__",
+  "0x634": "strlen",
+  "0x640": "strchr",
+  "0x64c": "terminal_itoa",
+  "0x658": "memset",
+  "0x664": "outlet_new",
+  "0x670": "popen",
+  "0x67c": "class_new",
+  "0x688": "outlet_anything",
+  "0x694": "terminal_bang",
+  "0x6a0": "class_addmethod",
+  "0x6ac": "pclose"
+}

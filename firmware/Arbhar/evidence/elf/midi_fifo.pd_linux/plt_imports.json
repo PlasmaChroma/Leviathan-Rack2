@@ -1,0 +1,23 @@
+{
+  "0x6d8": "gensym",
+  "0x6e4": "__cxa_finalize",
+  "0x6f0": "read",
+  "0x6fc": "pd_new",
+  "0x708": "midi_fifo_close",
+  "0x714": "clock_delay",
+  "0x720": "strerror",
+  "0x72c": "clock_new",
+  "0x738": "__gmon_start__",
+  "0x744": "open",
+  "0x750": "clock_unset",
+  "0x75c": "__errno_location",
+  "0x768": "post",
+  "0x774": "outlet_new",
+  "0x780": "class_new",
+  "0x78c": "outlet_list",
+  "0x798": "midi_fifo_read",
+  "0x7a4": "class_addmethod",
+  "0x7b0": "clock_free",
+  "0x7bc": "midi_bytes_per_message",
+  "0x7c8": "close"
+}

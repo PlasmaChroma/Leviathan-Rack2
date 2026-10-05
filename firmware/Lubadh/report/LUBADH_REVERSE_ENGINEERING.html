@@ -1,0 +1,664 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lubadh Reverse Engineering</title><style>
+:root{color-scheme:light dark;--bg:#f5f3ef;--paper:#fff;--ink:#24303a;--sub:#5c6871;--line:#d9dfdf;--accent:#285f65;--code:#edf2f2}
+@media(prefers-color-scheme:dark){:root{--bg:#14191d;--paper:#1b2227;--ink:#e6e9e9;--sub:#aebcc2;--line:#39444b;--accent:#9cd2c7;--code:#252f35}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{border-bottom:1px solid var(--line);padding:22px max(24px,calc((100% - 1080px)/2));background:var(--paper)}header small{letter-spacing:.13em;font-weight:700;color:var(--accent)}nav{font-size:14px;display:flex;gap:20px;flex-wrap:wrap;margin-top:8px}a{color:var(--accent);text-underline-offset:.2em}
+main{max-width:1080px;margin:30px auto;padding:40px 50px;background:var(--paper);border:1px solid var(--line);border-radius:10px}h1{font-size:2.15rem;line-height:1.2;margin:0 0 22px;letter-spacing:-.035em}h2{font-size:1.55rem;line-height:1.25;border-top:1px solid var(--line);padding-top:30px;margin-top:44px;letter-spacing:-.02em}h3{font-size:1.15rem;margin-top:29px}p{margin:14px 0}strong{font-weight:700}code{font: .87em/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{padding:19px 22px;background:var(--code);border-radius:6px;overflow-x:auto;font-size:14px;line-height:1.5}pre code{padding:0;white-space:pre;overflow-wrap:normal}table{border-collapse:collapse;width:100%;font-size:.88rem;margin:22px 0;display:block;overflow-x:auto}th,td{border:1px solid var(--line);padding:10px 12px;vertical-align:top}th{background:var(--code);text-align:left}blockquote{border-left:4px solid var(--accent);margin:20px 0;padding:2px 22px;color:var(--sub)}.contents{font-size:.86rem;border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin:30px 0}.contents summary{font-weight:700;cursor:pointer}.contents ol{columns:2;column-gap:32px;padding-left:20px}.contents li{margin:5px 0;break-inside:avoid}footer{max-width:1080px;margin:20px auto 40px;color:var(--sub);font-size:13px;padding:0 25px}
+@media(max-width:700px){main{margin:0;padding:27px 20px;border:0;border-radius:0}h1{font-size:1.85rem}.contents ol{columns:1}body{font-size:16px}}
+@media print{body,main,header{background:white;color:black}nav,.contents{display:none}main{border:none;padding:0;max-width:none}pre,table{break-inside:avoid}h2,h3{break-after:avoid}}
+</style></head><body><header><small>LEVIATHAN · FIRMWARE RESEARCH</small><nav><a href="LUBADH_REVERSE_ENGINEERING.html">Analysis</a><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack handoff</a><a href="PARAMETER_BIBLE.html">Parameters</a><a href="LUBADH_REVERSE_ENGINEERING.md">Markdown source</a></nav></header><main><h1>Lúbadh 2.1.0 — firmware reverse engineering for a native Rack instrument</h1>
+<p><strong>Analyzed input:</strong> <code>lubadh-v2.1.0.tar.gz</code> supplied in this conversation.<br />
+<strong>Scope:</strong> ARM executable/static data, factory presets, update/file-management scripts, selected original-instruction arithmetic probes, and official product/2.1 quickstart cross-checks.<br />
+<strong>Deliverable status:</strong> substantial engineering analysis and tested reference kernels, <strong>not</strong> a completed Rack module or a hardware-equivalent emulator.</p>
+<details class="contents"><summary>Contents</summary><ol><li><a href="#1-executive-findings">1. Executive findings</a></li><li><a href="#2-evidence-rules-and-reproducibility">2. Evidence rules and reproducibility</a></li><li><a href="#3-package-platform-and-software-architecture">3. Package, platform, and software architecture</a></li><li><a href="#4-timebases-capacity-and-latency">4. Timebases, capacity, and latency</a></li><li><a href="#5-controls-and-io">5. Controls and IO</a></li><li><a href="#6-deck-state-transport-and-multi-tap-behavior">6. Deck state, transport, and multi-tap behavior</a></li><li><a href="#7-recording-and-playback-signal-paths">7. Recording and playback signal paths</a></li><li><a href="#8-recovered-tape-and-output-algorithms">8. Recovered tape and output algorithms</a></li><li><a href="#9-crossfade-table-a-distinctive-reconstructable-detail">9. Crossfade table: a distinctive, reconstructable detail</a></li><li><a href="#10-factory-presets-as-behavioral-specifications">10. Factory presets as behavioral specifications</a></li><li><a href="#11-sample-import-export-and-persistent-state">11. Sample import/export and persistent state</a></li><li><a href="#12-numerical-validation-what-passed-and-what-did-not-run">12. Numerical validation: what passed and what did not run</a></li><li><a href="#13-remaining-questions-ranked-by-implementation-impact">13. Remaining questions ranked by implementation impact</a></li><li><a href="#14-recommended-implementation-order">14. Recommended implementation order</a></li><li><a href="#15-sources-and-evidence-navigation">15. Sources and evidence navigation</a></li></ol></details><h2 id="1-executive-findings">1. Executive findings</h2>
+<p>This is a particularly informative update package. It contains ordinary, dynamically linked <strong>32-bit ARM/Linux executables with C++ symbols intact</strong>, rather than an opaque encrypted microcontroller image. The main program exposes named application, transport, tape-effect, clock, state-machine, and file-management components. Ten richly commented factory presets and an HTML preset editor supply an unusually useful configuration specification alongside the machine code.</p>
+<p>The central instrument is not merely a stereo delay with a tape effect inserted afterward. It has two deck engines, distinct initial-record/overdub/playback states, variable-speed <strong>writing as well as reading</strong>, multiple logical playback engines, transition taps, pitch-hold modes, loop-region selection, event scheduling, and preset-selectable clock/record semantics. Reproducing these relationships matters more than substituting a generic tape saturator.</p>
+<p>The strongest newly recovered details are:</p>
+<ul>
+<li>The active tape-color chain has separately recoverable filtering, signed-square wear, a short signed-delay diffuser, flutter/crinkle modulation, and nonlinear clipping. Some attractive-looking class names elsewhere in the executable are <strong>not the classes used by the main processing path</strong>.</li>
+<li>The crossfade table is generated from a hybrid linear/sinusoidal amplitude curve. It is neither a plain linear fade nor an ordinary constant-power crossfade.</li>
+<li>The overdub buffer write is <code>writeClip(inputContribution + oldBuffer * feedbackCoefficient)</code>. Playback reverb is not directly substituted for <code>oldBuffer</code> in that routine.</li>
+<li>The tap organization is <strong>four logical engines with five transition slots apiece</strong>, not straightforward twenty-note polyphony.</li>
+<li>There are <strong>three different timebase numbers</strong>: requested JACK 48,000 Hz, a recurring DSP constant of 49,170.25390625 Hz, and SoX file conversion at 49,148 Hz. Treating them as interchangeable would bake unexplained pitch/timing errors into a recreation.</li>
+<li>Eight selected ARM routines were exercised through a deliberately restricted instruction interpreter. <strong>5,925 numerical comparisons passed</strong>. A separate C++ reference suite passed <strong>8,154 invariant checks</strong>. These are useful arithmetic checks, not end-to-end firmware or hardware validation.</li>
+</ul>
+<p>For implementation, start with a native, deterministic two-deck transport and the recovered kernels. Keep the analog interface, clock calibration, unresolved tap transitions, anti-alias behavior, and complete plate network explicitly open rather than filling them with plausible-sounding guesses.</p>
+<h2 id="2-evidence-rules-and-reproducibility">2. Evidence rules and reproducibility</h2>
+<p>This report uses five evidence levels:</p>
+<table>
+<thead>
+<tr>
+  <th>Label</th>
+  <th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>F — file fact</strong></td>
+  <td>Directly present in the supplied bytes, symbols, preset values, or script text.</td>
+</tr>
+<tr>
+  <td><strong>S — static reconstruction</strong></td>
+  <td>Derived from inspected instructions and dataflow; the complete path has not necessarily been executed.</td>
+</tr>
+<tr>
+  <td><strong>P — numerical probe</strong></td>
+  <td>Actual selected instruction text from the supplied binary executed in the included restricted ARM/VFP interpreter, compared with an independently expressed formula.</td>
+</tr>
+<tr>
+  <td><strong>D — documentation</strong></td>
+  <td>Official public product/update/quickstart information; not proof of exact machine-code behavior.</td>
+</tr>
+<tr>
+  <td><strong>R — recommendation</strong></td>
+  <td>A proposed implementation choice for Rack, not a claim about the original.</td>
+</tr>
+</tbody>
+</table>
+<p>All addresses below are <strong>virtual addresses in the uploaded <code>lubadh_main</code> executable</strong>, unless another binary is named. These are not raw file offsets. The primary file hash is:</p>
+<pre><code class="language-text">lubadh_main SHA-256
+2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4
+</code></pre>
+<p><code>evidence/manifest.json</code> hashes every extracted package file. <code>tables/recovered_constants.json</code> also records the original archive hash. <code>evidence/main_disassembly.txt</code> preserves LLVM output; the individual <code>evidence/functions/*.asm</code> files provide manageable function-level views with literal/import annotations. Annotation comments are aids, not a substitute for checking instructions: PC-loaded doubles can actually contain two unrelated 32-bit values, and linear string-reference annotations are not a complete dataflow analysis.</p>
+<p>No updater, launcher, hardware driver, or complete firmware process was run. The update scripts include system-changing operations and are included as <strong>inert evidence only</strong>. No claims are made about a booted device, its analog electronics, actual codec clock, scheduler latency, or audio listening tests.</p>
+<p>The official full 2.0 manual was located but could not be retrieved successfully in this session. It was <strong>not fully read</strong>. The 2.1 quickstart was inspected, including relevant page images; the product, firmware, and preset-editor information was cross-checked. A long manual's existence is not being counted as reviewed evidence.</p>
+<h2 id="3-package-platform-and-software-architecture">3. Package, platform, and software architecture</h2>
+<h3>3.1 Executables and configuration</h3>
+<table>
+<thead>
+<tr>
+  <th>Executable</th>
+  <th style="text-align:right">Bytes</th>
+  <th>Apparent responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>lubadh</code></td>
+  <td style="text-align:right">27,768</td>
+  <td>Supervisory/startup application</td>
+</tr>
+<tr>
+  <td><code>lubadh_main</code></td>
+  <td style="text-align:right">642,160</td>
+  <td>Main UI/control and audio engine</td>
+</tr>
+<tr>
+  <td><code>preset_load</code></td>
+  <td style="text-align:right">236,148</td>
+  <td>Hjson preset parsing and handoff</td>
+</tr>
+<tr>
+  <td><code>audio_load</code></td>
+  <td style="text-align:right">121,840</td>
+  <td>Audio loading/import coordination</td>
+</tr>
+<tr>
+  <td><code>audio_save</code></td>
+  <td style="text-align:right">78,320</td>
+  <td>Save/export coordination</td>
+</tr>
+<tr>
+  <td><code>autosave_audio</code></td>
+  <td style="text-align:right">85,216</td>
+  <td>Automatic audio persistence</td>
+</tr>
+<tr>
+  <td><code>autosave_data</code></td>
+  <td style="text-align:right">299,024</td>
+  <td>Automatic configuration/state persistence</td>
+</tr>
+<tr>
+  <td><code>erase</code></td>
+  <td style="text-align:right">79,800</td>
+  <td>Erasure worker</td>
+</tr>
+</tbody>
+</table>
+<p>The package also contains ten factory <code>.txt</code> presets, the browser preset editor, and startup/update/USB/SoX scripts. The preset parser successfully recovered <strong>31 flattened fields</strong> from every factory preset. The complete values and cross-preset comparison are supplied, rather than only a few hand-picked defaults.</p>
+<p>The main ELF contains 4,823 symbol-table entries and 1,635 defined function symbols. These counts include library machinery and aliases; they do <strong>not</strong> mean 1,635 distinct DSP algorithms. The curated application/DSP function set contains 272 unique addresses. <strong>F</strong></p>
+<h3>3.2 Runtime environment</h3>
+<p>The executables are little-endian ARM ELF/EABI5 hard-float binaries with dynamic uClibc linkage; the interpreter path is <code>/lib/ld-uClibc.so.0</code>. Attribute/build evidence includes ARMv8 application-profile code, VFP/NEON support, and a Buildroot GCC 9.4.0 toolchain string. Older compiler strings in startup components do not establish that the entire application used that compiler. The exact hardware model should not be guessed from <code>wiringPi</code> alone. <strong>F</strong></p>
+<p>The software uses JACK, Linux threading, shared memory/semaphores, GPIO/ADC handling, Hjson parsing, and separate helper processes. This is an update payload, not a full system image: dependent libraries, the actual codec/driver configuration, and every calibration source are not supplied here.</p>
+<p><code>AudioEngine::process</code> at <code>0x49244</code> coordinates presets, IO, deck processing, and display updates. Its normal two-deck path creates a worker thread for one channel, processes the other, and joins. The inspected path includes allocation for thread state. That may have been acceptable in the original appliance, but it is <strong>not a design to copy into Rack's audio callback</strong>. Calls named file loader/saver in the callback show coordination; their presence alone does not prove every disk operation occurs synchronously there. <strong>S</strong></p>
+<h3>3.3 Hardware-revision gain</h3>
+<p><code>Application::setup</code> at <code>0x2b03c</code> checks a hardware input and selects an input compensation of <strong>1.0</strong> or approximately <strong>3.1</strong>. Associated strings distinguish new hardware requiring no compensation from old hardware requiring a boost. That value is passed into the audio engine and applied to input samples. <strong>S</strong></p>
+<p>This is a useful warning against deducing Rack voltage scaling from one unexplained DSP gain. It is revision compensation, not a recovered universal volts-to-float calibration. The analog interface remains a separate model.</p>
+<h2 id="4-timebases-capacity-and-latency">4. Timebases, capacity, and latency</h2>
+<table>
+<thead>
+<tr>
+  <th>Domain</th>
+  <th style="text-align:right">Recovered value</th>
+  <th>Evidence and interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Requested JACK sample rate</td>
+  <td style="text-align:right">48,000 Hz</td>
+  <td>Literal startup command; does not itself measure the physical converter clock.</td>
+</tr>
+<tr>
+  <td>JACK period</td>
+  <td style="text-align:right">128 frames</td>
+  <td>Literal <code>-p128</code>.</td>
+</tr>
+<tr>
+  <td>ALSA periods</td>
+  <td style="text-align:right">3</td>
+  <td>Literal <code>-n3</code>; not a complete input-to-output latency measurement.</td>
+</tr>
+<tr>
+  <td>DSP arithmetic rate</td>
+  <td style="text-align:right">49,170.25390625 Hz</td>
+  <td>Float bits <code>0x47401241</code>, repeatedly embedded in DSP/control calculations.</td>
+</tr>
+<tr>
+  <td>Audio-file conversion rate</td>
+  <td style="text-align:right">49,148 Hz</td>
+  <td><code>soximport</code>, <code>soxexport</code>, <code>soxpreview</code>.</td>
+</tr>
+<tr>
+  <td>Deck capacity</td>
+  <td style="text-align:right">29,502,000 float samples</td>
+  <td>Shared-memory array type and indexing bounds.</td>
+</tr>
+<tr>
+  <td>Audio storage per deck</td>
+  <td style="text-align:right">118,008,000 bytes</td>
+  <td>Capacity × four bytes.</td>
+</tr>
+</tbody>
+</table>
+<p>The exact command is:</p>
+<pre><code class="language-sh">jackd -P70 -dalsa -r48000 -p128 -n3 &amp;
+</code></pre>
+<p>The two principal buffers alone total about <strong>225.08 MiB</strong>, before effect delay lines, temporary vectors, saved states, and other overhead. Their capacity is exactly <code>600 * 49170</code> samples. At a genuine 48 kHz clock, the same sample count would last <strong>614.625 seconds</strong>. At the recurring DSP rate it is very slightly less than 600 seconds. Those are arithmetic consequences, not evidence that the hardware actually records for either exact duration. <strong>F/S</strong></p>
+<p>The difference between the SoX and DSP numbers is small but real. The difference between 48 kHz and approximately 49.17 kHz is large enough to affect pitch and timing. A suitable hardware experiment is a known-frequency recording exported to WAV, combined with an independently timed long recording. Until that is done, preserve these domains separately in the reconstruction.</p>
+<p><strong>Rack recommendation:</strong> provide an explicit compatibility timing policy. A research mode can use fixed 128-frame processing and literal legacy constants. A host-native mode can preserve seconds and Hz at the host rate, with deliberate conversion of delay lengths, smoothing, loop lengths, and control periods. Do not silently mix host-rate storage with legacy-rate pitch formulas. Any eventual oversampling wrapper must keep transport time separate from effect processing rate. <strong>R</strong></p>
+<h2 id="5-controls-and-io">5. Controls and IO</h2>
+<h3>5.1 Functional inventory</h3>
+<p>Each deck needs an audio input/output path; speed, start, length, and Time controls; Record, Retrig/Shift, and Erase actions; configurable recording and retrigger inputs; and clock output behavior. The auxiliary input/output crossfaders and deck link are part of the instrument, not decorative controls. Capacitive interaction is a separate speed disturbance, not just a second manual speed knob.</p>
+<p>The official auxiliary diagram shows input distribution and output mixing with curved fades and audio-rate modulation capability. It does <strong>not</strong> numerically define the analog crossfader transfer law. The expander supplies Start, Length, Time, and Erase inputs for each deck. Its note says <strong>“bipolar (5Vpp)”</strong>; that is not equivalent to saying ±5 V. The preset speed comments, meanwhile, describe a 0–5 V mapped control domain. Hardware offsets, attenuation, summing, and clipping must therefore be measured or traced before asserting exact physical jack ranges. <strong>D/F</strong></p>
+<p>For a Rack adaptation, normalized parameter domains can be defined now; volts-to-domain conversion should remain an explicit adapter. The proposed contract in <code>RACK_IMPLEMENTATION_HANDOFF.md</code> is labeled as a design, not recovered circuitry.</p>
+<h3>5.2 Speed modes</h3>
+<p><code>SpeedControl</code> selects Notched, Stepped, Smooth, or V/oct behavior. Default positive speed markers are <code>[0, 0.5, 1, 2, 4]</code>; some sequencing/delay presets add <code>0.25</code>. The executable contains named <code>fillSpeedTable</code> routines and a 4,096-entry control table. Exact notch widths, sign handling, and step boundaries deserve a separate table reconstruction rather than an arbitrary quantizer. <strong>F/S</strong></p>
+<p>The supplied preset comments specify this V/oct control mapping:</p>
+<pre><code class="language-text">0 &lt;= V &lt; 1: speed = 0.25 * V
+1 &lt;= V &lt;= 5: speed = 2^(V - 3)
+</code></pre>
+<p>Thus 1 V gives 0.25×, 3 V gives 1×, and 5 V gives 4×. Reverse in this mode is a separate deck-flip operation. This is not automatically the most intuitive Rack pitch input convention; a Rack-centered 0 V = original pitch option would be a deliberate adaptation. <strong>F/R</strong></p>
+<p><code>setPotSpeed</code> at <code>0x37510</code> and <code>processSpeed</code> at <code>0x37408</code> implement a finite ramp with block-based steps. The inspected slew setup uses an integer-converted time divided by a nominal <strong>2.7</strong> and then adds one step. It is not simply a one-pole exponential smoother whose time constant equals the preset milliseconds. Flutter and touch multiply/disturb speed separately. <strong>S</strong></p>
+<h3>5.3 ADC behavior and control change detection</h3>
+<p><code>ADC::interpretVal</code> at <code>0x6c104</code> smooths into an <strong>integer cached value</strong>:</p>
+<pre><code class="language-text">cached = trunc(float32(alpha*raw + (1-alpha)*cached))
+</code></pre>
+<p>That integer history was numerically probed. The input is constrained to a 12-bit domain in the examined control path. Speed change detection requires a difference greater than nine counts; Time requires greater than 29. Replacing this with unconstrained high-resolution float smoothing may remove recognizable control behavior. For a modern Rack option that is fine, but keep it distinct from a compatibility path. <strong>P/S</strong></p>
+<h3>5.4 Time, clock, and quantization</h3>
+<p>Time has ordinary clock-division and dub-level functions plus a preset-selected third function: crossfade duration, speed-slew amount, or tape amount. <code>TimePot=2</code> means the third function is tape amount; it does <strong>not</strong> mean the entire Time UI has only three raw preset enum states. <strong>F/S</strong></p>
+<p>Clock division sets are:</p>
+<pre><code class="language-text">All:       1,2,3,4,5,6,7,8,9,10,11,12,16,24,32,64
+Even:      2,4,6,8,10,12,16,24,32,64
+Odd:       1,3,5,7,9,11
+Powers 2:  1,2,4,8,16,32,64
+</code></pre>
+<p>Start/length quantization uses corresponding lists without 1. A source-comment contradiction says both that <code>Quantisation=0</code> disables quantization and that it chooses the All list. Runtime enable/selection is separate from the preset list selector. Do <strong>not</strong> implement <code>Quantisation=0</code> as unconditional disabling based solely on that sentence. <strong>F/S</strong></p>
+<p><code>RecordJack=2</code> changes the <strong>record input</strong> into an external clock input. The averaging setting counts inter-pulse durations; resolution is pulses per <strong>full loop</strong>, not inherently pulses per quarter note. Resolution zero follows the selected clock division. Timeout zero disables expiration. The default average is four and resolution is 64. The Clockable preset uses a three-second timeout. <strong>F</strong></p>
+<p>The quickstart overview wording about retrigger synchronization should not override the explicit configurable RecordJack definition. Retrigger remains a loop-start/playhead event; external-speed clocking is a separate mode. <code>RetrigDelay</code>, used by several sequencing presets, is handled through a block countdown. Exact first-edge, lost-clock, simultaneous-event, and output pulse-width behavior remains unprobed. <strong>S</strong></p>
+<h3>5.5 Selected version-2.1 UI cross-checks</h3>
+<p>The 2.1 quickstart shows independent per-deck preset selection: hold both Shift controls and the target Erase, choose with Time, and load with Record. The runtime menu accommodates up to twelve files, while this update ships ten factory presets. Monitoring and one-shot recording/playback are independent modes, not additional factory presets. Avoid carrying an older two-slot A/B preset assumption into this version. <strong>D/F</strong></p>
+<p>The complete chord-to-event priority matrix has not been proven. A native event layer should represent semantic actions first and map button chords afterward. This prevents modifiers used for saving, preset selection, or mode changes from accidentally generating musical retriggers.</p>
+<h2 id="6-deck-state-transport-and-multi-tap-behavior">6. Deck state, transport, and multi-tap behavior</h2>
+<h3>6.1 Explicit deck states</h3>
+<p>The executable names and dispatches four principal states:</p>
+<table>
+<thead>
+<tr>
+  <th>State</th>
+  <th>Constructor VA</th>
+  <th>Button handler VA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Empty deck</td>
+  <td><code>0x37008</code></td>
+  <td><code>0x3a470</code></td>
+</tr>
+<tr>
+  <td>First recording</td>
+  <td><code>0x37024</code></td>
+  <td><code>0x3a6ac</code></td>
+</tr>
+<tr>
+  <td>Overdub recording</td>
+  <td><code>0x3704c</code></td>
+  <td><code>0x3a4ec</code></td>
+</tr>
+<tr>
+  <td>Playback</td>
+  <td><code>0x37068</code></td>
+  <td><code>0x3a5a0</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>Channel::setState</code> is at <code>0x3a018</code>. Their distinction is substantive: first recording establishes valid recorded extent and playback setup; overdubbing modifies existing material; playback and empty states interpret recording/arming differently. Inspected record event paths move Empty → FirstRec, FirstRec → Playback, Playback → Overdub, and Overdub → Playback, with additional gate/arming conditions. This is not a complete event transition table for every mode. <strong>S</strong></p>
+<p>The first-record handler checks minimum completion conditions, updates recorded extent, allocates/activates playback taps, and handles hold-speed configuration. Do not assume the <code>MinLength</code> preset alone defines every first-record stopping guard: it is clearly used for selected loop-region length, while the first-record handler has additional block-related checks. <strong>S</strong></p>
+<h3>6.2 Variable-speed writing versus fixed-speed writing</h3>
+<p>The most consequential transport preset is <code>RecordSpeed</code>:</p>
+<ul>
+<li><strong>0 / variable:</strong> writing follows signed transport speed. Incoming audio must be resampled into tape coordinates; recording backward is distinct from merely reversing playback afterward.</li>
+<li><strong>1 / fixed:</strong> writing remains forward at original speed while playback can run at another speed. This supports the older-style pitch-shifting/delay behavior.</li>
+</ul>
+<p><code>recordInput</code> at <code>0x47818</code> calculates the magnitude of effective record speed, uses an inverse-speed increment when sufficiently nonzero, preserves a fractional interpolation position, and writes across the tape indices traversed by the record tap. When the tap has crossed multiple storage samples, the input is interpolated separately for those writes. A near-zero guard uses approximately <code>1e-6</code> to avoid inverse-speed blowup. <strong>F/S</strong></p>
+<p>This is why a simplistic implementation that writes exactly one sample per audio frame and changes only a playback cursor is insufficient. It can approximate the fixed-record preset but not the variable-speed tape model. Zero-speed, direction changes, multiple writes per frame, and transitions need explicit regression cases.</p>
+<h3>6.3 Input interpolation and read addressing</h3>
+<p><code>Channel::InputBuffer::interpolate</code> at <code>0x38ab4</code> reads four samples <code>a,b,c,d</code> and evaluates:</p>
+<pre><code class="language-text">delta = c - b
+y = b + t * [ delta
+      - (1-t) * inv6 * (d + 2a - 3b + t*(d-a-3*delta)) ]
+inv6 float bits = 0x3e2aaaad
+</code></pre>
+<p>This is a four-point cubic/Lagrange-type expression, not ordinary linear interpolation and not the usual Catmull–Rom formula. The slightly unusual stored <code>inv6</code> value is <strong>0.16666670143604279</strong>. The arithmetic and sampled positions were probed. <strong>P</strong></p>
+<p>The InputBuffer implementation clamps an integer sample index but computes the fractional coordinate afterward; out-of-range positions can therefore extrapolate rather than behave like a separately clamped fraction. That is not an invitation to feed arbitrary positions in the native engine.</p>
+<p><code>AudioData::interpolate</code> at <code>0x38748</code> uses the same form but different addressing: the inspected positive/negative speed paths use different integer anchors, including <code>position+2</code> versus <code>position-3</code>, with boundary clamps and neighboring reads. The negative-speed path is not just a positive interpolator given a negative phase increment. That address selection is statically recovered, not numerically verified as a complete moving tape reader. <strong>S</strong></p>
+<h3>6.4 Logical voices and transition storage</h3>
+<p><code>TapManager::activate_new</code> at <code>0x4eea8</code> and <code>TapEngine::activate</code> at <code>0x4e358</code> reveal <strong>four engines</strong>, each occupying 680 bytes. Each engine contains <strong>five 132-byte Tap slots</strong> plus bookkeeping. A free engine is preferred. If none is free, an oldest-engine selection participates in fade-out/replacement. Within an engine, activation searches for a free transition slot and can return null if all slots are occupied. <strong>S</strong></p>
+<p>This storage arrangement supports overlap during retriggers, direction/boundary changes, and fades. It should not be presented as twenty independently controllable musical voices. A faithful model needs two levels: musical engine allocation and short-lived tap transitions. Stress behavior when many transitions overlap still needs targeted execution.</p>
+<p><code>PlaybackSpeed.Looping</code> and <code>.Oneshot</code> independently choose Follow or Hold. Hold snapshots speed at tap creation, allowing simultaneous pitches when MultiTap is enabled. It is not a global sample-and-hold applied to the deck's speed knob. <strong>F/S</strong></p>
+<h3>6.5 Start, length, and fades</h3>
+<p><code>setLoopingParameters</code> at <code>0x376ac</code> maps normalized start/length into the recorded span. The inspected unquantized start path uses the 12-bit control fraction and clamps inside the recorded range; the length path uses the recorded length minus one with a minimum based on <code>MinLength</code>. Quantized paths use floor-grid operations; length includes a one-unit offset rather than simply rounding to the nearest duration. Modifier-held unquantized offsets need further event-level testing. <strong>S</strong></p>
+<p>The selected crossfade span is bounded by the region, including a half-region limit, and an inspected path enforces a <strong>128-sample floor</strong> at <code>0x37888</code>. Consequently a preset duration of zero does not establish universally instantaneous splices. Small loops and overlapping transitions deserve special care.</p>
+<h2 id="7-recording-and-playback-signal-paths">7. Recording and playback signal paths</h2>
+<h3>7.1 Observed active processing order</h3>
+<p>The main channel processor starts at <code>0x47c08</code>. On its active tape-processing path, the calls occur in this order:</p>
+<pre><code class="language-text">Input preparation / hardware gain compensation
+  → TapeInFilter                         call 0x47d4c
+  → TapeFilter (TapeAge amount)           call 0x47d5c
+  → TapeCompander (Wear amount)           call 0x47d6c
+  → TapeAllpass (Hysterisis amount)       call 0x47d7c
+  → input anti-alias stage               call 0x47ddc
+  → InputBuffer                          call 0x47df0
+
+Tape/tap playback and mixing
+  → playback anti-alias stage            call 0x483ac
+  → voice-level / monitoring-related mix
+  → TapeFilter                           call 0x48464
+  → TapeCompander                        call 0x48474
+  → TapeAllpass                          call 0x48484
+  → MonoPlate                            call 0x484a4, once per output sample
+  → preview contribution                 call 0x484c4
+  → output SoftClipper                   call 0x484d4
+
+Recording work for active record taps
+  → recordInput                          call 0x48518
+  → AudioData::add                        call 0x47a44
+  → write SoftClipper                     call 0x3887c
+  → overwrite addressed tape samples
+</code></pre>
+<p>This is a <strong>call/dataflow reconstruction with conditional branches</strong>, not a claim that every state always passes through every box. Monitoring, preview, record envelopes, tap mixing, and bypass cases have additional branches. The exact anti-alias cutoff adaptation and every branch's signal ownership are not fully reconstructed.</p>
+<h3>7.2 The decisive overdub equation</h3>
+<p><code>AudioData::add</code> at <code>0x387fc</code> first combines the already prepared input-contribution vector with existing stored samples and a per-write feedback vector. It then calls a SoftClipper and commits the resulting vector back to the addressed buffer positions:</p>
+<pre><code class="language-text">for each addressed sample j:
+    candidate[j] = newInputContribution[j]
+                 + existingTape[index[j]] * feedbackCoefficient[j]
+
+writeClipper.process(candidate)
+
+for each addressed sample j:
+    tape[index[j]] = candidate[j]
+</code></pre>
+<p>The multiply-add is a VFP fused operation on the inspected path. Indices are clamped before reading and writing. The normal dub coefficient comes from channel configuration; recording-start/stop fades can modify that coefficient and the incoming contribution separately. It is not safe to collapse every transient to a single global <code>MaxDubLevel</code> multiplier. <strong>S</strong></p>
+<p>Crucially, <code>oldBuffer</code> is read from the tape storage. It is <strong>not the current post-reverb output vector</strong>. CPU scheduling runs the output effects before the record write, but execution order is not a feedback connection. Reverb can still be printed through an external or normalized cross-deck routing path; that is a different path requiring its own routing model.</p>
+<p>Likewise, the active TapeAge/Wear/Hysterisis effects occur on input and playback. Their presence does not prove that the stored old sample is passed through all three again on every internal overdub. The write soft clip certainly acts on the summed candidate. Claims about repeated degradation must distinguish internal overdub from re-recording/bouncing the audible output.</p>
+<h2 id="8-recovered-tape-and-output-algorithms">8. Recovered tape and output algorithms</h2>
+<h3>8.1 Parameter-to-object mapping</h3>
+<p><code>preset_load</code>'s key-to-store sequence around <code>0x1763c–0x1776c</code>, cross-checked with <code>setTime</code> at <code>0x37a44</code>, resolves an important struct-order trap. Relative to the inspected preset sub-base at +16,384, the fields are:</p>
+<pre><code class="language-text">+624 WowFlutterDepth     +628 CrinkleDepth
++632 Wear                +636 TapeAge
++640 Hysterisis          +644 Knee
++648 Compensation       +652 LowCutFreq
++656 LowCutQ             +660 HighCutFreq
++664 Reverb
+</code></pre>
+<p>Text-file ordering is not memory layout. In particular, Wear and TapeAge should not be swapped by guessing adjacent offsets.</p>
+<p>Let <code>t = TimeTapeAmount</code> in <code>[0,1]</code>. The active amounts are clamped products <code>t * presetValue</code> for tape age, wear, diffuser, flutter/crinkle, compensation, and reverb. Knee is clamped from its preset <strong>without multiplying by t</strong>. Input and playback have separate stateful filter/diffuser instances. <strong>S</strong></p>
+<h3>8.2 Active TapeAge: a static five-one-pole bank</h3>
+<p><code>TapeFilter::process</code> is at <code>0x4f524</code>; its constructor at <code>0x4f494</code> installs five coefficients. With independent one-pole states:</p>
+<pre><code class="language-text">h   = 0.6 * (HP100(x) + HP150(x))
+wet = 0.6 * (LP500(h) + LP1000(h)) + LP3000(0.2*x)
+y   = x + a*(wet-x)
+a   = clamp(t * preset.TapeAge, 0, 1)
+</code></pre>
+<p>The stored coefficient values are:</p>
+<table>
+<thead>
+<tr>
+  <th>Stage</th>
+  <th style="text-align:right">Coefficient c</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>HP100</td>
+  <td style="text-align:right">156.5137939453125</td>
+</tr>
+<tr>
+  <td>HP150</td>
+  <td style="text-align:right">104.34252166748047</td>
+</tr>
+<tr>
+  <td>LP500</td>
+  <td style="text-align:right">31.30275535583496</td>
+</tr>
+<tr>
+  <td>LP1000</td>
+  <td style="text-align:right">15.65137767791748</td>
+</tr>
+<tr>
+  <td>LP3000</td>
+  <td style="text-align:right">5.21712589263916</td>
+</tr>
+</tbody>
+</table>
+<p>Their nominal frequency labels follow <code>c = Fs / (pi*frequency)</code> with the recurring DSP rate. The one-pole recurrence is:</p>
+<pre><code class="language-text">low[n] = (x[n] + x[n-1] - (1-c)*low[n-1]) / (1+c)
+high[n] = x[n] - low[n]
+</code></pre>
+<p>LP and HP kernels at <code>0x4b0b0</code> and <code>0x4b104</code> were probed. The full filter-bank wiring is static reconstruction. Some intermediate 0.6 scaling is performed in double precision before returning to float; the reference preserves that broad ordering. <strong>P/S</strong></p>
+<p>The binary also contains a standalone class named <code>TapeAge</code>, whose setter suggests moving high/low cutoffs and resonance. <strong>That is not the active <code>TapeFilter</code> used at the above call sites.</strong> Porting that more intuitively named class instead would create a different sound. The same caution applies to a standalone <code>TapeSaturation</code> symbol: current active clipper calls must guide selection.</p>
+<h3>8.3 Input filtering is a different stage</h3>
+<p><code>TapeInFilter::process</code> at <code>0x4f474</code> calls a biquad followed by a one-pole lowpass. The preset independently supplies <code>LowCutFreq</code>, <code>LowCutQ</code>, and <code>HighCutFreq</code>; the common defaults are 20 Hz, 0.2, and 15 kHz. The comments describe a resonant low-cut/head-bump role followed by high-cut filtering. <strong>F/S</strong></p>
+<p>Do not fold these controls into the TapeAge filter bank: they are distinct effects with different state. The exact biquad coefficient/Q transformation is not fully validated in this handoff. A familiar RBJ filter would be an approximation until its coefficient equations are matched.</p>
+<h3>8.4 Wear is signed-square blending</h3>
+<p><code>TapeCompander::process</code> at <code>0x4fc60</code> implements:</p>
+<pre><code class="language-text">y = (1-w)*x + w*x*abs(x)
+w = clamp(t * preset.Wear, 0, 1)
+</code></pre>
+<p>This was probed with 560 comparisons. There is no attack/release envelope in this kernel. For normalized magnitudes below one it attenuates quiet samples more strongly than loud ones. For magnitudes above one, the signed-square contribution can grow; downstream clipping matters. Calling it a conventional compressor would misdescribe the algorithm. <strong>P</strong></p>
+<h3>8.5 “Hysterisis” is a signed feedforward diffuser</h3>
+<p>The active <code>TapeAllpass::process</code> at <code>0x4fce8</code> has delay lengths <strong>68, 159, 251, and 375 samples</strong>. Read each delay before writing; call the delayed values <code>d0..d3</code>:</p>
+<pre><code class="language-text">wet = 0.175 * (x + d0 + d1 + d2 + d3)
+y   = x + h*(wet-x)
+
+write delay0 = x
+write delay1 = x - d0
+write delay2 = x + d0 - d1
+write delay3 = x + d0 + d1 - d2
+h = clamp(t * preset.Hysterisis, 0, 1)
+</code></pre>
+<p>A 1,200-sample impulse probe at amount 0.7 matched the original instruction stream to within about <code>1.43e-8</code>. The nonzero impulse positions extend through sample 853. In this fixed-coefficient topology, the full-wet DC gain is 0.7, so it is <strong>not a conventional unity-magnitude all-pass network</strong>, notwithstanding the class name. It is also not a physical magnetic-hysteresis model. <strong>P/S</strong></p>
+<p>This small diffuser is a plausible contributor to the instrument's smearing texture. Preserve its signs, delay lengths, and read-before-write order before deciding to substitute a more elaborate physical model.</p>
+<h3>8.6 Soft clipping: two different transfer curves</h3>
+<p><code>SoftClipper::setParams</code> is at <code>0x4ffe0</code>; vector processing is at <code>0x4fea8</code>. Both were included in the probe suite. Let clamped knee and compensation be <code>k</code> and <code>c</code>.</p>
+<p>When float <code>k</code>, promoted to double, is at most the stored double threshold 0.01:</p>
+<pre><code class="language-text">u = (1+c)*x
+A = 28.274333953857422
+B = 9.42477798461914
+R(u) = clamp(u*(A+u*u)/(A+B*u*u), -1, 1)
+y = R(u)
+</code></pre>
+<p>The constants are approximately <code>9*pi</code> and <code>3*pi</code>. This is not exact <code>tanh</code>, and not the commonly substituted <code>27/9</code> rational approximation. Compensation is <strong>pre-gain</strong> in this mode.</p>
+<p>For <code>k &gt; 0.01</code>, first clamp input to <code>[-1,1]</code>, then use odd symmetry. For magnitude <code>m</code>:</p>
+<pre><code class="language-text">if m &lt;= k:
+    z = m
+else:
+    a = m-k
+    z = k + a / (1 + (a/(1-k))^2)
+
+y = sign(x) * z * [1 + c*(2/(1+k)-1)]
+</code></pre>
+<p>Compensation is <strong>post-gain</strong> in this mode. With <code>k=1</code>, the outside-knee branch is never reached for the clamped input, avoiding division by zero. The binary has distinct output and write clipper instances; matching the per-instance parameter setup remains part of whole-engine validation. <strong>P/S</strong></p>
+<p>The suite covers the threshold neighborhood, positive/negative signals, several compensation values, and finite amplitudes up to several times nominal. It does not establish NaN/Infinity handling, every FPSCR mode, or hardware analog saturation.</p>
+<h3>8.7 Wow, flutter, and crinkle</h3>
+<p><code>Flutter</code> construction at <code>0x4f1c0</code> and processing at <code>0x502c4</code> reveal two sinusoidal components with nominal constructor frequencies <strong>0.6 Hz and 5 Hz</strong>, combined with different weighting. Phase increment is block-related, and random/filtered components contribute irregularity. A Mersenne-Twister implementation and seeding machinery are present. <strong>S</strong></p>
+<p>The sine table construction uses 256 phase samples, while runtime wrap/interpolation has a 255-based convention worth preserving during a later exact port. The final speed-factor transform uses approximately:</p>
+<pre><code class="language-text">factor = 0.958333015442
+       + 0.0833339691162 * (combined + 2.5)/5
+</code></pre>
+<p>At zero combined disturbance this centers near unity. Do not interpret its constants as a proven global modulation bound: the preceding random/filter state and parameter interactions matter.</p>
+<p>The periodic component, filtered irregularity, contact/touch disturbance, and block timing should remain distinct. A single arbitrary detune LFO or white noise added to audio would not reproduce the recovered structure. The full stochastic process and its exact distribution were not probed here.</p>
+<h3>8.8 Reverb: recovered control law, incomplete network port</h3>
+<p>The update's official 2.1 change notes introduce reverb; the active implementation is <code>MonoPlate::process</code> at <code>0x496c0</code>, a roughly 3 KB instruction body with inlined delay/filter operations. Its actual output call is confirmed at <code>0x484a4</code>. <strong>D/S</strong></p>
+<p>The Time/preset control law is recoverable. Let <code>u=clamp(t*preset.Reverb,0,1)</code>:</p>
+<pre><code class="language-text">norm  = sqrt(u*u + (1-u)*(1-u))
+wet   = u / norm
+dry   = (1-u) / norm
+decay = min(2*u, 0.9)
+</code></pre>
+<p>Both wet/dry balance and a feedback/decay coefficient change; it is not merely a wet-gain knob. The complete plate's delays, damping, modulation, and output-tap algebra have <strong>not</strong> been converted into a verified native model. Do not assign a specific named published topology or an RT60 formula from <code>MonoPlate</code> alone. The reference header supplies the control mapping, not a substitute plate falsely labeled original. <strong>S/R</strong></p>
+<h2 id="9-crossfade-table-a-distinctive-reconstructable-detail">9. Crossfade table: a distinctive, reconstructable detail</h2>
+<p>The 256-entry table lives in BSS at <code>0x93f98</code>; it is <strong>generated at startup</strong>, not stored as a ready-to-copy 1,024-byte table in the ELF. The relevant initialization loop is <code>0x19c6c–0x19cac</code>.</p>
+<p>With <code>t</code> starting at float <code>1/255</code>, π stored as float, and <code>t</code> incremented in float:</p>
+<pre><code class="language-text">q = 0.5 - 0.5*cosf(pi*t)
+F = 0.5*(sqrt(q) + t)
+</code></pre>
+<p>Entry zero is explicitly zero. The ideal analytic shape for <code>0 &lt;= t &lt;= 1</code> is:</p>
+<pre><code class="language-text">F(t) = 0.5 * [t + sin(pi*t/2)]
+</code></pre>
+<p>The fade envelopes interpolate table entries and use the complementary/reversed coordinate for opposing fades. Since this is a hybrid amplitude curve, neither unity amplitude sum nor constant power should be presumed during overlap. A generic host crossfade helper can produce audibly different center gain and transient behavior. <strong>S</strong></p>
+<p><code>tables/reconstructed_xfade_table.csv</code> and <code>.f32le</code> reproduce the initialization arithmetic using host <code>cosf</code> and fused operations. They are clearly named <strong>reconstructed</strong>: the original uClibc <code>cosf</code> implementation is not included, and no live device table was dumped. The analytic helper in the C++ header is useful for understanding the curve; use the table when investigating finer compatibility.</p>
+<h2 id="10-factory-presets-as-behavioral-specifications">10. Factory presets as behavioral specifications</h2>
+<p>The ten presets are not just tone variations. Their structure demonstrates distinct instruments built from the same engine.</p>
+<table>
+<thead>
+<tr>
+  <th>Preset</th>
+  <th>Most important changes from Tape Looper</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Tape Looper</td>
+  <td>Variable-speed recording; tape amount on third Time function; follow-speed taps.</td>
+</tr>
+<tr>
+  <td>Clean</td>
+  <td>Tape effects and reverb amounts zero; knee 0.3; compensation zero; third Time controls fade; 5 ms slew.</td>
+</tr>
+<tr>
+  <td>Classic</td>
+  <td>Fixed forward recording, preserving variable-speed playback/pitch shifting.</td>
+</tr>
+<tr>
+  <td>Multi-Tape</td>
+  <td>MultiTap; held one-shot speeds; record jack clocking; tap-tempo chord.</td>
+</tr>
+<tr>
+  <td>Clockable</td>
+  <td>External clock record jack; power-of-two clock divisions; three-second timeout; 25 ms retrigger delay; 5 ms slew.</td>
+</tr>
+<tr>
+  <td>Octave-Delay</td>
+  <td>Fixed recording; looping speed hold; MultiTap; stepped speed including 0.25×; zero slew; tap tempo.</td>
+</tr>
+<tr>
+  <td>SequencingMono</td>
+  <td>Fixed recording; V/oct; extra 0.25× marker; Time controls slew; 300 ms configured slew; delayed retrigger.</td>
+</tr>
+<tr>
+  <td>SequencingPoly</td>
+  <td>SequencingMono plus MultiTap and hold for both looping and one-shot taps.</td>
+</tr>
+<tr>
+  <td>Melontron</td>
+  <td>Variable recording; V/oct; MultiTap; both hold modes; maximum configured wow/flutter depth; delayed retrigger.</td>
+</tr>
+<tr>
+  <td>Broken-Tape</td>
+  <td>Maximum configured wow/flutter, crinkle, age and diffuser; Wear 0.5; compensation 1; 2,000 ms slew; touch Stall.</td>
+</tr>
+</tbody>
+</table>
+<p>All exact values are in <code>tables/factory_presets.json</code>; <code>factory_preset_matrix.csv</code> is convenient for implementation checks. The original comments contain typos and some stale explanations, so code evidence wins where there is a demonstrated conflict.</p>
+<p>In particular, <strong>Clean is not proven bit-transparent</strong>: its input filters remain configured, and soft clipping still has knee 0.3. Do not make a “Clean preset must null against input” acceptance test. Test the specific disabled coloration parameters and preserved processing instead.</p>
+<h2 id="11-sample-import-export-and-persistent-state">11. Sample import/export and persistent state</h2>
+<p>The supplied shell scripts define more than a generic WAV loader:</p>
+<ul>
+<li>Import converts to 32-bit floating-point, single-channel raw data at 49,148 Hz. Mono sources are copied to both destinations. Linked stereo loading separates channels; the unlinked stereo branch combines channels before duplicating the result. Exact mixing normalization should follow the invoked SoX behavior, not an invented sum convention.</li>
+<li>Export creates dual-mono WAVs for a single deck and a stereo WAV for linked decks. The temporary-file and output-name scheme is a hardware file-management implementation, not a recommended Rack architecture.</li>
+<li>Dedicated autosave audio/data and erase helpers show persistence is separate from ordinary playback state, with shared-memory coordination.</li>
+</ul>
+<p>These scripts were read, not executed. Their paths and USB mounting assumptions are not appropriate to reuse directly in a plugin. <strong>F</strong></p>
+<p>For Rack, save the actual audio content and valid region, not only file paths. A preset describes behavior; it is not a full performance-state snapshot. Use versioned metadata and checksummed audio chunks, background serialization, and an atomic state swap on load. Stereo-linked assets must stay sample-aligned. Format conversion should be an explicit compatibility option because the discovered file rate differs from both other timing domains. <strong>R</strong></p>
+<h2 id="12-numerical-validation-what-passed-and-what-did-not-run">12. Numerical validation: what passed and what did not run</h2>
+<h3>12.1 Original-instruction arithmetic probes</h3>
+<p><code>probes/arm_leaf_probe.py</code> reads the supplied ELF and LLVM disassembly. It models a limited set of ARM/VFP operations, conditions, integer/float registers, memory, and fused operations. Unsupported instructions fail rather than being silently skipped. It is independently written and <strong>not a certified ARM emulator</strong>. No operating system, GPIO, JACK server, launcher, or full Channel constructor is executed.</p>
+<table>
+<thead>
+<tr>
+  <th>Test group</th>
+  <th style="text-align:right">Comparisons</th>
+  <th style="text-align:right">Maximum absolute discrepancy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>SoftClipper, including setter</td>
+  <td style="text-align:right">3,360</td>
+  <td style="text-align:right">1.474e-7</td>
+</tr>
+<tr>
+  <td>TapeCompander / Wear</td>
+  <td style="text-align:right">560</td>
+  <td style="text-align:right">6.110e-7</td>
+</tr>
+<tr>
+  <td>OnePole lowpass</td>
+  <td style="text-align:right">384</td>
+  <td style="text-align:right">1.325e-8</td>
+</tr>
+<tr>
+  <td>OnePole highpass</td>
+  <td style="text-align:right">384</td>
+  <td style="text-align:right">1.987e-8</td>
+</tr>
+<tr>
+  <td>InputBuffer cubic interpolation</td>
+  <td style="text-align:right">9</td>
+  <td style="text-align:right">2.829e-8</td>
+</tr>
+<tr>
+  <td>Integer ADC smoothing</td>
+  <td style="text-align:right">28</td>
+  <td style="text-align:right">0</td>
+</tr>
+<tr>
+  <td>TapeAllpass / signed diffuser impulse</td>
+  <td style="text-align:right">1,200</td>
+  <td style="text-align:right">1.431e-8</td>
+</tr>
+<tr>
+  <td><strong>Total across eight routines</strong></td>
+  <td style="text-align:right"><strong>5,925</strong></td>
+  <td style="text-align:right"><strong>All within test tolerances</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The first suite exercises 206 distinct instruction addresses; the diffuser probe exercises 108 additional addresses in its own routine. Coverage of those addresses is not coverage of all possible inputs/branches. Explicit object fields are initialized for the tests; complete constructor/setup behavior is not thereby established.</p>
+<p>The discrepancies reflect float arithmetic versus independently expressed reference equations within stated tolerances. The tests do not validate denormal flushing, NaNs/Infinities, exception flags, physical ADC noise, or original-libm bit identity.</p>
+<h3>12.2 Native C++ reference</h3>
+<p><code>native/recovered_kernels.hpp</code> contains standalone C++17 expressions for clipping, wear, cubic interpolation, one-poles, the active TapeAge bank, the signed diffuser, ideal hybrid fade, reverb control mapping, documented V/oct mapping, and the scalar write blend. It contains no Rack dependency, heap allocation in processing, firmware execution, or disk access.</p>
+<p><code>native/test_kernels.cpp</code> compiled with <code>g++ -std=c++17 -O2 -Wall -Wextra -Werror</code> and passed <strong>8,154 invariant checks</strong>, including symmetry, interpolation of a linear sequence, diffuser finite-tail/DC behavior, fade endpoints, dry/wet normalization, and bypass identities. These are <strong>separate native-model tests</strong>, not 8,154 additional hardware comparisons.</p>
+<p>No full-transport, complete reverb, alias-spectrum, double-deck, analog, or listening-test equivalence claim is made. The report supplies the raw evidence and tests needed to continue, not a fabricated confidence percentage.</p>
+<h2 id="13-remaining-questions-ranked-by-implementation-impact">13. Remaining questions ranked by implementation impact</h2>
+<table>
+<thead>
+<tr>
+  <th>Priority</th>
+  <th>Question</th>
+  <th>Best next evidence/action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>P0</td>
+  <td>What is the actual converter clock and intended relation among 48,000 / 49,170.25390625 / 49,148?</td>
+  <td>Timed record/export and known-frequency measurement; complete system/driver image.</td>
+</tr>
+<tr>
+  <td>P0</td>
+  <td>What are exact volts-to-float, CV sum/offset, analog gain/saturation, normalled bounce and auxiliary gain laws?</td>
+  <td>Schematics or calibrated hardware sweeps; firmware cannot reveal absent analog transfer functions.</td>
+</tr>
+<tr>
+  <td>P0</td>
+  <td>What are complete variable-speed record/read boundary rules at zero, reverse, short loops and simultaneous transitions?</td>
+  <td>Extend instruction probes or native instrumentation around Tap and recordInput; differential buffers.</td>
+</tr>
+<tr>
+  <td>P0</td>
+  <td>What is the exact plate topology and parameter initialization?</td>
+  <td>Trace constructor/state layout and process arithmetic; impulse responses after controlled initialization.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>How does speed-dependent anti-alias filtering change during record/playback?</td>
+  <td>Trace filter setup and transitions; swept-sine/impulse spectral comparison.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>What are notched/stepped speed table thresholds and signed endpoint rules?</td>
+  <td>Reconstruct or execute fillSpeedTable; export all 4,096 values per factory mode.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>What is the complete link-mode event/control master matrix?</td>
+  <td>Trace checkLink plus ADC/button/jack forwarding; asymmetric stereo tests.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>What happens under fifth-engine requests or all transition slots busy?</td>
+  <td>Rapid retrigger stress tests, age ordering, fades and null-return handling.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>How are tap-count normalization and monitor gain combined?</td>
+  <td>Complete callback branch dataflow; correlated/uncorrelated multi-head level tests.</td>
+</tr>
+<tr>
+  <td>P1</td>
+  <td>What are clock first-pulse, timeout, arming and jack/button priority semantics?</td>
+  <td>Event-sequence harness and digital capture; exact clock output pulse width.</td>
+</tr>
+<tr>
+  <td>P2</td>
+  <td>What is exact touch response and stochastic modulation behavior?</td>
+  <td>Trace cap calibration and flutter filters/RNG; seeded statistical tests.</td>
+</tr>
+<tr>
+  <td>P2</td>
+  <td>What exact state survives save/load/autosave?</td>
+  <td>Full metadata layout review and round-trip fixture tests.</td>
+</tr>
+</tbody>
+</table>
+<p>The lack of a full source tree is not a reason to stop at symbol names: substantial kernels are already recovered and checked. Conversely, symbols and reasonable approximations should not be described as complete algorithm recovery.</p>
+<h2 id="14-recommended-implementation-order">14. Recommended implementation order</h2>
+<p>Build the deterministic headless transport, with small test buffers, before designing a polished module panel. Separate physical voltages, normalized controls, tape coordinates, host time, and effect processing time. Freeze semantic events and persisted IDs, then implement first-record/playback/overdub, signed varispeed writing, interpolation, and crossfaded tap transitions. Add preset-driven fixed/variable record and Hold/Follow behavior before MultiTap stress handling.</p>
+<p>Integrate the verified coloration kernels with separate input, playback, and write state. Keep the unresolved plate replaceable and explicitly labeled while investigating it; do not let a guessed reverb obscure transport comparisons. Add clock/link/IO and sample persistence only after deterministic headless tests make failures localizable. Finally add a Rack adapter, with no allocations, filesystem operations, or per-block worker creation in its processing path.</p>
+<p>The companion <strong><code>RACK_IMPLEMENTATION_HANDOFF.md</code></strong> turns this order into concrete module boundaries, proposed interface contracts, test cases, and acceptance gates. The highest-value next fidelity work is the whole transport/write harness, the actual plate, and the three-rate calibration—not another generic tape-effect redesign.</p>
+<h2 id="15-sources-and-evidence-navigation">15. Sources and evidence navigation</h2>
+<h3>Uploaded primary evidence</h3>
+<p><code>extracted/bin/*</code>, <code>extracted/presets/new_factory/*</code>, and <code>extracted/scripts/*</code> are the supplied update's contents. See <code>evidence/manifest.json</code> for hashes. Every code-level claim above names a routine/address or a literal source file; the selected assembly and full binary listings are included.</p>
+<h3>Official public cross-checks</h3>
+<pre><code class="language-text">Product / analog-input description and feature inventory:
+https://www.instruomodular.com/product/lubadh/
+
+Version 2.1 change notes:
+https://www.instruomodular.com/firmware/
+
+Version 2.1 quickstart; page images inspected:
+https://www.instruomodular.com/wp-content/uploads/2025/03/Lubadh-V2.1-Quickstart.pdf
+
+Preset editor (a local copy is also in the supplied update):
+https://www.instruomodular.com/wp-content/uploads/preset_editors/Lubadh_Preset_Editor.html
+
+Located but not successfully retrieved/read in full:
+https://www.instruomodular.com/wp-content/uploads/2023/11/Lubadh-Manual-Firmare-V2-A5-.pdf
+</code></pre>
+<p>The public sources establish product/version context, not a substitute DSP specification. The detailed equations, numeric tables, factory values, and numerical probes come from the uploaded material.</p>
+<h3>Reuse boundary</h3>
+<p>Keep the supplied firmware and vendor assets as research evidence. The reference equations and proposed module design do not establish permission to redistribute vendor binaries, branding, artwork, or sample libraries. A new Leviathan module should have its own implementation and assets; release rights are a separate question from technical recoverability.</p>
+</main><footer>Analyzed artifact: user-supplied Lúbadh 2.1.0 update. Restricted instruction probes and static reconstruction; not full firmware or hardware validation.</footer></body></html>

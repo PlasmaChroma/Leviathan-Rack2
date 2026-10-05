@@ -1,0 +1,1202 @@
+[
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 26,
+    "operation": "memread",
+    "index": 22,
+    "record": "#X msg 899 74 memread 22"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 28,
+    "operation": "memread",
+    "index": 6,
+    "record": "#X msg 91 511 memread 6"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 84,
+    "operation": "memset",
+    "index": 116,
+    "record": "#X msg 839 780 memset 116 \\$1"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 97,
+    "operation": "memread",
+    "index": 37,
+    "record": "#X msg 540 594 memread 37"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 101,
+    "operation": "memread",
+    "index": 1,
+    "record": "#X msg 678 142 memread 1"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 115,
+    "operation": "memread",
+    "index": 12,
+    "record": "#X msg 818 295 memread 12"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 128,
+    "operation": "memread",
+    "index": 40,
+    "record": "#X msg 148 648 memread 40"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 142,
+    "operation": "memread",
+    "index": 52,
+    "record": "#X msg 897 271 memread 52"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 147,
+    "operation": "memread",
+    "index": 53,
+    "record": "#X msg 1290 333 memread 53"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 151,
+    "operation": "memread",
+    "index": 54,
+    "record": "#X msg 937 -76 memread 54"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 177,
+    "operation": "memset",
+    "index": 248,
+    "record": "#X msg 1239 117 memset 248 1"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 178,
+    "operation": "memset",
+    "index": 248,
+    "record": "#X msg 1227 84 memset 248 0"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 179,
+    "operation": "memread",
+    "index": 248,
+    "record": "#X msg 1170 129 memread 248"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 183,
+    "operation": "memread",
+    "index": 123,
+    "record": "#X msg 966 387 memread 123"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 201,
+    "operation": "memread",
+    "index": 132,
+    "record": "#X msg 1006 436 memread 132"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 206,
+    "operation": "memread",
+    "index": 121,
+    "record": "#X msg 1080 494 memread 121"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 238,
+    "operation": "memread",
+    "index": 42,
+    "record": "#X msg 1034 129 memread 42"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 275,
+    "operation": "memread",
+    "index": 200,
+    "record": "#X msg 331 217 memread 200"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 284,
+    "operation": "memread",
+    "index": 23,
+    "record": "#X msg 775 60 memread 23"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 292,
+    "operation": "memread",
+    "index": 140,
+    "record": "#X msg 645 497 memread 140"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 300,
+    "operation": "memread",
+    "index": 201,
+    "record": "#X msg 460 178 memread 201"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 343,
+    "operation": "memset",
+    "index": 62,
+    "record": "#X msg 754 827 memset 62 \\$1"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 347,
+    "operation": "memread",
+    "index": 63,
+    "record": "#X msg 1079 294 memread 63"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 352,
+    "operation": "memread",
+    "index": 109,
+    "record": "#X msg 1168 287 memread 109"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 0,
+    "object": 370,
+    "operation": "memread",
+    "index": 64,
+    "record": "#X msg 747 299 memread 64"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 4,
+    "object": 2,
+    "operation": "memread",
+    "index": 121,
+    "record": "#X msg 112 115 memread 121"
+  },
+  {
+    "file": "arbharMain.pd",
+    "canvas": 4,
+    "object": 79,
+    "operation": "memset",
+    "index": 132,
+    "record": "#X msg 689 260 memset 132 \\$1"
+  },
+  {
+    "file": "Untitled-1.pd",
+    "canvas": 0,
+    "object": 8,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 242 60 memset 0 10 9 11 21 41"
+  },
+  {
+    "file": "arbharRecorder.pd",
+    "canvas": 0,
+    "object": 44,
+    "operation": "memread",
+    "index": 40,
+    "record": "#X msg 249 138 memread 40"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 20,
+    "operation": "memread",
+    "index": 122,
+    "record": "#X msg 1047 91 memread 122"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 32,
+    "operation": "memread",
+    "index": 222,
+    "record": "#X msg 1165 69 memread 222"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 36,
+    "operation": "memread",
+    "index": 121,
+    "record": "#X msg 924 136 memread 121"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 49,
+    "operation": "memset",
+    "index": 123,
+    "record": "#X msg 723 606 memset 123 \\$1"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 79,
+    "operation": "memread",
+    "index": 33,
+    "record": "#X msg 1291 104 memread 33"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 82,
+    "operation": "memread",
+    "index": 31,
+    "record": "#X msg 1391 105 memread 31"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 119,
+    "operation": "memread",
+    "index": 120,
+    "record": "#X msg 1113 730 memread 120"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 142,
+    "operation": "memset",
+    "index": 124,
+    "record": "#X msg 1680 435 memset 124 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 147,
+    "operation": "memread",
+    "index": 118,
+    "record": "#X msg 557 677 memread 118"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 168,
+    "operation": "memread",
+    "index": 119,
+    "record": "#X msg 341 754 memread 119"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 183,
+    "operation": "memread",
+    "index": 108,
+    "record": "#X msg 121 700 memread 108"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 188,
+    "operation": "memread",
+    "index": 107,
+    "record": "#X msg 689 682 memread 107"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 204,
+    "operation": "memread",
+    "index": 33,
+    "record": "#X msg 1619 463 memread 33"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 221,
+    "operation": "memread",
+    "index": 26,
+    "record": "#X msg 1540 66 memread 26"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 269,
+    "operation": "memread",
+    "index": 231,
+    "record": "#X msg 995 739 memread 231"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 0,
+    "object": 270,
+    "operation": "memset",
+    "index": 231,
+    "record": "#X msg 899 731 memset 231 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 1,
+    "object": 10,
+    "operation": "memset",
+    "index": 118,
+    "record": "#X msg 127 192 memset 118 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 1,
+    "object": 20,
+    "operation": "memread",
+    "index": 118,
+    "record": "#X msg 179 289 memread 118"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 3,
+    "object": 6,
+    "operation": "memset",
+    "index": 108,
+    "record": "#X msg 88 177 memset 108 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 3,
+    "object": 9,
+    "operation": "memread",
+    "index": 108,
+    "record": "#X msg 155 246 memread 108"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 4,
+    "object": 6,
+    "operation": "memset",
+    "index": 119,
+    "record": "#X msg 127 192 memset 119 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 4,
+    "object": 16,
+    "operation": "memread",
+    "index": 119,
+    "record": "#X msg 135 256 memread 119"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 4,
+    "object": 19,
+    "operation": "memset",
+    "index": 119,
+    "record": "#X msg 459 209 memset 119 1"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 6,
+    "object": 16,
+    "operation": "memread",
+    "index": 107,
+    "record": "#X msg 181 316 memread 107"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 6,
+    "object": 18,
+    "operation": "memset",
+    "index": 107,
+    "record": "#X msg 397 338 memset 107 0"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 15,
+    "operation": "memread",
+    "index": 124,
+    "record": "#X msg 51 265 memread 124"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 52,
+    "operation": "memread",
+    "index": 125,
+    "record": "#X msg 120 454 memread 125"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 53,
+    "operation": "memread",
+    "index": 126,
+    "record": "#X msg 295 264 memread 126"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 54,
+    "operation": "memread",
+    "index": 127,
+    "record": "#X msg 364 453 memread 127"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 55,
+    "operation": "memread",
+    "index": 128,
+    "record": "#X msg 535 265 memread 128"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 56,
+    "operation": "memread",
+    "index": 129,
+    "record": "#X msg 604 454 memread 129"
+  },
+  {
+    "file": "loadFileToShMem2.pd",
+    "canvas": 14,
+    "object": 59,
+    "operation": "memread",
+    "index": 31,
+    "record": "#X msg 41 61 memread 31"
+  },
+  {
+    "file": "shmem_copy.pd",
+    "canvas": 0,
+    "object": 6,
+    "operation": "memdump",
+    "index": 1,
+    "record": "#X msg 151 424 memdump 1l"
+  },
+  {
+    "file": "shmem_copy.pd",
+    "canvas": 0,
+    "object": 25,
+    "operation": "memdump",
+    "index": 1,
+    "record": "#X msg 308 428 memdump 1r"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 0,
+    "object": 80,
+    "operation": "memset",
+    "index": 36,
+    "record": "#X msg 29 458 memset 36 \\$1"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 0,
+    "object": 124,
+    "operation": "memread",
+    "index": 116,
+    "record": "#X msg 865 136 memread 116"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 0,
+    "object": 142,
+    "operation": "memset",
+    "index": 40,
+    "record": "#X msg 706 167 memset 40 \\$1"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 2,
+    "object": 41,
+    "operation": "memread",
+    "index": 5,
+    "record": "#X msg 236 354 memread 5"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 2,
+    "object": 110,
+    "operation": "memread",
+    "index": 1,
+    "record": "#X msg 202 725 memread 1"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 2,
+    "object": 111,
+    "operation": "memread",
+    "index": 23,
+    "record": "#X msg 67 660 memread 23"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 2,
+    "object": 126,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 197 105 memset 0 \\$1"
+  },
+  {
+    "file": "arbharControls_corrupted.pd",
+    "canvas": 2,
+    "object": 277,
+    "operation": "memread",
+    "index": 99,
+    "record": "#X msg 893 697 memread 99"
+  },
+  {
+    "file": "shmem_test.pd",
+    "canvas": 0,
+    "object": 2,
+    "operation": "memset",
+    "index": 208,
+    "record": "#X msg 28 88 memset 208 \\$1"
+  },
+  {
+    "file": "shmem_test.pd",
+    "canvas": 0,
+    "object": 5,
+    "operation": "memset",
+    "index": 209,
+    "record": "#X msg 137 88 memset 209 \\$1"
+  },
+  {
+    "file": "awaitingProcessing.pd",
+    "canvas": 0,
+    "object": 9,
+    "operation": "memset",
+    "index": 108,
+    "record": "#X msg 83 405 memset 108 0"
+  },
+  {
+    "file": "awaitingProcessing.pd",
+    "canvas": 0,
+    "object": 11,
+    "operation": "memset",
+    "index": 119,
+    "record": "#X msg 305 415 memset 119 0"
+  },
+  {
+    "file": "awaitingProcessing.pd",
+    "canvas": 0,
+    "object": 14,
+    "operation": "memset",
+    "index": 118,
+    "record": "#X msg 504 475 memset 118 0"
+  },
+  {
+    "file": "awaitingProcessing.pd",
+    "canvas": 0,
+    "object": 16,
+    "operation": "memset",
+    "index": 107,
+    "record": "#X msg 731 457 memset 107 0"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 30,
+    "operation": "memread",
+    "index": 3,
+    "record": "#X msg 514 199 memread 3"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 33,
+    "operation": "memread",
+    "index": 2,
+    "record": "#X msg 657 198 memread 2"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 37,
+    "operation": "memread",
+    "index": 70,
+    "record": "#X msg 783 169 memread 70"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 43,
+    "operation": "memset",
+    "index": 70,
+    "record": "#X msg 836 101 memset 70 \\$1"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 45,
+    "operation": "memread",
+    "index": 10,
+    "record": "#X msg 196 26 memread 10"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 49,
+    "operation": "memread",
+    "index": 15,
+    "record": "#X msg 214 354 memread 15"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 54,
+    "operation": "memread",
+    "index": 12,
+    "record": "#X msg 521 471 memread 12"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 70,
+    "operation": "memread",
+    "index": 161,
+    "record": "#X msg 907 200 memread 161"
+  },
+  {
+    "file": "arbharWavetable.pd",
+    "canvas": 0,
+    "object": 72,
+    "operation": "memread",
+    "index": 102,
+    "record": "#X msg 825 249 memread 102"
+  },
+  {
+    "file": "shmem-tester.pd",
+    "canvas": 0,
+    "object": 25,
+    "operation": "memset",
+    "index": 208,
+    "record": "#X msg 733 96 memset 208 \\$1"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 59,
+    "operation": "memread",
+    "index": 116,
+    "record": "#X msg 865 136 memread 116"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 89,
+    "operation": "memread",
+    "index": 42,
+    "record": "#X msg 1038 402 memread 42"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 97,
+    "operation": "memset",
+    "index": 43,
+    "record": "#X msg 1052 666 memset 43 \\$1"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 125,
+    "operation": "memread",
+    "index": 123,
+    "record": "#X msg 869 431 memread 123"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 131,
+    "operation": "memset",
+    "index": 44,
+    "record": "#X msg 1147 665 memset 44 \\$1"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 201,
+    "operation": "memset",
+    "index": 249,
+    "record": "#X msg 867 642 memset 249 1"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 0,
+    "object": 205,
+    "operation": "memset",
+    "index": 249,
+    "record": "#X msg 893 614 memset 249 \\$1"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 2,
+    "object": 17,
+    "operation": "memread",
+    "index": 0,
+    "record": "#X msg 33 262 memread 0"
+  },
+  {
+    "file": "arbharCalibrationCheck.pd",
+    "canvas": 2,
+    "object": 21,
+    "operation": "memread",
+    "index": 1,
+    "record": "#X msg 169 266 memread 1"
+  },
+  {
+    "file": "arbhar_feedback.pd",
+    "canvas": 0,
+    "object": 63,
+    "operation": "memread",
+    "index": 207,
+    "record": "#X msg 741 60 memread 207"
+  },
+  {
+    "file": "arbhar_feedback.pd",
+    "canvas": 0,
+    "object": 64,
+    "operation": "memread",
+    "index": 206,
+    "record": "#X msg 633 61 memread 206"
+  },
+  {
+    "file": "arbhar_stereo_test.pd",
+    "canvas": 0,
+    "object": 107,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 595 659 memset 0l"
+  },
+  {
+    "file": "arbhar_stereo_test.pd",
+    "canvas": 0,
+    "object": 108,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 756 662 memset 0r"
+  },
+  {
+    "file": "arbhar_stereo_test.pd",
+    "canvas": 1,
+    "object": 110,
+    "operation": "memread",
+    "index": 48000,
+    "record": "#X msg 1144 694 memread 48000"
+  },
+  {
+    "file": "arbhar_stereo_test.pd",
+    "canvas": 1,
+    "object": 112,
+    "operation": "memset",
+    "index": 48000,
+    "record": "#X msg 1171 667 memset 48000 \\$1"
+  },
+  {
+    "file": "arbhar_stereo_test.pd",
+    "canvas": 1,
+    "object": 116,
+    "operation": "memread",
+    "index": 48000,
+    "record": "#X msg 982 744 memread 48000"
+  },
+  {
+    "file": "arbharLoader.pd",
+    "canvas": 0,
+    "object": 40,
+    "operation": "memread",
+    "index": 23,
+    "record": "#X msg 634 32 memread 23"
+  },
+  {
+    "file": "arbharLoader.pd",
+    "canvas": 0,
+    "object": 45,
+    "operation": "memread",
+    "index": 13,
+    "record": "#X msg 655 211 memread 13"
+  },
+  {
+    "file": "arbharLoader.pd",
+    "canvas": 0,
+    "object": 58,
+    "operation": "memread",
+    "index": 22,
+    "record": "#X msg 747 86 memread 22"
+  },
+  {
+    "file": "loadFileToShMem.pd",
+    "canvas": 0,
+    "object": 13,
+    "operation": "memdump",
+    "index": 1,
+    "record": "#X msg 627 56 memdump 1l"
+  },
+  {
+    "file": "loadFileToShMem.pd",
+    "canvas": 0,
+    "object": 14,
+    "operation": "memdump",
+    "index": 0,
+    "record": "#X msg 398 34 memdump 0l"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 0,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 83 418 memset 0 1 1 1 1 1"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 7,
+    "operation": "memdump",
+    "index": 0,
+    "record": "#X msg 598 352 memdump 0 array2"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 15,
+    "operation": "memdump",
+    "index": 0,
+    "record": "#X msg 608 374 memdump 0 array2 50"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 26,
+    "operation": "memdump",
+    "index": 50,
+    "record": "#X msg 618 394 memdump 50 array2 0 10"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 38,
+    "operation": "memset",
+    "index": 1,
+    "record": "#X msg 46 321 memset 1 array1 array1 array1"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 39,
+    "operation": "memset",
+    "index": 1,
+    "record": "#X msg 52 343 memset 1 0 array1"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 40,
+    "operation": "memset",
+    "index": 1,
+    "record": "#X msg 68 365 memset 1 0 array1 50"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 41,
+    "operation": "memset",
+    "index": 1,
+    "record": "#X msg 78 391 memset 1 50 array1 0 25"
+  },
+  {
+    "file": "arbhar_shmem-help.pd",
+    "canvas": 0,
+    "object": 61,
+    "operation": "memread",
+    "index": 0,
+    "record": "#X msg 629 121 memread 0 \\$1"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 68,
+    "operation": "memread",
+    "index": 204,
+    "record": "#X msg 580 164 memread 204"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 73,
+    "operation": "memread",
+    "index": 205,
+    "record": "#X msg 701 165 memread 205"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 84,
+    "operation": "memread",
+    "index": 208,
+    "record": "#X msg 831 167 memread 208"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 85,
+    "operation": "memread",
+    "index": 209,
+    "record": "#X msg 757 231 memread 209"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 88,
+    "operation": "memread",
+    "index": 210,
+    "record": "#X msg 902 268 memread 210"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 89,
+    "operation": "memread",
+    "index": 211,
+    "record": "#X msg 954 167 memread 211"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 96,
+    "operation": "memread",
+    "index": 212,
+    "record": "#X msg 1062 400 memread 212"
+  },
+  {
+    "file": "arbharReverb.pd",
+    "canvas": 0,
+    "object": 128,
+    "operation": "memread",
+    "index": 213,
+    "record": "#X msg 1083 177 memread 213"
+  },
+  {
+    "file": "arbhar_hardware_Tester.pd",
+    "canvas": 0,
+    "object": 83,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 228 65 memset 0 \\$1"
+  },
+  {
+    "file": "arbhar_hardware_Tester.pd",
+    "canvas": 0,
+    "object": 216,
+    "operation": "memread",
+    "index": 1,
+    "record": "#X msg 211 614 memread 1"
+  },
+  {
+    "file": "arbhar_hardware_Tester.pd",
+    "canvas": 0,
+    "object": 313,
+    "operation": "memread",
+    "index": 24,
+    "record": "#X msg 16 308 memread 24"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 1,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 83 418 memset 0 1 1 1 1 1"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 3,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 52 343 memset 0 array1"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 6,
+    "operation": "memset",
+    "index": 0,
+    "record": "#X msg 68 365 memset 0 array1 50"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 14,
+    "operation": "memdump",
+    "index": 0,
+    "record": "#X msg 598 352 memdump 0 array2"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 23,
+    "operation": "memset",
+    "index": 50,
+    "record": "#X msg 99 448 memset 50 5 5 5 1 1 0.1 0.2 0.3 0.4 0.5 0.6 0.7"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 25,
+    "operation": "memdump",
+    "index": 0,
+    "record": "#X msg 608 374 memdump 0 array2 50"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 34,
+    "operation": "memset",
+    "index": 50,
+    "record": "#X msg 78 391 memset 50 array1 0 25"
+  },
+  {
+    "file": "shmem-help.pd",
+    "canvas": 0,
+    "object": 41,
+    "operation": "memdump",
+    "index": 50,
+    "record": "#X msg 618 394 memdump 50 array2 0 10"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 58,
+    "operation": "memread",
+    "index": 116,
+    "record": "#X msg 1156 791 memread 116"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 88,
+    "operation": "memread",
+    "index": 42,
+    "record": "#X msg 1038 402 memread 42"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 96,
+    "operation": "memset",
+    "index": 43,
+    "record": "#X msg 1052 666 memset 43 \\$1"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 124,
+    "operation": "memread",
+    "index": 123,
+    "record": "#X msg 917 292 memread 123"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 130,
+    "operation": "memset",
+    "index": 44,
+    "record": "#X msg 1147 665 memset 44 \\$1"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 204,
+    "operation": "memset",
+    "index": 248,
+    "record": "#X msg 949 733 memset 248 1"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 207,
+    "operation": "memread",
+    "index": 33,
+    "record": "#X msg 1215 278 memread 33"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 223,
+    "operation": "memread",
+    "index": 42,
+    "record": "#X msg 922 349 memread 42"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 0,
+    "object": 259,
+    "operation": "memread",
+    "index": 222,
+    "record": "#X msg 1345 207 memread 222"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 2,
+    "object": 15,
+    "operation": "memread",
+    "index": 0,
+    "record": "#X msg 33 262 memread 0"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 2,
+    "object": 19,
+    "operation": "memread",
+    "index": 1,
+    "record": "#X msg 169 266 memread 1"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 2,
+    "object": 25,
+    "operation": "memread",
+    "index": 6,
+    "record": "#X msg 536 18 memread 6"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 3,
+    "object": 12,
+    "operation": "memset",
+    "index": 248,
+    "record": "#X msg 258 70 memset 248 0"
+  },
+  {
+    "file": "arbharControls.pd",
+    "canvas": 3,
+    "object": 15,
+    "operation": "memset",
+    "index": 248,
+    "record": "#X msg 344 66 memset 248 1"
+  }
+]

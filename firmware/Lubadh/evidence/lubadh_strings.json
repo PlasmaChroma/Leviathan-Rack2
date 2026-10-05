@@ -1,0 +1,506 @@
+[
+  {
+    "address": 65844,
+    "text": "/lib/ld-uClibc.so.0"
+  },
+  {
+    "address": 66759,
+    "text": "~`3f"
+  },
+  {
+    "address": 66838,
+    "text": "OIyIk"
+  },
+  {
+    "address": 68225,
+    "text": "__register_frame_info"
+  },
+  {
+    "address": 68247,
+    "text": "strftime"
+  },
+  {
+    "address": 68256,
+    "text": "memcpy"
+  },
+  {
+    "address": 68263,
+    "text": "strlen"
+  },
+  {
+    "address": 68270,
+    "text": "_ITM_deregisterTMCloneTable"
+  },
+  {
+    "address": 68298,
+    "text": "_ITM_registerTMCloneTable"
+  },
+  {
+    "address": 68324,
+    "text": "abort"
+  },
+  {
+    "address": 68330,
+    "text": "vsnprintf"
+  },
+  {
+    "address": 68340,
+    "text": "__deregister_frame_info"
+  },
+  {
+    "address": 68364,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE13_S_copy_charsEPcPKcS7_"
+  },
+  {
+    "address": 68442,
+    "text": "_ZNSt6localeD1Ev"
+  },
+  {
+    "address": 68459,
+    "text": "_ZSt20__throw_length_errorPKc"
+  },
+  {
+    "address": 68489,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_assignERKS4_"
+  },
+  {
+    "address": 68559,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcj"
+  },
+  {
+    "address": 68628,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag"
+  },
+  {
+    "address": 68731,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE5clearESt12_Ios_Iostate"
+  },
+  {
+    "address": 68791,
+    "text": "_ZNSt8ios_baseD2Ev"
+  },
+  {
+    "address": 68810,
+    "text": "_ZTISt9exception"
+  },
+  {
+    "address": 68827,
+    "text": "_ZNSt6chrono3_V212system_clock3nowEv"
+  },
+  {
+    "address": 68864,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj"
+  },
+  {
+    "address": 68929,
+    "text": "__aeabi_atexit"
+  },
+  {
+    "address": 68944,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPKcEEvT_S8_St20forward_iterator_tag"
+  },
+  {
+    "address": 69048,
+    "text": "_ZNSt13runtime_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 69126,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEj"
+  },
+  {
+    "address": 69190,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EOS4_"
+  },
+  {
+    "address": 69251,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5rfindEcj"
+  },
+  {
+    "address": 69315,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv"
+  },
+  {
+    "address": 69365,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKc"
+  },
+  {
+    "address": 69430,
+    "text": "_ZTVSt15basic_streambufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 69475,
+    "text": "_ZNSt8ios_base4InitD1Ev"
+  },
+  {
+    "address": 69499,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 69545,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendERKS4_"
+  },
+  {
+    "address": 69612,
+    "text": "__cxa_throw"
+  },
+  {
+    "address": 69624,
+    "text": "__cxa_begin_catch"
+  },
+  {
+    "address": 69642,
+    "text": "_ZTISt13runtime_error"
+  },
+  {
+    "address": 69664,
+    "text": "_ZSt4cerr"
+  },
+  {
+    "address": 69674,
+    "text": "_ZdlPv"
+  },
+  {
+    "address": 69681,
+    "text": "_ZNSt8ios_baseC2Ev"
+  },
+  {
+    "address": 69700,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_"
+  },
+  {
+    "address": 69761,
+    "text": "__cxa_allocate_exception"
+  },
+  {
+    "address": 69786,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode"
+  },
+  {
+    "address": 69854,
+    "text": "__gxx_personality_v0"
+  },
+  {
+    "address": 69875,
+    "text": "__cxa_end_cleanup"
+  },
+  {
+    "address": 69893,
+    "text": "_ZNSt13runtime_errorD1Ev"
+  },
+  {
+    "address": 69918,
+    "text": "_ZTVSt13basic_filebufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 69961,
+    "text": "_ZSt16__ostream_insertIcSt11char_traitsIcEERSt13basic_ostreamIT_T0_ES6_PKS3_i"
+  },
+  {
+    "address": 70039,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKcj"
+  },
+  {
+    "address": 70105,
+    "text": "_ZNSt12__basic_fileIcED1Ev"
+  },
+  {
+    "address": 70132,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERjj"
+  },
+  {
+    "address": 70200,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_"
+  },
+  {
+    "address": 70262,
+    "text": "_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_PKc"
+  },
+  {
+    "address": 70318,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE13_S_copy_charsEPcS5_S5_"
+  },
+  {
+    "address": 70396,
+    "text": "_ZTVSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 70439,
+    "text": "_ZTVSt9basic_iosIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 70477,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE4initEPSt15basic_streambufIcS1_E"
+  },
+  {
+    "address": 70546,
+    "text": "_ZNSt8ios_base4InitC1Ev"
+  },
+  {
+    "address": 70570,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEEC1Ev"
+  },
+  {
+    "address": 70616,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 70674,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_mutateEjjPKcj"
+  },
+  {
+    "address": 70745,
+    "text": "_ZTTSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 70788,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_disposeEv"
+  },
+  {
+    "address": 70856,
+    "text": "_ZSt4cout"
+  },
+  {
+    "address": 70866,
+    "text": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_RKS8_"
+  },
+  {
+    "address": 70945,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6insertEjPKc"
+  },
+  {
+    "address": 71011,
+    "text": "_ZNSt13basic_fstreamIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 71057,
+    "text": "__cxa_end_catch"
+  },
+  {
+    "address": 71073,
+    "text": "_ZSt19__throw_logic_errorPKc"
+  },
+  {
+    "address": 71102,
+    "text": "__cxa_free_exception"
+  },
+  {
+    "address": 71123,
+    "text": "__aeabi_unwind_cpp_pr0"
+  },
+  {
+    "address": 71146,
+    "text": "__aeabi_unwind_cpp_pr1"
+  },
+  {
+    "address": 71169,
+    "text": "__aeabi_ldivmod"
+  },
+  {
+    "address": 71185,
+    "text": "system"
+  },
+  {
+    "address": 71192,
+    "text": "waitpid"
+  },
+  {
+    "address": 71200,
+    "text": "kill"
+  },
+  {
+    "address": 71205,
+    "text": "getchar"
+  },
+  {
+    "address": 71213,
+    "text": "fork"
+  },
+  {
+    "address": 71218,
+    "text": "localtime"
+  },
+  {
+    "address": 71228,
+    "text": "__uClibc_main"
+  },
+  {
+    "address": 71242,
+    "text": "execv"
+  },
+  {
+    "address": 71248,
+    "text": "libstdc++.so.6"
+  },
+  {
+    "address": 71263,
+    "text": "libgcc_s.so.1"
+  },
+  {
+    "address": 71277,
+    "text": "libc.so.0"
+  },
+  {
+    "address": 71287,
+    "text": "GCC_3.5"
+  },
+  {
+    "address": 71295,
+    "text": "GLIBCXX_3.4.9"
+  },
+  {
+    "address": 71309,
+    "text": "CXXABI_ARM_1.3.3"
+  },
+  {
+    "address": 71326,
+    "text": "CXXABI_1.3"
+  },
+  {
+    "address": 71337,
+    "text": "GLIBCXX_3.4.19"
+  },
+  {
+    "address": 71352,
+    "text": "GLIBCXX_3.4.21"
+  },
+  {
+    "address": 71367,
+    "text": "GLIBCXX_3.4"
+  },
+  {
+    "address": 79292,
+    "text": "Failed to launch process "
+  },
+  {
+    "address": 79318,
+    "text": " with deduced name "
+  },
+  {
+    "address": 79338,
+    "text": "Failed to fork process when trying to launch "
+  },
+  {
+    "address": 79384,
+    "text": "audio_load"
+  },
+  {
+    "address": 79395,
+    "text": "audio_save"
+  },
+  {
+    "address": 79406,
+    "text": "autosave_audio"
+  },
+  {
+    "address": 79421,
+    "text": "autosave_data"
+  },
+  {
+    "address": 79435,
+    "text": "erase"
+  },
+  {
+    "address": 79441,
+    "text": "preset_load"
+  },
+  {
+    "address": 79453,
+    "text": "./bin/"
+  },
+  {
+    "address": 79463,
+    "text": "renice -n 19 -p "
+  },
+  {
+    "address": 79480,
+    "text": " > /dev/null"
+  },
+  {
+    "address": 79493,
+    "text": "$(pidof "
+  },
+  {
+    "address": 79504,
+    "text": "taskset -apc 3 "
+  },
+  {
+    "address": 79520,
+    "text": "cpulimit -l 50 -p "
+  },
+  {
+    "address": 79539,
+    "text": " > /dev/null &"
+  },
+  {
+    "address": 79554,
+    "text": "./bin/lubadh_main"
+  },
+  {
+    "address": 79572,
+    "text": "renice -n -20 -p "
+  },
+  {
+    "address": 79590,
+    "text": "taskset -apc 0,1,2 "
+  },
+  {
+    "address": 79610,
+    "text": "Error when attempting to launch background process "
+  },
+  {
+    "address": 79662,
+    "text": "Error when attempting to launch main Lubadh process: "
+  },
+  {
+    "address": 79716,
+    "text": "basic_string::_M_construct null not valid"
+  },
+  {
+    "address": 79768,
+    "text": "[INFO]"
+  },
+  {
+    "address": 79776,
+    "text": "[WARNING]"
+  },
+  {
+    "address": 79788,
+    "text": "[ERROR]"
+  },
+  {
+    "address": 79796,
+    "text": "YYYY-MM-DD "
+  },
+  {
+    "address": 79808,
+    "text": "basic_string::append"
+  },
+  {
+    "address": 79832,
+    "text": "%Y-%m-%d "
+  },
+  {
+    "address": 79844,
+    "text": "HH:MM:SS"
+  },
+  {
+    "address": 79856,
+    "text": "%H:%M:%S"
+  },
+  {
+    "address": 79868,
+    "text": "%lld"
+  },
+  {
+    "address": 79876,
+    "text": "Failed to log message with error: "
+  },
+  {
+    "address": 79912,
+    "text": "log.txt"
+  },
+  {
+    "address": 79920,
+    "text": "basic_string::_M_construct null not valid"
+  }
+]

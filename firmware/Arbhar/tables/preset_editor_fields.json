@@ -1,0 +1,621 @@
+[
+  {
+    "tag": "select",
+    "id": "presetTemplate",
+    "attributes": {
+      "id": "presetTemplate"
+    },
+    "options": [
+      {
+        "value": "preset1",
+        "label": "alpha - Classic",
+        "selected_in_html": true
+      },
+      {
+        "value": "preset2",
+        "label": "beta - Delay",
+        "selected_in_html": false
+      },
+      {
+        "value": "preset3",
+        "label": "gamma - Stereo",
+        "selected_in_html": false
+      },
+      {
+        "value": "preset4",
+        "label": "delta - Follow Mode",
+        "selected_in_html": false
+      },
+      {
+        "value": "preset5",
+        "label": "epsilon - Panning",
+        "selected_in_html": false
+      },
+      {
+        "value": "preset6",
+        "label": "zeta - Accumulative Recording",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "input",
+    "id": "fileInput",
+    "attributes": {
+      "type": "file",
+      "id": "fileInput",
+      "style": "display:none"
+    }
+  },
+  {
+    "tag": "input",
+    "id": "presetName",
+    "attributes": {
+      "type": "text",
+      "id": "presetName",
+      "name": "presetName",
+      "value": "arbhar Classic"
+    }
+  },
+  {
+    "tag": "select",
+    "id": "loadConfig",
+    "attributes": {
+      "id": "loadConfig",
+      "name": "loadConfig"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Load Nothing",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Load Preset",
+        "selected_in_html": false
+      },
+      {
+        "value": "2",
+        "label": "2 - Load Layers",
+        "selected_in_html": false
+      },
+      {
+        "value": "3",
+        "label": "3 - Load Scene",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "inputMode",
+    "attributes": {
+      "id": "inputMode",
+      "name": "inputMode"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Mono",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Stereo",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "analogEmulation",
+    "attributes": {
+      "id": "analogEmulation",
+      "name": "analogEmulation"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "phaseSwitch",
+    "attributes": {
+      "id": "phaseSwitch",
+      "name": "phaseSwitch"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Phase-Inverted",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Phase-Corrected",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "captureCVMode",
+    "attributes": {
+      "id": "captureCVMode",
+      "name": "captureCVMode"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Latching",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Momentary",
+        "selected_in_html": true
+      },
+      {
+        "value": "2",
+        "label": "2 - Retrigger",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "captureButtonMode",
+    "attributes": {
+      "id": "captureButtonMode",
+      "name": "captureButtonMode"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Latching",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Momentary",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "activateCapture",
+    "attributes": {
+      "id": "activateCapture",
+      "name": "activateCapture"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "accumulativeCapture",
+    "attributes": {
+      "id": "accumulativeCapture",
+      "name": "accumulativeCapture"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "linkAccumulative",
+    "attributes": {
+      "id": "linkAccumulative",
+      "name": "linkAccumulative"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "onsetMode",
+    "attributes": {
+      "id": "onsetMode",
+      "name": "onsetMode"
+    },
+    "options": [
+      {
+        "value": "1",
+        "label": "1 - Alpha",
+        "selected_in_html": true
+      },
+      {
+        "value": "2",
+        "label": "2 - Beta",
+        "selected_in_html": false
+      },
+      {
+        "value": "3",
+        "label": "3 - Gamma",
+        "selected_in_html": false
+      },
+      {
+        "value": "4",
+        "label": "4 - Delta",
+        "selected_in_html": false
+      },
+      {
+        "value": "5",
+        "label": "5 - Epsilon",
+        "selected_in_html": false
+      },
+      {
+        "value": "6",
+        "label": "6 - Zeta",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "strikeButton",
+    "attributes": {
+      "id": "strikeButton",
+      "name": "strikeButton"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "input",
+    "id": "strikeDelay",
+    "attributes": {
+      "type": "number",
+      "id": "strikeDelay",
+      "name": "strikeDelay",
+      "value": "0",
+      "min": "0"
+    }
+  },
+  {
+    "tag": "select",
+    "id": "followMode",
+    "attributes": {
+      "id": "followMode",
+      "name": "followMode"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Scan Mode",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Follow Mode",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "followSpeed",
+    "attributes": {
+      "id": "followSpeed",
+      "name": "followSpeed"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Unidirectional",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Bidirectional",
+        "selected_in_html": true
+      },
+      {
+        "value": "2",
+        "label": "2 - Inverted Unidirectional",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "input",
+    "id": "followOffset",
+    "attributes": {
+      "type": "number",
+      "id": "followOffset",
+      "name": "followOffset",
+      "value": "0",
+      "min": "0"
+    }
+  },
+  {
+    "tag": "select",
+    "id": "followPositionOffset",
+    "attributes": {
+      "id": "followPositionOffset",
+      "name": "followPositionOffset"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Both Control",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Scan Knob Only",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "followLoop",
+    "attributes": {
+      "id": "followLoop",
+      "name": "followLoop"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "followLength",
+    "attributes": {
+      "id": "followLength",
+      "name": "followLength"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "randomTiming",
+    "attributes": {
+      "id": "randomTiming",
+      "name": "randomTiming"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": true
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "randomAmplitude",
+    "attributes": {
+      "id": "randomAmplitude",
+      "name": "randomAmplitude"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "modCV",
+    "attributes": {
+      "id": "modCV",
+      "name": "modCV"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - None",
+        "selected_in_html": false
+      },
+      {
+        "value": "1",
+        "label": "1 - Panning",
+        "selected_in_html": false
+      },
+      {
+        "value": "2",
+        "label": "2 - Hold",
+        "selected_in_html": false
+      },
+      {
+        "value": "3",
+        "label": "3 - Reverb",
+        "selected_in_html": true
+      },
+      {
+        "value": "4",
+        "label": "4 - Delay",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "select",
+    "id": "resetReverb",
+    "attributes": {
+      "id": "resetReverb",
+      "name": "resetReverb"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Disable",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Enable Reset on Strike",
+        "selected_in_html": false
+      },
+      {
+        "value": "2",
+        "label": "2 - Enable Reset on Onset",
+        "selected_in_html": false
+      },
+      {
+        "value": "3",
+        "label": "3 - Enable Reset on Strike and Onset",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "input",
+    "id": "panningDefaultValue",
+    "attributes": {
+      "type": "number",
+      "id": "panningDefaultValue",
+      "name": "panningDefaultValue",
+      "value": "0",
+      "step": "1"
+    }
+  },
+  {
+    "tag": "input",
+    "id": "reverbDefaultValue",
+    "attributes": {
+      "type": "number",
+      "id": "reverbDefaultValue",
+      "name": "reverbDefaultValue",
+      "value": "0",
+      "step": "1"
+    }
+  },
+  {
+    "tag": "input",
+    "id": "delayDefaultValue",
+    "attributes": {
+      "type": "number",
+      "id": "delayDefaultValue",
+      "name": "delayDefaultValue",
+      "value": "0",
+      "step": "1"
+    }
+  },
+  {
+    "tag": "select",
+    "id": "effectOrder",
+    "attributes": {
+      "id": "effectOrder",
+      "name": "effectOrder"
+    },
+    "options": [
+      {
+        "value": "0",
+        "label": "0 - Delay and Reverb in parallel",
+        "selected_in_html": true
+      },
+      {
+        "value": "1",
+        "label": "1 - Delay and Reverb in series",
+        "selected_in_html": false
+      }
+    ]
+  },
+  {
+    "tag": "input",
+    "id": "wavetableFrequency",
+    "attributes": {
+      "type": "number",
+      "id": "wavetableFrequency",
+      "name": "wavetableFrequency",
+      "value": "130.813",
+      "step": "0.001"
+    }
+  },
+  {
+    "tag": "input",
+    "id": "quantiseTable",
+    "attributes": {
+      "type": "text",
+      "id": "quantiseTable",
+      "name": "quantiseTable",
+      "value": "1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12"
+    }
+  }
+]

@@ -1,0 +1,10 @@
+#install the udev rule
+/etc/udev/rules.d/33-midiusb.rules
+#creating the proxy buffer
+mkfifo /tmp/midi_fifo
+#launching proxy program
+./midi_proxy
+
+#things to check
+# sudo apt install inotify-tools
+#

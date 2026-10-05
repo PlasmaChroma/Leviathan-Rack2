@@ -1,0 +1,3 @@
+#ACTION=="*", SUBSYSTEM=="sound", KERNEL=="midiC*", RUN+="/bin/sh /home/pi/arbhar_v2/send_to_pd_usb.sh %k %E{ACTION}"
+SUBSYSTEM=="sound", KERNEL=="midiC[0-9]*", ACTION=="add", RUN+="/home/pi/midi_proxy"
+SUBSYSTEM=="sound", KERNEL=="midiC[0-9]*", ACTION=="remove", RUN+="/home/pi/kill_midi_proxy.sh"

@@ -1,0 +1,8 @@
+hold+ 0
+hold- 1
+panning+ 2
+panning- 3
+reverb+ 4
+reverb- 5
+delay+ 6
+delay- 7

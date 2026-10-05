@@ -1,0 +1,50 @@
+{
+  "method": "restricted LLVM-disassembly-driven ARM/VFP interpreter; not hardware or complete firmware execution",
+  "seed": 210,
+  "comparisons": 4725,
+  "distinct_instruction_addresses_exercised": 206,
+  "results": [
+    {
+      "test": "ADCIntegerSmoothing",
+      "checks": 28,
+      "max_abs_error": 0,
+      "status": "PASS"
+    },
+    {
+      "test": "InputBufferCubic",
+      "checks": 9,
+      "max_abs_error": 2.828892320394516e-08,
+      "status": "PASS"
+    },
+    {
+      "test": "OnePoleHP",
+      "checks": 384,
+      "max_abs_error": 1.9868214962137642e-08,
+      "status": "PASS"
+    },
+    {
+      "test": "OnePoleLP",
+      "checks": 384,
+      "max_abs_error": 1.3245476659928812e-08,
+      "status": "PASS"
+    },
+    {
+      "test": "SoftClipper",
+      "checks": 3360,
+      "max_abs_error": 1.4738551656900967e-07,
+      "status": "PASS"
+    },
+    {
+      "test": "TapeCompander",
+      "checks": 560,
+      "max_abs_error": 6.109299306444882e-07,
+      "status": "PASS"
+    }
+  ],
+  "limitations": [
+    "No operating system or hardware execution",
+    "Interpreter is independently written and not a certified ARM emulator",
+    "No NaN/Inf, FPSCR trap, denormal flush, or analogue behavior claims",
+    "No transport, scheduler, reverb or complete module verification in this probe suite"
+  ]
+}

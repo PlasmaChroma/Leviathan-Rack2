@@ -1,0 +1,99 @@
+{
+  "source": "Uploaded preset comments, corroborated list-selection functions",
+  "clock": {
+    "all": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      16,
+      24,
+      32,
+      64
+    ],
+    "even": [
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      16,
+      24,
+      32,
+      64
+    ],
+    "odd": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11
+    ],
+    "powers_of_two": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ]
+  },
+  "start_length_quantisation": {
+    "all": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      16,
+      24,
+      32,
+      64
+    ],
+    "even": [
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      16,
+      24,
+      32,
+      64
+    ],
+    "odd": [
+      3,
+      5,
+      7,
+      9,
+      11
+    ],
+    "powers_of_two": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ]
+  },
+  "caveat": "Preset Quantisation=0 chooses All; source prose is contradictory about disabling, which is separate runtime state."
+}

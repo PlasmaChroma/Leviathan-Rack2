@@ -1,0 +1,86 @@
+[
+  {
+    "priority": "P0",
+    "id": "RATE-01",
+    "question": "Actual converter rate and relation among three rate constants",
+    "next_action": "Known-frequency and timed record/export, system driver configuration",
+    "implementation_guardrail": "Do not hard-code a single inferred physical rate"
+  },
+  {
+    "priority": "P0",
+    "id": "IO-01",
+    "question": "Analog voltage/gain/saturation and aux/normalled routing",
+    "next_action": "Schematics or calibrated hardware sweep",
+    "implementation_guardrail": "Use explicit provisional IO adapter"
+  },
+  {
+    "priority": "P0",
+    "id": "TRANSPORT-01",
+    "question": "Full signed write/read boundary and transition behavior",
+    "next_action": "Instruction/native harness with small buffers and edge cases",
+    "implementation_guardrail": "Do not implement playback-only varispeed"
+  },
+  {
+    "priority": "P0",
+    "id": "PLATE-01",
+    "question": "Complete MonoPlate delay/filter/output topology",
+    "next_action": "Constructor+process reconstruction and impulse probe",
+    "implementation_guardrail": "Control law is recovered; full plate is not"
+  },
+  {
+    "priority": "P1",
+    "id": "AA-01",
+    "question": "Speed-dependent anti-alias coefficient setup",
+    "next_action": "Trace filter setup and speed transitions",
+    "implementation_guardrail": "Generic cutoff rule is an approximation"
+  },
+  {
+    "priority": "P1",
+    "id": "SPEED-01",
+    "question": "4096-entry notched/stepped speed tables",
+    "next_action": "Execute/reconstruct fillSpeedTable",
+    "implementation_guardrail": "Do not guess notch widths"
+  },
+  {
+    "priority": "P1",
+    "id": "LINK-01",
+    "question": "Exact link switch/master control/event forwarding",
+    "next_action": "checkLink plus IO dispatch review",
+    "implementation_guardrail": "Stereo is not summed mono"
+  },
+  {
+    "priority": "P1",
+    "id": "TAP-01",
+    "question": "Voice stealing and transition exhaustion",
+    "next_action": "High-rate retrigger stress harness",
+    "implementation_guardrail": "4 engines times 5 transition slots is not 20 ordinary voices"
+  },
+  {
+    "priority": "P1",
+    "id": "MIX-01",
+    "question": "Tap normalization and monitor gain branches",
+    "next_action": "Complete callback dataflow and correlated-head tests",
+    "implementation_guardrail": "Avoid arbitrary averaging"
+  },
+  {
+    "priority": "P1",
+    "id": "CLOCK-01",
+    "question": "First edge, timeout, arming, output pulse and event priority",
+    "next_action": "Sequenced event probes and digital capture",
+    "implementation_guardrail": "Do not conflate Record clock role with Retrig"
+  },
+  {
+    "priority": "P2",
+    "id": "MOD-01",
+    "question": "Touch calibration and flutter stochastic statistics",
+    "next_action": "Charge response trace and seeded modulation tests",
+    "implementation_guardrail": "Preserve independent disturbances"
+  },
+  {
+    "priority": "P2",
+    "id": "SAVE-01",
+    "question": "Full autosave/metadata and asset round-trip semantics",
+    "next_action": "Trace helper layouts and fixtures",
+    "implementation_guardrail": "Preset alone is not state"
+  }
+]

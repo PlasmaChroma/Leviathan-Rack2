@@ -1,0 +1,11 @@
+{
+  "original_archive_files": 29,
+  "binaries": 8,
+  "factory_presets": 10,
+  "preset_flat_fields": 31,
+  "curated_functions": 272,
+  "restricted_instruction_comparisons": 5925,
+  "routines_probed": 8,
+  "native_invariant_checks": 8154,
+  "status": "PASS within stated scopes; not complete firmware or hardware validation"
+}

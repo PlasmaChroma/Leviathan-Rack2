@@ -1,0 +1,114 @@
+[
+  {
+    "id": "OPEN-01",
+    "priority": "P0",
+    "area": "Grain allocation/retirement",
+    "question": "82 storage slots vs 42-threshold logic and documented 44 sounding/engine",
+    "entry_point": "play_next 0x6c34; perform 0x4248",
+    "next_action": "Trace every launch, kill, active count, MIDI and override branch; build oversubscription fixtures."
+  },
+  {
+    "id": "OPEN-02",
+    "priority": "P0",
+    "area": "Internal grain scheduler",
+    "question": "Exact Intensity law, duration coupling, asynchronous jitter and minimum spacing",
+    "entry_point": "tickInternTrig 0x7928; GPIO timing functions; main/core patches",
+    "next_action": "Trace clocks and snapshot time; test fixed duration/density grids with fixed random seed."
+  },
+  {
+    "id": "OPEN-03",
+    "priority": "P0",
+    "area": "Capture/Dub/boundaries",
+    "question": "Full write equation, two-writer handover, 256-sample fades, end behavior",
+    "entry_point": "rec perform 0x4288; checkCaptureButton 0x4a14",
+    "next_action": "Use ramps/impulses and event timeline fixtures; never assume perpetual ring recording."
+  },
+  {
+    "id": "OPEN-04",
+    "priority": "P0",
+    "area": "Delay macro",
+    "question": "Creation multiplier differs from dynamic multiplier and descriptive ranges",
+    "entry_point": "arbhar_feedback.pd and upstream macro/MIDI wiring",
+    "next_action": "Evaluate Pd message order; map actual incoming domain and render impulse traces."
+  },
+  {
+    "id": "OPEN-05",
+    "priority": "P1",
+    "area": "Pitch/quantisation",
+    "question": "Detent fix, deviation probabilities, ordered sequence selection and V/oct latch",
+    "entry_point": "setDeviation 0x404c; _getChord 0x2f40; MIDI branches",
+    "next_action": "Trace center departures and pair selection, preserve repeated values."
+  },
+  {
+    "id": "OPEN-06",
+    "priority": "P1",
+    "area": "Texture and reverse grains",
+    "question": "Row indexing, window advance, boundary reads and reverse tails",
+    "entry_point": "makingWndArray 0x5b34; perform 0x4248",
+    "next_action": "Probe signed-speed/texture endpoints and all buffer edges."
+  },
+  {
+    "id": "OPEN-07",
+    "priority": "P1",
+    "area": "Stereo output / gain / panning",
+    "question": "Exact mixing, mono normalization, phase, activity gain and MIDI scaling",
+    "entry_point": "main graph; main_out_stereo~; play perform",
+    "next_action": "Impulse both channels; compare cable states and preset phase policies."
+  },
+  {
+    "id": "OPEN-08",
+    "priority": "P1",
+    "area": "Onset profiles",
+    "question": "Installed bonk~ implementation and six profile event truth tables",
+    "entry_point": "arbharRecorder.pd; _processOnsetData 0x4044; GPIO _setOnsetMode",
+    "next_action": "Identify exact dependency, then test hits, gaps, hold, manual capture, and stereo transitions."
+  },
+  {
+    "id": "OPEN-09",
+    "priority": "P1",
+    "area": "Follow and Omega boundaries",
+    "question": "Backward-looking spray, endpoint layer 6 guard, record-head exclusion",
+    "entry_point": "_getPositionRange 0x6868; _setPlayParameters 0x7c50",
+    "next_action": "Trace guards including 0x6a20; test all six layer boundaries and offsets."
+  },
+  {
+    "id": "OPEN-10",
+    "priority": "P1",
+    "area": "Timebases/file length",
+    "question": "48k request vs 49148 raw conversion vs WT factor",
+    "entry_point": "launch, conversion scripts, WT patch",
+    "next_action": "Measure hardware or verified original process; test 624000 vs 638924 frame files."
+  },
+  {
+    "id": "OPEN-11",
+    "priority": "P2",
+    "area": "Auxiliary reverb",
+    "question": "Nonzero activation not established",
+    "entry_point": "main object 336 and gains 337/338",
+    "next_action": "Find normal initialization/control drivers before enabling."
+  },
+  {
+    "id": "OPEN-12",
+    "priority": "P2",
+    "area": "Clocked mode",
+    "question": "Disabled fallback but beta source/editor present",
+    "entry_point": "configurationDataInitFile and clock scripts",
+    "next_action": "Separate optional-feature compatibility from stock baseline."
+  },
+  {
+    "id": "OPEN-13",
+    "priority": "P1",
+    "area": "Analog input/output",
+    "question": "No authentic gain/limiter/codec transfer measurement",
+    "entry_point": "stereo_in~; ALSA state; physical hardware",
+    "next_action": "Measure physical transfer separately; avoid labelling a generic soft clip authentic."
+  },
+  {
+    "id": "OPEN-14",
+    "priority": "P2",
+    "area": "Source/build provenance",
+    "question": "Source snapshot missing headers; DWARF is hardware-library data",
+    "entry_point": "arbhar_gpio~.c_changes?; Makefile; dwarf metadata",
+    "next_action": "Do not use source sketches as authoritative compiled DSP definitions."
+  }
+]

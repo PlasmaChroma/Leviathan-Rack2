@@ -1,0 +1,13 @@
+priority,id,question,next_action,implementation_guardrail
+P0,RATE-01,Actual converter rate and relation among three rate constants,"Known-frequency and timed record/export, system driver configuration",Do not hard-code a single inferred physical rate
+P0,IO-01,Analog voltage/gain/saturation and aux/normalled routing,Schematics or calibrated hardware sweep,Use explicit provisional IO adapter
+P0,TRANSPORT-01,Full signed write/read boundary and transition behavior,Instruction/native harness with small buffers and edge cases,Do not implement playback-only varispeed
+P0,PLATE-01,Complete MonoPlate delay/filter/output topology,Constructor+process reconstruction and impulse probe,Control law is recovered; full plate is not
+P1,AA-01,Speed-dependent anti-alias coefficient setup,Trace filter setup and speed transitions,Generic cutoff rule is an approximation
+P1,SPEED-01,4096-entry notched/stepped speed tables,Execute/reconstruct fillSpeedTable,Do not guess notch widths
+P1,LINK-01,Exact link switch/master control/event forwarding,checkLink plus IO dispatch review,Stereo is not summed mono
+P1,TAP-01,Voice stealing and transition exhaustion,High-rate retrigger stress harness,4 engines times 5 transition slots is not 20 ordinary voices
+P1,MIX-01,Tap normalization and monitor gain branches,Complete callback dataflow and correlated-head tests,Avoid arbitrary averaging
+P1,CLOCK-01,"First edge, timeout, arming, output pulse and event priority",Sequenced event probes and digital capture,Do not conflate Record clock role with Retrig
+P2,MOD-01,Touch calibration and flutter stochastic statistics,Charge response trace and seeded modulation tests,Preserve independent disturbances
+P2,SAVE-01,Full autosave/metadata and asset round-trip semantics,Trace helper layouts and fixtures,Preset alone is not state

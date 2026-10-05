@@ -1,0 +1,16 @@
+#N canvas 112 464 653 300 12;
+#X msg 377 120 \; pd dsp 0;
+#X msg 379 74 \; pd dsp 1;
+#X obj 67 130 env~ 512;
+#X floatatom 67 155 5 0 0 0 - - - 0;
+#X obj 153 134 env~ 512;
+#X floatatom 153 159 5 0 0 0 - - - 0;
+#X obj 67 105 raw_play~;
+#X msg 164 31 loadRaw /mnt/ramdisk/_temp/combined_L.raw;
+#X obj 85 216 dac~;
+#X connect 2 0 3 0;
+#X connect 4 0 5 0;
+#X connect 6 0 2 0;
+#X connect 6 1 4 0;
+#X connect 6 1 8 1;
+#X connect 7 0 6 0;

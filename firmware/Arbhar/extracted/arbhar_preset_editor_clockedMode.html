@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arbhar Preset Configuration Tool</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Basic styling for form elements */
+        body {
+            font-family: 'Barlow', sans-serif; /* Define font family */
+            padding: 20px;
+            font-size: 14px; /* Body text size */
+            color: #333; /* Body text color */
+        }
+
+        #infoSection {
+    display: block; /* Make the span behave like a block element */
+    width: 95%;
+    max-width: 800px;
+    box-sizing: border-box; /* Ensure padding is included in width */
+    padding: 10px; /* Add padding for consistency */
+    background-color: #f9f9f9; /* Optional: Add a subtle background color */
+    border: 1px solid #ccc; /* Optional: Add a border for consistency */
+    margin-bottom: 20px; /* Add spacing below the section */
+}
+
+#infoToggle {
+    display: block; /* Make sure the first sentence behaves like a block */
+    margin-bottom: 10px; /* Add spacing between the first sentence and the expandable content */
+}
+
+#extraInfo {
+    display: block; /* Ensure the expandable text acts like a block */
+    margin-top: 10px; /* Add spacing between the toggle and the extra content */
+    padding: 10px; /* Add padding to match the rest */
+    background-color: #f9f9f9; /* Keep background color consistent */
+    border-top: 1px solid #ccc; /* Optional: Add a top border for separation */
+}
+
+#downloadButton {
+    width: 95%;
+    max-width: 800px;
+    box-sizing: border-box; /* Ensures padding is included in the width calculation */
+    margin-top: 10px;
+}
+
+        form {
+            display: flex;
+            flex-direction: column;
+            width: 95%;
+            max-width: 800px;
+            box-sizing: border-box; /* Ensure padding (if any) is included in width */
+        }
+
+        label {
+            margin-bottom: 5px; /* Space between label and input */
+        }
+
+        input, select {
+            font-size: 16px; /* Change this value to your desired font size */
+            padding: 5px; /* Optional: Add some padding for better usability */
+            margin-bottom: 2px; /* Space between inputs */
+            width: 100%; /* Make inputs and selects take full width */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+
+        button {
+            padding: 10px;
+            background-color: #927b4b;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+        }
+
+        /* Style to make the label and info appear inline */
+        .label-container {
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            margin-bottom: 0px; /* Space between each label-container */
+            padding: 10px; /* Add padding inside the container */
+            border: 1px solid #ccc; /* Optional border for the container */
+            border-radius: 5px; /* Optional rounded corners */
+            background-color: #f9f9f9; /* Optional background color */
+        }
+
+        .info {
+            color: #927b4b;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-left: 2px;
+            margin-bottom: 2px;
+        }
+
+        /* Initially hide all expandable info */
+        .expandable-info {
+            display: none;
+            margin-top: 0px 0;
+            padding: 2px;
+            font-family: Arial, sans-serif; /* Ensure it uses the same font */
+            font-size: 14px; /* Match the body text size */
+            background-color: #dcdcdc;
+            border: 1px solid #927b4b;
+            color: #333; /* Match the body text color */
+        }
+
+        hr {
+            border: 2px solid #927b4b; /* Divider line style */
+            margin: 20px 0; /* Space above and below the divider */
+        }
+
+        /* .drop-zone {
+            border: 2px dashed #007BFF;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        } */
+        .drop-zone {
+            border: 2px dashed #927b4b;
+            padding: 20px;
+            text-align: center;
+            width: 95%;
+            max-width: 800px;
+            background-color: #dcdcdc;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box; /* Ensure padding is included in width */
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        .slider {
+            width: 300px;
+        }
+
+        .slider-value {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>arbhar</h1><h2> Preset Configuration Tool</h2>
+
+    <!-- Expandable Information Section -->
+    <span id="infoSection">
+        <span id="infoToggle" style="cursor: pointer; color: #927b4b; text-decoration: underline;">
+            [about]
+        </span>
+        <span id="extraInfo" style="display: none;"></span> <!-- The expandable content will be injected here via JavaScript -->
+    </span>
+
+     <!-- File Drop/Load Area -->
+     <div class="drop-zone" id="dropZone">Drop an arbhar preset file here or click to upload one.<br>By default this editor is starting with the 'arbhar Classic' preset.</div>
+     <input type="file" id="fileInput" style="display:none">
+    
+    <form id="configForm">
+        <!-- Preset Name -->
+        <div class="label-container">
+            <label for="presetName"><b>Preset Name</b></label>
+            <input type="text" id="presetName" name="presetName" value="arbhar Classic">
+            <span class="info" data-target="presetInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="presetInfo"></p>
+
+         <hr> <!-- Divider line -->
+
+        <!-- Load Configuration -->
+        <div class="label-container">
+            <label for="loadConfig"><b>Load Configuration: Presets, Layers, and Scenes</b></label>
+            <select id="loadConfig" name="loadConfig">
+                <option value="0">0 - Load Nothing</option>
+                <option value="1">1 - Load Preset</option>
+                <option value="2">2 - Load Layers</option>
+                <option value="3" selected>3 - Load Scene</option>
+            </select>
+            <span class="info" data-target="loadConfigInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="loadConfigInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+        
+        <!-- Input Mode -->
+        <div class="label-container">
+            <label for="inputMode"><b>Mono and Stereo Input Modes</b></label>
+            <select id="inputMode" name="inputMode">
+                <option value="0" selected>0 - Mono</option>
+                <option value="1">1 - Stereo</option>
+            </select>
+            <span class="info" data-target="inputModeInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="inputModeInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Analog Emulation -->
+        <div class="label-container">
+            <label for="analogEmulation"><b>Analogue Emulation Mode</b></label>
+            <select id="analogEmulation" name="analogEmulation">
+                <option value="0">0 - Disable</option>
+                <option value="1" selected>1 - Enable</option>
+            </select>
+            <span class="info" data-target="analogInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="analogInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Phase Switch -->
+        <div class="label-container">
+            <label for="phaseSwitch"><b>Phase Switch on Output 2</b></label>
+            <select id="phaseSwitch" name="phaseSwitch">
+                <option value="0" selected>0 - Phase-Inverted</option>
+                <option value="1">1 - Phase-Corrected</option>
+            </select>
+            <span class="info" data-target="phaseInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="phaseInfo"></p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- Capture CV Mode -->
+        <div class="label-container">
+            <label for="captureCVMode"><b>Capture Modes: Momentary, Latching, and Retrigger</b></label>
+            <select id="captureCVMode" name="captureCVMode">
+                <option value="0">0 - Latching</option>
+                <option value="1" selected>1 - Momentary</option>
+                <option value="2">2 - Retrigger</option>
+            </select>
+            <span class="info" data-target="captureInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="captureInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Capture Button Mode -->
+        <div class="label-container">
+            <label for="captureButtonMode"><b>Capture Button Modes: Latching or Momentary</b></label>
+            <select id="captureButtonMode" name="captureButtonMode">
+                <option value="0" selected>0 - Latching</option>
+                <option value="1">1 - Momentary</option>
+            </select>
+            <span class="info" data-target="captureButtonInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="captureButtonInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Activate Capture On Button Up -->
+        <div class="label-container">
+            <label for="activateCapture"><b>Activate Capture On Button Up</b></label>
+            <select id="activateCapture" name="activateCapture">
+                <option value="0" selected>0 - Disable</option>
+                <option value="1">1 - Enable</option>
+            </select>
+            <span class="info" data-target="activateInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="activateInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Accumulative Capture Mode -->
+        <div class="label-container">
+            <label for="accumulativeCapture"><b>Accumulative Capture Mode</b></label>
+            <select id="accumulativeCapture" name="accumulativeCapture">
+                <option value="0" selected>0 - Disable</option>
+                <option value="1">1 - Enable</option>
+            </select>
+            <span class="info" data-target="accumulativeInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="accumulativeInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Link Accumulative Capture and Capture Button Mode -->
+        <div class="label-container">
+            <label for="linkAccumulative"><b>Link Accumulative Capture and Button Mode:</b></label>
+            <select id="linkAccumulative" name="linkAccumulative">
+                <option value="0" selected>0 - Disable</option>
+                <option value="1">1 - Enable</option>
+            </select>
+            <span class="info" data-target="linkInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="linkInfo"></p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- Onset Control Mode -->
+        <div class="label-container">
+            <label for="onsetMode"><b>Onset Control Modes</b></label>
+            <select id="onsetMode" name="onsetMode">
+                <option value="1" selected>1 - Alpha</option>
+                <option value="2">2 - Beta</option>
+                <option value="3">3 - Gamma</option>
+                <option value="4">4 - Delta</option>
+                <option value="5">5 - Epsilon</option>
+                <option value="6">6 - Zeta</option>
+            </select>
+            <span class="info" data-target="onsetInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="onsetInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Strike Button to Trigger -->
+        <div class="label-container">
+            <label for="strikeButton"><b>Strike Button to Trigger Signal</b></label>
+            <select id="strikeButton" name="strikeButton">
+                <option value="0" selected>0 - Disable</option>
+                <option value="1">1 - Enable</option>
+            </select>
+            <span class="info" data-target="strikeInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="strikeInfo">Set the Strike Button to generate a trigger signal.</p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Trigger Delay -->
+        <div class="label-container">
+            <label for="strikeDelay"><b>Trigger Delay On Strike Input</b></label>
+            <input type="number" id="strikeDelay" name="strikeDelay" value="0" min="0">
+            <span class="info" data-target="strikeDelayInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="strikeDelayInfo">Set a trigger delay to the Strike Input in ms.</p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- Scan and Follow Modes -->
+        <div class="label-container">
+            <label for="followMode"><b>Scan and Follow Mode</b></label>
+            <select id="followMode" name="followMode">
+                <option value="0" selected>0 - Scan Mode</option>
+                <option value="1">1 - Follow Mode</option>
+            </select>
+            <span class="info" data-target="followInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followInfo">Choose between Scan Mode and Follow Mode.</p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Follow Mode Speed Control -->
+        <div class="label-container">
+            <label for="followSpeed"><b>Follow Mode Speed Control</b></label>
+            <select id="followSpeed" name="followSpeed">
+                <option value="0">0 - Unidirectional</option>
+                <option value="1" selected>1 - Bidirectional</option>
+                <option value="2">2 - Inverted Unidirectional</option>
+            </select>
+            <span class="info" data-target="followSpeedInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followSpeedInfo">Control playback speed in Follow Mode.</p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Follow Mode Scan Offset -->
+        <div class="label-container">
+            <label for="followOffset"><b>Follow Mode Scan Offset</b></label>
+            <input type="number" id="followOffset" name="followOffset" value="0" min="0">
+            <span class="info" data-target="followOffsetInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followOffsetInfo">Set a scan offset in Follow Mode in ms.</p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Follow Position Offset with Scan CV -->
+        <div class="label-container">
+            <label for="followPositionOffset"><b>Follow Mode Scan Offset and Speed Control</b></label>
+            <select id="followPositionOffset" name="followPositionOffset">
+                <option value="0">0 - Both Control</option>
+                <option value="1" selected>1 - Scan Knob Only</option>
+            </select>
+            <span class="info" data-target="followPositionInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followPositionInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Follow Mode Looping -->
+        <div class="label-container">
+            <label for="followLoop"><b>Follow Mode Looping</b></label>
+            <select id="followLoop" name="followLoop">
+                <option value="0">0 - Disable</option>
+                <option value="1" selected>1 - Enable</option>
+            </select>
+            <span class="info" data-target="followLoopInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followLoopInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Follow Mode Loop Length -->
+        <div class="label-container">
+            <label for="followLength"><b>Follow Mode Loop Length</b></label>
+            <select id="followLength" name="followLength">
+                <option value="0">0 - Disable</option>
+                <option value="1" selected>1 - Enable</option>
+            </select>
+            <span class="info" data-target="followLengthInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="followLengthInfo"></p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- Random Timing of Grains -->
+        <div class="label-container">
+            <label for="randomTiming"><b>Random Timing of Grains</b></label>
+            <select id="randomTiming" name="randomTiming">
+                <option value="0">0 - Disable</option>
+                <option value="1" selected>1 - Enable</option>
+            </select>
+            <span class="info" data-target="randomTimingInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="randomTimingInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Random Amplitude of Grains -->
+        <div class="label-container">
+            <label for="randomAmplitude"><b>Random Amplitude of Grains</b></label>
+            <select id="randomAmplitude" name="randomAmplitude">
+                <option value="0" selected>0 - Disable</option>
+                <option value="1">1 - Enable</option>
+            </select>
+            <span class="info" data-target="randomAmplitudeInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="randomAmplitudeInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Mod CV Input Modes -->
+        <div class="label-container">
+            <label for="modCV"><b>Mod CV Input Modes</b></label>
+            <select id="modCV" name="modCV">
+                <option value="0">0 - None</option>
+                <option value="1">1 - Panning</option>
+                <option value="2">2 - Hold</option>
+                <option value="3" selected>3 - Reverb</option>
+                <option value="4">4 - Delay</option>
+            </select>
+            <span class="info" data-target="modCVInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="modCVInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Wavetable Centre Frequency -->
+        <div class="label-container">
+            <label for="wavetableFrequency"><b>Centre Frequency of Wavetable Mode</b></label>
+            <input type="number" id="wavetableFrequency" name="wavetableFrequency" value="130.813" step="0.001">
+            <span class="info" data-target="wavetableInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="wavetableInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Quantised Random Pitch Deviation Table -->
+        <div class="label-container">
+            <label for="quantiseTable"><b>Quantised Random Pitch Deviation Table</b></label>
+            <input type="text" id="quantiseTable" name="quantiseTable" value="1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12">
+            <span class="info" data-target="quantiseInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="quantiseInfo"></p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- CLOCKED MODE Switch -->
+        <div class="label-container">
+            <label for="clockedModeSwitch"><b>Clocked Mode Enable User Interface Switch</b></label>
+            <select id="clockedModeSwitch" name="clockedModeSwitch">
+                <option value="0">0 - Disable</option>
+                <option value="1" selected>1 - Enable</option>
+            </select>
+            <span class="info" data-target="clockedModeSwitchInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="clockedModeSwitchInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CLOCKED MODE -->
+        <div class="label-container">
+            <label for="clockedMode"><b>Clocked Mode </b></label>
+            <select id="clockedMode" name="clockedMode">
+                <option value="0" selected>0 - Inactive</option>
+                <option value="1">1 - Active</option>
+            </select>
+            <span class="info" data-target="clockedModeInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="clockedModeInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CLOCKED MODE Internal Clock Speed in BPM -->
+        <div class="label-container">
+            <label for="clockBPM"><b>Clocked Mode: Internal Clock Speed in BPM</b></label>
+            <input type="number" id="clockBPM" name="clockBPM" value="120.0" step="0.1">
+            <span class="info" data-target="clockBPMInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="clockBPMInfo">.</p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CLOCKED MODE Clock Multiplier -->
+        <div class="label-container">
+            <label for="clockMultiplier"><b>Clocked Mode: Clock Multipliers</b></label>
+            <input type="text" id="clockMultiplier" name="clockMultiplier" value="1 1.5 2 3 4 6 8 12 16 24 32">
+            <span class="info" data-target="clockMultiplierInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="clockMultiplierInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CLOCKED MODE CLOCK DIVISIONS -->
+        <div class="label-container">
+            <label for="clockDivisions"><b>Clocked Mode: Clock Divisions:</b></label>
+            <input type="text" id="clockDivisions" name="clockDivisions" value="1 1.5 2 3 4">
+            <span class="info" data-target="clockDivisionsInfo">[details]</span>
+        </div>
+        <p class="expandable-info" id="clockDivisionsInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CLOCKED MODE INPUT CLOCK DIVISION -->
+        <div class="label-container">
+            <label for="inputClockDivision"><b>Clocked Mode: Input Clock Division</b></label>
+            <input type="number" id="inputClockDivision" name="inputClockDivision" value="1" step="1" min="1">
+            <span class="info" data-target="inputClockDivisionInfo">[details]</span>
+        </div>
+
+        <hr> <!-- Divider line -->
+        <p class="expandable-info" id="inputClockDivisionInfo"></p>
+
+    </div> <!-- End of main form container -->
+
+        <!-- Button to Generate Configuration -->
+     <!-- Button to Generate Configuration -->
+        <button type="button" id="generateConfig">Generate Configuration</button>
+    </form>
+
+    <!-- Button to Download Configuration -->
+    <button id="downloadButton" style="margin-top: 10px;">Download arbhar preset file.</button>
+
+    <!-- Display Configuration Output -->
+    <h2>Configuration Output</h2>
+    <pre id="output"></pre>
+
+    <script>
+        // JavaScript to toggle the visibility of the extra information
+        document.getElementById('infoToggle').addEventListener('click', function() {
+            const extraInfo = document.getElementById('extraInfo');
+            if (extraInfo.style.display === 'none' || extraInfo.style.display === '') {
+                extraInfo.style.display = 'block';
+            } else {
+                extraInfo.style.display = 'none';
+            }
+        });
+
+        // JavaScript to toggle visibility for any info section
+        document.querySelectorAll('.info').forEach(item => {
+            item.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const infoText = document.getElementById(targetId);
+
+                if (infoText.style.display === "none" || infoText.style.display === "") {
+                    infoText.style.display = "block";
+                } else {
+                    infoText.style.display = "none";
+                }
+            });
+        });
+
+        // JavaScript for generating the configuration
+        document.getElementById("generateConfig").addEventListener("click", function() {
+            const presetName = document.getElementById("presetName").value;
+        const loadConfig = document.getElementById("loadConfig").value;
+        const inputMode = document.getElementById("inputMode").value;
+        const analogEmulation = document.getElementById("analogEmulation").value;
+        const phaseSwitch = document.getElementById("phaseSwitch").value;
+        const captureCVMode = document.getElementById("captureCVMode").value;
+        const captureButtonMode = document.getElementById("captureButtonMode").value;
+        const activateCapture = document.getElementById("activateCapture").value;
+        const accumulativeCapture = document.getElementById("accumulativeCapture").value;
+        const linkAccumulative = document.getElementById("linkAccumulative").value;
+        const onsetMode = document.getElementById("onsetMode").value;
+        const strikeButton = document.getElementById("strikeButton").value;
+        const strikeDelay = document.getElementById("strikeDelay").value;
+        const followMode = document.getElementById("followMode").value;
+        const followSpeed = document.getElementById("followSpeed").value;
+        const followOffset = document.getElementById("followOffset").value;
+        const followPositionOffset = document.getElementById("followPositionOffset").value;
+        const followLoop = document.getElementById("followLoop").value;
+        const followLength = document.getElementById("followLength").value;
+        const randomTiming = document.getElementById("randomTiming").value;
+        const randomAmplitude = document.getElementById("randomAmplitude").value;
+        const modCV = document.getElementById("modCV").value;
+        const wavetableFrequency = document.getElementById("wavetableFrequency").value;
+        const quantiseTable = document.getElementById("quantiseTable").value;
+        const clockedModeSwitch = document.getElementById("clockedModeSwitch").value;
+        const clockedMode = document.getElementById("clockedMode").value;
+        const clockBPM = document.getElementById("clockBPM").value;
+        const clockMultiplier = document.getElementById("clockMultiplier").value;
+        const clockDivisions = document.getElementById("clockDivisions").value;
+        const inputClockDivision = document.getElementById("inputClockDivision").value;
+
+        // Get current date and time
+        const generatedTime = getCurrentDateTime();
+
+        // Configuration text with dynamic values from the form
+        const configText =  `
+#ARB
+/*
+    Instruō arbhar V2 Configuration
+    ------------------------------------------------------------------
+    Preset Name: ${presetName} 
+    Config generated on: ${generatedTime}
+    ------------------------------------------------------------------
+    ${arbharInfoText}
+*/
+
+{
+    /* Preset Name: */
+    PRESET_NAME: "${presetName}"
+    
+    /* Load Configuration: Presets, Layers, and Scenes */
+    PARAMETER: LoadConfiguration: ${loadConfig}
+
+    /* Mono and Stereo Input Modes */
+    PARAMETER: InputMode: ${inputMode}
+
+    /* Analogue Emulation Mode */
+    PARAMETER: AnalogEmulation: ${analogEmulation}
+
+    /* Phase Switch on Output 2 */
+    PARAMETER: PhaseSwitch: ${phaseSwitch}
+
+    /* Capture Modes: Momentary, Latching, and Retrigger */
+    PARAMETER: CaptureCVMode: ${captureCVMode}
+
+    /* Capture Button Modes: Latching or Momentary */
+    PARAMETER: CaptureButtonMode: ${captureButtonMode}
+
+    /* Activate Capture On Button Up */
+    PARAMETER: ActivateCaptureOnButtonUp: ${activateCapture}
+
+    /* Accumulative Capture Mode */
+    PARAMETER: AccumulativeCaptureMode: ${accumulativeCapture}
+
+    /* Link Accumulative Capture and Button Mode: */
+    PARAMETER: LinkAccumulativeRecordingCaptureAsGate: ${linkAccumulative}
+
+    /* Onset Control Modes */
+    PARAMETER: OnsetMode: ${onsetMode}
+
+    /* Strike Button to Trigger Signal */
+    PARAMETER: StrikeButtonToTrigger: ${strikeButton}
+
+    /* Trigger Delay On Strike Input */
+    PARAMETER: StrikeCVDelay: ${strikeDelay}
+
+    /* Scan and Follow Mode */
+    PARAMETER: FollowMode: ${followMode}
+
+    /* Follow Mode Speed Control */
+    PARAMETER: FollowSpeedDirection: ${followSpeed}
+
+    /* Follow Mode Scan Offset */
+    PARAMETER: FollowScanOffset: ${followOffset}
+
+    /* Follow Mode Scan Offset and Speed Control */
+    PARAMETER: FollowPositionOffsetWithScanCV: ${followPositionOffset}
+
+    /* Follow Mode Looping */
+    PARAMETER: FollowLoop: ${followLoop}
+
+    /* Follow Mode Loop Length */
+    PARAMETER: FollowSetLoopLengthWithHold: ${followLength}
+
+    /* Random Timing of Grains */
+    PARAMETER: RandomTimingWithRandomIntensity: ${randomTiming}
+
+    /* Random Amplitude of Grains */
+    PARAMETER: RandomAmpWithRandomIntensity: ${randomAmplitude}
+
+    /* Mod CV Input Modes */
+    PARAMETER: ModCV: ${modCV}
+
+    /* Centre Frequency of Wavetable Mode */
+    PARAMETER: WavetableCentreFrequency: ${wavetableFrequency}
+
+    /* Quantised Random Pitch Deviation Table */
+    PARAMETER: QuantiseTable: ${quantiseTable}
+
+    /* Clocked Mode Enable User Interface Switch */
+    PARAMETER: EnableClockedModeSwitch: ${clockedModeSwitch}
+
+    /* Clocked Mode */
+    PARAMETER: ClockedMode: ${clockedMode}
+
+    /* Clocked Mode: Internal Clock Speed in BPM */
+    PARAMETER: ClockBPM: ${clockBPM}
+
+    /* Clocked Mode: Clock Multipliers */
+    PARAMETER: ClockMultiplications: ${clockMultiplier}
+
+    /* Clocked Mode: Clock Divisions: */
+    PARAMETER: ClockDivisions: ${clockDivisions}
+
+    /* Clocked Mode: Input Clock Division */
+    PARAMETER: InputClockDivision: ${inputClockDivision}
+
+}`;
+
+            // Display the configuration text in the output preformatted block
+            document.getElementById("output").textContent = configText;
+        });
+
+        function getCurrentDateTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');  // Months are zero-based
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        }
+
+        // Function to download the configuration as a text file
+        function downloadConfig(content, filename) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const anchor = document.createElement('a');
+            anchor.download = filename;
+            anchor.href = window.URL.createObjectURL(blob);
+            anchor.click();
+        }
+
+        function downloadConfig(content) {
+            // Get the preset name
+            const presetName = document.getElementById('presetName').value;
+            
+            // Remove spaces from the preset name and append .txt suffix
+            const fileName = presetName.replace(/\s+/g, '') + '.txt';  // Remove spaces and add .txt
+
+            // Create the blob and trigger download
+            const blob = new Blob([content], { type: 'text/plain' });
+            const anchor = document.createElement('a');
+            anchor.download = fileName;
+            anchor.href = window.URL.createObjectURL(blob);
+            anchor.click();
+        }
+
+        // Event listener for the download button
+        document.getElementById("downloadButton").addEventListener("click", function() {
+            // Get the configuration content (this could be generated based on the form)
+            const configContent = document.getElementById("output").textContent;
+
+            // Call downloadConfig function with the generated content
+            downloadConfig(configContent);
+        });
+    </script>
+
+<script>
+    // Define the content for the expandable information in a variable
+    const arbharInfoText = `
+    arbhar's user interface has been developed with live performance in mind, giving direct and immediate control over all parameters of the granular playback engine.
+
+    However, there are various audio-processing parameters, as well as control approaches, that might not need immediate influence. Nevertheless, these parameters allow for changes to arbhar's configuration that will enable particular workflow and performance approaches.
+
+    This configuration file will outline these parameters, give an overview of the possible parameter settings, and allow for saving user configurations.
+
+    Please note that a valid arbhar preset file has to have the #ARB identification at the beginning of the file (identical to the identification at the top of this file).
+`;
+
+// Insert the extra info text into the 'extraInfo' span on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('extraInfo').innerHTML = arbharInfoText.replace(/\n/g, '<br>'); // Replace newlines with <br> for HTML rendering
+});
+
+
+    const presetInfoText = `<p>The preset name is used to generate a filename for the preset file. 
+        <br>Use it for your own purpose to identify different preset configurations.</p>`;
+
+    const loadConfigInfoText = `
+            <p>arbhar can load Presets, Layers, and Scenes.</p>
+            <p><b>'Load Preset'</b> will load all parameters defined in the configuration file and ignore any 
+            audio files that are present in the <em>_arbhar_scene</em> directory. The parameters will set arbhar 
+            to the defined configuration and may change the control behaviour of arbhar drastically, but 
+            all content in the layers will be preserved. This option is equal to only having a 
+            configuration file in the directory.</p>
+            <p><b>'Load Layers'</b> will load the first 6 audio files present in the <em>_arbhar_scene</em> directory, 
+            and ignore all the parameters defined in the configuration file. The control behaviour of the 
+            arbhar will remain the same, but the audio files in the layers will be replaced. This 
+            option is equal to having audio files in the directory, but no configuration file.</p>
+            <p><b>'Load Scene'</b> will load all parameters defined in this configuration file and
+            the first 6 audio files present in the <em>_arbhar_scene</em> directory.</p>
+        `;
+
+    const inputModeInfoText = `
+            <p>arbhar can function in both <b>Mono</b> or <b>Stereo Input Modes</b>. <br>
+                In Stereo Input Mode, the Input becomes the left input and the Onset Input 
+                becomes the right input. The Sensitivity Knob functions as a level control 
+                for the Onset Input.</p>
+                
+
+    <p><em>PARAM_TEMPORARY: 
+        <br>Press and hold the Shift and Capture Buttons and then turn the Grain Window Knob
+                     from its centre position. Turning the knob fully anticlockwise sets Mono
+                     Input Mode. This is indicated by amber illumination of the Onset Indicator. 
+                     Turning the knob fully clockwise sets Stereo Input Mode. This is indicated 
+                     by white illumination of the Onset Indicator.</em></p>
+    `;
+
+    const analogInfoText = `
+        <p>arbhar allows for analogue emulation for the Onset Input. 
+        </p>
+        <p>Because arbhar's top input incorporates analogue limiting and its Onset Input does not, 
+        Analogue Emulation Mode can be enabled for the Onset Input, so that both inputs affect the input 
+        signal similarly in Stereo Input Mode. If the user has a lárachd module, the Enhance I/O 
+        can be used instead of arbhar's analogue emulation.</p>
+    `;
+
+    const phaseInfoText = `
+        <p>arbhar can set the phase relationship of the audio outputs. 
+        </p>
+    <p>By default, arbhar's Output 2 is phase-inverted from Output 1. If mono input/mono output 
+    patching is desired, set the Phase Switch to mono. If mono input/stereo output patching is 
+    desired, set the Phase Switch to stereo. If stereo input/stereo output patching is desired, 
+    set the Phase Switch to stereo.</p>
+
+    <p><em>PARAM_TEMPORARY: 
+        <br>Press and hold the Shift and Capture Buttons and then turn the Hold Knob
+                     from its centre position. Turning the knob fully anticlockwise sets phase-
+                     inverted configuration. Turning the knob fully clockwise sets Phase-
+                     corrected configuration.</em></p>
+    `;
+
+    const captureInfoText = `
+          <p>arbhar can set one of three captures modes: Momentary, Latching, and Retrigger. </p>
+   
+    <p><b>Momentary Capture</b> Mode will record for as long as the signal present at the Capture Pulse
+    Input is held HIGH. This is best used with gate signals. </p>
+
+    <p><b>Latching Capture</b> Mode will start recording when a rising-edge signal is received at the 
+    Capture Pulse Input and will continue recording until another hard-edge signal is received. 
+    This is best used with trigger signals. </p>
+
+    <p><b>Retrigger Capture</b> Mode will restart recording with every rising-edge signal received at the 
+    Capture Pulse Input, but will not interfere with the capture state.</p>
+
+
+    <p><em>PARAM_TEMPORARY: 
+        <br>Press and hold the Shift and Capture Buttons and then turn the Dub Knob
+                     from its centre position. Turning the knob fully anticlockwise sets
+                     Momentary Capture Mode. Turning the knob fully clockwise sets Latching
+                     Capture Mode. Retrigger Capture Mode is only accessible via the 
+                     configuration file.
+        </em></p>
+    `;
+
+    const captureButtonInfoText = `
+        <p>arbhar's Capture Button can be set to Latching or Momentary Modes.
+            </p>
+    <p>Latching Modes will activate recording when the Capture Button is pressed and deactivate 
+    recording when the Capture Button is pressed again.
+        </p>
+    <p>Momentary Mode will activate recording as long as the Capture Button is pressed and will 
+    deactivate recording when the Capture Button is released. This behaviour might be more 
+    appropriate for certain use cases, including capturing shorter samples when using the 
+    Accumulative Capture Mode.
+        </p>
+    <p><b>Note:</b> This parameter might overwrite the 'Activate Capture On Button Up' parameter.
+    </p>
+    `;
+
+    const activateInfoText = `
+        <p>arbhar can set to record on a button down action or a button up action.    
+        </p>
+    <p>By default recording is activated upon pressing the Capture Button down. This parameter can 
+    be changed so that recording is activated upon the release of the Capture Button. This 
+    behaviour might be more appropriate for certain use cases, including working with the 
+    Accumulative Capture Mode or when working with the built-in Condenser Microphone minimising 
+    the recording of button noises.
+        </p>
+    <p><b>Note:</b> This parameter might be overwritten by the Capture Button Mode parameter.
+        </p>
+    `;
+
+    const accumulativeInfoText = `
+        <p>arbhar can be set to Accumulative Capture Mode.</p>
+
+    <p>This mode allows for the consecutive collage of different recordings within different 
+    locations of a layer. When enabled, pressing the Capture Button will pause the record head, 
+    rather than reset it to the start of the layer.
+    </p>
+
+    <p><em>PARAM_TEMPORARY: Press and hold the Capture Button and then press the Shift Button.
+    </em></p>
+    `;
+
+    const linkInfoText = `
+        <p>arbhar can be set to link Accumulative Capture Mode and Capture Button Mode.
+            </p>
+    <p>This allows for linking the Capture Button Mode to be activated when the Accumulative Capture 
+    Mode is enabled.</p>
+
+    <p><b>Note:</b> This parameter might overwrite the 'Activate Capture On Button Up' and 
+          'Capture Button Mode' parameters.</p>
+    `;
+
+    const onsetInfoText = `
+        <p>arbhar features 6 Onset Control Modes that analyse the incoming audio for significant 
+    spectral changes in order to estimate the start of new sonic events.
+    </p>
+ 
+        <p><b>alpha</b>:   <br>Onset detection of an audio signal triggers recording. With every generated 
+                 grain, a trigger signal is generated at the Pulse Output.
+                 </p>
+        <p><b>beta</b>:    <br>Onset detection of an audio signal triggers recording. A gate signal is
+                 generated at the Pulse Output and is held HIGH for a duration set by the
+                 Hold Knob.</p>
+        <p><b>gamma</b>:   <br>With every generated grain, a trigger signal is generated at the Pulse 
+                 Output. An additional trigger signal is generated upon Onset analysis.
+                 </p>
+        <p><b>delta</b>:   <br>A gate signal is generated at the Pulse Output and is held HIGH for a
+                 duration set by the Hold Knob.</p>
+        <p><b>epsilon</b>: <br>Pressing the Strike Button will generate a trigger signal at the Pulse 
+                 Output.</p>
+        <p><b>zeta</b>:    <br>With playback direction set to forward in Follow Mode, a trigger signal will
+                 generate at the Pulse Output at the end of layer playback.
+                </p>
+        <p><b>Note:</b>    In Stereo Capture Mode, the link between the onset detection and the capture 
+                 triggering is disabled (i.e. alpha and beta become gamma and delta, but do 
+                 not change visually).</p>
+
+    <p><em>PARAM_TEMPORARY: Press and hold the Shift and Capture Buttons and then turn the Layer Knob
+                     to select the desired Onset Control Mode.</em></p>
+    `;
+
+    const strikeInfoText = `
+        <p>arbhar can set the Strike Button to generate a trigger signal at the Pulse Output when 
+    pressed.</p>
+
+    <p>If this feature is disabled, pressing the Strike Button will not generate a trigger signal at 
+    the Pulse Output. If this feature is enabled, pressing the Strike Button will generate a 
+    trigger signal at the Pulse Output.</p>
+    `;
+
+    const strikeDelayInfoText = `
+        <p>arbhar can be set to apply a trigger delay to the Strike Input.    
+            </p>
+    <p>This defines the time added to the Strike Input latency. Adjusting this delay can improve the 
+    response to devices that produce both a trigger signal and a control voltage signal, 
+    especially if the trigger signal occurs before the control voltage signal has been set. Set 
+    time in ms.</p>
+    `;
+
+    const followInfoText = `
+        <p>arbhar can be set to either Scan Mode or Follow Mode. 
+            </p>
+    <p>In <b>Scan Mode</b>, the Scan Knob will move through the layer, setting the playback position at any 
+    Point to freeze audio playback.</p>
+    
+    <p>In <b>Follow Mode</b>, audio playback is triggered and directed internally and the Scan Knob becomes 
+    a speed control for the grains to progress through the recorded material. This mode allows 
+    for changing playback speed of layers independent of pitch control. The Scan Knob controls 
+    from 20x speed (fully anticlockwise) to a 1/20th in speed (fully clockwise).</p>
+
+    <p><em>PARAM_TEMPORARY: Press and hold the Shift and Capture Buttons and then turn the Scan Knob
+                     from its centre position. Turning the knob fully anticlockwise enters
+                     Follow Mode. This is indicated by white illumination of the Strike Button
+                     Turning the knob fully clockwise sets Scan Mode. This is indicated by an
+                     unilluminated Strike Button.</em></p>
+    `;
+
+    const followSpeedInfoText = `
+        <p>arbhar can set the behaviour of the playback speed control (Scan Knob) in Follow Mode.
+            </p>
+    <p><b>Unidirectional</b> sets the playback position to move forward only. If the Scan Knob is set to 
+    its fully anticlockwise position, the playback speed will be at its slowest rate. If the Scan 
+    Knob is set to its fully clockwise position, the playback speed will be at its fastest rate.
+        </p>
+    <p><b>Bidirectional</b> sets the playback position to move forward or reverse. If the Scan Knob is set 
+    to its centre position, playback speed will be at its slowest rate. If the Scan Knob is set 
+    to its fully clockwise position, playback speed will be at its fastest rate in the forward 
+    direction. If the Scan Knob is set to its fully anticlockwise position, playback speed will
+    be at its fastest rate in the reverse direction.</p>
+
+    <p><b>Inverted Unidirectional</b> sets the playback position to move forward only. If the Scan Knob is
+    set to its fully anticlockwise position, the playback speed will be at its fastest rate. If 
+    the Scan Knob is set to its fully clockwise position, the playback speed will be at its 
+    slowest rate. This is identical to Unidirectional, but the behaviour of the Scan Knob is 
+    inverted.</p>
+    `;
+
+    const followOffsetInfoText = `
+        <p>arbhar can set a Scan offset in Follow Mode if Follow Mode's playback speed is set to be 
+    controlled by the Scan Knob and Scan CV Input.</p> 
+    <p>Set value in ms.
+            </p>
+    `;
+
+    const followPositionInfoText = `
+            <p>arbhar can set the behaviour of the Scan Knob and Scan CV Input while in Follow Mode. 
+                </p>
+    <p>The Scan Knob and Scan CV Input can be set to control playback speed, Scan offset, or both.
+            </p>
+        <p><b>Both control Speed</b> - The Scan Knob and Scan CV Input both control the Follow Mode playback speed</p>
+        <p><b>Knob controls Speed / CV controls Offset</b> - The Scan Knob controls the playback speed and the Scan CV Input controls an offset 
+            between the record and playheads (Default)</p>
+    `;
+
+    const followLoopInfoText = `
+        <p>arbhar can enable or disable looped playback of the playheads in Follow Mode.</p>
+    
+    <p>An end-of-layer (EOL) trigger signal can be internally routed to retrigger playback from the 
+    start of the layer or the defined offset value. This is the same EOL trigger signal that is 
+    available in the zeta Onset Control Mode.</p>
+    `;
+
+    const followLengthInfoText = `
+            <p>arbhar can set the Hold duration as the length of the looped playback in Follow Mode. 
+                </p>
+    <p>The end-of-layer (EOL) trigger signal can be triggered at the Follow Mode Scan Offset and 
+    looped for the Hold duration. This is the same EOL trigger signal that is available in the 
+    zeta Onset Control Mode.</p>
+    `;
+
+    const randomTimingInfoText = `
+            <p>arbhar can set the random timing of grains.  </p>  
+
+    <p><b>Randomised timing</b> of internally triggered grains can be applied by turning the Intensity Knob 
+    from its centre position to its fully clockwise position.</p>
+    `;
+
+    const randomAmplitudeInfoText = `
+            <p>arbhar can set the random amplitude of grains.</p>
+
+    <p><b>Randomised amplitude</b> of internally triggered grains can be applied by turning the Intensity Knob 
+    from its centre position to its fully clockwise position.</p>
+    `;
+
+    const modCVInfoText = `
+    <p>arbhar can set the target of the Mod CV Input and replaces the hardware configuration set by 
+    the physical switches on the module. </p>
+
+    <p><b>Panning</b>: Sets the curated distribution amount of the stereo panning.</p>
+    <p><b>Hold</b>:    Sets the duration of the Hold parameter.</p>
+    <p><b>Reverb</b>:  Sets the curated controls of the stereo reverb.</p>
+    <p><b>Delay</b>:   Sets the curated controls of the feedback/delay.</p>
+
+     <p><b> Note:</b> If an arbhar older than or matching hardware revision no 1.7 is used, the V2 firmware 
+    disables the functionality of the Hardware Configuration Switches entirely. For this reason, 
+    newer hardware revisions do not have the Hardware Configuration Switches installed.</p>
+    `;
+
+    const wavetableInfoText = `
+            <p>arbhar can set the centre frequency of the Wavetable Mode. Set value in Hz.  </p>  
+
+        <p>For example:  <br>  
+        F1  -  87.307   <br>
+        F#1 -  92.499   <br>
+        G1  -  97.999   <br>
+        G#1 - 103.826   <br>
+        A1  - 110   <br>
+        Bb1 - 116.541   <br>
+        B1  - 123.471   <br>
+        <b>C2  - 130.813 (Default)    </b><br>
+        C#2 - 138.591   <br>
+        D2  - 146.832   <br>
+        Eb2 - 155.563   <br>
+        E2  - 164.814   <br>
+        F2  - 174.614   <br>
+        F#2 - 184.997   <br>
+        G2  - 195.998   <br>
+        G#  - 207.652   <br>
+        A2  - 220   </p>
+    `;
+
+    const quantiseInfoText = `
+            <p>arbhar can set customised pitch deviation offsets available by clockwise Pitch Deviation Knob 
+    settings. Set values in semitones.    </p>
+
+    <p>At each stage of the clockwise Pitch Deviation Knob setting, a pair of the numbers in the 
+    list, as well as the 'original' pitch (set by the Pitch Knob) will be used by the Pitch 
+    Deviation parameter. </p>
+
+    <p>For example, looking at the first stage (of 12 semitones) defined in the default pitch 
+    deviation table, a transposition of 1 semitone up (1), 2 semitones down (-2), as well as the 
+    'original' pitch (0, set by the Pitch Knob) will become possible pitches for the generated 
+    grains. </p>
+
+    <p>To give another example, the 8th stage (the numbers 7 and -5) will give the interval of a 
+    perfect fifth (7 semitones) up, the interval of a perfect fourth (5 semitones) down and the 
+    'original' pitch (0, set by the Pitch Knob). </p>
+    
+    <p>The user can choose how many stages (pairs of transpositions) are defined, and the number of 
+    stages will be distributed across the clockwise Pitch Deviation Knob range.</p>
+    
+    <p>Define pairs of pitch deviations.  </p>
+        <p>Chromatic:     1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12 (Default)<br>
+        Major:         2 -1 4 -3 5 -7 7 -5 9 -8 11 -10 12 -12 <br>
+        Natural Minor: 2 -1 3 -4 5 -7 7 -5 8 -9 10 -10 12 -12 </p>
+    `;
+
+    const clockedModeSwitchInfoText = `
+            <p>Description of features:</p>
+        <p>Disable - Clock Mode is disabled and inaccessible via the UI of the arbhar.</p>
+        <p>Enable - Clock Mode can be toggled with shift+capture and turning Scan Knob fully clockwise.</p>
+    `;
+
+    const clockedModeInfoText = `
+            <p>Description of features:</p>
+        <p>Inactive - Clocked Mode is inactive / Scan mode is active </p>
+        <p>Active - Clocked Mode is active / Scan mode is disabled.</p>
+    `;
+
+    const clockBPMInfoText = `
+            <p>Description of features:</p>
+        <p>Define internal bpm clock speed in Beats Per Minute (BPM). Float value is accepted.</p>
+    
+    `;
+
+    const clockMultiplierInfoText = `
+            <p>Intensity becomes clock multiplier from mid knob position to fully clockwise:</p>
+        
+          <p>Define multiplier values starting with 1 as the value to get triggers in the speed of the
+          internal BPM clock. </p>
+    `;
+
+    const clockDivisionsInfoText = `
+            <p>Intensity becomes clock divisor from mid knob position to fully anticlockwise:</p>
+        
+          <p>Define divisor values starting with 1 as the value to get triggers in the speed of the
+          internal BPM clock.</p>
+    `;
+
+    const inputClockDivisionInfoText = `
+            <p>Define a clock divisor for the incoming clock patched into the Strike CV input.</p>
+        
+          <p>1 - The measured time between <b>each received trigger</b> will be used to calculate the Clock BPM.<br>
+          2 - The measured time between every <b>second received trigger</b> will be used to calculate the Clock BPM.<br>
+          3 - The measured time between every <b>third received trigger</b> will be used to calculate the Clock BPM.<br>
+          ... etc.<p/>
+    `;
+
+    // Wait until the DOM content is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set the text of the expandable info paragraph
+        document.getElementById('presetInfo').innerHTML = presetInfoText;
+        document.getElementById('loadConfigInfo').innerHTML = loadConfigInfoText;
+        document.getElementById('inputModeInfo').innerHTML = inputModeInfoText;
+        document.getElementById('analogInfo').innerHTML = analogInfoText;
+        document.getElementById('phaseInfo').innerHTML = phaseInfoText;
+        document.getElementById('captureInfo').innerHTML = captureInfoText;
+        document.getElementById('captureButtonInfo').innerHTML = captureButtonInfoText;
+        document.getElementById('activateInfo').innerHTML = activateInfoText;
+        document.getElementById('accumulativeInfo').innerHTML = accumulativeInfoText;
+        document.getElementById('linkInfo').innerHTML = linkInfoText;
+        document.getElementById('onsetInfo').innerHTML = onsetInfoText;
+        document.getElementById('strikeInfo').innerHTML = strikeInfoText;
+        document.getElementById("strikeDelayInfo").innerHTML = strikeDelayInfoText;
+        document.getElementById('followInfo').innerHTML = followInfoText;
+        document.getElementById('followSpeedInfo').innerHTML = followSpeedInfoText;
+        document.getElementById('followOffsetInfo').innerHTML = followOffsetInfoText;
+        document.getElementById('followPositionInfo').innerHTML = followPositionInfoText;
+        document.getElementById('followLoopInfo').innerHTML = followLoopInfoText;
+        document.getElementById('followLengthInfo').innerHTML = followLengthInfoText;
+        document.getElementById('randomTimingInfo').innerHTML = randomTimingInfoText;
+        document.getElementById('randomAmplitudeInfo').innerHTML = randomAmplitudeInfoText;
+        document.getElementById('modCVInfo').innerHTML = modCVInfoText;
+        document.getElementById('wavetableInfo').innerHTML = wavetableInfoText;
+        document.getElementById('quantiseInfo').innerHTML = quantiseInfoText;
+        document.getElementById('clockedModeSwitchInfo').innerHTML = clockedModeSwitchInfoText;
+        document.getElementById('clockedModeInfo').innerHTML = clockedModeInfoText;
+        document.getElementById('clockBPMInfo').innerHTML = clockBPMInfoText;
+        document.getElementById('clockMultiplierInfo').innerHTML = clockMultiplierInfoText;
+        document.getElementById('clockDivisionsInfo').innerHTML = clockDivisionsInfoText;
+        document.getElementById('inputClockDivisionInfo').innerHTML = inputClockDivisionInfoText;
+
+
+
+    });
+</script>
+<script>
+    
+    // Handle the file drop or upload
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    // Click on the drop zone opens the file dialog
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // Drag and drop functionality
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#0056b3'; // Change border color
+    });
+
+    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '#007BFF');
+    
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#007BFF'; // Reset border color
+        const file = e.dataTransfer.files[0];
+        readFile(file);
+    });
+
+    // Handle file upload via file dialog
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        readFile(file);
+    });
+
+    // Function to read and parse the preset file
+    function readFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const text = event.target.result;
+            parsePresetFile(text);
+        };
+        reader.readAsText(file);
+    }
+
+    // Function to parse the preset file and set form values
+    function parsePresetFile(text) {
+        const presetName = extractValueName(text, 'PRESET_NAME');
+        const loadConfig = extractValue(text, 'PARAMETER: LoadConfiguration');
+        const inputMode = extractValue(text, 'PARAMETER: InputMode'); 
+        const analogEmulation = extractValue(text, 'PARAMETER: AnalogEmulation'); 
+        const phaseSwitch = extractValue(text, 'PARAMETER: PhaseSwitch'); 
+        const captureCVMode = extractValue(text, 'PARAMETER: CaptureCVMode'); 
+        const captureButtonMode = extractValue(text, 'PARAMETER: CaptureButtonMode'); 
+        const activateCapture = extractValue(text, 'PARAMETER: ActivateCaptureOnButtonUp'); 
+        const accumulativeCapture = extractValue(text, 'PARAMETER: AccumulativeCaptureMode'); 
+        const linkAccumulative = extractValue(text, 'PARAMETER: LinkAccumulativeRecordingCaptureAsGate'); 
+        const onsetMode = extractValue(text, 'PARAMETER: OnsetMode'); 
+        const strikeButton = extractValue(text, 'PARAMETER: StrikeButtonToTrigger'); 
+        const strikeDelay = extractValue(text, 'PARAMETER: StrikeCVDelay'); 
+        const followMode = extractValue(text, 'PARAMETER: FollowMode'); 
+        const followSpeed = extractValue(text, 'PARAMETER: FollowSpeedDirection'); 
+        const followOffset = extractValueNumber(text, 'PARAMETER: FollowScanOffset'); 
+        const followPositionOffset = extractValue(text, 'PARAMETER: FollowPositionOffsetWithScanCV'); 
+        const followLoop = extractValue(text, 'PARAMETER: FollowLoop'); 
+        const followLength = extractValue(text, 'PARAMETER: FollowSetLoopLengthWithHold'); 
+        const randomTiming = extractValue(text, 'PARAMETER: RandomTimingWithRandomIntensity'); 
+        const randomAmplitude = extractValue(text, 'PARAMETER: RandomAmpWithRandomIntensity'); 
+        const modCV = extractValue(text, 'PARAMETER: ModCV'); 
+        const wavetableFrequency = extractValue(text, 'PARAMETER: WavetableCentreFrequency'); 
+        const quantiseTable = extractValue(text, 'PARAMETER: QuantiseTable'); 
+        const clockedModeSwitch = extractValue(text, 'PARAMETER: EnableClockedModeSwitch'); 
+        const clockedMode = extractValue(text, 'PARAMETER: ClockedMode'); 
+        const clockBPM = extractValue(text, 'PARAMETER: ClockBPM'); 
+        const clockMultiplier = extractValue(text, 'PARAMETER: ClockMultiplications'); 
+        const clockDivisions = extractValue(text, 'PARAMETER: ClockDivisions'); 
+        const inputClockDivision = extractValueNumber(text, 'PARAMETER: InputClockDivision'); 
+
+
+        // Set form values based on parsed file content
+        if (presetName) document.getElementById('presetName').value = presetName;
+        if (loadConfig) document.getElementById('loadConfig').value = loadConfig;
+        if (inputMode) document.getElementById('inputMode').value = inputMode;
+        if (analogEmulation) document.getElementById('analogEmulation').value = analogEmulation;
+        if (phaseSwitch) document.getElementById('phaseSwitch').value = phaseSwitch;
+        if (captureCVMode) document.getElementById('captureCVMode').value = captureCVMode;
+        if (captureButtonMode) document.getElementById('captureButtonMode').value = captureButtonMode;
+        if (activateCapture) document.getElementById('activateCapture').value = activateCapture;
+        if (accumulativeCapture) document.getElementById('accumulativeCapture').value = accumulativeCapture;
+        if (linkAccumulative) document.getElementById('linkAccumulative').value = linkAccumulative;
+        if (onsetMode) document.getElementById('onsetMode').value = onsetMode;
+        if (strikeButton) document.getElementById('strikeButton').value = strikeButton;
+        if (strikeDelay) document.getElementById('strikeDelay').value = strikeDelay;
+        if (followMode) document.getElementById('followMode').value = followMode;
+        if (followSpeed) document.getElementById('followSpeed').value = followSpeed;
+        if (followOffset) document.getElementById('followOffset').value = followOffset;
+        if (followPositionOffset) document.getElementById('followPositionOffset').value = followPositionOffset;
+        if (followLoop) document.getElementById('followLoop').value = followLoop;
+        if (followLength) document.getElementById('followLength').value = followLength;
+        if (randomTiming) document.getElementById('randomTiming').value = randomTiming;
+        if (randomAmplitude) document.getElementById('randomAmplitude').value = randomAmplitude;
+        if (modCV) document.getElementById('modCV').value = modCV;
+        if (wavetableFrequency) document.getElementById('wavetableFrequency').value = wavetableFrequency;
+        if (quantiseTable) document.getElementById('quantiseTable').value = quantiseTable;
+        if (clockedModeSwitch) document.getElementById('clockedModeSwitch').value = clockedModeSwitch;
+        if (clockedMode) document.getElementById('clockedMode').value = clockedMode;
+        if (clockBPM) document.getElementById('clockBPM').value = clockBPM;
+        if (clockMultiplier) document.getElementById('clockMultiplier').value = clockMultiplier;
+        if (clockDivisions) document.getElementById('clockDivisions').value = clockDivisions;
+        if (inputClockDivision) document.getElementById('inputClockDivision').value = inputClockDivision;
+
+        alert('Preset loaded successfully!');
+    }
+
+    // Helper function to extract parameter values from the file
+    function extractValue(text, key) {
+        const regex = new RegExp(`${key}:\\s*([\\w\\s.\\-]+)`, 'i');
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+    function extractValueNumber(text, key) {
+        const regex = new RegExp(`${key}:\\s*([\\d]+)`, 'i'); // Only looking for numbers
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+    function extractValueName(text, key) {
+        const regex = new RegExp(`${key}:\\s*"?([\\w\\s.\\-]+)?"`, 'i');  // Updated regex to handle quotes
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+</script>
+</body>
+</html>
+

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>State machines and event semantics</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  :root{color-scheme:light dark;--bg:#f5f5f2;--paper:#fff;--ink:#152331;--muted:#536674;--line:#d5dde2;--accent:#237b86;--code:#edf3f5;}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0 auto;padding:3.5rem 2rem 5rem;max-width:1140px;font:17px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+  header{border-top:7px solid var(--accent);padding-top:1.3rem;margin-bottom:2rem}header h1{font-size:2.65rem;line-height:1.16;letter-spacing:-.035em}h1{font-size:2.2rem;line-height:1.24;letter-spacing:-.025em}h2{font-size:1.55rem;margin-top:2.7rem;border-bottom:1px solid var(--line);padding-bottom:.5rem}h3{font-size:1.15rem;margin-top:1.8rem}p{margin:.85rem 0}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}strong{font-weight:690}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em}code{padding:.14em .3em;background:var(--code);border-radius:4px;overflow-wrap:anywhere}pre{background:var(--code);padding:1.1rem 1.25rem;border:1px solid var(--line);border-radius:8px;overflow-x:auto;line-height:1.5}pre code{padding:0;background:none;overflow-wrap:normal}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;line-height:1.5;margin:1.4rem 0;display:block;overflow-x:auto}th,td{padding:.7rem .75rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;min-width:80px}th{background:var(--code);font-weight:700}tr:nth-child(even) td{background:color-mix(in srgb,var(--code) 45%,transparent)}
+  #TOC{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.7rem;font-size:.95rem;margin:1.8rem 0 2.8rem}#TOC>ul{columns:2;column-gap:3rem}#TOC li{break-inside:avoid;margin:.3rem 0}#TOC ul ul{font-size:.9em}blockquote{margin:1.2rem 0;border-left:4px solid var(--accent);padding:.3rem 1.2rem;background:var(--paper)}li{margin:.3rem 0}.title{margin-top:.2rem}.bundle-nav{font-size:.88rem;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}.bundle-nav a{margin-right:1.1rem}.footnote{font-size:.85rem;color:var(--muted)}
+  @media(max-width:700px){body{padding:1.5rem 1rem;font-size:16px}header h1{font-size:2.05rem}#TOC>ul{columns:1}table{font-size:.78rem}th,td{padding:.5rem}h2{font-size:1.35rem}}
+  @media(prefers-color-scheme:dark){:root{--bg:#10171f;--paper:#17212c;--ink:#e2eaf0;--muted:#9eafbd;--line:#334451;--accent:#80c9cc;--code:#1d2b36}}
+  @media print{body{background:white;color:black;max-width:none;padding:0;font-size:10pt}#TOC>ul{columns:2}pre{white-space:pre-wrap}a{color:inherit}h2,h3{break-after:avoid}table{display:table;font-size:8pt}tr{break-inside:avoid}.bundle-nav{display:none}}
+  </style>
+</head>
+<body>
+<div class="bundle-nav"><strong>ARBHAR / RESEARCH DOSSIER</strong><br><a href="index.html">Bundle index</a><a href="ARBHAR_REVERSE_ENGINEERING.html">Findings</a><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack handoff</a><a href="PARAMETER_BIBLE.html">Parameters</a><a href="STATE_MACHINES.html">State machines</a><a href="VALIDATION_PLAN.html">Validation</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#state-machines-and-event-semantics"
+id="toc-state-machines-and-event-semantics">State machines and event
+semantics</a>
+<ul>
+<li><a href="#capture-state-is-not-one-boolean"
+id="toc-capture-state-is-not-one-boolean">1. Capture state is not one
+boolean</a></li>
+<li><a href="#grain-slot-lifecycle" id="toc-grain-slot-lifecycle">2.
+Grain slot lifecycle</a></li>
+<li><a href="#continuous-and-strike-engines"
+id="toc-continuous-and-strike-engines">3. Continuous and Strike
+engines</a></li>
+<li><a href="#follow-scan-and-omega" id="toc-follow-scan-and-omega">4.
+Follow, Scan, and Omega</a></li>
+<li><a href="#gesture-state-and-track-hold"
+id="toc-gesture-state-and-track-hold">5. Gesture state and Track &amp;
+Hold</a></li>
+<li><a href="#onset-hold-and-reverb-ducking"
+id="toc-onset-hold-and-reverb-ducking">6. Onset, Hold, and reverb
+ducking</a></li>
+<li><a href="#persistence-and-preset-application"
+id="toc-persistence-and-preset-application">7. Persistence and preset
+application</a></li>
+<li><a href="#compatibility-gate" id="toc-compatibility-gate">8.
+Compatibility gate</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="state-machines-and-event-semantics">State machines and event
+semantics</h1>
+<p><strong>Purpose:</strong> identify the state a native implementation
+must represent, and separate recovered facts from incomplete transition
+logic. The state names below are proposed software names, not a
+recovered source enum. Addresses are virtual addresses in the named
+shared object.</p>
+<h2 id="capture-state-is-not-one-boolean">1. Capture state is not one
+boolean</h2>
+<p>The GPIO layer exposes <code>_setRecordingState</code>,
+<code>_setRecordingStateWithReset</code>,
+<code>_toggleRecordingState</code>, <code>_toggleAccumRecording</code>,
+and distinct button-down/up handling. The recorder owns the audio-write
+phase. <code>arbhar_rec~</code> perform at 0x4288 shows two writer
+records, fades, finite bounds, and a smoothed Dub-related coefficient.
+[F/S]</p>
+<p>A native model should keep these dimensions separate:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Candidate values</th>
+<th>Evidence boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>User capture request</td>
+<td>idle / active / retrigger requested</td>
+<td>Exact CV enum values recovered; all simultaneous-event precedence
+not recovered.</td>
+</tr>
+<tr class="even">
+<td>Writer lifecycle</td>
+<td>stopped / starting / writing / retiring</td>
+<td>Two writer records and fading observed; full envelope transition
+equation remains open.</td>
+</tr>
+<tr class="odd">
+<td>Capture policy</td>
+<td>ordinary / accumulative</td>
+<td>Exact configuration switch exists; do not infer ring-buffer
+behavior.</td>
+</tr>
+<tr class="even">
+<td>Write destination</td>
+<td>selected record layer</td>
+<td>Distinct play/record layer and coupling controls exist.</td>
+</tr>
+<tr class="odd">
+<td>Write position</td>
+<td>reset position / current position / parked resume position</td>
+<td>Mode dependent; capture reset versus accumulative resume must be
+explicit.</td>
+</tr>
+<tr class="even">
+<td>Input mode</td>
+<td>mono analysis/record split / stereo</td>
+<td>Changes both data routing and onset-related behavior.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="capture-cv-contract">Capture CV contract</h3>
+<p>Configuration labels are exact: <strong>0 latch, 1 momentary, 2
+retrigger</strong>. A likely baseline interpretation is edge-toggle,
+gate-held recording, and new-capture restart respectively, but exact
+interaction with active fades, onset requests, button state, and
+accumulative mode requires a truth table. Treat the following as
+required tests, not a claimed completed reconstruction:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Existing state</th>
+<th>Event</th>
+<th>Required question</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Stopped</td>
+<td>CV rising edge</td>
+<td>Start now or after scheduling boundary? Which controls/layer are
+latched?</td>
+</tr>
+<tr class="even">
+<td>Writing</td>
+<td>CV rising edge in latch mode</td>
+<td>Which writer enters retirement, and when does its last sample
+occur?</td>
+</tr>
+<tr class="odd">
+<td>Writing</td>
+<td>CV falling edge in momentary mode</td>
+<td>How does the stop fade interact with remaining input and Dub?</td>
+</tr>
+<tr class="even">
+<td>Writing</td>
+<td>CV rising edge in retrigger mode</td>
+<td>Does old writing overlap new writing, and how are their gains
+combined?</td>
+</tr>
+<tr class="odd">
+<td>Accumulative paused</td>
+<td>Start request</td>
+<td>Resume the parked write position or reset under a particular linkage
+option?</td>
+</tr>
+<tr class="even">
+<td>Any</td>
+<td>Manual button + onset in same interval</td>
+<td>Which event wins; can a second event retrigger the first?</td>
+</tr>
+<tr class="odd">
+<td>Any</td>
+<td>Record-layer change or scene load</td>
+<td>Which grains/writers retain the previous layer generation?</td>
+</tr>
+<tr class="even">
+<td>Writing near end</td>
+<td>End reached</td>
+<td>Fade, stop, park, or schedule another action? No assumed perpetual
+wrap.</td>
+</tr>
+</tbody>
+</table>
+<p>Starting functions: GPIO <code>_toggleAccumRecording</code> 0xbb70,
+<code>_setRecordingStateWithReset</code> 0xb398,
+<code>tick_processButtonDown</code> 0xbcfc,
+<code>tick_processButtonUp</code> 0xb3d8; recorder
+<code>arbhar_rec_tilde_checkCaptureButton</code> 0x4a14 and perform
+0x4288.</p>
+<h2 id="grain-slot-lifecycle">2. Grain slot lifecycle</h2>
+<p>The compiled player distinguishes an active flag from a retirement
+flag and gain. Pool capacity is 82 records; activity-limit semantics are
+a separate question. Proposed model:</p>
+<pre class="text"><code>AVAILABLE -&gt; PREPARED -&gt; ACTIVE -&gt; FINISHED -&gt; AVAILABLE
+                          |
+                          +-&gt; RETIRING -&gt; AVAILABLE</code></pre>
+<p><code>PREPARED</code> is a native design state for explicit delayed
+launches; it is not a proven original enum. Parameters should be snapped
+at a deliberately defined point. A scheduled Strike event, for example,
+may intentionally wait for pitch CV stabilization, so “trigger edge” and
+“grain launch” cannot automatically be collapsed.</p>
+<p>The retirement gain step is observed at the perform-block level.
+Count block visits in traces and report block size/rate alongside sample
+counts. Do not use <code>gain -= 1/64</code> in Rack’s per-sample
+callback.</p>
+<p>Required trace fields: engine, event ID, record index, previous/new
+lifecycle, active count, retirement count, layer/generation, source
+event timestamp, actual start timestamp, duration, pitch ratio, texture
+row, direction, and random draws. The trace must be optional and
+nonblocking; the audio thread can write to a bounded preallocated
+ring.</p>
+<p>Starting functions: player constructor 0x619c, <code>play_next</code>
+0x6c34, <code>play_next_override</code> 0x393c,
+<code>_killAllGrains</code> 0x294c,
+<code>arbhar_play_tilde_kill_selected</code> 0x29a8, perform 0x4248.</p>
+<h2 id="continuous-and-strike-engines">3. Continuous and Strike
+engines</h2>
+<p>Separate sources are visible in the main/core graph. A
+continuous-engine tick and a Strike input are not interchangeable. There
+are distinct trigger clocks, MIDI/chord paths, and output gain
+controls.</p>
+<p>Native scheduling should represent periodic/asynchronous candidate
+events, cancellation or coalescing policy, delayed Strike events, and
+launch-sampled controls. The exact Intensity-to-rate curve,
+duration-dependent limits, and randomized scheduling remain open. Keep
+timing randomization independent of amplitude randomization because
+configuration exposes both switches and the named factory presets use
+different defaults for them.</p>
+<p>Starting functions: player
+<code>arbhar_play_tilde_tickInternTrig</code> 0x7928,
+<code>arbhar_play_tilde_tickPolyphonicTrig</code> 0x7ac8,
+<code>_setInternTrig</code> 0x7a58; GPIO Strike timing, clock, and event
+handlers; <code>arbharGrainCore.pd</code>.</p>
+<h2 id="follow-scan-and-omega">4. Follow, Scan, and Omega</h2>
+<p>The pure Follow-speed helper is numerically probed, but it is only
+one part of a transport. A complete state model needs current head
+position, direction, speed, loop bounds, offset configuration, selected
+layer, capture position, and any recording-head exclusion zone.</p>
+<p>Scan and Follow use different start-position/spray branches. Omega
+introduces a combined layer/position coordinate and a top-end guard. Do
+not reuse a single <code>wrap(scan + uniform(-spray,+spray))</code>
+expression for every mode.</p>
+<p>Required boundary events include: Follow stop/zero crossing;
+unity-speed plateau entry/exit; loop change while grains remain alive;
+playback-layer switch; capture reset while Follow is reading; negative
+pitch/read increment; all Omega layer boundaries; exact maximum control
+value.</p>
+<p>Starting anchors: GPIO <code>calculateFollowSpeed</code> 0x3f10,
+<code>_setPlayParameters</code> 0x7c50, <code>_setFollowMode</code>
+0x76b8; player <code>_getPositionRange</code> 0x6868. The comparison
+near 0x6a20 in that player function remains a specific unresolved
+dataflow branch.</p>
+<h2 id="gesture-state-and-track-hold">5. Gesture state and Track &amp;
+Hold</h2>
+<p>Do not model Shift as a global freeze switch. Separate ordinary
+performance, Shift-modified gestures, staged parameter edits,
+configuration menus, and file operations. An explicit staged snapshot
+allows Track &amp; Hold changes to be applied together without
+suspending unrelated capture or effects state.</p>
+<p>The complete button-order detector and hold/double-tap timing are not
+reconstructed. A native prototype can choose a clear gesture policy, but
+it must remain marked as an adaptation until compared with the GPIO
+handlers or hardware. File-management gestures are especially dangerous
+to guess because they can mean erase, undo, load, or save depending on
+state.</p>
+<p>Starting anchors: GPIO <code>_getButton</code>,
+<code>_setOrder_button</code>, <code>getModeFromOrder</code>,
+<code>tick_processButtonDown</code> 0xbcfc,
+<code>tick_processButtonUp</code> 0xb3d8, and controls patch. Do not run
+the original shell actions while testing gesture interpretation.</p>
+<h2 id="onset-hold-and-reverb-ducking">6. Onset, Hold, and reverb
+ducking</h2>
+<p>The detector generates analysis events; the current onset profile
+decides how those events affect capture, grains, or other behavior. Keep
+detector state, onset holdoff, capture hold state, and reverb duck state
+separate. A single “onset enabled” boolean is insufficient.</p>
+<p>A practical native decomposition is
+<code>DetectorEvent -&gt; OnsetPolicy -&gt; TimedInstrumentEvents</code>.
+The exact six policy tables must be recovered rather than guessed from
+their Greek names. The connected default analysis is <code>bonk~</code>
+with 256-point/32-hop/11-filter arguments after four high-pass stages;
+the custom FFT tester is not the normal path.</p>
+<p>The reverb interruption patch ramps level down and restores it over
+250 ms. Treat tank clearing as unproven. Test onset/Strike events while
+reverb is already ducking, while routing changes, and while the reverb
+macro is zero.</p>
+<p>Starting anchors: recorder <code>_processOnsetData</code> 0x4044;
+GPIO <code>_setOnsetMode</code> 0x6424 and <code>_setHoldValue</code>
+0xe4f4; <code>arbharRecorder.pd</code>,
+<code>arbharReverb.pd</code>.</p>
+<h2 id="persistence-and-preset-application">7. Persistence and preset
+application</h2>
+<p><code>LoadConfiguration</code> distinguishes
+nothing/preset/layers/scene. Applying a preset is not necessarily
+replacing audio. The startup script chooses USB preset, then autosave,
+then the initialization fallback; the initialization file is not
+identical to factory alpha.</p>
+<p>Use atomic staged file adoption in Rack. A recommended transition is
+<code>idle -&gt; preparing off-thread -&gt; ready -&gt; audio-boundary adoption -&gt; old-generation retirement -&gt; idle</code>.
+Failure before adoption should retain the current sound and report an
+error without corrupting current layers. This is a host reliability
+design, not a recovered original file-state enum.</p>
+<h2 id="compatibility-gate">8. Compatibility gate</h2>
+<p>These proposed state names become implementation scaffolding now.
+They become <strong>recovered compatibility behavior only when each
+transition is linked to compiled dataflow or an observed oracle
+trace</strong>. Keep open transitions in the issue ledger rather than
+filling them with plausible but undocumented behavior.</p>
+</body>
+</html>

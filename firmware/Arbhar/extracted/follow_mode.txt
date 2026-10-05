@@ -1,0 +1,398 @@
+#ARB
+/*
+    Instruō arbhar V2 Configuration
+    -----------------------------------------------------------------------
+    The user interface of the arbhar has been developed with performance in
+    mind, giving direct and immediate controls on all musical parameters of
+    the granular playback. There are however various parameters in the over-
+    all processing of audio and approaches in control that might not need 
+    immediate controls, but nevertheless allow changes to the overall setup 
+    of the arbhar that might enable particular workflows and approaches to 
+    performing with this instrument. This configuration file will outline 
+    these parameters, give an overview on the possible setting and allow you 
+    to save your user configuration.
+
+    Please note that a valid arbhar preset file has to have the #ARB identification
+    at the start of the file!
+*/
+
+
+
+{
+	/*
+	-----------------------------------------------------------------------
+    Preset Name
+    -----------------------------------------------------------------------
+	The preset name is optional at the moment, use it for your own purpose to 
+	identify differen preset configuations.
+	*/
+	
+    PRESET_NAME: "Arbhar Classic"
+    
+
+    /*
+    -----------------------------------------------------------------------
+    Load Preset Only, Load Scene Only or Load Preset and Scene
+    -----------------------------------------------------------------------
+    'Load Preset Only' will load all parameters defined in this Configuration
+    file and ignore any audio files that might be pesent in the _arbhar_scene
+    directory. The parameters will setup the arbhar in the way defined and
+    might change the behaviour of the arbhar drastically, but all content in
+    the layers will be preserved. This option is equal to have only a 
+    Configuration file in the directory. 
+    'Load Scene Only' will load the first six audio files pesent in the 
+    _arbhar_scene directory, and ignore all the parameters defined in this 
+    Configuration file. The control behaviour of the arbhar will remain the same, 
+    but the audio content in the layers will be replaced. This option is equal 
+    to have audio files in the directory, but no configuration file.
+    'Load Preset and Scene' will load all.
+    
+        0 - nothing will be loaded.
+        1 - Load Preset Only 
+        2 - Load Scene Only
+        3 - Load Preset and Scene (default)
+    */
+
+  PARAMETER: LoadConfiguration: 3
+
+
+    /*
+    -----------------------------------------------------------------------
+    Arbhar mod CV configuration
+    -----------------------------------------------------------------------
+    Decide what the mod CV is controlling:
+    Panning controls the stereo spread of the arbhar output. Range -5V to 5V. 
+    Curated distribution. Dependent on the Output Phase Switch, this can 'fake'
+    a VCA on the output in a monophonic integration.
+    Hold controls the minimum record time after triggering the capture process.
+    Reverb ...
+    Delay ...
+        0 - none
+        1 - panning (default)
+        2 - hold
+        3 - reverb
+        4 - delay
+    */
+
+  PARAMETER: ModCV: 3
+
+
+    /*
+    -----------------------------------------------------------------------
+    Set Default Values For The ModCV Processes
+    -----------------------------------------------------------------------
+    Since this firmware update version 2, the arbhar can run all available
+    ModCV processes, i.e. Reverb and Delay can be used simultaneously. 
+    However, as only one process can be controlled via the Mod CV input,
+    a CV value can be defined here in Volt, i.e. use values between 5 and -5.
+    This will enable you to measure a CV source to transfer its ModCV value
+    as a default value, i.e. after finding a reverb amount you like, when 
+    ModCV was set to 3 (controlling the reverb), define it here for the 
+    ReverbDefaultValue parameter and change the ModCV paramter to control 
+    another process.   
+ 
+        PanningDefaultValue: <value in volt>
+        HoldDefaultValue:: <value in volt>
+        ReverbDefaultValue:: <value in volt>
+        DelayDefaultValue:: <value in volt>
+    */
+  
+  PARAMETER: PanningDefaultValue: 0
+  PARAMETER: HoldDefaultValue: 0
+  PARAMETER: ReverbDefaultValue: 0
+  PARAMETER: DelayDefaultValue: 0
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Mono/Stereo Record and Playback mode.
+    -----------------------------------------------------------------------
+    Since this firmware update version 2, the arbhar can work in two 
+    fundamental input configurations:
+        0 - Mono (default)
+        1 - Stereo
+    */
+
+  PARAMETER: InputMode: 1
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Output Phase Switch
+    -----------------------------------------------------------------------
+    The second output is by design phase inversed. In certain patching 
+    configurations(e.g. mono input and patching the output in stereo) you 
+    might want to switch the ouput phase switch to stereo
+        0 - Mono (default)
+        1 - Stereo
+    */
+
+  PARAMETER: OutputPhaseSwitch: 1
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Analog Emulation on Onset Input (for stereo input without Larachd)
+    -----------------------------------------------------------------------
+    Description
+        0 - off 
+        1 - on (default)
+    */
+
+  PARAMETER: AnalogEmulationOfOnsetInput: 1
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Capture CV modes are Gate, Trigger and Retrigger
+    -----------------------------------------------------------------------
+    Capture CV in gate mode will capture for as long as the CV is held high.
+    Capture CV in trigger mode will start cpature on the first trigger received and 
+    record until another trigger is received.
+    Capture CV in retrigger mode will start restart capturing for every trigger signal 
+        0 - Trigger 
+        1 - Gate (default)
+        2 - Retrigger  (not implemented yet)
+    */
+
+  PARAMETER: CaptureCvMode: 1
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Onset Modes / Trigger Output  (can be set in PARAM_TEMPORARY)
+    -----------------------------------------------------------------------
+    The arbhar features an onset detection method that attempts to analyse 
+    the incoming audio for significant spectral changes to estimate the 
+    start of new sonic events. The detection of an onset can be mapped to 
+        alpha: onset analysis controls and triggers capture via onset audio signal.
+        beta: ...
+        gamma: ...
+        delta: ...
+        epsilon: ...
+        zeta: ...
+        1 - alpha (default)
+        2 - beta
+        3 - gamma
+        4 - delta
+        5 - epsilon
+        6 - zeta
+    */
+
+  PARAMETER: OnsetMode: 1
+
+
+
+    /*
+    -----------------------------------------------------------------------
+        Strike Button to Trigger Gate Out
+    -----------------------------------------------------------------------
+        Description
+        off: Strike button does not cause trigger out to go high.
+        on: Strike buttin will produce trigger on gate output.
+        0 - off (default)
+        1 - on
+    */
+
+    PARAMETER: StrikeButtonToTrigger: 0
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Follow Mode (can be set in PARAM_TEMPORARY (scan pot))
+    -----------------------------------------------------------------------
+    In Follow Mode the Scan becomes a speed control for the grains to 
+    progress through the recorded material. This mode allows for changing
+    playback speed of layers independent of pitch control.
+    The Scan pot controls from 20x (fully CCW) to a 1/20th in speed.
+        0 - off (default)
+        1 - on
+    */
+
+  PARAMETER: FollowMode: 1
+  
+
+    /*
+    -----------------------------------------------------------------------
+    Follow Mode Speed Control 
+    -----------------------------------------------------------------------
+    The behaviour for the speed control (using the Scan pot) for the playback 
+    in Follow Mode can be set with this parameter.
+	 
+        0 - Forward progression of the playback position only, with slowest
+            speed set when fully CCW and fastest when fully CW
+        1 - Bidirectional control for the progression of playback position.
+            Scan pot at mid position is for the slowest playback, turn Scan
+            CW to increase speed of forward progression of the playback position
+            and CCW to increase speed of reverse progression of playback
+            position. (default) 
+        2 - Forward progression of the playback position only, with fastest
+            speed set when fully CCW and slowest when fully CW
+    */
+
+  PARAMETER: FollowSpeedBiDirectional: 1
+
+
+
+    PARAMETER: FollowPositionOffsetWithScanCV: 1
+    PARAMETER: FollowPositionOffset: 0
+    PARAMETER: FollowLoop: 1
+    PARAMETER: FollowSetLoopLengthWithHold: 1    
+  
+    /*
+    -----------------------------------------------------------------------
+    Random Intensity influences the Timing of Grains
+    -----------------------------------------------------------------------
+    Description of features:
+        0 - off
+        1 - on (default)
+    */
+
+    PARAMETER: RandomTimingWithRandomIntensity: 1
+    
+    
+    /*
+    -----------------------------------------------------------------------
+    Random Intensity influences the Volume of Grains
+    -----------------------------------------------------------------------
+    Description of features:
+        0 - off (default)
+        1 - on
+    */
+
+    PARAMETER: RandomAmpWithRandomIntensity: 0
+ 
+ 
+ 
+    /*
+    -----------------------------------------------------------------------
+    Accumulate Recordings In Layer
+    -----------------------------------------------------------------------
+    Description of features:
+        0 - off (default)
+        1 - on
+    */
+
+  PARAMETER: AccumulateRecordingsInLayer: 0
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    Activate Capture (Recording) on Button Up
+    -----------------------------------------------------------------------
+    By default Capture is activated on pressing the Capture button. This 
+    paramter allows to change the behaviour so Capture is starting on button
+    up. This behaviour might feel more appropriate for certain use cases, 
+    including working with the Accumate Recordings In Layer feature and when
+    working with the in-built microphone minimising the button clicks.
+        0 - off (default)
+        1 - on
+    PLEASE NOTE: this parameter might be overwritten by the 
+    'Capture Button Controls as Gate' parameter.
+    */
+
+  PARAMETER: ActivateCaptureOnButtonUp: 0
+  
+  
+  
+    /*
+    -----------------------------------------------------------------------
+    Capture Button Controls as Gate
+    -----------------------------------------------------------------------
+    By default Capture Button is set up to trigger the capture process, i.e. 
+    press to start the capture and press again to stop. This 
+    paramter allows to change the behaviour so Capture is working as like a 
+    gate, i.e. capture starts on button down and stops on button up, recording
+    for the duration of the Capture Button being held down. This behaviour 
+    might feel more appropriate for certain use cases, including capturing 
+    shorter samples when using the Accumulative Recording in Layer method.
+        0 - off (default)
+        1 - on
+    PLEASE NOTE: using this parameter might overwrite the 
+    'Activate Capture On Button Up' parameter.
+    */
+
+  PARAMETER: CaptureButtonAsGate: 0
+  
+  
+  
+    /*
+    -----------------------------------------------------------------------
+    Linking Accumulative Recordings in Layer and Capture Button Controls as Gate
+    -----------------------------------------------------------------------
+    This allows to link the Capture Button Controls as Gate to be activated 
+    when the Capture Mode is toggled to the Accumulative Recordings In Layer
+        0 - off (default)
+        1 - on
+    PLEASE NOTE: using this parameter might overwrite the 
+    'Activate Capture On Button Up' and 'Capture Button Controls as Gate' 
+    parameter.
+    */
+
+  PARAMETER: LinkAccumulativeRecordingCaptureAsGate: 0
+
+
+
+    /*
+    -----------------------------------------------------------------------
+    CV Delay on Strike CV Input (in ms)
+    -----------------------------------------------------------------------
+    Define time (in ms) added to the Strike CV input latency. Adjustimg this delay can
+    improve the response to devices that produce a trigger as well as CV
+    as often the trigger would occur beore the CV value has been set.  
+        0 ms (default)
+    */
+
+  PARAMETER: StrikeCvDelay: 0
+    
+    
+    
+    /*
+    -----------------------------------------------------------------------
+    Centre frequency of Wavetable Oscillator
+    -----------------------------------------------------------------------
+    Define centre frequency (in Hz) for the Wavetable Oscillator.  
+        130.813 Hz (default)
+    */
+
+  PARAMETER: WavetableCentreFrequency: 130.813
+  
+    /*
+    -----------------------------------------------------------------------
+    Set Quantised Random Pitch Deviation Table in semitones.
+    -----------------------------------------------------------------------
+    Define pairs of pitch deviations.  
+        1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12 (default)
+        major: 2 -1 4 -3 5 -7 7 -5 9 -8 11 -10 12 -12
+        minor: 2 -1 3 -4 5 -7 7 -5 8 -9 10 -10 12 -12
+    */
+
+  PARAMETER: SetQuantiseTable: 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12
+
+  ____________________________________________________________________________________
+    
+    /*
+    MidiEnable: 0 (default), 1
+    GrainNoUsedByMidi: 24 (default)
+    */
+
+    /*
+    -----------------------------------------------------------------------
+    PARAMETER HEADER TEMPLATE
+    -----------------------------------------------------------------------
+    Description of features:
+        0 - option one (default)
+        1 - option two
+    */
+
+    PARAMETER: feature: 0
+
+
+}

@@ -1,0 +1,4880 @@
+[
+  {
+    "name": "",
+    "address": 0,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 0,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 65844,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 1,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 65864,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 2,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 66676,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 3,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 67384,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 4,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 69048,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 5,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 72660,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 6,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 72868,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 7,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 73060,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 8,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 73276,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 9,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 73908,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 10,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 73924,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 11,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 74896,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 12,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 114732,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 13,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 114748,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 14,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 116760,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 15,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 119800,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 16,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 120160,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 17,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 187788,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 18,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 187804,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 19,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 187808,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 20,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 188160,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 21,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 188416,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 22,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 188824,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 23,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 188832,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 24,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 0,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 25,
+    "demangled": ""
+  },
+  {
+    "name": "",
+    "address": 0,
+    "size": 0,
+    "type": 3,
+    "bind": 0,
+    "section": 26,
+    "demangled": ""
+  },
+  {
+    "name": "/home/kian/Instruo/Lubadh/buildroot-crossCompiler/arm-buildroot-linux-uclibcgnueabihf_sdk-buildroot/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib/crt1.o",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "/home/kian/Instruo/Lubadh/buildroot-crossCompiler/arm-buildroot-linux-uclibcgnueabihf_sdk-buildroot/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib/crt1.o"
+  },
+  {
+    "name": "$a",
+    "address": 76736,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 76784,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "initfini.c",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "initfini.c"
+  },
+  {
+    "name": "$a",
+    "address": 73908,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 10,
+    "demangled": "$a"
+  },
+  {
+    "name": "$a",
+    "address": 114732,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 13,
+    "demangled": "$a"
+  },
+  {
+    "name": "initfini.c",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "initfini.c"
+  },
+  {
+    "name": "$a",
+    "address": 73920,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 10,
+    "demangled": "$a"
+  },
+  {
+    "name": "$a",
+    "address": 114744,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 13,
+    "demangled": "$a"
+  },
+  {
+    "name": "audio_save.cpp",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "audio_save.cpp"
+  },
+  {
+    "name": "$a",
+    "address": 81904,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 119848,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 81912,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 81980,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82036,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82064,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82068,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82108,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82112,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82140,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82144,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82184,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82188,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82216,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82220,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 82260,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 114748,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 77016,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_.constprop.0",
+    "address": 77016,
+    "size": 176,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string<std::allocator<char> >(char const*, std::allocator<char> const&) [clone .constprop.0]"
+  },
+  {
+    "name": "$d",
+    "address": 119824,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82264,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82320,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 117184,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119856,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115072,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 82528,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 83156,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 83296,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 83992,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117196,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119864,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 83996,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 84628,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 84768,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 85464,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117300,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119872,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 85468,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 86100,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 86240,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 86936,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117404,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119880,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 86940,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 87568,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 87708,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 88404,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117508,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119888,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 88408,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 89036,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 89176,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 89872,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117612,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119896,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 89876,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 90516,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 90656,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 91352,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117716,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119904,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 91356,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 92000,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 92140,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 92836,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117820,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119912,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 92840,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 93484,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 93624,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 94320,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 117924,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119920,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 94324,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 94964,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 95104,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 95800,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118028,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119928,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 95804,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 96444,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 96584,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 97280,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118132,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119936,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 97284,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118236,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119944,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 97552,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118272,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119952,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 97800,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118300,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119960,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 97960,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 98104,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118324,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119968,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 98108,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118352,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119976,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115264,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 98328,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 98512,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 98608,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 99456,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 99564,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 100452,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118376,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119984,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115508,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 100456,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 101144,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 101232,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 101972,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118544,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119992,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115736,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 101976,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118652,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120000,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 103124,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 103376,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118752,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120008,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 103384,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 103568,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 103664,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 103888,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 103900,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 104528,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 104636,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 118776,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120016,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 105524,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 106220,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 106308,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 107048,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 118944,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120024,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 107052,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 119052,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120032,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 108200,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 108452,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119152,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120040,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 79292,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116760,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 79336,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 80648,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 80700,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$a",
+    "address": 74896,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 75548,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119176,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119800,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 75556,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "_GLOBAL__sub_I_main",
+    "address": 75556,
+    "size": 896,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "_GLOBAL__sub_I_main"
+  },
+  {
+    "name": "$d",
+    "address": 76384,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 187792,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 18,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115796,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115816,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115828,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115848,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115860,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115888,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115896,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115916,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115928,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115972,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 115984,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116020,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116028,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116056,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116068,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116152,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116164,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116184,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116204,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116220,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116236,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116252,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116268,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116284,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 189000,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 24,
+    "demangled": "$d"
+  },
+  {
+    "name": "_ZN6lubadhL7chNamesE",
+    "address": 189000,
+    "size": 48,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::chNames"
+  },
+  {
+    "name": "_ZN6lubadhL21sampleSemSaveNameBaseE",
+    "address": 189048,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleSemSaveNameBase"
+  },
+  {
+    "name": "_ZN6lubadhL23sampleMemSaveLengthBaseE",
+    "address": 189072,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleMemSaveLengthBase"
+  },
+  {
+    "name": "_ZN6lubadhL23sampleMemSaveStatusBaseE",
+    "address": 189096,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleMemSaveStatusBase"
+  },
+  {
+    "name": "_ZN6lubadh5audioL17bufferMemNameBaseE",
+    "address": 189120,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::audio::bufferMemNameBase"
+  },
+  {
+    "name": "_ZN6lubadhL13sampleSaveDirE",
+    "address": 189144,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleSaveDir"
+  },
+  {
+    "name": "_ZN6lubadhL13sampleSaveExtE",
+    "address": 189168,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleSaveExt"
+  },
+  {
+    "name": "_ZN6lubadhL18firmware_version_sE",
+    "address": 189192,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::firmware_version_s"
+  },
+  {
+    "name": "_ZN6lubadhL9sampleDirE",
+    "address": 189216,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleDir"
+  },
+  {
+    "name": "_ZN6lubadhL6shmPreE",
+    "address": 189240,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::shmPre"
+  },
+  {
+    "name": "_ZN6lubadhL6semPreE",
+    "address": 189264,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::semPre"
+  },
+  {
+    "name": "_ZN6lubadhL24sampleTailIdentifierTagsE",
+    "address": 189288,
+    "size": 72,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::sampleTailIdentifierTags"
+  },
+  {
+    "name": "_ZStL8__ioinit",
+    "address": 189360,
+    "size": 1,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "std::__ioinit"
+  },
+  {
+    "name": "_ZN6lubadh5audioL14eodMemNameBaseE",
+    "address": 189364,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::audio::eodMemNameBase"
+  },
+  {
+    "name": "_ZN6lubadh5audio7previewL13bufferMemNameE",
+    "address": 189388,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "lubadh::audio::preview::bufferMemName"
+  },
+  {
+    "name": "SemCpp.cpp",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "SemCpp.cpp"
+  },
+  {
+    "name": "$d",
+    "address": 114748,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 108456,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 109568,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119332,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120048,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 109648,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 109940,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 109972,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 110516,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 110560,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 110956,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 110988,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 111264,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 111284,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 111648,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 76452,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "_GLOBAL__sub_I_SemCpp.cpp",
+    "address": 76452,
+    "size": 72,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "_GLOBAL__sub_I_SemCpp.cpp"
+  },
+  {
+    "name": "$d",
+    "address": 76508,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119816,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 187796,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 18,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 189412,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 24,
+    "demangled": "$d"
+  },
+  {
+    "name": "_ZStL8__ioinit",
+    "address": 189412,
+    "size": 1,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "std::__ioinit"
+  },
+  {
+    "name": "MessageLogger.cpp",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "MessageLogger.cpp"
+  },
+  {
+    "name": "$a",
+    "address": 114480,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 120136,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 116632,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 111680,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 111876,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120096,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 111888,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 111944,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 111952,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 112764,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119624,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 15,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 114748,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 14,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 114552,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 114728,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 120144,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 112792,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 113712,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 113760,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 114340,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 114352,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "$a",
+    "address": 76524,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "_GLOBAL__sub_I_MessageLogger.cpp",
+    "address": 76524,
+    "size": 212,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "_GLOBAL__sub_I_MessageLogger.cpp"
+  },
+  {
+    "name": "$d",
+    "address": 76700,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 119824,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 16,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 187800,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 18,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 189416,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 24,
+    "demangled": "$d"
+  },
+  {
+    "name": "_ZStL8__ioinit",
+    "address": 189416,
+    "size": 1,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "std::__ioinit"
+  },
+  {
+    "name": "crtstuff.c",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "crtstuff.c"
+  },
+  {
+    "name": "",
+    "address": 120160,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 17,
+    "demangled": ""
+  },
+  {
+    "name": "$a",
+    "address": 76796,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "deregister_tm_clones",
+    "address": 76796,
+    "size": 0,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "deregister_tm_clones"
+  },
+  {
+    "name": "$d",
+    "address": 76828,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 76840,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "register_tm_clones",
+    "address": 76840,
+    "size": 0,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "register_tm_clones"
+  },
+  {
+    "name": "$d",
+    "address": 76884,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "$d",
+    "address": 188828,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 23,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 76896,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "__do_global_dtors_aux",
+    "address": 76896,
+    "size": 0,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "__do_global_dtors_aux"
+  },
+  {
+    "name": "$d",
+    "address": 76956,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "completed.10359",
+    "address": 188972,
+    "size": 1,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "completed.10359"
+  },
+  {
+    "name": "$d",
+    "address": 187804,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 19,
+    "demangled": "$d"
+  },
+  {
+    "name": "__do_global_dtors_aux_fini_array_entry",
+    "address": 187804,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 19,
+    "demangled": "__do_global_dtors_aux_fini_array_entry"
+  },
+  {
+    "name": "$a",
+    "address": 76968,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$a"
+  },
+  {
+    "name": "frame_dummy",
+    "address": 76968,
+    "size": 0,
+    "type": 2,
+    "bind": 0,
+    "section": 12,
+    "demangled": "frame_dummy"
+  },
+  {
+    "name": "$d",
+    "address": 77004,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 12,
+    "demangled": "$d"
+  },
+  {
+    "name": "object.10364",
+    "address": 188976,
+    "size": 24,
+    "type": 1,
+    "bind": 0,
+    "section": 24,
+    "demangled": "object.10364"
+  },
+  {
+    "name": "$d",
+    "address": 187788,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 18,
+    "demangled": "$d"
+  },
+  {
+    "name": "__frame_dummy_init_array_entry",
+    "address": 187788,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 18,
+    "demangled": "__frame_dummy_init_array_entry"
+  },
+  {
+    "name": "$d",
+    "address": 188973,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 24,
+    "demangled": "$d"
+  },
+  {
+    "name": "crtstuff.c",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": "crtstuff.c"
+  },
+  {
+    "name": "$d",
+    "address": 120160,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 17,
+    "demangled": "$d"
+  },
+  {
+    "name": "__FRAME_END__",
+    "address": 120160,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 17,
+    "demangled": "__FRAME_END__"
+  },
+  {
+    "name": "",
+    "address": 0,
+    "size": 0,
+    "type": 4,
+    "bind": 0,
+    "section": 65521,
+    "demangled": ""
+  },
+  {
+    "name": "_GLOBAL_OFFSET_TABLE_",
+    "address": 188416,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 22,
+    "demangled": "_GLOBAL_OFFSET_TABLE_"
+  },
+  {
+    "name": "_DYNAMIC",
+    "address": 188160,
+    "size": 0,
+    "type": 1,
+    "bind": 0,
+    "section": 21,
+    "demangled": "_DYNAMIC"
+  },
+  {
+    "name": "$d",
+    "address": 188824,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 23,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 73924,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 11,
+    "demangled": "$a"
+  },
+  {
+    "name": "$d",
+    "address": 73940,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 11,
+    "demangled": "$d"
+  },
+  {
+    "name": "$a",
+    "address": 73944,
+    "size": 0,
+    "type": 0,
+    "bind": 0,
+    "section": 11,
+    "demangled": "$a"
+  },
+  {
+    "name": "data_start",
+    "address": 188824,
+    "size": 0,
+    "type": 0,
+    "bind": 2,
+    "section": 23,
+    "demangled": "data_start"
+  },
+  {
+    "name": "shm_open",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "shm_open"
+  },
+  {
+    "name": "_ZSt20__throw_length_errorPKc@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__throw_length_error(char const*)@GLIBCXX_3.4"
+  },
+  {
+    "name": "__register_frame_info",
+    "address": 0,
+    "size": 0,
+    "type": 0,
+    "bind": 2,
+    "section": 0,
+    "demangled": "__register_frame_info"
+  },
+  {
+    "name": "_ZNSt6threadC2IRFvN6lubadh11_ChannelIDsEEJS2_EvEEOT_DpOT0_",
+    "address": 97960,
+    "size": 148,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::thread<void (&)(lubadh::_ChannelIDs), lubadh::_ChannelIDs, void>(void (&)(lubadh::_ChannelIDs), lubadh::_ChannelIDs&&)"
+  },
+  {
+    "name": "_ZTSN3shm13_SharedMemoryILj118008000EEE",
+    "address": 115984,
+    "size": 36,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::_SharedMemory<118008000u>"
+  },
+  {
+    "name": "strftime",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "strftime"
+  },
+  {
+    "name": "_ZNSo5writeEPKci@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_ostream<char, std::char_traits<char> >::write(char const*, int)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_Z9runLinkedv",
+    "address": 79336,
+    "size": 2568,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "runLinked()"
+  },
+  {
+    "name": "__errno_location",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__errno_location"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EEC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 103124,
+    "size": 256,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::_SharedMemory(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "_start",
+    "address": 76736,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "_start"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_replaceEjjPKcj@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_replace(unsigned int, unsigned int, char const*, unsigned int)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZTVSt9basic_iosIcSt11char_traitsIcEE@GLIBCXX_3.4",
+    "address": 187808,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 20,
+    "demangled": "vtable for std::basic_ios<char, std::char_traits<char> >@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTSN3shm6ObjectIN6lubadh14FileSaveStatusEEE",
+    "address": 115928,
+    "size": 41,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::Object<lubadh::FileSaveStatus>"
+  },
+  {
+    "name": "_ZN3shm6ObjectIiED1Ev",
+    "address": 88408,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<int>::~Object()"
+  },
+  {
+    "name": "_ZTVNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEEE",
+    "address": 116284,
+    "size": 20,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >"
+  },
+  {
+    "name": "__aeabi_unwind_cpp_pr0@GCC_3.5",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__aeabi_unwind_cpp_pr0@GCC_3.5"
+  },
+  {
+    "name": "system",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "system"
+  },
+  {
+    "name": "sem_unlink",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_unlink"
+  },
+  {
+    "name": "__aeabi_ldivmod@GCC_3.5",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__aeabi_ldivmod@GCC_3.5"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EE3mapEv",
+    "address": 105524,
+    "size": 1528,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::map()"
+  },
+  {
+    "name": "_ZNSt8ios_baseC2Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::ios_base::ios_base()@GLIBCXX_3.4"
+  },
+  {
+    "name": "memcpy",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "memcpy"
+  },
+  {
+    "name": "_ZN9SemaphoreD1Ev",
+    "address": 109648,
+    "size": 324,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::~Semaphore()"
+  },
+  {
+    "name": "_ZN7logging14_MessageLoggerD2Ev",
+    "address": 114480,
+    "size": 72,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::~_MessageLogger()"
+  },
+  {
+    "name": "_ZN3shm9FileErrorD1Ev",
+    "address": 82112,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::FileError::~FileError()"
+  },
+  {
+    "name": "_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEE6_M_runEv",
+    "address": 81904,
+    "size": 8,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >::_M_run()"
+  },
+  {
+    "name": "_ZTSNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEEE",
+    "address": 116068,
+    "size": 83,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >"
+  },
+  {
+    "name": "_ZTVN3shm9FileErrorE",
+    "address": 116164,
+    "size": 20,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::FileError"
+  },
+  {
+    "name": "_ZN7logging14_MessageLogger16config_timestampEbb",
+    "address": 111972,
+    "size": 12,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::config_timestamp(bool, bool)"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EEC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 103124,
+    "size": 256,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::_SharedMemory(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "_ZNSt13runtime_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::runtime_error::runtime_error(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt13runtime_errorC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::runtime_error::runtime_error(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6insertEjPKc@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::insert(unsigned int, char const*)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNK7logging14_MessageLogger3logERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS0_12MessageLabelE",
+    "address": 114352,
+    "size": 128,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::log(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, logging::_MessageLogger::MessageLabel) const"
+  },
+  {
+    "name": "_ZdlPv@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "operator delete(void*)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt5arrayINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELj2EED1Ev",
+    "address": 81980,
+    "size": 56,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::array<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 2u>::~array()"
+  },
+  {
+    "name": "_ZNSt5arrayINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELj3EED2Ev",
+    "address": 81912,
+    "size": 68,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::array<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 3u>::~array()"
+  },
+  {
+    "name": "_ZN9Semaphore10wait_untilENSt6chrono10time_pointINS0_3_V212system_clockENS0_8durationIxSt5ratioILx1ELx1000000000EEEEEE",
+    "address": 111284,
+    "size": 392,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::wait_until(std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > >)"
+  },
+  {
+    "name": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EERKS8_SA_",
+    "address": 98108,
+    "size": 220,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114pathC2INSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES1_EERKT_NS1_6formatE",
+    "address": 97552,
+    "size": 248,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::filesystem::__cxx11::path::path<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::filesystem::__cxx11::path>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::filesystem::__cxx11::path::format)"
+  },
+  {
+    "name": "_ZN3shm5ArrayIfLj29502000EED0Ev",
+    "address": 92840,
+    "size": 1484,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Array<float, 29502000u>::~Array()"
+  },
+  {
+    "name": "_fini",
+    "address": 114732,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 13,
+    "demangled": "_fini"
+  },
+  {
+    "name": "_ZNSt8ios_base4InitC1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::ios_base::Init::Init()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZSt4cerr@GLIBCXX_3.4",
+    "address": 188832,
+    "size": 140,
+    "type": 1,
+    "bind": 1,
+    "section": 24,
+    "demangled": "std::cerr@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm5ArrayIfLj29502000EED2Ev",
+    "address": 85468,
+    "size": 1472,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Array<float, 29502000u>::~Array()"
+  },
+  {
+    "name": "sem_close",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_close"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EEC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 108200,
+    "size": 256,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::_SharedMemory(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "_ZNSt6chrono3_V212system_clock3nowEv@GLIBCXX_3.4.19",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::chrono::_V2::system_clock::now()@GLIBCXX_3.4.19"
+  },
+  {
+    "name": "_ZN3shm6ObjectIN6lubadh14FileSaveStatusEED2Ev",
+    "address": 86940,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<lubadh::FileSaveStatus>::~Object()"
+  },
+  {
+    "name": "_ZTVN3shm6ObjectIN6lubadh14FileSaveStatusEEE",
+    "address": 116236,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::Object<lubadh::FileSaveStatus>"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag",
+    "address": 114552,
+    "size": 180,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>(char*, char*, std::forward_iterator_tag)"
+  },
+  {
+    "name": "_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEED0Ev",
+    "address": 82068,
+    "size": 44,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >::~_State_impl()"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKc@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::append(char const*)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_mutateEjjPKcj@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_mutate(unsigned int, unsigned int, char const*, unsigned int)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt5arrayINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELj3EED1Ev",
+    "address": 81912,
+    "size": 68,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::array<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 3u>::~array()"
+  },
+  {
+    "name": "__uClibc_main",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__uClibc_main"
+  },
+  {
+    "name": "__cxa_end_cleanup@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_end_cleanup@CXXABI_1.3"
+  },
+  {
+    "name": "_ZN7logging14_MessageLogger15config_textFileEb",
+    "address": 111896,
+    "size": 56,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::config_textFile(bool)"
+  },
+  {
+    "name": "_ZTVSt13basic_filebufIcSt11char_traitsIcEE@GLIBCXX_3.4",
+    "address": 187824,
+    "size": 64,
+    "type": 1,
+    "bind": 2,
+    "section": 20,
+    "demangled": "vtable for std::basic_filebuf<char, std::char_traits<char> >@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_filebuf<char, std::char_traits<char> >::open(char const*, std::_Ios_Openmode)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt13runtime_errorD2Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::runtime_error::~runtime_error()@GLIBCXX_3.4"
+  },
+  {
+    "name": "strlen",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "strlen"
+  },
+  {
+    "name": "_ZN3shm5ArrayIfLj29502000EED1Ev",
+    "address": 85468,
+    "size": 1472,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Array<float, 29502000u>::~Array()"
+  },
+  {
+    "name": "_ZN7logging18defaultLogFileNameB5cxx11E",
+    "address": 189420,
+    "size": 24,
+    "type": 1,
+    "bind": 1,
+    "section": 24,
+    "demangled": "logging::defaultLogFileName[abi:cxx11]"
+  },
+  {
+    "name": "_ZNSt8ios_base4InitD1Ev@GLIBCXX_3.4",
+    "address": 74256,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::ios_base::Init::~Init()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ITM_deregisterTMCloneTable",
+    "address": 0,
+    "size": 0,
+    "type": 0,
+    "bind": 2,
+    "section": 0,
+    "demangled": "_ITM_deregisterTMCloneTable"
+  },
+  {
+    "name": "_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_PKc@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt14overflow_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::overflow_error::overflow_error(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZTVSt13basic_fstreamIcSt11char_traitsIcEE@GLIBCXX_3.4",
+    "address": 187888,
+    "size": 60,
+    "type": 1,
+    "bind": 2,
+    "section": 20,
+    "demangled": "vtable for std::basic_fstream<char, std::char_traits<char> >@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTIN3shm13_SharedMemoryILj118008000EEE",
+    "address": 116020,
+    "size": 8,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::_SharedMemory<118008000u>"
+  },
+  {
+    "name": "_ZTSN3shm13_SharedMemoryILj4EEE",
+    "address": 115860,
+    "size": 28,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::_SharedMemory<4u>"
+  },
+  {
+    "name": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EERKS8_PKS5_",
+    "address": 97284,
+    "size": 268,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EOS4_@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt6thread15_M_start_threadESt10unique_ptrINS_6_StateESt14default_deleteIS1_EEPFvvE@GLIBCXX_3.4.22",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)())@GLIBCXX_3.4.22"
+  },
+  {
+    "name": "_ZN7logging14_MessageLoggerD1Ev",
+    "address": 114480,
+    "size": 72,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::~_MessageLogger()"
+  },
+  {
+    "name": "_ZTIN3shm11MemoryErrorE",
+    "address": 115848,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::MemoryError"
+  },
+  {
+    "name": "_ITM_registerTMCloneTable",
+    "address": 0,
+    "size": 0,
+    "type": 0,
+    "bind": 2,
+    "section": 0,
+    "demangled": "_ITM_registerTMCloneTable"
+  },
+  {
+    "name": "__data_start",
+    "address": 188824,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 23,
+    "demangled": "__data_start"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev@GLIBCXX_3.4.21",
+    "address": 74316,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::~basic_string()@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "__bss_start__",
+    "address": 188832,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "__bss_start__"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_assignERKS4_@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_assign(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZTVN3shm13_SharedMemoryILj4EEE",
+    "address": 116204,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::_SharedMemory<4u>"
+  },
+  {
+    "name": "_ZTINSt6thread6_StateE@GLIBCXX_3.4.22",
+    "address": 187948,
+    "size": 8,
+    "type": 1,
+    "bind": 1,
+    "section": 20,
+    "demangled": "typeinfo for std::thread::_State@GLIBCXX_3.4.22"
+  },
+  {
+    "name": "_ZTVN10__cxxabiv117__class_type_infoE@CXXABI_1.3",
+    "address": 187956,
+    "size": 44,
+    "type": 1,
+    "bind": 1,
+    "section": 20,
+    "demangled": "vtable for __cxxabiv1::__class_type_info@CXXABI_1.3"
+  },
+  {
+    "name": "_ZN3shm11MemoryErrorD0Ev",
+    "address": 82220,
+    "size": 44,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::MemoryError::~MemoryError()"
+  },
+  {
+    "name": "_ZTSN3shm9FileErrorE",
+    "address": 115796,
+    "size": 17,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::FileError"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EE5closeEv",
+    "address": 101976,
+    "size": 1148,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::close()"
+  },
+  {
+    "name": "_ZTIN3shm9FileErrorE",
+    "address": 115816,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::FileError"
+  },
+  {
+    "name": "_ZNSt13basic_fstreamIcSt11char_traitsIcEED1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_fstream<char, std::char_traits<char> >::~basic_fstream()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTSN3shm6ObjectIiEE",
+    "address": 115896,
+    "size": 17,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::Object<int>"
+  },
+  {
+    "name": "sem_timedwait",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_timedwait"
+  },
+  {
+    "name": "shm_unlink",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "shm_unlink"
+  },
+  {
+    "name": "_ZTINSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEEE",
+    "address": 116152,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EED0Ev",
+    "address": 91356,
+    "size": 1484,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::~_SharedMemory()"
+  },
+  {
+    "name": "_ZN3shm6ObjectIiED2Ev",
+    "address": 88408,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<int>::~Object()"
+  },
+  {
+    "name": "_ZNSt16invalid_argumentC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::invalid_argument::invalid_argument(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEED2Ev",
+    "address": 82036,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >::~_State_impl()"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114pathC1INSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES1_EERKT_NS1_6formatE",
+    "address": 97552,
+    "size": 248,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::filesystem::__cxx11::path::path<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::filesystem::__cxx11::path>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::filesystem::__cxx11::path::format)"
+  },
+  {
+    "name": "_ZN3shm6ObjectIN6lubadh14FileSaveStatusEED1Ev",
+    "address": 86940,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<lubadh::FileSaveStatus>::~Object()"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114path14_M_split_cmptsEv@GLIBCXX_3.4.26",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::filesystem::__cxx11::path::_M_split_cmpts()@GLIBCXX_3.4.26"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114path5_ListC1Ev@GLIBCXX_3.4.26",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::filesystem::__cxx11::path::_List::_List()@GLIBCXX_3.4.26"
+  },
+  {
+    "name": "_ZN9SemaphoreC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj",
+    "address": 108456,
+    "size": 1192,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::Semaphore(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, unsigned int)"
+  },
+  {
+    "name": "_ZTISt13runtime_error@GLIBCXX_3.4",
+    "address": 188000,
+    "size": 12,
+    "type": 1,
+    "bind": 1,
+    "section": 20,
+    "demangled": "typeinfo for std::runtime_error@GLIBCXX_3.4"
+  },
+  {
+    "name": "pthread_create",
+    "address": 74412,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "pthread_create"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EED2Ev",
+    "address": 83996,
+    "size": 1472,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::~_SharedMemory()"
+  },
+  {
+    "name": "__TMC_END__",
+    "address": 188832,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 23,
+    "demangled": "__TMC_END__"
+  },
+  {
+    "name": "_ZSt4cout@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::cout@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTSN3shm11MemoryErrorE",
+    "address": 115828,
+    "size": 20,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::MemoryError"
+  },
+  {
+    "name": "_ZSt9terminatev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::terminate()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNKSt10filesystem7__cxx114path5_List13_Impl_deleterclEPNS2_5_ImplE@GLIBCXX_3.4.26",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::filesystem::__cxx11::path::_List::_Impl_deleter::operator()(std::filesystem::__cxx11::path::_List::_Impl*) const@GLIBCXX_3.4.26"
+  },
+  {
+    "name": "localtime",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "localtime"
+  },
+  {
+    "name": "close",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "close"
+  },
+  {
+    "name": "__dso_handle",
+    "address": 188828,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 23,
+    "demangled": "__dso_handle"
+  },
+  {
+    "name": "_ZN7logging14_MessageLoggerC1Ev",
+    "address": 111680,
+    "size": 208,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::_MessageLogger()"
+  },
+  {
+    "name": "__end__",
+    "address": 189548,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "__end__"
+  },
+  {
+    "name": "__bss_end__",
+    "address": 189548,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "__bss_end__"
+  },
+  {
+    "name": "_ZNSt6thread6_StateD2Ev@GLIBCXX_3.4.22",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::thread::_State::~_State()@GLIBCXX_3.4.22"
+  },
+  {
+    "name": "_ZTVN3shm11MemoryErrorE",
+    "address": 116184,
+    "size": 20,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::MemoryError"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EED2Ev",
+    "address": 82528,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::~_SharedMemory()"
+  },
+  {
+    "name": "_ZNSt14overflow_errorD1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::overflow_error::~overflow_error()@GLIBCXX_3.4"
+  },
+  {
+    "name": "mmap64",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "mmap64"
+  },
+  {
+    "name": "_ZN9Semaphore4postEv",
+    "address": 110560,
+    "size": 428,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::post()"
+  },
+  {
+    "name": "_Znwj@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "operator new(unsigned int)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcj@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_append(char const*, unsigned int)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZNK7logging14_MessageLogger7tpToISOB5cxx11ENSt6chrono10time_pointINS1_3_V212system_clockENS1_8durationIxSt5ratioILx1ELx1000000000EEEEEE",
+    "address": 112792,
+    "size": 968,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::tpToISO[abi:cxx11](std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > >) const"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EEC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 108200,
+    "size": 256,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::_SharedMemory(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "_ZTISt9exception@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 0,
+    "demangled": "typeinfo for std::exception@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt9basic_iosIcSt11char_traitsIcEE4initEPSt15basic_streambufIcS1_E@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_ios<char, std::char_traits<char> >::init(std::basic_streambuf<char, std::char_traits<char> >*)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEED1Ev",
+    "address": 82036,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (*)(lubadh::_ChannelIDs), lubadh::_ChannelIDs> > >::~_State_impl()"
+  },
+  {
+    "name": "_ZTIN3shm5ArrayIfLj29502000EEE",
+    "address": 116056,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::Array<float, 29502000u>"
+  },
+  {
+    "name": "_ZN9Semaphore5checkEv",
+    "address": 110988,
+    "size": 296,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::check()"
+  },
+  {
+    "name": "_ZNK7logging14_MessageLogger12log_internalESt5tupleIJNSt6chrono10time_pointINS2_3_V212system_clockENS2_8durationIxSt5ratioILx1ELx1000000000EEEEEENS0_12MessageLabelENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEE",
+    "address": 113760,
+    "size": 592,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::log_internal(std::tuple<std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > >, logging::_MessageLogger::MessageLabel, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >) const"
+  },
+  {
+    "name": "__bss_start",
+    "address": 188832,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "__bss_start"
+  },
+  {
+    "name": "_ZN3shm6ObjectIiED0Ev",
+    "address": 94324,
+    "size": 1480,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<int>::~Object()"
+  },
+  {
+    "name": "_ZTVN10__cxxabiv120__si_class_type_infoE@CXXABI_1.3",
+    "address": 188012,
+    "size": 44,
+    "type": 1,
+    "bind": 1,
+    "section": 20,
+    "demangled": "vtable for __cxxabiv1::__si_class_type_info@CXXABI_1.3"
+  },
+  {
+    "name": "_ZTVN3shm13_SharedMemoryILj118008000EEE",
+    "address": 116252,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::_SharedMemory<118008000u>"
+  },
+  {
+    "name": "_ZTSN3shm5ArrayIfLj29502000EEE",
+    "address": 116028,
+    "size": 27,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo name for shm::Array<float, 29502000u>"
+  },
+  {
+    "name": "_bss_end__",
+    "address": 189548,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "_bss_end__"
+  },
+  {
+    "name": "_ZN7logging14_MessageLogger15config_textFileERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 111952,
+    "size": 20,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::config_textFile(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "munmap",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "munmap"
+  },
+  {
+    "name": "_ZTIN3shm6ObjectIN6lubadh14FileSaveStatusEEE",
+    "address": 115972,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::Object<lubadh::FileSaveStatus>"
+  },
+  {
+    "name": "_ZNSt8ios_baseD2Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::ios_base::~ios_base()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt12__basic_fileIcED1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__basic_file<char>::~__basic_file()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EE5closeEv",
+    "address": 107052,
+    "size": 1148,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::close()"
+  },
+  {
+    "name": "__cxa_allocate_exception@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_allocate_exception@CXXABI_1.3"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEj@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::reserve(unsigned int)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EE4openEv",
+    "address": 98328,
+    "size": 2128,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::open()"
+  },
+  {
+    "name": "abort",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "abort"
+  },
+  {
+    "name": "vsnprintf",
+    "address": 74604,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "vsnprintf"
+  },
+  {
+    "name": "__cxa_free_exception@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_free_exception@CXXABI_1.3"
+  },
+  {
+    "name": "_ZSt19__throw_logic_errorPKc@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__throw_logic_error(char const*)@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTISt14overflow_error@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 0,
+    "demangled": "typeinfo for std::overflow_error@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm11MemoryErrorD2Ev",
+    "address": 82188,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::MemoryError::~MemoryError()"
+  },
+  {
+    "name": "_ZTTSt13basic_fstreamIcSt11char_traitsIcEE@GLIBCXX_3.4",
+    "address": 188056,
+    "size": 40,
+    "type": 1,
+    "bind": 2,
+    "section": 20,
+    "demangled": "VTT for std::basic_fstream<char, std::char_traits<char> >@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EED0Ev",
+    "address": 89876,
+    "size": 1480,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::~_SharedMemory()"
+  },
+  {
+    "name": "_ZN3shm9FileErrorD0Ev",
+    "address": 82144,
+    "size": 44,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::FileError::~FileError()"
+  },
+  {
+    "name": "_ZNSt13runtime_errorD1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::runtime_error::~runtime_error()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZdlPvj@CXXABI_1.3.9",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "operator delete(void*, unsigned int)@CXXABI_1.3.9"
+  },
+  {
+    "name": "_ZN9SemaphoreD2Ev",
+    "address": 109648,
+    "size": 324,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::~Semaphore()"
+  },
+  {
+    "name": "__aeabi_atexit@CXXABI_ARM_1.3.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__aeabi_atexit@CXXABI_ARM_1.3.3"
+  },
+  {
+    "name": "_ZNSt9basic_iosIcSt11char_traitsIcEE5clearESt12_Ios_Iostate@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_ios<char, std::char_traits<char> >::clear(std::_Ios_Iostate)@GLIBCXX_3.4"
+  },
+  {
+    "name": "__cxa_throw@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_throw@CXXABI_1.3"
+  },
+  {
+    "name": "_end",
+    "address": 189548,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 24,
+    "demangled": "_end"
+  },
+  {
+    "name": "_ZTVSt15basic_streambufIcSt11char_traitsIcEE@GLIBCXX_3.4",
+    "address": 188096,
+    "size": 64,
+    "type": 1,
+    "bind": 2,
+    "section": 20,
+    "demangled": "vtable for std::basic_streambuf<char, std::char_traits<char> >@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN9Semaphore4waitEv",
+    "address": 109972,
+    "size": 588,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::wait()"
+  },
+  {
+    "name": "_ZNSt13basic_filebufIcSt11char_traitsIcEEC1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_filebuf<char, std::char_traits<char> >::basic_filebuf()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm6ObjectIN6lubadh14FileSaveStatusEED0Ev",
+    "address": 95804,
+    "size": 1480,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::Object<lubadh::FileSaveStatus>::~Object()"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EE3mapEv",
+    "address": 100456,
+    "size": 1520,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::map()"
+  },
+  {
+    "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERjj@GLIBCXX_3.4.21",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_create(unsigned int&, unsigned int)@GLIBCXX_3.4.21"
+  },
+  {
+    "name": "__cxa_end_catch@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_end_catch@CXXABI_1.3"
+  },
+  {
+    "name": "sem_post",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_post"
+  },
+  {
+    "name": "_ZNSt5arrayINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEELj2EED2Ev",
+    "address": 81980,
+    "size": 56,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::array<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 2u>::~array()"
+  },
+  {
+    "name": "_ZNSt13basic_filebufIcSt11char_traitsIcEED1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_filebuf<char, std::char_traits<char> >::~basic_filebuf()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN7logging14_MessageLoggerC2Ev",
+    "address": 111680,
+    "size": 208,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::_MessageLogger()"
+  },
+  {
+    "name": "_Z10runChannelN6lubadh11_ChannelIDsE",
+    "address": 77192,
+    "size": 2144,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "runChannel(lubadh::_ChannelIDs)"
+  },
+  {
+    "name": "_ZTIN3shm13_SharedMemoryILj4EEE",
+    "address": 115888,
+    "size": 8,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::_SharedMemory<4u>"
+  },
+  {
+    "name": "sem_trywait",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_trywait"
+  },
+  {
+    "name": "__cxa_begin_catch@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__cxa_begin_catch@CXXABI_1.3"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114pathD1Ev",
+    "address": 82264,
+    "size": 56,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::filesystem::__cxx11::path::~path()"
+  },
+  {
+    "name": "_ZNSt16invalid_argumentD1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::invalid_argument::~invalid_argument()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN3shm11MemoryErrorD1Ev",
+    "address": 82188,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::MemoryError::~MemoryError()"
+  },
+  {
+    "name": "sem_open",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_open"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EE4openEv",
+    "address": 103384,
+    "size": 2140,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::open()"
+  },
+  {
+    "name": "_edata",
+    "address": 188832,
+    "size": 0,
+    "type": 0,
+    "bind": 1,
+    "section": 23,
+    "demangled": "_edata"
+  },
+  {
+    "name": "_ZNSt10filesystem6statusERKNS_7__cxx114pathE@GLIBCXX_3.4.26",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::filesystem::status(std::filesystem::__cxx11::path const&)@GLIBCXX_3.4.26"
+  },
+  {
+    "name": "__gxx_personality_v0@CXXABI_1.3",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__gxx_personality_v0@CXXABI_1.3"
+  },
+  {
+    "name": "_ZNK7logging14_MessageLogger7log_rawERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+    "address": 111984,
+    "size": 808,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::log_raw(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) const"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj4EED1Ev",
+    "address": 82528,
+    "size": 1468,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<4u>::~_SharedMemory()"
+  },
+  {
+    "name": "_ZN3shm13_SharedMemoryILj118008000EED1Ev",
+    "address": 83996,
+    "size": 1472,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::_SharedMemory<118008000u>::~_SharedMemory()"
+  },
+  {
+    "name": "_ZN9SemaphoreC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEj",
+    "address": 108456,
+    "size": 1192,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "Semaphore::Semaphore(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, unsigned int)"
+  },
+  {
+    "name": "_ZN7logging14_MessageLogger11config_coutEb",
+    "address": 111888,
+    "size": 8,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "logging::_MessageLogger::config_cout(bool)"
+  },
+  {
+    "name": "__aeabi_unwind_cpp_pr1@GCC_3.5",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "__aeabi_unwind_cpp_pr1@GCC_3.5"
+  },
+  {
+    "name": "_ZNSt6localeD1Ev@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::locale::~locale()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZTIN3shm6ObjectIiEE",
+    "address": 115916,
+    "size": 12,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "typeinfo for shm::Object<int>"
+  },
+  {
+    "name": "ftruncate64",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "ftruncate64"
+  },
+  {
+    "name": "_ZTVN3shm6ObjectIiEE",
+    "address": 116220,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::Object<int>"
+  },
+  {
+    "name": "_ZTISt16invalid_argument@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 1,
+    "bind": 1,
+    "section": 0,
+    "demangled": "typeinfo for std::invalid_argument@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN9__gnu_cxx12__to_xstringINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEcEET_PFiPT0_jPKS8_St9__va_listEjSB_z",
+    "address": 82320,
+    "size": 208,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > __gnu_cxx::__to_xstring<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char>(int (*)(char*, unsigned int, char const*, std::__va_list), unsigned int, char const*, ...)"
+  },
+  {
+    "name": "_ZN3shm9FileErrorD2Ev",
+    "address": 82112,
+    "size": 32,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "shm::FileError::~FileError()"
+  },
+  {
+    "name": "_ZNSt10filesystem7__cxx114pathD2Ev",
+    "address": 82264,
+    "size": 56,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::filesystem::__cxx11::path::~path()"
+  },
+  {
+    "name": "_ZSt16__ostream_insertIcSt11char_traitsIcEERSt13basic_ostreamIT_T0_ES6_PKS3_i@GLIBCXX_3.4.9",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_ostream<char, std::char_traits<char> >& std::__ostream_insert<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*, int)@GLIBCXX_3.4.9"
+  },
+  {
+    "name": "_ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv@GLIBCXX_3.4",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::basic_filebuf<char, std::char_traits<char> >::close()@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZNSt6threadC1IRFvN6lubadh11_ChannelIDsEEJS2_EvEEOT_DpOT0_",
+    "address": 97960,
+    "size": 148,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::thread::thread<void (&)(lubadh::_ChannelIDs), lubadh::_ChannelIDs, void>(void (&)(lubadh::_ChannelIDs), lubadh::_ChannelIDs&&)"
+  },
+  {
+    "name": "_ZNKSt13runtime_error4whatEv@GLIBCXX_3.4",
+    "address": 74856,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "std::runtime_error::what() const@GLIBCXX_3.4"
+  },
+  {
+    "name": "_ZN7logging6loggerE",
+    "address": 189444,
+    "size": 104,
+    "type": 1,
+    "bind": 1,
+    "section": 24,
+    "demangled": "logging::logger"
+  },
+  {
+    "name": "main",
+    "address": 74896,
+    "size": 660,
+    "type": 2,
+    "bind": 1,
+    "section": 12,
+    "demangled": "main"
+  },
+  {
+    "name": "_init",
+    "address": 73908,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 10,
+    "demangled": "_init"
+  },
+  {
+    "name": "__deregister_frame_info",
+    "address": 0,
+    "size": 0,
+    "type": 0,
+    "bind": 2,
+    "section": 0,
+    "demangled": "__deregister_frame_info"
+  },
+  {
+    "name": "_ZTVN3shm5ArrayIfLj29502000EEE",
+    "address": 116268,
+    "size": 16,
+    "type": 1,
+    "bind": 2,
+    "section": 14,
+    "demangled": "vtable for shm::Array<float, 29502000u>"
+  },
+  {
+    "name": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_RKS8_",
+    "address": 97800,
+    "size": 160,
+    "type": 2,
+    "bind": 2,
+    "section": 12,
+    "demangled": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+  },
+  {
+    "name": "sem_wait",
+    "address": 0,
+    "size": 0,
+    "type": 2,
+    "bind": 1,
+    "section": 0,
+    "demangled": "sem_wait"
+  }
+]

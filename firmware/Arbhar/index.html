@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>arbhar reverse-engineering bundle</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>
+  :root{color-scheme:light dark;--bg:#f5f5f2;--paper:#fff;--ink:#152331;--muted:#536674;--line:#d5dde2;--accent:#237b86;--code:#edf3f5;}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0 auto;padding:3.5rem 2rem 5rem;max-width:1140px;font:17px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+  header{border-top:7px solid var(--accent);padding-top:1.3rem;margin-bottom:2rem}header h1{font-size:2.65rem;line-height:1.16;letter-spacing:-.035em}h1{font-size:2.2rem;line-height:1.24;letter-spacing:-.025em}h2{font-size:1.55rem;margin-top:2.7rem;border-bottom:1px solid var(--line);padding-bottom:.5rem}h3{font-size:1.15rem;margin-top:1.8rem}p{margin:.85rem 0}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}strong{font-weight:690}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em}code{padding:.14em .3em;background:var(--code);border-radius:4px;overflow-wrap:anywhere}pre{background:var(--code);padding:1.1rem 1.25rem;border:1px solid var(--line);border-radius:8px;overflow-x:auto;line-height:1.5}pre code{padding:0;background:none;overflow-wrap:normal}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;line-height:1.5;margin:1.4rem 0;display:block;overflow-x:auto}th,td{padding:.7rem .75rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;min-width:80px}th{background:var(--code);font-weight:700}tr:nth-child(even) td{background:color-mix(in srgb,var(--code) 45%,transparent)}
+  #TOC{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.7rem;font-size:.95rem;margin:1.8rem 0 2.8rem}#TOC>ul{columns:2;column-gap:3rem}#TOC li{break-inside:avoid;margin:.3rem 0}#TOC ul ul{font-size:.9em}blockquote{margin:1.2rem 0;border-left:4px solid var(--accent);padding:.3rem 1.2rem;background:var(--paper)}li{margin:.3rem 0}.title{margin-top:.2rem}.bundle-nav{font-size:.88rem;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}.bundle-nav a{margin-right:1.1rem}.footnote{font-size:.85rem;color:var(--muted)}
+  @media(max-width:700px){body{padding:1.5rem 1rem;font-size:16px}header h1{font-size:2.05rem}#TOC>ul{columns:1}table{font-size:.78rem}th,td{padding:.5rem}h2{font-size:1.35rem}}
+  @media(prefers-color-scheme:dark){:root{--bg:#10171f;--paper:#17212c;--ink:#e2eaf0;--muted:#9eafbd;--line:#334451;--accent:#80c9cc;--code:#1d2b36}}
+  @media print{body{background:white;color:black;max-width:none;padding:0;font-size:10pt}#TOC>ul{columns:2}pre{white-space:pre-wrap}a{color:inherit}h2,h3{break-after:avoid}table{display:table;font-size:8pt}tr{break-inside:avoid}.bundle-nav{display:none}}
+  </style>
+</head>
+<body>
+<div class="bundle-nav"><strong>ARBHAR / RESEARCH DOSSIER</strong><br><a href="index.html">Bundle index</a><a href="ARBHAR_REVERSE_ENGINEERING.html">Findings</a><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack handoff</a><a href="PARAMETER_BIBLE.html">Parameters</a><a href="STATE_MACHINES.html">State machines</a><a href="VALIDATION_PLAN.html">Validation</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#arbhar-reverse-engineering-bundle"
+id="toc-arbhar-reverse-engineering-bundle">arbhar reverse-engineering
+bundle</a>
+<ul>
+<li><a href="#start-here" id="toc-start-here">Start here</a></li>
+<li><a href="#important-findings" id="toc-important-findings">Important
+findings</a></li>
+<li><a href="#directory-layout" id="toc-directory-layout">Directory
+layout</a></li>
+<li><a href="#validation-performed"
+id="toc-validation-performed">Validation performed</a></li>
+<li><a href="#reproduce-the-checks"
+id="toc-reproduce-the-checks">Reproduce the checks</a></li>
+<li><a href="#reading-conventions" id="toc-reading-conventions">Reading
+conventions</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="arbhar-reverse-engineering-bundle">arbhar reverse-engineering
+bundle</h1>
+<p><strong>Initial firmware-to-Rack research handoff · October 5,
+2026</strong></p>
+<p>Analyzed <code>arbhar_updater_2-13.gz</code> supplied by the user,
+associated with release 2.1.3. The package exposes a Pure Data
+application graph, ARM/Linux DSP externals, configuration, hardware
+notes, and an unverified C source snapshot. This bundle contains the
+evidence and selected native arithmetic reconstructions. <strong>It is
+not a completed Rack module or a hardware-validated
+emulation.</strong></p>
+<h2 id="start-here">Start here</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Artifact</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="ARBHAR_REVERSE_ENGINEERING.html">Main report</a> · <a
+href="ARBHAR_REVERSE_ENGINEERING.html">HTML</a></td>
+<td>Platform, DSP, memory, controls, capture, effects, version caveats,
+and precise evidence boundaries.</td>
+</tr>
+<tr class="even">
+<td><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack implementation
+handoff</a></td>
+<td>Native architecture, control/event ownership, sample-rate policy,
+implementation phases, and instructions for Codex.</td>
+</tr>
+<tr class="odd">
+<td><a href="PARAMETER_BIBLE.html">Parameter and I/O bible</a> · <a
+href="tables/parameter_bible.json">JSON</a></td>
+<td>20 control roles, 19 port roles, 48 keys found across parsed
+configuration variants, exact source-specific defaults, and unresolved
+laws.</td>
+</tr>
+<tr class="even">
+<td><a href="STATE_MACHINES.html">State machines</a></td>
+<td>Capture, grain lifecycle, Follow, gestures, onset, and persistence;
+recovered facts versus proposed structure.</td>
+</tr>
+<tr class="odd">
+<td><a href="VALIDATION_PLAN.html">Validation plan</a></td>
+<td>Existing tests, required fixtures, oracle limitations, and fidelity
+gates.</td>
+</tr>
+<tr class="even">
+<td><a href="reference/README.md">Reference kernels</a></td>
+<td>Tested C++17 arithmetic and tables, CMake build, restricted-probe
+scope, and safety adaptations.</td>
+</tr>
+<tr class="odd">
+<td><a href="tables/open_questions.csv">Open questions</a></td>
+<td>Fourteen prioritized issues with function/patch entry points and
+next actions.</td>
+</tr>
+</tbody>
+</table>
+<p>The forty-eight configuration keys include archived/experimental
+variants; they are <strong>not forty-eight confirmed active stock user
+settings</strong>. <code>null</code> in the JSON means absent or
+unproven, not inferred zero.</p>
+<h2 id="important-findings">Important findings</h2>
+<p>The player contains 82 storage records per instance, <strong>not
+proven 82-note audible polyphony</strong>. Six stereo layer pairs
+allocate 624,000 samples per channel. The window bank is reconstructed
+as 101 × 515 floats; the rational soft clipper is not
+<code>std::tanh</code>. Normal onset detection uses the connected
+<code>bonk~</code> path, not the bundled FFT tester. Source sketches and
+debug-data presence must not be mistaken for a complete recovered
+application source tree.</p>
+<p>The two most important source conflicts are the 44-grain design
+sketch versus compiled storage/lifecycle logic, and the unreconciled
+delay macro scaling. The full report keeps both open instead of silently
+resolving them with guesses.</p>
+<h2 id="directory-layout">Directory layout</h2>
+<pre class="text"><code>extracted/              184 original regular files, inert permissions
+  *.pd                  readable application and test patches
+  *.pd_linux            ARM ELF shared objects (do not execute)
+  factoryPresets/        six named preset files
+  Pin_Adc_Control_Info/  source-era interface notes
+
+evidence/
+  manifest.json         input identity, every file size/hash/original mode
+  elf/&lt;binary&gt;/         metadata, disassembly, functions, annotated literals
+  main_graph.txt        indexed main patch plus edges
+  feedback_graph.txt    indexed delay patch plus edges
+
+tables/
+  parameter_bible.json  typed handoff data and explicit unknowns
+  presets.json          exact parsed values from 17 config/preset files
+  preset_matrix.csv     named factory comparison
+  pd_netlists.json      all 59 parsed top-level Pd files and subcanvases
+  extracted_float_tables.json
+  reconstructed_window_bank.f32
+  follow_probe.csv      12,288 restricted instruction-text reference cases
+  *_results.json        scope-qualified test results
+  open_questions.*      priority backlog
+
+reference/              C++17 kernels, exact float literals, tests, CMake
+tools/                  inert analysis, verification, and regeneration tools</code></pre>
+<h2 id="validation-performed">Validation performed</h2>
+<p><strong>184</strong> extracted files matched the manifest.
+<strong>5,727</strong> parsed connections had valid endpoint indices. A
+restricted instruction-text probe covered one Follow-speed routine over
+<strong>12,288</strong> cases. Optimized and ASan/UBSan native builds
+each passed <strong>107,421</strong> checks, including the Follow
+fixture comparisons. There was <strong>no original firmware/Pd
+execution, hardware audio comparison, or complete ARM
+emulation</strong>.</p>
+<h2 id="reproduce-the-checks">Reproduce the checks</h2>
+<p>From this bundle directory:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/verify_manifest.py</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/probe_follow.py</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">cmake</span> <span class="at">-S</span> reference <span class="at">-B</span> build <span class="at">-DCMAKE_BUILD_TYPE</span><span class="op">=</span>Release</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cmake</span> <span class="at">--build</span> build <span class="at">--parallel</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">ctest</span> <span class="at">--test-dir</span> build <span class="at">--output-on-failure</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./build/test_kernels</span> tables/follow_probe.csv</span></code></pre></div>
+<p>To additionally check the original archive:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/verify_manifest.py <span class="at">--archive</span> /path/to/arbhar_updater_2-13.gz</span></code></pre></div>
+<p>For a fresh inert extraction, choose a <strong>new</strong>
+directory:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/safe_extract.py /path/to/arbhar_updater_2-13.gz /tmp/arbhar-evidence-copy</span></code></pre></div>
+<h3 id="rebuild-derived-evidence">Rebuild derived evidence</h3>
+<p>Requirements: Python 3, GNU <code>readelf</code>, LLVM
+<code>llvm-objdump</code> on PATH, and <code>beautifulsoup4</code> for
+the included HTML form parser. Native tests require C++17 and optionally
+CMake. The generated report HTML requires Pandoc. No package
+installation or network access is performed by these tools.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/extract_evidence.py</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/annotate_assembly.py</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/build_structured_data.py</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/build_handoff_data.py</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/export_reference_tables.py</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/probe_follow.py</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/view_evidence.py arbharMain.pd 0 <span class="at">--edges</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> tools/view_evidence.py arbhar_feedback.pd 0 <span class="at">--edges</span></span></code></pre></div>
+<p>These steps inspect bytes and text; they do not run any manufacturer
+process. Graph regeneration includes test patches, so an object count is
+not an active-runtime coverage count. <code>annotated/</code> literal
+type guesses and PLT annotations are convenient aids tied to this linker
+layout, not a general ARM decompiler.</p>
+<h2 id="reading-conventions">Reading conventions</h2>
+<p>F = file fact; S = static reconstruction; P = restricted
+original-instruction-text probe; T = native test; D = official
+documentation; R = recommendation. Function addresses are virtual
+addresses inside the explicitly named ELF. Missing source headers and
+hardware-library-only DWARF prevent claims of complete original
+application types.</p>
+<p>Read <a href="NOTICE.html">NOTICE</a> before reusing
+manufacturer-derived evidence or tables in a distributed product. Keep
+the original files read-only during implementation. The highest-value
+next work is grain allocation/scheduler behavior, capture/Dub
+transitions, and delay macro reconciliation.</p>
+</body>
+</html>

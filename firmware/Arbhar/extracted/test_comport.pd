@@ -1,0 +1,15 @@
+#N canvas 171 165 450 300 12;
+#X msg 123 114 close;
+#X obj 69 202 comport 0 115200;
+#X obj 82 32 loadbang;
+#X obj 82 57 del 5;
+#X obj 82 82 t b b;
+#X obj 33 32 bng 20 250 50 0 empty empty empty 0 -10 0 12 #fcfcfc #000000 #000000;
+#X msg 72 158 devicename /dev/ttyAMA0 \, baud 115200;
+#X connect 0 0 1 0;
+#X connect 2 0 3 0;
+#X connect 3 0 4 0;
+#X connect 4 0 6 0;
+#X connect 4 1 0 0;
+#X connect 5 0 3 0;
+#X connect 6 0 1 0;

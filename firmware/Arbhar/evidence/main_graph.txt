@@ -1,0 +1,830 @@
+  0: #X msg 222 -76 \; pd dsp 1
+  1: #X msg 291 -76 \; pd dsp 0
+  2: #X msg 251 138 setStereo \$1
+  3: #X obj 251 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+  4: #X obj 342 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+  5: #X msg 342 138 internTrig \$1
+  6: #X obj 436 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+  7: #X msg 436 138 randomIntensity \$1
+  8: #X obj 852 396 s modCVreverb
+  9: #X obj 677 450 arbharRecorder
+ 10: #X obj 626 59 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+ 11: #X msg 626 82 internTrig \$1
+ 12: #X msg 881 206 next bang
+ 13: #X obj 726 -82 loadbang
+ 14: #X obj 685 -21 0
+ 15: #X obj 893 -33 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+ 16: #X obj 898 299 shmem 61019 250
+ 17: #X obj 819 156 metro 10
+ 18: #X obj 900 321 expr (2048 - $f1) / 20.48
+ 19: #X obj 148 -52 t b b b
+ 20: #X obj 726 -58 del 1000
+ 21: #X obj 760 -30 1
+ 22: #X obj 897 117 shmem 61019 250
+ 23: #X obj 892 144 change
+ 24: #X obj 890 168 sel 1
+ 25: #X obj 910 4 metro 15
+ 26: #X msg 899 74 memread 22
+ 27: #X obj 91 533 shmem 61019 250
+ 28: #X msg 91 511 memread 6
+ 29: #X obj 27 -52 adc~ 1 2
+ 30: #X obj 3 379 stereo_in~
+ 31: #X msg 213 380 0.9
+ 32: #X msg 157 457 -0.9
+ 33: #X obj 168 329 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+ 34: #X obj 168 349 t b b
+ 35: #X msg 168 374 0.9
+ 36: #X obj 218 333 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+ 37: #X obj 218 353 t b b
+ 38: #X restore 26 430 pd highShelf
+ 39: #X obj 55 287 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+ 40: #X obj 87 286 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+ 41: #X restore 50 478 pd highShelf
+ 42: #X obj 254 440 receive~ dryL
+ 43: #X obj 430 511 receive~ dryR
+ 44: #X obj 676 418 receive~ recL
+ 45: #X obj 773 427 receive~ recR
+ 46: #X obj 125 411 send~ recL
+ 47: #X obj 236 411 send~ recR
+ 48: #X obj 65 586 expr (4095 - $f1) / 4095
+ 49: #X obj 62 653 osc~ 0
+ 50: #X obj 2 786 send~ dryL
+ 51: #X obj 89 859 send~ dryR
+ 52: #X obj 32 710 *~
+ 53: #X obj 102 697 *~
+ 54: #X obj 264 474 osc~ 0
+ 55: #X obj 63 610 expr $f1 * 0.25 \; ($f1 * 0.25) + 0.75
+ 56: #X obj 231 528 *~
+ 57: #X obj 313 537 *~
+ 58: #X obj 388 647 arbharReverb
+ 59: #X obj 901 352 f
+ 60: #X obj 516 458 arbharWavetable
+ 61: #X obj 1397 -69 notein
+ 62: #X obj 781 681 print
+ 63: #X msg 789 577 aconnect -o
+ 64: #X obj 480 247 > 0
+ 65: #X obj 55 675 lop~ 25
+ 66: #X obj 264 497 lop~ 25
+ 67: #X msg 205 32 pd~ start -nogui -audiobuf 25 arbharGrainCore.pd
+ 68: #X msg 212 57 pd~ start -audiobuf 25 arbharGrainCore.pd
+ 69: #X floatatom 346 301 5 0 0 0 - - - 0
+ 70: #X obj 425 750 *~
+ 71: #X obj 531 734 *~
+ 72: #X obj 458 735 line~
+ 73: #X msg 463 710 \$1 25
+ 74: #X obj 49 509 *~ 0
+ 75: #X obj 13 524 *~ 0
+ 76: #X obj 171 216 loadbang
+ 77: #X obj 170 246 del 2000
+ 78: #X obj 26 334 r stereoInput
+ 79: #X restore 69 170 pd stereoFilter
+ 80: #X obj 260 560 main_out_stereo~ 0.9 0.9
+ 81: #X obj 839 801 shmem 61019 250
+ 82: #X obj 335 455 +~
+ 83: #X obj 424 450 +~
+ 84: #X msg 839 780 memset 116 \$1
+ 85: #X obj 841 694 clip 0 100
+ 86: #X obj 838 759 i
+ 87: #X floatatom 787 722 5 0 0 0 - - - 0
+ 88: #X obj 722 728 * 1
+ 89: #X obj 888 654 array define -k -yrange 0 71 ampConversion
+ 90: #X obj 836 727 expr ampConversion[$i1]
+ 91: #X obj 539 387 tgl 18 0 empty empty wavetable\ on/off 0 -9 0 10 #fcfcfc #000000 #000000 0 1
+ 92: #X msg 527 77 setStereo \$1
+ 93: #X obj 527 54 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+ 94: #X msg 307 -3 setQuantiseTable 12 -12 -24 -12
+ 95: #X restore 1277 292 pd previewing
+ 96: #X obj 536 617 shmem 61019 250
+ 97: #X msg 540 594 memread 37
+ 98: #X obj 969 4 metro 50
+ 99: #X obj 510 651 sel 0 1
+100: #X obj 674 167 shmem 61019 250
+101: #X msg 678 142 memread 1
+102: #X msg 611 349 \$1 15
+103: #X obj 610 386 line~
+104: #X obj 507 536 *~
+105: #X obj 561 548 *~
+106: #X obj 403 491 *~
+107: #X obj 340 486 *~
+108: #X msg 475 433 \$1 15
+109: #X obj 471 464 line~
+110: #X obj 594 320 t f f f
+111: #X obj 662 339 expr 1 - $f1
+112: #X obj 593 291 clip 0 1
+113: #X obj 561 229 expr if($f1 > 3830 \, ($f1 - 3800) / 265 \, 0) \; if($f1 > 3750 \, 1 \, 0)
+114: #X obj 819 324 shmem 61019 250
+115: #X msg 818 295 memread 12
+116: #X obj 516 498 *~
+117: #X obj 552 507 *~
+118: #X obj 754 200 t b
+119: #X obj 649 276 spigot
+120: #X obj 664 389 vline~
+121: #X msg 793 387 \$1 150
+122: #X obj 803 362 expr if( $f1 < 3620 && $f1 > 480 \, 0.6 \, 0)
+123: #X msg 649 299 0.9 2 \, 0 0 250
+124: #X msg 757 608 sudo sh /home/pi/arbhar_v2/connectMidi.sh
+125: #X restore 999 779 pd calculateAmpConversionTable
+126: #X msg 281 91 pd~ stop
+127: #X obj 148 671 shmem 61019 250
+128: #X msg 148 648 memread 40
+129: #X obj 64 718 expr 1 - $f1
+130: #X obj 43 753 *~
+131: #X obj 521 846 dac~ 1 2
+132: #X floatatom 103 226 5 0 0 0 - - - 0
+133: #X obj -1 99 arbhar_in1_gain~
+134: #X obj 37 144 arbhar_in2_gain~
+135: #X obj 35 226 *~ 1
+136: #X obj 1214 508 loadbang
+137: #X obj 781 658 shell
+138: #X msg 505 8 pd~ start -nogui -audiobuf 5 arbharGrainCore.pd
+139: #X msg 517 35 pd~ start -audiobuf 25 arbharGrainCore.pd
+140: #X msg 283 -38 setQuantiseTable 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12
+141: #X obj 1214 531 del 3000
+142: #X msg 897 271 memread 52
+143: #X obj 1269 453 s modCVfeedback
+144: #X obj 1291 361 shmem 61019 250
+145: #X obj 1291 406 expr (2048 - $f1) / 20.48
+146: #X obj 1250 426 f
+147: #X msg 1290 333 memread 53
+148: #X obj 143 717 f
+149: #X msg 109 301 emulateAnalog \$1
+150: #X obj 936 -46 shmem 61019 250
+151: #X msg 937 -76 memread 54
+152: #X text 987 -94 emulateAnalog
+153: #X obj 722 705 env~ 512
+154: #X msg 382 -66 setQuantiseTableFromShMem bang
+155: #X obj 1170 154 shmem 61019 250
+156: #X obj 1165 189 change
+157: #X msg 1152 257 \; pd dsp 1
+158: #X msg 1234 261 \; pd dsp 0
+159: #X obj 810 -15 bang~
+160: #X msg 728 66 set 0
+161: #X obj 810 8 t b b
+162: #X restore 20 819 pd sampleRateDeduction
+163: #X restore 273 371 pd bitRateDeduction
+164: #X obj 1291 195 pack 0 0 0
+165: #X obj 1293 143 ctlin
+166: #X msg 1387 347 stop
+167: #X obj 1221 -24 loadbang
+168: #X obj 1181 12 del 250
+169: #X obj 1181 35 1
+170: #X obj 1181 58 metro 50
+171: #X obj 419 790 *~
+172: #X obj 560 785 *~
+173: #X obj 1165 214 sel 1 0
+174: #X obj 633 706 line~
+175: #X msg 634 649 \$1 1000
+176: #X floatatom 696 619 5 0 0 0 - - - 0
+177: #X msg 1239 117 memset 248 1
+178: #X msg 1227 84 memset 248 0
+179: #X msg 1170 129 memread 248
+180: #X obj 91 556 change -1
+181: #X obj 936 -23 change -1
+182: #X obj 940 417 shmem 61019 250
+183: #X msg 966 387 memread 123
+184: #X obj 939 440 < 1
+185: #X obj 991 538 change -1
+186: #X msg 1023 603 \; pd dsp 1
+187: #X msg 1089 603 \; pd dsp 0
+188: #X floatatom 576 690 5 0 0 0 - - - 0
+189: #X obj 505 696 -1
+190: #X obj 543 677 1
+191: #X obj 564 810 *~ 1
+192: #X obj 421 811 *~ 1
+193: #X obj 277 335 *~ 0.9
+194: #X obj 326 334 *~ 0.9
+195: #X obj 29 -4 send~ analysisL
+196: #X obj 140 -4 send~ analysisR
+197: #X msg 412 84 pd~ stop
+198: #X obj 415 771 tanh_approx~ 0.89
+199: #X obj 540 764 tanh_approx~ 0.89
+200: #X obj 1006 462 shmem 61019 250
+201: #X msg 1006 436 memread 132
+202: #X obj 1010 492 < 1
+203: #X obj 993 482 &&
+204: #X msg 874 565 \$1 5
+205: #X obj 1080 520 shmem 61019 250
+206: #X msg 1080 494 memread 121
+207: #X obj 993 517 &&
+208: #X obj 1048 563 < 1
+209: #X obj 146 693 change -1
+210: #X obj 950 558 f
+211: #X obj 938 484 sel 1
+212: #X obj 931 532 1
+213: #X obj 938 461 change -1
+214: #X msg 755 550 controlDsp \$1
+215: #X obj 818 463 sel 0
+216: #X obj 818 509 0
+217: #X obj 818 532 i
+218: #X obj 818 486 del 10
+219: #X obj 138 -78 del 1000
+220: #X obj 70 -84 loadbang
+221: #X obj 931 509 del 100
+222: #X obj 660 -57 del 2000
+223: #X obj 119 766 *~ 0
+224: #X msg 1565 314 64 120 72 120
+225: #X obj 1575 347 list split 2
+226: #X obj 1667 348 t a
+227: #X msg 1650 322 64 0 72 0
+228: #X msg 1546 385 60 120
+229: #X msg 1567 407 60 0
+230: #X obj 485 402 *~
+231: #X obj 437 402 *~
+232: #X obj 487 358 line~
+233: #X obj 526 265 loadbang
+234: #X msg 526 288 1.25
+235: #X msg 459 335 \$1 500
+236: #X obj 1304 258 s midiCtl
+237: #X obj 1034 154 shmem 61019 250
+238: #X msg 1034 129 memread 42
+239: #X obj 1033 175 == 1
+240: #X obj 1028 220 sel 1 0
+241: #X obj 1010 260 del 1000
+242: #X msg 1087 269 stop
+243: #X obj 1033 198 change
+244: #X obj 1440 82 notein
+245: #X obj 1417 127 expr if ($f3 > 0 && $f2 == 0 \, $f1 \, -1)
+246: #X obj 1404 181 sel -1
+247: #X msg 1438 213 \$1 127
+248: #X msg 1545 208 stop
+249: #X obj 1433 377 poly 6 0
+250: #X obj 1437 247 poly 64 0
+251: #X obj 1560 82 sel 0
+252: #X obj 1397 -45 pack 0 0
+253: #X obj 1454 407 pack 0 0 1
+254: #X obj 1314 -4 spigot 1
+255: #X obj 1410 -12 spigot 0
+256: #X obj 1376 16 unpack
+257: #X obj 1360 45 stripnote
+258: #X obj 1531 51 expr 1 - $f1
+259: #X obj 1359 76 pack 0 0
+260: #X obj 1546 -83 r midiCtl
+261: #X obj 1546 -46 expr if ($f3 == 1 && $f2 == 64 \, $f1 / 127 \, -1)
+262: #X obj 1546 -23 > 0
+263: #X msg 1459 338 \$1 0
+264: #X obj 1462 308 sel -1
+265: #X obj 1462 285 expr if ($f2 > 0 \, -1 \, $f1)
+266: #X obj 1543 -1 i
+267: #X obj 1526 502 s midiNotesCore1
+268: #X obj 1407 505 s midiNotesCore2
+269: #X obj 136 122 r midiNotesCore1
+270: #X obj 486 66 r midiNotesCore2
+271: #X obj 456 307 expr if ($f1 > 0 \, 0.9 \, 1.25)
+272: #X msg 262 208 next bang
+273: #X msg 1451 433 midiNotesIn \$1 \$2 \$3
+274: #X msg 1498 463 midiNotesInShare \$1 \$2 \$3
+275: #X msg 331 217 memread 200
+276: #X obj 331 240 shmem 61019 250
+277: #X obj 329 270 / 127
+278: #X obj 21 63 *~
+279: #X obj 76 68 *~
+280: #X text 1032 739 0 tbd 1 hold 2 pan+ 3 pan- 4 reverb+ 5 reverb- 6 delay+ 7 delay-
+281: #X obj 777 97 shmem 61019 250
+282: #X obj 773 121 change
+283: #X obj 773 144 sel 1
+284: #X msg 775 60 memread 23
+285: #X msg 1180 599 \; pd midi-dialog 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+286: #X obj 1617 -75 print midiCtl
+287: #X obj 1291 218 spigot 1
+288: #X obj 1359 224 tgl 18 0 empty empty empty 0 -9 0 10 #fcfcfc #000000 #000000 0 1
+289: #X obj 1373 252 expr 1 - $f1
+290: #X obj 1369 280 metro 50
+291: #X obj 641 520 shmem 61019 250
+292: #X msg 645 497 memread 140
+293: #X obj 641 543 t i i
+294: #X obj 641 566 sel 1
+295: #X obj 641 589 0
+296: #X obj 674 190 spigot 1
+297: #X obj 693 558 expr 1 - $f1
+298: #X text 633 472 disable WT when in clocked mode
+299: #X obj 432 203 shmem 61019 250
+300: #X msg 460 178 memread 201
+301: #X obj 431 249 + 1
+302: #X obj 98 -48 line~
+303: #X floatatom 480 227 5 0 0 0 - - - 0
+304: #X obj 83 44 delread4~ fbR
+305: #X obj 22 22 delread4~ fbL
+306: #X obj 582 840 delwrite~ fbR 4800
+307: #X obj 406 833 delwrite~ fbL 4800
+308: #X obj 431 226 * 3.77
+309: #X obj 421 288 pack f 75
+310: #X floatatom 1249 184 5 0 0 0 - - - 0
+311: #X floatatom 1253 218 5 0 0 0 - - - 0
+312: #X msg 1176 554 \; pd midi-dialog 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+313: #X obj 655 55 r nextOverride
+314: #X obj 1061 34 s nextOverride
+315: #X restore 1054 11 pd nextOverride
+316: #X obj 179 92 r nextOverride
+317: #X msg 516 329 0
+318: #X msg 526 339 1
+319: #X obj 564 157 send~ reverb3
+320: #X obj 581 188 send~ reverb4
+321: #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+322: #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+323: #X floatatom 274 807 4 0 120 0 - - - 0
+324: #X floatatom 308 824 4 0 100 0 - - - 0
+325: #X floatatom 341 852 6 0 0 0 - - - 0
+326: #X floatatom 357 881 4 0 100 0 - - - 0
+327: #X text 377 855 crossover frequency \, Hz.
+328: #X text 305 807 output level (dB)
+329: #X text 335 831 liveness \, feedback percentage (0-100)
+330: #X text 392 882 High Frequency damping \, percentage (0-100)
+331: #X obj 1058 -32 midiToControlList
+332: #X obj 220 754 lop~ 3000
+333: #X obj 220 777 lop~ 3000
+334: #X obj 284 746 lop~ 3000
+335: #X obj 284 769 lop~ 3000
+336: #X obj 198 831 rev3~ 98 94 300 93
+337: #X obj 198 854 *~
+338: #X obj 237 861 *~
+339: #X floatatom 659 762 5 0 0 0 - - - 0
+340: #X obj 659 784 pack 0 100
+341: #X obj 659 807 line~
+342: #X obj 754 848 shmem 61019 250
+343: #X msg 754 827 memset 62 \$1
+344: #X floatatom 754 791 5 0 0 0 - - - 0
+345: #X obj 1168 482 s reverb_interrupt
+346: #X obj 1065 316 shmem 61019 250
+347: #X msg 1079 294 memread 63
+348: #X obj 1078 421 spigot 0
+349: #X obj 1152 430 spigot 0
+350: #X obj 1148 404 r resetReverbWithOnstet
+351: #X obj 1171 312 shmem 61019 250
+352: #X msg 1168 287 memread 109
+353: #X obj 1112 232 t b b
+354: #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0)
+355: #X obj 1173 663 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \;
+356: #X obj 1385 662 expr if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0)
+357: #X obj 1191 453 spigot 0
+358: #X obj 1099 451 spigot 0
+359: #X obj 255 615 arbhar_feedback
+360: #X obj 362 611 *~ 1
+361: #X obj 409 613 *~ 1
+362: #X obj 262 676 *~ 1
+363: #X obj 327 675 *~ 1
+364: #X obj 296 676 *~ 0
+365: #X obj 361 675 *~ 0
+366: #X obj 461 606 unpack 1 0
+367: #X msg 457 579 1 0
+368: #X msg 488 582 0 1
+369: #X obj 748 328 shmem 61019 250
+370: #X msg 747 299 memread 64
+371: #X obj 748 351 == 1
+372: #X obj 459 553 sel 0 1
+373: #X floatatom 748 374 5 0 0 0 - - - 0
+374: #X obj 992 703 midiControllerToShMem
+
+EDGES:
+2:0 #X msg 251 138 setStereo \$1 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+3:0 #X obj 251 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 2:0 #X msg 251 138 setStereo \$1
+4:0 #X obj 342 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 5:0 #X msg 342 138 internTrig \$1
+5:0 #X msg 342 138 internTrig \$1 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+6:0 #X obj 436 115 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 7:0 #X msg 436 138 randomIntensity \$1
+7:0 #X msg 436 138 randomIntensity \$1 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+10:0 #X obj 626 59 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 11:0 #X msg 626 82 internTrig \$1
+11:0 #X msg 626 82 internTrig \$1 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+12:0 #X msg 881 206 next bang -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+13:0 #X obj 726 -82 loadbang -> 20:0 #X obj 726 -58 del 1000
+13:0 #X obj 726 -82 loadbang -> 222:0 #X obj 660 -57 del 2000
+14:0 #X obj 685 -21 0 -> 10:0 #X obj 626 59 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+15:0 #X obj 893 -33 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 17:0 #X obj 819 156 metro 10
+15:0 #X obj 893 -33 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 25:0 #X obj 910 4 metro 15
+15:0 #X obj 893 -33 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 98:0 #X obj 969 4 metro 50
+16:0 #X obj 898 299 shmem 61019 250 -> 18:0 #X obj 900 321 expr (2048 - $f1) / 20.48
+17:0 #X obj 819 156 metro 10 -> 142:0 #X msg 897 271 memread 52
+17:0 #X obj 819 156 metro 10 -> 147:0 #X msg 1290 333 memread 53
+18:0 #X obj 900 321 expr (2048 - $f1) / 20.48 -> 59:0 #X obj 901 352 f
+19:0 #X obj 148 -52 t b b b -> 67:0 #X msg 205 32 pd~ start -nogui -audiobuf 25 arbharGrainCore.pd
+19:1 #X obj 148 -52 t b b b -> 138:0 #X msg 505 8 pd~ start -nogui -audiobuf 5 arbharGrainCore.pd
+19:2 #X obj 148 -52 t b b b -> 0:0 #X msg 222 -76 \; pd dsp 1
+20:0 #X obj 726 -58 del 1000 -> 14:0 #X obj 685 -21 0
+20:0 #X obj 726 -58 del 1000 -> 21:0 #X obj 760 -30 1
+21:0 #X obj 760 -30 1 -> 15:0 #X obj 893 -33 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1
+22:0 #X obj 897 117 shmem 61019 250 -> 23:0 #X obj 892 144 change
+23:0 #X obj 892 144 change -> 24:0 #X obj 890 168 sel 1
+24:0 #X obj 890 168 sel 1 -> 12:0 #X msg 881 206 next bang
+24:0 #X obj 890 168 sel 1 -> 348:0 #X obj 1078 421 spigot 0
+24:0 #X obj 890 168 sel 1 -> 358:0 #X obj 1099 451 spigot 0
+25:0 #X obj 910 4 metro 15 -> 26:0 #X msg 899 74 memread 22
+25:0 #X obj 910 4 metro 15 -> 28:0 #X msg 91 511 memread 6
+25:0 #X obj 910 4 metro 15 -> 101:0 #X msg 678 142 memread 1
+25:0 #X obj 910 4 metro 15 -> 128:0 #X msg 148 648 memread 40
+25:0 #X obj 910 4 metro 15 -> 275:0 #X msg 331 217 memread 200
+25:0 #X obj 910 4 metro 15 -> 300:0 #X msg 460 178 memread 201
+26:0 #X msg 899 74 memread 22 -> 22:0 #X obj 897 117 shmem 61019 250
+27:0 #X obj 91 533 shmem 61019 250 -> 180:0 #X obj 91 556 change -1
+28:0 #X msg 91 511 memread 6 -> 27:0 #X obj 91 533 shmem 61019 250
+29:0 #X obj 27 -52 adc~ 1 2 -> 195:0 #X obj 29 -4 send~ analysisL
+29:0 #X obj 27 -52 adc~ 1 2 -> 133:0 #X obj -1 99 arbhar_in1_gain~
+29:1 #X obj 27 -52 adc~ 1 2 -> 196:0 #X obj 140 -4 send~ analysisR
+29:1 #X obj 27 -52 adc~ 1 2 -> 134:0 #X obj 37 144 arbhar_in2_gain~
+30:0 #X obj 3 379 stereo_in~ -> 38:0 #X restore 26 430 pd highShelf
+30:0 #X obj 3 379 stereo_in~ -> 46:0 #X obj 125 411 send~ recL
+30:1 #X obj 3 379 stereo_in~ -> 47:0 #X obj 236 411 send~ recR
+30:1 #X obj 3 379 stereo_in~ -> 41:0 #X restore 50 478 pd highShelf
+31:0 #X msg 213 380 0.9 -> 75:1 #X obj 13 524 *~ 0
+32:0 #X msg 157 457 -0.9 -> 74:1 #X obj 49 509 *~ 0
+33:0 #X obj 168 329 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 34:0 #X obj 168 349 t b b
+34:0 #X obj 168 349 t b b -> 35:0 #X msg 168 374 0.9
+35:0 #X msg 168 374 0.9 -> 74:1 #X obj 49 509 *~ 0
+35:0 #X msg 168 374 0.9 -> 75:1 #X obj 13 524 *~ 0
+36:0 #X obj 218 333 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 37:0 #X obj 218 353 t b b
+37:0 #X obj 218 353 t b b -> 31:0 #X msg 213 380 0.9
+37:1 #X obj 218 353 t b b -> 32:0 #X msg 157 457 -0.9
+38:0 #X restore 26 430 pd highShelf -> 75:0 #X obj 13 524 *~ 0
+39:0 #X obj 55 287 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 38:1 #X restore 26 430 pd highShelf
+39:0 #X obj 55 287 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 41:1 #X restore 50 478 pd highShelf
+40:0 #X obj 87 286 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 38:2 #X restore 26 430 pd highShelf
+40:0 #X obj 87 286 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 -> 41:2 #X restore 50 478 pd highShelf
+41:0 #X restore 50 478 pd highShelf -> 74:0 #X obj 49 509 *~ 0
+42:0 #X obj 254 440 receive~ dryL -> 56:0 #X obj 231 528 *~
+42:0 #X obj 254 440 receive~ dryL -> 80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9
+43:0 #X obj 430 511 receive~ dryR -> 57:0 #X obj 313 537 *~
+43:0 #X obj 430 511 receive~ dryR -> 80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9
+44:0 #X obj 676 418 receive~ recL -> 9:0 #X obj 677 450 arbharRecorder
+45:0 #X obj 773 427 receive~ recR -> 9:1 #X obj 677 450 arbharRecorder
+48:0 #X obj 65 586 expr (4095 - $f1) / 4095 -> 55:0 #X obj 63 610 expr $f1 * 0.25 \; ($f1 * 0.25) + 0.75
+49:0 #X obj 62 653 osc~ 0 -> 65:0 #X obj 55 675 lop~ 25
+52:0 #X obj 32 710 *~ -> 50:0 #X obj 2 786 send~ dryL
+52:0 #X obj 32 710 *~ -> 130:0 #X obj 43 753 *~
+53:0 #X obj 102 697 *~ -> 223:0 #X obj 119 766 *~ 0
+54:0 #X obj 264 474 osc~ 0 -> 66:0 #X obj 264 497 lop~ 25
+55:0 #X obj 63 610 expr $f1 * 0.25 \; ($f1 * 0.25) + 0.75 -> 49:1 #X obj 62 653 osc~ 0
+55:1 #X obj 63 610 expr $f1 * 0.25 \; ($f1 * 0.25) + 0.75 -> 54:1 #X obj 264 474 osc~ 0
+56:0 #X obj 231 528 *~ -> 80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9
+57:0 #X obj 313 537 *~ -> 80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9
+58:0 #X obj 388 647 arbharReverb -> 198:0 #X obj 415 771 tanh_approx~ 0.89
+58:1 #X obj 388 647 arbharReverb -> 199:0 #X obj 540 764 tanh_approx~ 0.89
+58:2 #X obj 388 647 arbharReverb -> 73:0 #X msg 463 710 \$1 25
+59:0 #X obj 901 352 f -> 8:0 #X obj 852 396 s modCVreverb
+60:0 #X obj 516 458 arbharWavetable -> 116:0 #X obj 516 498 *~
+60:1 #X obj 516 458 arbharWavetable -> 117:0 #X obj 552 507 *~
+61:0 #X obj 1397 -69 notein -> 252:0 #X obj 1397 -45 pack 0 0
+61:1 #X obj 1397 -69 notein -> 252:1 #X obj 1397 -45 pack 0 0
+63:0 #X msg 789 577 aconnect -o -> 137:0 #X obj 781 658 shell
+64:0 #X obj 480 247 > 0 -> 271:0 #X obj 456 307 expr if ($f1 > 0 \, 0.9 \, 1.25)
+65:0 #X obj 55 675 lop~ 25 -> 52:1 #X obj 32 710 *~
+65:0 #X obj 55 675 lop~ 25 -> 53:1 #X obj 102 697 *~
+66:0 #X obj 264 497 lop~ 25 -> 56:1 #X obj 231 528 *~
+66:0 #X obj 264 497 lop~ 25 -> 57:1 #X obj 313 537 *~
+67:0 #X msg 205 32 pd~ start -nogui -audiobuf 25 arbharGrainCore.pd -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+68:0 #X msg 212 57 pd~ start -audiobuf 25 arbharGrainCore.pd -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+69:0 #X floatatom 346 301 5 0 0 0 - - - 0 -> 193:1 #X obj 277 335 *~ 0.9
+69:0 #X floatatom 346 301 5 0 0 0 - - - 0 -> 194:1 #X obj 326 334 *~ 0.9
+70:0 #X obj 425 750 *~ -> 198:0 #X obj 415 771 tanh_approx~ 0.89
+71:0 #X obj 531 734 *~ -> 199:0 #X obj 540 764 tanh_approx~ 0.89
+72:0 #X obj 458 735 line~ -> 70:1 #X obj 425 750 *~
+72:0 #X obj 458 735 line~ -> 71:1 #X obj 531 734 *~
+73:0 #X msg 463 710 \$1 25 -> 72:0 #X obj 458 735 line~
+74:0 #X obj 49 509 *~ 0 -> 53:0 #X obj 102 697 *~
+75:0 #X obj 13 524 *~ 0 -> 52:0 #X obj 32 710 *~
+76:0 #X obj 171 216 loadbang -> 77:0 #X obj 170 246 del 2000
+77:0 #X obj 170 246 del 2000 -> 33:0 #X obj 168 329 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+77:0 #X obj 170 246 del 2000 -> 39:0 #X obj 55 287 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000
+78:0 #X obj 26 334 r stereoInput -> 30:0 #X obj 3 379 stereo_in~
+80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 70:0 #X obj 425 750 *~
+80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 153:0 #X obj 722 705 env~ 512
+80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 359:0 #X obj 255 615 arbhar_feedback
+80:0 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 360:0 #X obj 362 611 *~ 1
+80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 71:0 #X obj 531 734 *~
+80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 153:0 #X obj 722 705 env~ 512
+80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 359:1 #X obj 255 615 arbhar_feedback
+80:1 #X obj 260 560 main_out_stereo~ 0.9 0.9 -> 361:0 #X obj 409 613 *~ 1
+82:0 #X obj 335 455 +~ -> 107:0 #X obj 340 486 *~
+83:0 #X obj 424 450 +~ -> 106:0 #X obj 403 491 *~
+84:0 #X msg 839 780 memset 116 \$1 -> 81:0 #X obj 839 801 shmem 61019 250
+85:0 #X obj 841 694 clip 0 100 -> 90:0 #X obj 836 727 expr ampConversion[$i1]
+86:0 #X obj 838 759 i -> 84:0 #X msg 839 780 memset 116 \$1
+87:0 #X floatatom 787 722 5 0 0 0 - - - 0 -> 86:0 #X obj 838 759 i
+88:0 #X obj 722 728 * 1 -> 85:0 #X obj 841 694 clip 0 100
+90:0 #X obj 836 727 expr ampConversion[$i1] -> 86:0 #X obj 838 759 i
+91:0 #X obj 539 387 tgl 18 0 empty empty wavetable\ on/off 0 -9 0 10 #fcfcfc #000000 #000000 0 1 -> 60:0 #X obj 516 458 arbharWavetable
+92:0 #X msg 527 77 setStereo \$1 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+93:0 #X obj 527 54 tgl 15 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000 0 1 -> 92:0 #X msg 527 77 setStereo \$1
+94:0 #X msg 307 -3 setQuantiseTable 12 -12 -24 -12 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+94:0 #X msg 307 -3 setQuantiseTable 12 -12 -24 -12 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+96:0 #X obj 536 617 shmem 61019 250 -> 99:0 #X obj 510 651 sel 0 1
+97:0 #X msg 540 594 memread 37 -> 96:0 #X obj 536 617 shmem 61019 250
+98:0 #X obj 969 4 metro 50 -> 97:0 #X msg 540 594 memread 37
+98:0 #X obj 969 4 metro 50 -> 115:0 #X msg 818 295 memread 12
+98:0 #X obj 969 4 metro 50 -> 151:0 #X msg 937 -76 memread 54
+98:0 #X obj 969 4 metro 50 -> 201:0 #X msg 1006 436 memread 132
+98:0 #X obj 969 4 metro 50 -> 206:0 #X msg 1080 494 memread 121
+98:0 #X obj 969 4 metro 50 -> 292:0 #X msg 645 497 memread 140
+98:0 #X obj 969 4 metro 50 -> 353:0 #X obj 1112 232 t b b
+98:0 #X obj 969 4 metro 50 -> 370:0 #X msg 747 299 memread 64
+99:0 #X obj 510 651 sel 0 1 -> 189:0 #X obj 505 696 -1
+99:1 #X obj 510 651 sel 0 1 -> 190:0 #X obj 543 677 1
+100:0 #X obj 674 167 shmem 61019 250 -> 296:0 #X obj 674 190 spigot 1
+101:0 #X msg 678 142 memread 1 -> 100:0 #X obj 674 167 shmem 61019 250
+102:0 #X msg 611 349 \$1 15 -> 103:0 #X obj 610 386 line~
+103:0 #X obj 610 386 line~ -> 104:1 #X obj 507 536 *~
+103:0 #X obj 610 386 line~ -> 105:1 #X obj 561 548 *~
+104:0 #X obj 507 536 *~ -> 56:0 #X obj 231 528 *~
+105:0 #X obj 561 548 *~ -> 57:0 #X obj 313 537 *~
+106:0 #X obj 403 491 *~ -> 57:0 #X obj 313 537 *~
+107:0 #X obj 340 486 *~ -> 56:0 #X obj 231 528 *~
+108:0 #X msg 475 433 \$1 15 -> 109:0 #X obj 471 464 line~
+109:0 #X obj 471 464 line~ -> 106:1 #X obj 403 491 *~
+109:0 #X obj 471 464 line~ -> 107:1 #X obj 340 486 *~
+110:1 #X obj 594 320 t f f f -> 102:0 #X msg 611 349 \$1 15
+110:2 #X obj 594 320 t f f f -> 111:0 #X obj 662 339 expr 1 - $f1
+111:0 #X obj 662 339 expr 1 - $f1 -> 108:0 #X msg 475 433 \$1 15
+112:0 #X obj 593 291 clip 0 1 -> 110:0 #X obj 594 320 t f f f
+113:0 #X obj 561 229 expr if($f1 > 3830 \, ($f1 - 3800) / 265 \, 0) \; if($f1 > 3750 \, 1 \, 0) -> 112:0 #X obj 593 291 clip 0 1
+113:1 #X obj 561 229 expr if($f1 > 3830 \, ($f1 - 3800) / 265 \, 0) \; if($f1 > 3750 \, 1 \, 0) -> 60:0 #X obj 516 458 arbharWavetable
+113:1 #X obj 561 229 expr if($f1 > 3830 \, ($f1 - 3800) / 265 \, 0) \; if($f1 > 3750 \, 1 \, 0) -> 119:1 #X obj 649 276 spigot
+114:0 #X obj 819 324 shmem 61019 250 -> 122:0 #X obj 803 362 expr if( $f1 < 3620 && $f1 > 480 \, 0.6 \, 0)
+115:0 #X msg 818 295 memread 12 -> 114:0 #X obj 819 324 shmem 61019 250
+116:0 #X obj 516 498 *~ -> 104:0 #X obj 507 536 *~
+117:0 #X obj 552 507 *~ -> 105:0 #X obj 561 548 *~
+118:0 #X obj 754 200 t b -> 119:0 #X obj 649 276 spigot
+119:0 #X obj 649 276 spigot -> 123:0 #X msg 649 299 0.9 2 \, 0 0 250
+120:0 #X obj 664 389 vline~ -> 116:1 #X obj 516 498 *~
+120:0 #X obj 664 389 vline~ -> 117:1 #X obj 552 507 *~
+121:0 #X msg 793 387 \$1 150 -> 120:0 #X obj 664 389 vline~
+122:0 #X obj 803 362 expr if( $f1 < 3620 && $f1 > 480 \, 0.6 \, 0) -> 121:0 #X msg 793 387 \$1 150
+123:0 #X msg 649 299 0.9 2 \, 0 0 250 -> 120:0 #X obj 664 389 vline~
+124:0 #X msg 757 608 sudo sh /home/pi/arbhar_v2/connectMidi.sh -> 137:0 #X obj 781 658 shell
+126:0 #X msg 281 91 pd~ stop -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+127:0 #X obj 148 671 shmem 61019 250 -> 209:0 #X obj 146 693 change -1
+128:0 #X msg 148 648 memread 40 -> 127:0 #X obj 148 671 shmem 61019 250
+129:0 #X obj 64 718 expr 1 - $f1 -> 130:1 #X obj 43 753 *~
+130:0 #X obj 43 753 *~ -> 51:0 #X obj 89 859 send~ dryR
+132:0 #X floatatom 103 226 5 0 0 0 - - - 0 -> 135:1 #X obj 35 226 *~ 1
+133:0 #X obj -1 99 arbhar_in1_gain~ -> 30:0 #X obj 3 379 stereo_in~
+134:0 #X obj 37 144 arbhar_in2_gain~ -> 135:0 #X obj 35 226 *~ 1
+135:0 #X obj 35 226 *~ 1 -> 30:1 #X obj 3 379 stereo_in~
+136:0 #X obj 1214 508 loadbang -> 312:0 #X msg 1176 554 \; pd midi-dialog 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+136:0 #X obj 1214 508 loadbang -> 141:0 #X obj 1214 531 del 3000
+137:0 #X obj 781 658 shell -> 62:0 #X obj 781 681 print
+138:0 #X msg 505 8 pd~ start -nogui -audiobuf 5 arbharGrainCore.pd -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+139:0 #X msg 517 35 pd~ start -audiobuf 25 arbharGrainCore.pd -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+140:0 #X msg 283 -38 setQuantiseTable 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+140:0 #X msg 283 -38 setQuantiseTable 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+142:0 #X msg 897 271 memread 52 -> 16:0 #X obj 898 299 shmem 61019 250
+144:0 #X obj 1291 361 shmem 61019 250 -> 145:0 #X obj 1291 406 expr (2048 - $f1) / 20.48
+145:0 #X obj 1291 406 expr (2048 - $f1) / 20.48 -> 146:0 #X obj 1250 426 f
+146:0 #X obj 1250 426 f -> 143:0 #X obj 1269 453 s modCVfeedback
+147:0 #X msg 1290 333 memread 53 -> 144:0 #X obj 1291 361 shmem 61019 250
+148:0 #X obj 143 717 f -> 129:0 #X obj 64 718 expr 1 - $f1
+148:0 #X obj 143 717 f -> 223:1 #X obj 119 766 *~ 0
+148:0 #X obj 143 717 f -> 359:2 #X obj 255 615 arbhar_feedback
+149:0 #X msg 109 301 emulateAnalog \$1 -> 30:0 #X obj 3 379 stereo_in~
+150:0 #X obj 936 -46 shmem 61019 250 -> 181:0 #X obj 936 -23 change -1
+151:0 #X msg 937 -76 memread 54 -> 150:0 #X obj 936 -46 shmem 61019 250
+153:0 #X obj 722 705 env~ 512 -> 88:0 #X obj 722 728 * 1
+154:0 #X msg 382 -66 setQuantiseTableFromShMem bang -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+154:0 #X msg 382 -66 setQuantiseTableFromShMem bang -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+155:0 #X obj 1170 154 shmem 61019 250 -> 156:0 #X obj 1165 189 change
+156:0 #X obj 1165 189 change -> 173:0 #X obj 1165 214 sel 1 0
+156:0 #X obj 1165 189 change -> 175:0 #X msg 634 649 \$1 1000
+159:0 #X obj 810 -15 bang~ -> 161:0 #X obj 810 8 t b b
+161:0 #X obj 810 8 t b b -> 284:0 #X msg 775 60 memread 23
+161:1 #X obj 810 8 t b b -> 183:0 #X msg 966 387 memread 123
+162:0 #X restore 20 819 pd sampleRateDeduction -> 82:0 #X obj 335 455 +~
+162:1 #X restore 20 819 pd sampleRateDeduction -> 83:0 #X obj 424 450 +~
+163:0 #X restore 273 371 pd bitRateDeduction -> 82:0 #X obj 335 455 +~
+163:1 #X restore 273 371 pd bitRateDeduction -> 83:1 #X obj 424 450 +~
+164:0 #X obj 1291 195 pack 0 0 0 -> 287:0 #X obj 1291 218 spigot 1
+165:0 #X obj 1293 143 ctlin -> 164:0 #X obj 1291 195 pack 0 0 0
+165:0 #X obj 1293 143 ctlin -> 310:0 #X floatatom 1249 184 5 0 0 0 - - - 0
+165:1 #X obj 1293 143 ctlin -> 164:1 #X obj 1291 195 pack 0 0 0
+165:1 #X obj 1293 143 ctlin -> 311:0 #X floatatom 1253 218 5 0 0 0 - - - 0
+165:2 #X obj 1293 143 ctlin -> 164:2 #X obj 1291 195 pack 0 0 0
+166:0 #X msg 1387 347 stop -> 249:0 #X obj 1433 377 poly 6 0
+167:0 #X obj 1221 -24 loadbang -> 178:0 #X msg 1227 84 memset 248 0
+167:0 #X obj 1221 -24 loadbang -> 168:0 #X obj 1181 12 del 250
+168:0 #X obj 1181 12 del 250 -> 169:0 #X obj 1181 35 1
+169:0 #X obj 1181 35 1 -> 170:0 #X obj 1181 58 metro 50
+170:0 #X obj 1181 58 metro 50 -> 179:0 #X msg 1170 129 memread 248
+170:0 #X obj 1181 58 metro 50 -> 238:0 #X msg 1034 129 memread 42
+171:0 #X obj 419 790 *~ -> 192:0 #X obj 421 811 *~ 1
+172:0 #X obj 560 785 *~ -> 191:0 #X obj 564 810 *~ 1
+173:0 #X obj 1165 214 sel 1 0 -> 157:0 #X msg 1152 257 \; pd dsp 1
+174:0 #X obj 633 706 line~ -> 172:1 #X obj 560 785 *~
+174:0 #X obj 633 706 line~ -> 171:1 #X obj 419 790 *~
+175:0 #X msg 634 649 \$1 1000 -> 174:0 #X obj 633 706 line~
+176:0 #X floatatom 696 619 5 0 0 0 - - - 0 -> 175:0 #X msg 634 649 \$1 1000
+177:0 #X msg 1239 117 memset 248 1 -> 155:0 #X obj 1170 154 shmem 61019 250
+178:0 #X msg 1227 84 memset 248 0 -> 155:0 #X obj 1170 154 shmem 61019 250
+179:0 #X msg 1170 129 memread 248 -> 155:0 #X obj 1170 154 shmem 61019 250
+180:0 #X obj 91 556 change -1 -> 48:0 #X obj 65 586 expr (4095 - $f1) / 4095
+181:0 #X obj 936 -23 change -1 -> 149:0 #X msg 109 301 emulateAnalog \$1
+182:0 #X obj 940 417 shmem 61019 250 -> 184:0 #X obj 939 440 < 1
+183:0 #X msg 966 387 memread 123 -> 182:0 #X obj 940 417 shmem 61019 250
+184:0 #X obj 939 440 < 1 -> 213:0 #X obj 938 461 change -1
+185:0 #X obj 991 538 change -1 -> 204:0 #X msg 874 565 \$1 5
+185:0 #X obj 991 538 change -1 -> 215:0 #X obj 818 463 sel 0
+188:0 #X floatatom 576 690 5 0 0 0 - - - 0 -> 198:1 #X obj 415 771 tanh_approx~ 0.89
+188:0 #X floatatom 576 690 5 0 0 0 - - - 0 -> 199:1 #X obj 540 764 tanh_approx~ 0.89
+189:0 #X obj 505 696 -1 -> 191:1 #X obj 564 810 *~ 1
+190:0 #X obj 543 677 1 -> 191:1 #X obj 564 810 *~ 1
+191:0 #X obj 564 810 *~ 1 -> 131:1 #X obj 521 846 dac~ 1 2
+191:0 #X obj 564 810 *~ 1 -> 306:0 #X obj 582 840 delwrite~ fbR 4800
+192:0 #X obj 421 811 *~ 1 -> 131:0 #X obj 521 846 dac~ 1 2
+192:0 #X obj 421 811 *~ 1 -> 307:0 #X obj 406 833 delwrite~ fbL 4800
+193:0 #X obj 277 335 *~ 0.9 -> 163:0 #X restore 273 371 pd bitRateDeduction
+193:0 #X obj 277 335 *~ 0.9 -> 162:0 #X restore 20 819 pd sampleRateDeduction
+193:0 #X obj 277 335 *~ 0.9 -> 82:0 #X obj 335 455 +~
+194:0 #X obj 326 334 *~ 0.9 -> 163:1 #X restore 273 371 pd bitRateDeduction
+194:0 #X obj 326 334 *~ 0.9 -> 162:1 #X restore 20 819 pd sampleRateDeduction
+194:0 #X obj 326 334 *~ 0.9 -> 83:0 #X obj 424 450 +~
+197:0 #X msg 412 84 pd~ stop -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+198:0 #X obj 415 771 tanh_approx~ 0.89 -> 171:0 #X obj 419 790 *~
+199:0 #X obj 540 764 tanh_approx~ 0.89 -> 172:0 #X obj 560 785 *~
+200:0 #X obj 1006 462 shmem 61019 250 -> 202:0 #X obj 1010 492 < 1
+201:0 #X msg 1006 436 memread 132 -> 200:0 #X obj 1006 462 shmem 61019 250
+202:0 #X obj 1010 492 < 1 -> 203:1 #X obj 993 482 &&
+203:0 #X obj 993 482 && -> 207:0 #X obj 993 517 &&
+204:0 #X msg 874 565 \$1 5 -> 174:0 #X obj 633 706 line~
+205:0 #X obj 1080 520 shmem 61019 250 -> 208:0 #X obj 1048 563 < 1
+206:0 #X msg 1080 494 memread 121 -> 205:0 #X obj 1080 520 shmem 61019 250
+207:0 #X obj 993 517 && -> 185:0 #X obj 991 538 change -1
+208:0 #X obj 1048 563 < 1 -> 207:1 #X obj 993 517 &&
+209:0 #X obj 146 693 change -1 -> 148:0 #X obj 143 717 f
+210:0 #X obj 950 558 f -> 203:0 #X obj 993 482 &&
+211:0 #X obj 938 484 sel 1 -> 221:0 #X obj 931 509 del 100
+211:1 #X obj 938 484 sel 1 -> 210:0 #X obj 950 558 f
+212:0 #X obj 931 532 1 -> 210:0 #X obj 950 558 f
+213:0 #X obj 938 461 change -1 -> 211:0 #X obj 938 484 sel 1
+214:0 #X msg 755 550 controlDsp \$1 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+214:0 #X msg 755 550 controlDsp \$1 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+215:0 #X obj 818 463 sel 0 -> 218:0 #X obj 818 486 del 10
+215:1 #X obj 818 463 sel 0 -> 217:0 #X obj 818 532 i
+216:0 #X obj 818 509 0 -> 217:0 #X obj 818 532 i
+217:0 #X obj 818 532 i -> 214:0 #X msg 755 550 controlDsp \$1
+218:0 #X obj 818 486 del 10 -> 216:0 #X obj 818 509 0
+219:0 #X obj 138 -78 del 1000 -> 19:0 #X obj 148 -52 t b b b
+220:0 #X obj 70 -84 loadbang -> 219:0 #X obj 138 -78 del 1000
+221:0 #X obj 931 509 del 100 -> 212:0 #X obj 931 532 1
+222:0 #X obj 660 -57 del 2000 -> 14:0 #X obj 685 -21 0
+223:0 #X obj 119 766 *~ 0 -> 51:0 #X obj 89 859 send~ dryR
+224:0 #X msg 1565 314 64 120 72 120 -> 225:0 #X obj 1575 347 list split 2
+225:0 #X obj 1575 347 list split 2 -> 249:0 #X obj 1433 377 poly 6 0
+225:1 #X obj 1575 347 list split 2 -> 226:0 #X obj 1667 348 t a
+226:0 #X obj 1667 348 t a -> 225:0 #X obj 1575 347 list split 2
+227:0 #X msg 1650 322 64 0 72 0 -> 225:0 #X obj 1575 347 list split 2
+228:0 #X msg 1546 385 60 120 -> 225:0 #X obj 1575 347 list split 2
+229:0 #X msg 1567 407 60 0 -> 225:0 #X obj 1575 347 list split 2
+230:0 #X obj 485 402 *~ -> 83:0 #X obj 424 450 +~
+231:0 #X obj 437 402 *~ -> 82:1 #X obj 335 455 +~
+232:0 #X obj 487 358 line~ -> 230:1 #X obj 485 402 *~
+232:0 #X obj 487 358 line~ -> 231:1 #X obj 437 402 *~
+233:0 #X obj 526 265 loadbang -> 234:0 #X msg 526 288 1.25
+234:0 #X msg 526 288 1.25 -> 232:0 #X obj 487 358 line~
+235:0 #X msg 459 335 \$1 500 -> 232:0 #X obj 487 358 line~
+237:0 #X obj 1034 154 shmem 61019 250 -> 239:0 #X obj 1033 175 == 1
+238:0 #X msg 1034 129 memread 42 -> 237:0 #X obj 1034 154 shmem 61019 250
+239:0 #X obj 1033 175 == 1 -> 243:0 #X obj 1033 198 change
+240:0 #X obj 1028 220 sel 1 0 -> 241:0 #X obj 1010 260 del 1000
+240:1 #X obj 1028 220 sel 1 0 -> 242:0 #X msg 1087 269 stop
+241:0 #X obj 1010 260 del 1000 -> 166:0 #X msg 1387 347 stop
+242:0 #X msg 1087 269 stop -> 241:0 #X obj 1010 260 del 1000
+243:0 #X obj 1033 198 change -> 240:0 #X obj 1028 220 sel 1 0
+244:0 #X obj 1440 82 notein -> 245:0 #X obj 1417 127 expr if ($f3 > 0 && $f2 == 0 \, $f1 \, -1)
+244:1 #X obj 1440 82 notein -> 245:1 #X obj 1417 127 expr if ($f3 > 0 && $f2 == 0 \, $f1 \, -1)
+245:0 #X obj 1417 127 expr if ($f3 > 0 && $f2 == 0 \, $f1 \, -1) -> 246:0 #X obj 1404 181 sel -1
+246:1 #X obj 1404 181 sel -1 -> 247:0 #X msg 1438 213 \$1 127
+247:0 #X msg 1438 213 \$1 127 -> 250:0 #X obj 1437 247 poly 64 0
+248:0 #X msg 1545 208 stop -> 250:0 #X obj 1437 247 poly 64 0
+249:1 #X obj 1433 377 poly 6 0 -> 253:0 #X obj 1454 407 pack 0 0 1
+249:2 #X obj 1433 377 poly 6 0 -> 64:0 #X obj 480 247 > 0
+249:2 #X obj 1433 377 poly 6 0 -> 253:1 #X obj 1454 407 pack 0 0 1
+250:1 #X obj 1437 247 poly 64 0 -> 265:0 #X obj 1462 285 expr if ($f2 > 0 \, -1 \, $f1)
+250:2 #X obj 1437 247 poly 64 0 -> 265:1 #X obj 1462 285 expr if ($f2 > 0 \, -1 \, $f1)
+251:0 #X obj 1560 82 sel 0 -> 248:0 #X msg 1545 208 stop
+252:0 #X obj 1397 -45 pack 0 0 -> 255:0 #X obj 1410 -12 spigot 0
+252:0 #X obj 1397 -45 pack 0 0 -> 254:0 #X obj 1314 -4 spigot 1
+253:0 #X obj 1454 407 pack 0 0 1 -> 273:0 #X msg 1451 433 midiNotesIn \$1 \$2 \$3
+253:0 #X obj 1454 407 pack 0 0 1 -> 274:0 #X msg 1498 463 midiNotesInShare \$1 \$2 \$3
+254:0 #X obj 1314 -4 spigot 1 -> 249:0 #X obj 1433 377 poly 6 0
+255:0 #X obj 1410 -12 spigot 0 -> 256:0 #X obj 1376 16 unpack
+256:0 #X obj 1376 16 unpack -> 257:0 #X obj 1360 45 stripnote
+256:1 #X obj 1376 16 unpack -> 257:1 #X obj 1360 45 stripnote
+257:0 #X obj 1360 45 stripnote -> 259:0 #X obj 1359 76 pack 0 0
+257:1 #X obj 1360 45 stripnote -> 259:1 #X obj 1359 76 pack 0 0
+258:0 #X obj 1531 51 expr 1 - $f1 -> 254:1 #X obj 1314 -4 spigot 1
+259:0 #X obj 1359 76 pack 0 0 -> 249:0 #X obj 1433 377 poly 6 0
+260:0 #X obj 1546 -83 r midiCtl -> 261:0 #X obj 1546 -46 expr if ($f3 == 1 && $f2 == 64 \, $f1 / 127 \, -1)
+261:0 #X obj 1546 -46 expr if ($f3 == 1 && $f2 == 64 \, $f1 / 127 \, -1) -> 262:0 #X obj 1546 -23 > 0
+262:0 #X obj 1546 -23 > 0 -> 266:0 #X obj 1543 -1 i
+263:0 #X msg 1459 338 \$1 0 -> 249:0 #X obj 1433 377 poly 6 0
+264:1 #X obj 1462 308 sel -1 -> 263:0 #X msg 1459 338 \$1 0
+265:0 #X obj 1462 285 expr if ($f2 > 0 \, -1 \, $f1) -> 264:0 #X obj 1462 308 sel -1
+266:0 #X obj 1543 -1 i -> 245:2 #X obj 1417 127 expr if ($f3 > 0 && $f2 == 0 \, $f1 \, -1)
+266:0 #X obj 1543 -1 i -> 251:0 #X obj 1560 82 sel 0
+266:0 #X obj 1543 -1 i -> 255:1 #X obj 1410 -12 spigot 0
+266:0 #X obj 1543 -1 i -> 258:0 #X obj 1531 51 expr 1 - $f1
+269:0 #X obj 136 122 r midiNotesCore1 -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+270:0 #X obj 486 66 r midiNotesCore2 -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+271:0 #X obj 456 307 expr if ($f1 > 0 \, 0.9 \, 1.25) -> 235:0 #X msg 459 335 \$1 500
+272:0 #X msg 262 208 next bang -> 322:0 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12
+273:0 #X msg 1451 433 midiNotesIn \$1 \$2 \$3 -> 268:0 #X obj 1407 505 s midiNotesCore2
+274:0 #X msg 1498 463 midiNotesInShare \$1 \$2 \$3 -> 267:0 #X obj 1526 502 s midiNotesCore1
+275:0 #X msg 331 217 memread 200 -> 276:0 #X obj 331 240 shmem 61019 250
+276:0 #X obj 331 240 shmem 61019 250 -> 277:0 #X obj 329 270 / 127
+277:0 #X obj 329 270 / 127 -> 279:1 #X obj 76 68 *~
+277:0 #X obj 329 270 / 127 -> 278:1 #X obj 21 63 *~
+278:0 #X obj 21 63 *~ -> 133:0 #X obj -1 99 arbhar_in1_gain~
+279:0 #X obj 76 68 *~ -> 134:0 #X obj 37 144 arbhar_in2_gain~
+281:0 #X obj 777 97 shmem 61019 250 -> 282:0 #X obj 773 121 change
+282:0 #X obj 773 121 change -> 283:0 #X obj 773 144 sel 1
+283:0 #X obj 773 144 sel 1 -> 118:0 #X obj 754 200 t b
+284:0 #X msg 775 60 memread 23 -> 281:0 #X obj 777 97 shmem 61019 250
+287:0 #X obj 1291 218 spigot 1 -> 236:0 #X obj 1304 258 s midiCtl
+288:0 #X obj 1359 224 tgl 18 0 empty empty empty 0 -9 0 10 #fcfcfc #000000 #000000 0 1 -> 287:1 #X obj 1291 218 spigot 1
+288:0 #X obj 1359 224 tgl 18 0 empty empty empty 0 -9 0 10 #fcfcfc #000000 #000000 0 1 -> 289:0 #X obj 1373 252 expr 1 - $f1
+289:0 #X obj 1373 252 expr 1 - $f1 -> 290:0 #X obj 1369 280 metro 50
+290:0 #X obj 1369 280 metro 50 -> 236:0 #X obj 1304 258 s midiCtl
+291:0 #X obj 641 520 shmem 61019 250 -> 293:0 #X obj 641 543 t i i
+292:0 #X msg 645 497 memread 140 -> 291:0 #X obj 641 520 shmem 61019 250
+293:0 #X obj 641 543 t i i -> 294:0 #X obj 641 566 sel 1
+293:1 #X obj 641 543 t i i -> 297:0 #X obj 693 558 expr 1 - $f1
+294:0 #X obj 641 566 sel 1 -> 295:0 #X obj 641 589 0
+295:0 #X obj 641 589 0 -> 60:0 #X obj 516 458 arbharWavetable
+296:0 #X obj 674 190 spigot 1 -> 113:0 #X obj 561 229 expr if($f1 > 3830 \, ($f1 - 3800) / 265 \, 0) \; if($f1 > 3750 \, 1 \, 0)
+297:0 #X obj 693 558 expr 1 - $f1 -> 296:1 #X obj 674 190 spigot 1
+299:0 #X obj 432 203 shmem 61019 250 -> 308:0 #X obj 431 226 * 3.77
+300:0 #X msg 460 178 memread 201 -> 299:0 #X obj 432 203 shmem 61019 250
+301:0 #X obj 431 249 + 1 -> 309:0 #X obj 421 288 pack f 75
+302:0 #X obj 98 -48 line~ -> 304:0 #X obj 83 44 delread4~ fbR
+302:0 #X obj 98 -48 line~ -> 305:0 #X obj 22 22 delread4~ fbL
+304:0 #X obj 83 44 delread4~ fbR -> 279:0 #X obj 76 68 *~
+305:0 #X obj 22 22 delread4~ fbL -> 278:0 #X obj 21 63 *~
+308:0 #X obj 431 226 * 3.77 -> 301:0 #X obj 431 249 + 1
+309:0 #X obj 421 288 pack f 75 -> 302:0 #X obj 98 -48 line~
+313:0 #X obj 655 55 r nextOverride -> 321:0 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2
+315:0 #X restore 1054 11 pd nextOverride -> 314:0 #X obj 1061 34 s nextOverride
+317:0 #X msg 516 329 0 -> 232:0 #X obj 487 358 line~
+318:0 #X msg 526 339 1 -> 232:0 #X obj 487 358 line~
+321:1 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 319:0 #X obj 564 157 send~ reverb3
+321:1 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 231:0 #X obj 437 402 *~
+321:2 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 320:0 #X obj 581 188 send~ reverb4
+321:2 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 230:0 #X obj 485 402 *~
+321:3 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 332:0 #X obj 220 754 lop~ 3000
+321:4 #X obj 542 112 pd~ -ninsig 0 -noutsig 4 -fifo 2 -> 334:0 #X obj 284 746 lop~ 3000
+322:1 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12 -> 193:0 #X obj 277 335 *~ 0.9
+322:2 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12 -> 194:0 #X obj 326 334 *~ 0.9
+322:3 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12 -> 332:0 #X obj 220 754 lop~ 3000
+322:4 #X obj 213 166 pd~ -ninsig 0 -noutsig 4 -fifo 12 -> 334:0 #X obj 284 746 lop~ 3000
+323:0 #X floatatom 274 807 4 0 120 0 - - - 0 -> 336:2 #X obj 198 831 rev3~ 98 94 300 93
+324:0 #X floatatom 308 824 4 0 100 0 - - - 0 -> 336:3 #X obj 198 831 rev3~ 98 94 300 93
+325:0 #X floatatom 341 852 6 0 0 0 - - - 0 -> 336:4 #X obj 198 831 rev3~ 98 94 300 93
+326:0 #X floatatom 357 881 4 0 100 0 - - - 0 -> 336:5 #X obj 198 831 rev3~ 98 94 300 93
+332:0 #X obj 220 754 lop~ 3000 -> 333:0 #X obj 220 777 lop~ 3000
+333:0 #X obj 220 777 lop~ 3000 -> 336:0 #X obj 198 831 rev3~ 98 94 300 93
+334:0 #X obj 284 746 lop~ 3000 -> 335:0 #X obj 284 769 lop~ 3000
+335:0 #X obj 284 769 lop~ 3000 -> 336:1 #X obj 198 831 rev3~ 98 94 300 93
+336:0 #X obj 198 831 rev3~ 98 94 300 93 -> 337:0 #X obj 198 854 *~
+336:1 #X obj 198 831 rev3~ 98 94 300 93 -> 338:0 #X obj 237 861 *~
+337:0 #X obj 198 854 *~ -> 198:0 #X obj 415 771 tanh_approx~ 0.89
+338:0 #X obj 237 861 *~ -> 199:0 #X obj 540 764 tanh_approx~ 0.89
+339:0 #X floatatom 659 762 5 0 0 0 - - - 0 -> 340:0 #X obj 659 784 pack 0 100
+340:0 #X obj 659 784 pack 0 100 -> 341:0 #X obj 659 807 line~
+341:0 #X obj 659 807 line~ -> 337:1 #X obj 198 854 *~
+341:0 #X obj 659 807 line~ -> 338:1 #X obj 237 861 *~
+343:0 #X msg 754 827 memset 62 \$1 -> 342:0 #X obj 754 848 shmem 61019 250
+344:0 #X floatatom 754 791 5 0 0 0 - - - 0 -> 343:0 #X msg 754 827 memset 62 \$1
+346:0 #X obj 1065 316 shmem 61019 250 -> 354:0 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0)
+347:0 #X msg 1079 294 memread 63 -> 346:0 #X obj 1065 316 shmem 61019 250
+348:0 #X obj 1078 421 spigot 0 -> 345:0 #X obj 1168 482 s reverb_interrupt
+349:0 #X obj 1152 430 spigot 0 -> 345:0 #X obj 1168 482 s reverb_interrupt
+350:0 #X obj 1148 404 r resetReverbWithOnstet -> 349:0 #X obj 1152 430 spigot 0
+350:0 #X obj 1148 404 r resetReverbWithOnstet -> 357:0 #X obj 1191 453 spigot 0
+351:0 #X obj 1171 312 shmem 61019 250 -> 354:1 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0)
+352:0 #X msg 1168 287 memread 109 -> 351:0 #X obj 1171 312 shmem 61019 250
+353:0 #X obj 1112 232 t b b -> 347:0 #X msg 1079 294 memread 63
+353:1 #X obj 1112 232 t b b -> 352:0 #X msg 1168 287 memread 109
+354:0 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0) -> 348:1 #X obj 1078 421 spigot 0
+354:1 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0) -> 349:1 #X obj 1152 430 spigot 0
+354:2 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0) -> 358:1 #X obj 1099 451 spigot 0
+354:3 #X obj 1081 343 expr if ($f1 == 1 \, 1 \, 0) \; if ($f1 == 2 && $f2 == 0 \, 1 \, 0) \; if ($f1 == 3 \, 1 \, 0) \; if ($f1 == 3 && $f2 == 0 \, 1 \, 0) -> 357:1 #X obj 1191 453 spigot 0
+357:0 #X obj 1191 453 spigot 0 -> 345:0 #X obj 1168 482 s reverb_interrupt
+358:0 #X obj 1099 451 spigot 0 -> 345:0 #X obj 1168 482 s reverb_interrupt
+359:0 #X obj 255 615 arbhar_feedback -> 362:0 #X obj 262 676 *~ 1
+359:0 #X obj 255 615 arbhar_feedback -> 364:0 #X obj 296 676 *~ 0
+359:1 #X obj 255 615 arbhar_feedback -> 363:0 #X obj 327 675 *~ 1
+359:1 #X obj 255 615 arbhar_feedback -> 365:0 #X obj 361 675 *~ 0
+360:0 #X obj 362 611 *~ 1 -> 58:0 #X obj 388 647 arbharReverb
+361:0 #X obj 409 613 *~ 1 -> 58:1 #X obj 388 647 arbharReverb
+362:0 #X obj 262 676 *~ 1 -> 198:0 #X obj 415 771 tanh_approx~ 0.89
+363:0 #X obj 327 675 *~ 1 -> 199:0 #X obj 540 764 tanh_approx~ 0.89
+364:0 #X obj 296 676 *~ 0 -> 58:0 #X obj 388 647 arbharReverb
+364:0 #X obj 296 676 *~ 0 -> 70:0 #X obj 425 750 *~
+365:0 #X obj 361 675 *~ 0 -> 58:1 #X obj 388 647 arbharReverb
+365:0 #X obj 361 675 *~ 0 -> 71:0 #X obj 531 734 *~
+366:0 #X obj 461 606 unpack 1 0 -> 360:1 #X obj 362 611 *~ 1
+366:0 #X obj 461 606 unpack 1 0 -> 361:1 #X obj 409 613 *~ 1
+366:0 #X obj 461 606 unpack 1 0 -> 362:1 #X obj 262 676 *~ 1
+366:0 #X obj 461 606 unpack 1 0 -> 363:1 #X obj 327 675 *~ 1
+366:1 #X obj 461 606 unpack 1 0 -> 365:1 #X obj 361 675 *~ 0
+366:1 #X obj 461 606 unpack 1 0 -> 364:1 #X obj 296 676 *~ 0
+367:0 #X msg 457 579 1 0 -> 366:0 #X obj 461 606 unpack 1 0
+368:0 #X msg 488 582 0 1 -> 366:0 #X obj 461 606 unpack 1 0
+369:0 #X obj 748 328 shmem 61019 250 -> 371:0 #X obj 748 351 == 1
+370:0 #X msg 747 299 memread 64 -> 369:0 #X obj 748 328 shmem 61019 250
+371:0 #X obj 748 351 == 1 -> 372:0 #X obj 459 553 sel 0 1
+371:0 #X obj 748 351 == 1 -> 373:0 #X floatatom 748 374 5 0 0 0 - - - 0
+372:0 #X obj 459 553 sel 0 1 -> 367:0 #X msg 457 579 1 0
+372:1 #X obj 459 553 sel 0 1 -> 368:0 #X msg 488 582 0 1

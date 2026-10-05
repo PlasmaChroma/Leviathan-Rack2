@@ -1,0 +1,1602 @@
+/*
+ * Arbhar grain player
+ * (c) 2020 Sebastian Lexer
+ * based on tabread4~, Copyright (c) 1997-1999 Miller Puckette and others.
+ * For information on usage and redistribution, and for a DISCLAIMER OF ALL
+ * WARRANTIES, see the file, "LICENSE.txt," in this distribution.
+ */
+
+/*
+* SL: Adapted to stereo Sept 2021
+*
+*/
+
+#include "m_pd.h"
+#include <time.h>
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include "arbhar_functions.h"  /// all calculation adn return functions are saved here. Also includes arbharWindows.h
+#include "arbharVersionNo.h"
+#include <errno.h>
+
+
+
+
+static t_class *arbhar_play_tilde_class;
+
+// #define VERSION 1.007
+#define NO_OF_GRAINS 96   // define maximum of grain count
+#define KILLOFFSET 42
+//UPDATE: non-interpolated playback is disabled
+// #define INTERPOLATE 1   // switch playback interpolation on/off
+#define FWD_REC_FADE 1024
+#define REV_REC_FADE 4095
+
+static const short DEVMODE= 1;
+
+//enum arbhar_controls {
+	//VPO = 2, //V/Oct
+	//LYC = 4, //Layer CV
+	//SCC = 7, //Scan CV
+	//TEX = 14, //texture
+	//DIR = 10, //Direction
+	//MOD = 13, // Mod
+	//SCP = 0, // Scan Pot
+	//DW = 6, // Dry/Wet
+	//PI = 3, //Pitch
+	//INT = 12, //Intensity
+	//LEN = 1, //Length
+	//LYP = 5, //Layer Pot
+	//SPR = 9, //Spray
+	//HOL = 8, //Hold
+	//DUB = 11, //Overdub
+	//DEV = 15 //Deviation
+//};
+
+typedef struct _voice_struct {
+  t_int v_active;
+  t_int v_grainNo;
+  t_float v_vol;
+  t_float v_pitch;
+  t_int v_pTrigFrame;
+} t_voice;
+
+typedef struct _grain_struct {
+  t_int g_id;
+  t_int g_duration;
+  t_int g_startPos;
+  t_int g_startDelay;
+  int g_delayed;
+  t_float g_grainSpeed;
+  t_float g_volume;
+  t_float g_cPosGrain;
+  t_float g_cPosWnd;
+  // t_int g_loop;
+  t_int g_play;
+  t_float g_panning;
+  t_int g_playLayer;
+  t_int g_direction;
+  t_float g_wndShape;
+  t_float g_recHeadMeetAt;
+  t_float g_recDiffSpeed;
+  t_float g_killVol;
+  t_int g_kill;
+  t_int g_trigOutVal;
+  t_int g_trigOutTimer;
+  /////
+  t_sample g_last[2];
+  t_float g_coef;
+} t_grain;
+
+typedef struct _arbhar_play_tilde {
+  t_object  x_obj;
+  t_clock*x_clockTrigger;
+  t_clock*x_clockActiveGrains;
+  t_clock*x_clockFollow;
+  t_clock*x_internTrig;
+  t_clock*x_trigInfoOut;
+  int x_internTrigActive;
+  float x_sampleRate;
+  t_int x_bufSize[24];    // size of array? but where is it set?
+  t_word *x_bufPntr[24];    // pointer to the array
+  t_symbol *x_buffer[24];  //array name
+  t_int x_displayLength[24];
+  int x_noOfBufUsed;
+  short x_playStereo;
+  t_int x_duration;
+  t_int x_intensity;
+  t_int x_randIntensity;
+  t_int x_startPos;
+  t_float x_startPercent;
+  t_int x_spray;
+  t_float x_speed;
+  t_float x_volume;
+  t_float x_randVolume;
+  t_int x_wndSize;
+  t_float x_wndShape;
+  t_float x_f; // bogus variable to convert floats in first input into signals
+  t_outlet*x_out_L;
+  t_outlet*x_out_R;
+  t_outlet*x_info;
+  t_outlet*x_infoStart;
+  t_outlet*x_trigger;
+  t_outlet*x_followInfo;
+  t_outlet*x_voicesInfo;
+  t_grain x_grain[NO_OF_GRAINS];
+  t_int x_grainsActive;
+  t_int x_playLayer;
+  t_float x_qPitch;
+  t_float x_qPitchVals[3];
+  t_float x_rPitch;
+  // t_int x_playDirection;
+  t_int x_dirPercent;
+  t_float x_grainSpacer;
+  t_int x_adjustDuration;
+  t_int x_triggerCount;
+  t_int x_triggerMod;
+  t_int x_killOffset;
+  t_int x_recordingState;
+  t_int x_recordingPos;
+  t_int x_randomVal;
+  t_int x_triggerVal;
+  t_int x_pTriggerVal;
+  t_int x_lastGrainNo;
+  t_float x_inVal;
+  t_int x_followMode;
+  t_float x_followPosition;
+  t_float x_followSpeed;
+  int x_polyphony;
+  t_float x_polyPitches[8];
+  t_voice x_voices[8];
+  int x_pitchOrder;
+  uint32_t x_internTrigCount;
+  t_float x_panning;
+  ////////
+  //shared memory
+  int segment_id[13];
+  t_float *share_memory[13];
+  int segment_size[13];
+  /////////
+} t_arbhar_play_tilde;
+
+static void arbhar_play_tilde_tickTrigger(t_arbhar_play_tilde *x){
+  outlet_float(x->x_trigger, (float)x->x_triggerVal);
+}
+
+void arbhar_play_tilde_allocate(t_arbhar_play_tilde *x, t_int section, t_float fId, t_float fSize)
+{
+  int id = (int) fId;
+  if ( id < 1 ){
+    error("id should be > 0"); // shmid 0 doesn't seem to work
+    return;
+  }
+
+  x->segment_size[section] = (int) fSize;
+  int size = sizeof(t_float)*x->segment_size[section];
+
+  struct shmid_ds shmbuffer;
+  if (x->share_memory[section]) {
+    shmdt (x->share_memory[section]);
+    x->share_memory[section]=NULL;
+  }
+  if (x->segment_id[section] != -1) {
+    shmctl (x->segment_id[section], IPC_RMID, 0);
+    x->segment_id[section] = -1;
+  }
+
+  x->segment_id[section]  =  shmget  (id,  sizeof(t_float)*x->segment_size[section],
+        IPC_CREAT | S_IRUSR | S_IWUSR | S_IROTH | S_IWOTH); // AV it should safer to use ftok() to generate an id
+
+  if(x->segment_id[section] != -1) { // 0 could be a valid value, -1 means error
+    x->share_memory[section] = (t_float*) shmat (x->segment_id[section], 0, 0);
+    // post("shmem memory attached at address %p\n", x->share_memory);
+
+    shmctl (x->segment_id[section], IPC_STAT, &shmbuffer);
+    // post ("segment size: %d\n", shmbuffer.shm_segsz);
+
+    if ((int)shmbuffer.shm_segsz < (int)sizeof(t_float)*x->segment_size[section]) {
+      // there was a problem, set object meme size to 0
+      error("could not allocate shmem memory Id : %d, size %d", (int)id,  x->segment_size[section] );
+      x->segment_size[section] = 0;
+      x->share_memory[section]=NULL;
+      //outlet_float(x->m_info_out, -1);
+    }
+  }
+  else {
+    error("could not allocate shmem memory Id : %d, size %d", (int)id,  x->segment_size[section] );
+    x->segment_size[section] = 0;
+    //outlet_float(x->m_info_out, -1);
+  }
+    //outlet_float(x->m_info_out, id);
+}
+
+t_float _memread(t_arbhar_play_tilde *x, t_float s, t_float index)
+{
+  t_int section = (t_int)s;
+    if ( !x->share_memory[section] ) return -1;
+    int shmem_offset;
+
+	shmem_offset = index;
+	if (shmem_offset < 0) shmem_offset = 0;
+	if (shmem_offset > x->segment_size[section]-1) shmem_offset = x->segment_size[section]-1;
+	// post("i=%d", offset);
+	//outlet_float(x->x_obj.ob_outlet, x->share_memory[shmem_offset]);
+	t_float readval = x->share_memory[section][shmem_offset];
+
+	return readval;
+}
+
+void writeToSharedMem(t_arbhar_play_tilde *x, t_float s, t_float n, t_float val)
+{
+  t_int section = (t_int)s;
+    if ( !x->share_memory[section] ){
+        error("Create a valid shared memory before setting data !");
+        return;
+    }
+
+    int i=0, j, index_max, shmem_offset, array_offset, size;
+
+	shmem_offset = (int)n;
+	if (shmem_offset < 0) shmem_offset=0;
+
+	index_max = x->segment_size[section] - shmem_offset;
+	//post("this is checking memwrite: %f, %f offset %d, size %d", n, val, shmem_offset, x->segment_size[section]);
+	x->share_memory[section][i+shmem_offset]=val;
+
+  
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+static int dirExists(t_arbhar_play_tilde *x, const char* path)
+{
+	DIR *dir= opendir(path);
+	if (dir)
+	{
+		closedir(dir);
+		return 1;
+	}
+	else if (errno == ENOENT)
+	{
+		if (DEVMODE) pd_error(x,"path not found");
+		return 0;
+	}
+	else
+	{
+		if (DEVMODE) pd_error(x,"accessing path error %d",errno);
+		return 0;
+	}
+}
+
+
+
+static void arbhar_play_tilde_tickGrainsActive(t_arbhar_play_tilde *x){
+  outlet_float(x->x_info, (float)x->x_grainsActive);
+}
+
+static void arbhar_play_tilde_tickFollow(t_arbhar_play_tilde *x){
+  t_atom followInfo[2];
+  SETFLOAT(followInfo, x->x_followPosition);
+  SETFLOAT(followInfo+1, x->x_followSpeed);
+  outlet_list(x->x_followInfo, gensym("list"), 2, followInfo);
+  // post("follow speed and position: %f : %f", x->x_followSpeed, x->x_followPosition);
+}
+
+static void setWindowShape(t_arbhar_play_tilde *x, t_float val) {
+  x->x_wndShape = val;
+}
+
+static void setDisplayLength(t_arbhar_play_tilde *x, t_float l, t_float val) {
+
+  int layer = (int)l;
+  if(layer >= 0 && layer < 6)
+    x->x_displayLength[layer] = val;
+  else if (layer == -1)
+  {
+    for(int i=0; i<6;i++)
+      x->x_displayLength[i] = val;
+  }
+  else{
+    post("setDisplayLength for layer %d ignored!", layer);
+  }
+}
+
+static t_int checkForActiveGrains(t_arbhar_play_tilde * x) {
+  int cActive = 0;
+  for ( int i=0; i<NO_OF_GRAINS; i++) {
+    if (x->x_grain[i].g_play > 0) {
+        cActive++;
+    }
+  }
+  x->x_grainsActive = cActive;
+  return cActive;
+}
+
+static void observeRecording(t_arbhar_play_tilde *x, t_float val)
+{
+  x->x_recordingState = (int)val > 0 ? 1 : 0;
+  if(val>0)
+    x->x_recordingPos = 0;
+  else
+    x->x_recordingPos = 0x7fffffff;
+  // post("observing record head: %d", x->x_recordingState);
+}
+
+static void setQuantisedPitch(t_arbhar_play_tilde *x, t_float v)
+{
+  x->x_qPitch = v >= 0 ? (v<= 12 ? v : 12) : 0;
+  int pDev = (int)x->x_qPitch;
+  x->x_qPitchVals[0] = 1.0f;
+  // post("pitchDeviation index: %d", pDev);
+  x->x_qPitchVals[1] = PITCH_VALUES[(int)(69 + Q_PITCH_DEVIATION[pDev * 2])];
+  x->x_qPitchVals[2] = PITCH_VALUES[(int)(69 + Q_PITCH_DEVIATION[(pDev * 2)+1])];
+  // post("pitchDeviation: %f %f %f", x->x_qPitchVals[0], x->x_qPitchVals[1], x->x_qPitchVals[2]);
+}
+
+static t_float calcQuantisedPitch(t_arbhar_play_tilde *x)
+{
+  t_float up = 15;
+  t_float dwn = 45;
+  t_float random = fmod(rand(),100);
+  t_float retVal = 1.0f;
+  if(random <= up){
+    retVal = x->x_qPitchVals[1];
+  } else if(random > up && random <= up + dwn ){
+    retVal = x->x_qPitchVals[2];
+  } else {
+    retVal = x->x_qPitchVals[0];
+  }
+  return retVal;
+}
+
+static void setRandomPitch(t_arbhar_play_tilde *x, t_float v)
+{
+  x->x_rPitch = v;
+}
+
+static void setDeviation(t_arbhar_play_tilde *x, t_float v)
+{
+  if(v >= 0) {
+    setQuantisedPitch(x,v*12);
+    setRandomPitch(x,0);
+  } else {
+    setQuantisedPitch(x,0);
+    setRandomPitch(x,v * -1);
+  }
+}
+
+static void _adjustKillFade(t_grain *grain)
+{
+  grain->g_killVol -= 0.25f; //0.17f;
+  if (grain->g_killVol <= 0) {
+	grain->g_killVol = 0;
+    grain->g_play = 0;
+    grain->g_kill = 0;
+    // post("grain %d stopped.", g);
+  }
+}
+
+static void _setTiggerOutValue(t_arbhar_play_tilde *x, t_int g)
+{
+  x->x_grain[g].g_trigOutTimer -= 1;
+  if (x->x_grain[g].g_trigOutTimer <= 0){
+   x->x_grain[g].g_trigOutVal = 0;
+   // post("trigger %d : 0", g);
+   // outlet_float(x->x_trigger, (float)x->x_grain[g].g_trigOutVal);
+   x->x_triggerVal = 1 - x->x_triggerVal;
+ }
+}
+
+// static t_float _pitchToSpeed(t_float f){
+//   t_float speed = 8.17579891564 * exp(.0577622650 * f);
+//   speed /= 261.625549;
+//   return speed;
+// }
+
+static t_int _getChord(t_arbhar_play_tilde *x){
+  int no = 0;
+  t_float val = 0;
+  float arrangedPitches[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  for (int i=0; i<8;i++) {
+    if(x->x_polyPitches[i] > 0){
+      arrangedPitches[no] = x->x_polyPitches[i];
+      no++;
+    }
+  }
+  for (int p=0; p<8;p++) {
+    x->x_polyPitches[p] = arrangedPitches[p];
+  }
+  x->x_polyphony = no > 0 ? 1 : 0;
+  // post("polyphony: %d", no);
+  return no;
+}
+
+static void arbhar_play_tilde_chordPitches(t_arbhar_play_tilde *x, t_symbol *s, int argc, t_atom *argv)
+{
+  int max = argc;
+  int setPoly = 0;
+  max = max > 8 ? 8 : max;
+  for (int p=0; p<max;p++)
+  {
+    x->x_polyPitches[p] = atom_getfloat(argv+p);
+    setPoly++;
+  }
+  for (int q=max; q<8;q++)
+  {
+    x->x_polyPitches[q] = 0;
+  }
+  x->x_polyphony = setPoly > 0 ? 1 : 0;
+  // post("no of pitches: %d", _getChord(x));
+
+  /* t_voice struct has the following variables.
+  t_int v_no;
+  t_int v_grainNo;
+  t_float v_vol;
+  t_float v_pitch;
+  The idea would now be that on incoming chord commands, the pitch is assigned
+  to a voice, which grabs a grain and plays it. The voice position is invremented
+  per sample to trigger as many as grain intensity is being assigned to chords (not more than 8).
+  When new chord commands come in, the assigned voices are checked for the same pitch to avoid
+  disturbing the voice playing, pitches now missing are switched off, and new pitches are assigned
+  to new voices.
+
+  */
+}
+
+static float _calcGrainSpeed(t_arbhar_play_tilde *x){
+  float qPitch = 1.0f;
+  float rPitch = 1.0f;
+  if(x->x_qPitch > 0)
+    qPitch = calcQuantisedPitch(x);
+  if(x->x_rPitch > 0)
+    rPitch = calcRandomPitch(x->x_rPitch);
+  int chordPitches = _getChord(x);
+  float chordPitch = 1.0f;
+  if(x->x_polyphony > 0 && chordPitches > 0){
+    static int getChordPitch = 0;
+    if(x->x_pitchOrder > 0){
+      getChordPitch++;
+      getChordPitch = getChordPitch >= chordPitches ? 0 : getChordPitch;
+    } else {
+      getChordPitch = rand() % chordPitches;
+    }
+    chordPitch = _pitchToSpeed((float)x->x_polyPitches[getChordPitch]);
+  }
+  return x->x_speed * qPitch * rPitch * chordPitch;
+}
+
+static t_float _calcPitch(t_float vpo, t_float pitch)
+{
+	//vpo 1V 1633, 2V 1230, 3V = 816
+	t_float vpoNorm = ((2048 - vpo) / ((2048 - 816) / 3)) * 1;
+	t_float pitchNorm = (((2048 - pitch) / 2048) * 3);// + 36;
+	t_float rVal = pow(2, (vpoNorm + pitchNorm));
+	//t_float speed = pow(2, (rVal / 12));
+	
+	return rVal;
+}
+
+t_float _calcGrainLength(t_arbhar_play_tilde *x)
+{
+	t_float sr = 48;
+	t_float mcpChLEN = 4095 - _memread(x, 0, 1);
+	t_float length = /*sr * */ mcpChLEN / 4095; //* 0.732600732; // 3000 / 4095
+	length = (length * length) * 3000 * sr;
+	length = length > 3000*sr ? 3000*sr : length;
+	return length;
+}
+
+static t_float _getTexture(t_arbhar_play_tilde *x)
+{
+	return ((4095 - _memread(x, 0, 14)) / 2047) - 1;
+	
+}
+
+
+static t_float _getDirection(t_arbhar_play_tilde *x)
+{
+	return (4095 - _memread(x, 0, 10)) / 40.95;
+	
+}
+
+static t_float _getIntensity(t_arbhar_play_tilde *x)
+{
+	return ((4095 - _memread(x, 0, 12)) / 4095) * 50;
+	
+}
+
+static t_float _calcGrainSpeedNew(t_arbhar_play_tilde *x){
+  t_float qPitch = 1.0f;
+  t_float rPitch = 1.0f;
+  t_float vpoCV = _memread(x, 0, 2);
+  t_float pitchPot = _memread(x, 0, 3);
+  t_float pitch = _calcPitch(vpoCV, pitchPot);
+  //post("pitch %f", pitch);
+  //x->x_speed = pitch;
+  if(x->x_qPitch > 0)
+    qPitch = calcQuantisedPitch(x);
+  if(x->x_rPitch > 0)
+    rPitch = calcRandomPitch(x->x_rPitch);
+  int chordPitches = _getChord(x);
+  t_float chordPitch = 1.0f;
+  if(x->x_polyphony > 0 && chordPitches > 0){
+    static t_int getChordPitch = 0;
+    if(x->x_pitchOrder > 0){
+      getChordPitch++;
+      getChordPitch = getChordPitch >= chordPitches ? 0 : getChordPitch;
+    } else {
+      getChordPitch = rand() % chordPitches;
+    }
+    chordPitch = _pitchToSpeed((t_float)x->x_polyPitches[getChordPitch]);
+  }
+  x->x_speed = pitch * qPitch * rPitch * chordPitch;
+  return pitch * qPitch * rPitch * chordPitch;
+}
+
+static void arbhar_play_tilde_tickInfoOut(t_arbhar_play_tilde *x, t_grain *g){
+  t_atom startAndId[3];
+  SETFLOAT(startAndId, g->g_id);
+  SETFLOAT(startAndId+1, g->g_startPos);
+  SETFLOAT(startAndId+2, g->g_direction);
+  outlet_list(x->x_infoStart, gensym("list"), 3, startAndId);
+}
+
+////////////////////////_setGrain//////////////////////////////////////
+static void _setGrain(t_arbhar_play_tilde *x,t_grain *grain, t_float forcePitch)
+{
+  float rVol = ((float)(rand() % 1000) * 0.001) * x->x_randVolume;
+  grain->g_volume = 1.0f - rVol;
+  // post("rand vol %f : %f", rVol, x->x_grain[g].g_volume);
+  // post("poly: %d", x->x_polyphony);
+  if (grain->g_volume > 0.3){
+    int layer = x->x_playLayer;
+    grain->g_playLayer = layer;
+    int spray = calcSpray(x->x_spray);
+    float pan = (float)(rand() % 2);
+    float panMod = 0;
+    if (x->x_panning < 0)
+      panMod = (float)((rand() % 100) * 0.01f) * x->x_panning * -0.5; /// has to be made negative!!
+    else
+      panMod = x->x_panning * 0.5;
+    if(pan > 0.5)
+      pan -= panMod;
+    else
+      pan += panMod;
+    // post("pan: %f", pan);
+    grain->g_panning = pan;
+    grain->g_killVol = 1.0f;
+
+    if(forcePitch == 1)
+      grain->g_grainSpeed = _calcGrainSpeedNew(x);
+    else
+      grain->g_grainSpeed = forcePitch;
+
+    grain->g_wndShape = _getTexture(x); //x->x_wndShape;
+
+    int direction = getRandomDirection(_getDirection(x));
+    grain->g_direction = direction;
+    // post("grain direction: %d", direction);
+ 
+    if(x->x_adjustDuration > 0){
+      //int adjustedDuration = (int)((float)grain->g_duration * grain->g_grainSpeed);
+      //grain->g_duration = adjustedDuration;
+      grain->g_duration *= grain->g_grainSpeed;
+    } /*else {
+      grain->g_duration = x->x_duration;
+    }*/
+      grain->g_recDiffSpeed = 1.0f + grain->g_grainSpeed;
+    //int startPos = 0;
+    //if (x->x_followMode > 0)
+      //startPos = x->x_followPosition + spray;
+    //else
+      //startPos = x->x_startPos + spray;
+    //if(startPos > x->x_displayLength[layer])
+      //startPos = x->x_startPos - (startPos - x->x_displayLength[layer]);
+    //if (startPos + x->x_duration >= x->x_bufSize[layer])
+      //startPos = startPos - ((startPos + x->x_duration) - x->x_bufSize[layer]) - spray;
+    //startPos = startPos < 1 ? 1 : startPos;
+    /*
+    if(startPos + grain->g_duration >= x->x_bufSize[layer])
+      grain->g_duration = x->x_bufSize[layer] - startPos;
+      */
+      
+     //post("next grain duration %f", (float)grain->g_duration / 48000.f);
+    
+    grain->g_coef = grain->g_grainSpeed + 0.1;
+    grain->g_coef = grain->g_coef > 1 ? 1 : grain->g_coef ;//0.76;
+    grain->g_last[0] = 0.;
+    grain->g_last[1] = 0.;
+      
+    switch(direction){
+      case -1:{
+        grain->g_cPosGrain = grain->g_duration;
+        grain->g_cPosWnd = WND_LENGTH;
+       // grain->g_startPos = startPos;
+        break;
+      }
+      default:{
+        grain->g_cPosGrain = 0;
+        grain->g_cPosWnd = 0;
+       // grain->g_startPos = startPos;
+        break;
+      }
+    }
+    
+    grain->g_trigOutVal = 1;
+    grain->g_trigOutTimer = 8;
+
+    if(x->x_randIntensity > 0){
+      grain->g_startDelay = rand() % grain->g_duration;
+      grain->g_delayed = 1;
+    }
+    else
+    {
+      arbhar_play_tilde_tickInfoOut(x, grain);
+    }
+  }
+}
+
+#define OUTPUT_MIX() out1[i] += tanhApproxGain(tempL,x->x_volume * x->x_grain[g].g_volume); \
+                     out2[i] += tanhApproxGain(tempR,x->x_volume * x->x_grain[g].g_volume);
+
+#define COMBINE_GRAINS() if(x->x_grain[g].g_coef < 1) { \
+						 t_sample fb = 1 - x->x_grain[g].g_coef; \
+						 intpSampVal = x->x_grain[g].g_coef * intpSampVal + fb * x->x_grain[g].g_last[0]; \
+						 x->x_grain[g].g_last[0] = intpSampVal; \
+						 } \
+						 tempVol = intpSampVal * wndVal; \
+                         tempVol *= volAdjustment * killVol; \
+                         tempR = tempVol * x->x_grain[g].g_panning; \
+                         tempL = tempVol * (1 - x->x_grain[g].g_panning);
+
+#define COMBINE_STEREO_GRAINS() if(x->x_grain[g].g_coef < 1) { \
+								t_sample fb = 1 - x->x_grain[g].g_coef; \
+								intpSampVal = x->x_grain[g].g_coef * intpSampVal + fb * x->x_grain[g].g_last[0]; \
+								intpSampVal2 = x->x_grain[g].g_coef * intpSampVal2 + fb * x->x_grain[g].g_last[1]; \
+								x->x_grain[g].g_last[0] = intpSampVal; \
+								x->x_grain[g].g_last[1] = intpSampVal2; \
+								} \
+								tempVol = intpSampVal * wndVal; \
+                                tempVol2 = intpSampVal2 * wndVal; \
+                                tempVol *= volAdjustment * killVol; \
+                                tempVol2 *= volAdjustment * killVol; \
+                                tempR = tempVol * x->x_grain[g].g_panning; \
+                                tempR += tempVol2 * (1 - x->x_grain[g].g_panning); \
+                                tempL = tempVol2 * x->x_grain[g].g_panning; \
+                                tempL += tempVol * (1 - x->x_grain[g].g_panning);
+
+
+////////////////////////arbhar_play_tilde_perform//////////////////////////////////////
+t_int *arbhar_play_tilde_perform(t_int *w)
+{
+  /* the first element is a pointer to the dataspace of this object */
+  t_arbhar_play_tilde *x = (t_arbhar_play_tilde *)(w[1]);
+  /* here is a pointer to the t_sample arrays that hold the 2 input signals */
+  // t_sample  *in1 =    (t_sample *)(w[2]);
+  // t_sample  *recHead =    (t_sample *)(w[3]);
+  t_sample *out1 = (t_sample *)(w[2]);
+  t_sample *out2 = (t_sample *)(w[3]);
+  int n = (int)(w[4]);
+  int maxIdBuf, i, g;
+  t_word *buf = x->x_bufPntr[0];
+  t_word *wp;
+  t_word *buf2 = x->x_bufPntr[0];
+  t_word *wp2;
+
+  if (x->x_recordingState > 0)
+    x->x_recordingPos += n;
+  else
+    x->x_recordingPos = 0x7fffffff;
+
+  maxIdBuf = x->x_bufSize[0] - 3; /// -3 because of interpolation, otherwise -1 would be correct
+
+  if(maxIdBuf<0) goto zero;
+  if(!buf) goto zero;
+
+  if (x->x_duration > maxIdBuf)
+    x->x_duration = maxIdBuf;
+
+   x->x_inVal = 0;
+
+   for(i=0; i<n; i++)
+   {
+     out1[i] = 0;
+     out2[i] = 0;
+   }
+
+   t_float fPos = x->x_followPosition;
+   if (x->x_followMode > 0){
+     fPos += n * x->x_followSpeed;
+     if(fPos >= (float)x->x_displayLength[0])
+      fPos = 0;
+     else if (fPos < 0)
+      fPos = (float)x->x_displayLength[0];
+     x->x_followPosition = fPos;
+     arbhar_play_tilde_tickFollow(x);
+   }
+
+   static int pActiveGrains = 0;
+   int activeGrains = checkForActiveGrains(x);
+   if (pActiveGrains != activeGrains){
+    clock_set(x->x_clockActiveGrains, 0.f);
+    }
+   pActiveGrains = activeGrains;
+
+   int noStBuf = x->x_noOfBufUsed/2;
+
+   t_float volRedFactor = calcVolReduction(activeGrains);
+   for ( g=0; g<NO_OF_GRAINS; g++)
+   {
+     if(x->x_grain[g].g_startDelay > 0){
+       x->x_grain[g].g_startDelay -= n;
+     } else {
+       if(x->x_grain[g].g_delayed > 0){
+         x->x_triggerVal = 1 - x->x_triggerVal;
+         x->x_grain[g].g_delayed = 0;
+         arbhar_play_tilde_tickInfoOut(x, &x->x_grain[g]);
+       }
+       if (x->x_grain[g].g_kill > 0)
+          _adjustKillFade(&x->x_grain[g]);
+       if (x->x_grain[g].g_trigOutVal > 0)
+         _setTiggerOutValue(x, g);
+       int play = x->x_grain[g].g_play;
+       switch(play){
+        case 0: ////////IGNORE GRAIN////////////
+          break;
+        default: ////////PLAY GRAIN////////////
+        {
+         float killVol = x->x_grain[g].g_killVol;
+         switch(x->x_grain[g].g_direction){
+           case -1: ////////////REVERSE////////////////
+           {
+             t_float windowShape = x->x_grain[g].g_wndShape;
+             if(x->x_grain[g].g_startPos + x->x_grain[g].g_duration > maxIdBuf){
+               x->x_grain[g].g_duration = maxIdBuf - x->x_grain[g].g_startPos;
+             }
+             t_int recDist = REV_REC_FADE;
+             t_int volCorrection = 0;
+             t_float volAdjustment = 1.0f;
+              t_int layer = x->x_grain[g].g_playLayer;
+              buf = x->x_bufPntr[layer];
+               t_float index = x->x_grain[g].g_cPosGrain;  //start at the end of grain
+               if(x->x_recordingState > 0){
+                 int checkIndex = index + x->x_grain[g].g_startPos - x->x_recordingPos;
+                 if (labs(checkIndex) < recDist){
+                   recDist = checkIndex;
+                   volCorrection = 1;
+                 }
+               }
+               for(i=0; i<n; i++)
+               {
+                 if (index <= 3) {
+                     x->x_grain[g].g_play = 0;
+                 }
+                 index -= x->x_grain[g].g_grainSpeed;
+                 if(volCorrection > 0){
+                   recDist -= x->x_grain[g].g_recDiffSpeed;
+                   volAdjustment = (float)(labs(recDist)) / (float)(REV_REC_FADE);
+                   volAdjustment = volAdjustment < 0.0f ? 0 : (volAdjustment > 1 ? 1 : volAdjustment);
+                 }
+                 t_sample tempVol = 0, tempVol2 = 0, tempL = 0, tempR = 0;
+                 t_sample intpSampVal, intpSampVal2;
+                 if (index > 3) {
+                   int getVal = 0;
+                   getVal = (int)index + x->x_grain[g].g_startPos;
+                   wp = buf + (int)getVal;
+                   intpSampVal = interpolate4(index - (int)index, wp[-2].w_float, wp[-1].w_float, wp[0].w_float, wp[1].w_float);
+                   intpSampVal *= volRedFactor;
+                   if(x->x_playStereo > 0){
+                     wp2 = buf2 + (int)getVal;
+                     intpSampVal2 = interpolate4(index - (int)index, wp2[-2].w_float, wp2[-1].w_float, wp2[0].w_float, wp2[1].w_float);
+                     intpSampVal2 *= volRedFactor;
+                   }
+         
+				   t_float indexWndFloat = (index * ((float)x->x_wndSize / (float)x->x_grain[g].g_duration))*x->x_grainSpacer;
+                   int indexWnd = (int)indexWndFloat;
+                   t_float indexWndDiff = indexWndFloat - indexWnd; // fixed bug 30/04/2022
+                   indexWnd = indexWnd < 0 ? 0 : (indexWnd > WND_LENGTH ? WND_LENGTH : indexWnd);
+                   t_float wndVal = getWndValIntp(indexWnd, windowShape, indexWndDiff);
+                   if(x->x_playStereo > 0){
+                     COMBINE_STEREO_GRAINS();
+                   } else {
+                     COMBINE_GRAINS();
+                   }
+                 }
+                 OUTPUT_MIX();
+               }
+               x->x_grain[g].g_cPosGrain = index;
+               break;
+             }
+           default: ////////////FORWARD////////////////
+           {
+             t_float windowShape = x->x_grain[g].g_wndShape;
+             if(x->x_grain[g].g_startPos + x->x_grain[g].g_duration > maxIdBuf){
+               x->x_grain[g].g_duration = maxIdBuf - x->x_grain[g].g_startPos;
+             }
+             t_int recDist = FWD_REC_FADE;
+             t_int volCorrection = 0;
+             t_float volAdjustment = 1.0f;
+              t_int layer = x->x_grain[g].g_playLayer;
+              buf = x->x_bufPntr[layer];
+              buf2 = x->x_bufPntr[layer+noStBuf];
+              t_float index = x->x_grain[g].g_cPosGrain;
+              if(x->x_recordingState > 0){
+                int checkIndex = index + x->x_grain[g].g_startPos - x->x_recordingPos;
+                if (labs(checkIndex) < recDist){
+                  recDist = checkIndex;
+                  volCorrection = 1;
+                }
+              }
+             for(i=0; i<n; i++)
+               {
+                 index += x->x_grain[g].g_grainSpeed;
+                 if(volCorrection > 0){
+                   volAdjustment = ((float)(labs(recDist)) / (float)(FWD_REC_FADE) * 1.1) - 0.1;
+                   recDist++;
+                   volAdjustment = volAdjustment < 0.0f ? 0 : (volAdjustment > 1 ? 1 : volAdjustment);
+                 }
+                 t_sample tempVol = 0, tempVol2 = 0, tempL = 0, tempR = 0;
+                 t_sample intpSampVal, intpSampVal2;
+                 if (index >= x->x_grain[g].g_duration) {
+                   x->x_grain[g].g_play = 0;
+                   tempL = 0; tempR = 0;
+                 } else {
+                   int getVal = (int)index + x->x_grain[g].g_startPos;;
+                   wp = buf + (int)getVal;
+                   intpSampVal = interpolate4(index - (int)index, wp[-1].w_float, wp[0].w_float, wp[1].w_float, wp[2].w_float);
+                   intpSampVal *= volRedFactor;
+                   if(x->x_playStereo > 0){
+                     wp2 = buf2 + (int)getVal;
+                     intpSampVal2 = interpolate4(index - (int)index, wp2[-1].w_float, wp2[0].w_float, wp2[1].w_float, wp2[2].w_float);
+                     intpSampVal2 *= volRedFactor;
+                   }
+                   t_float indexWndFloat = (index * ((float)x->x_wndSize / (float)x->x_grain[g].g_duration))*x->x_grainSpacer;
+                   int indexWnd = (int)indexWndFloat;
+                   t_float indexWndDiff = indexWndFloat - indexWnd;
+                   indexWnd = indexWnd > WND_LENGTH ? WND_LENGTH : indexWnd;
+                   t_float wndVal = getWndValIntp(indexWnd, windowShape, indexWndDiff);
+                   if(x->x_playStereo > 0){
+                     COMBINE_STEREO_GRAINS();
+                   } else {
+                     COMBINE_GRAINS();
+                   }
+                 }
+                 OUTPUT_MIX();
+               }
+               x->x_grain[g].g_cPosGrain = index;
+               break;
+             }
+         }
+         break;
+        }
+       }
+     }
+   }
+   if (x->x_pTriggerVal != x->x_triggerVal){
+     // outlet_float(x->x_trigger, (float)x->x_triggerVal);
+     clock_set(x->x_clockTrigger, 0.f);
+     x->x_pTriggerVal = x->x_triggerVal;
+   }
+  /* return a pointer to the dataspace for the next dsp-object */
+  return (w+5);
+
+  zero:
+     while (n--) *out1++ = 0;
+     while (n--) *out2++ = 0;
+     return (w+5);
+}
+
+
+static void arbhar_play_tilde_set_layer(t_arbhar_play_tilde *x, t_symbol *s, t_float f)
+{
+    t_garray *a;
+    t_int layer = (int)f;
+    x->x_buffer[layer] = s;
+    if (!(a = (t_garray *)pd_findbyclass(x->x_buffer[layer], garray_class))) {
+        if (*s->s_name)
+            pd_error(x, "arbhar_play~: %s: no such array", x->x_buffer[layer]->s_name);
+        x->x_bufPntr[layer] = 0;
+    } else if (!garray_getfloatwords(a, (int*)&x->x_bufSize[layer], &x->x_bufPntr[layer])) {
+        pd_error(x, "%s: bad template for arbhar_play~", x->x_buffer[layer]->s_name);
+        x->x_bufPntr[layer] = 0;
+    } else garray_usedindsp(a);
+}
+
+
+static void arbhar_play_tilde_fire(t_arbhar_play_tilde *x, t_float f)
+{
+    int g = (int)f;
+    if (g >= 0 && g < NO_OF_GRAINS) {
+      x->x_grain[g].g_play = 1;
+      x->x_grain[g].g_cPosGrain = 0;
+      _setGrain(x, &x->x_grain[g], 1.0f);
+      post("%d grain fired", g);
+    }
+    else
+      post("%d outside available grain count", g);
+}
+
+static void arbhar_play_tilde_kill(t_arbhar_play_tilde *x, t_float f)
+{
+  int g = (int)f;
+  if (x->x_grain[g].g_play == 0) {
+    // post("%d is not playing", g);
+  }
+  else if (g >= 0 && g < NO_OF_GRAINS && x->x_grain[g].g_play > 0)  {
+    // post("grain %d stopped.", g);
+    x->x_grain[g].g_kill = 1;
+    x->x_grain[g].g_killVol = 1.0f;
+  } //else {
+    //post("%d outside available grain count", g);
+  //}
+}
+
+static void arbhar_play_tilde_kill_selected(t_arbhar_play_tilde *x, t_float f, t_float n)
+{
+  int gFirst = (int)f, gNo = (int)n, g = 0;
+  for(int i = gFirst; i < gFirst + gNo; i++){
+    g = i < NO_OF_GRAINS ? i : (i % NO_OF_GRAINS);
+    if (x->x_grain[g].g_play > 0)  {
+      x->x_grain[g].g_kill = 1;
+      x->x_grain[g].g_killVol = 1.0f;
+      post("%d will be killed", g);
+    }
+  }
+}
+
+static void arbhar_play_tilde_killOffset(t_arbhar_play_tilde *x, t_float f)
+{
+  int offset = (int)f;
+  if(offset > NO_OF_GRAINS)
+    post("value exceeds NO_OF_GRAINS %d", NO_OF_GRAINS);
+  else
+    x->x_killOffset = offset;
+}
+
+t_grain *_getPositionRange(t_arbhar_play_tilde *x,t_grain *g)
+{	//get storedvalues from shmem
+	//post("pitch %f", _calcPitch(_memread(x, 0, 2), _memread(x, 0, 3)));
+	//t_grain createGrain;
+	t_float bufAccessSize = 10000;
+	t_float sr = 48;
+	t_float mcpChSCP = 4095 - _memread(x, 0, 0);
+  //post("reading mcpChSCP %f", _memread(x, 0));
+	t_float mcpChSCC = 4095 - _memread(x, 0, 7) - 2048;
+	t_float mcpChSPR = 4095 - _memread(x, 0, 9);
+	//t_float mcpChLEN = 4095 - _memread(x, 0, 1);
+	static t_float deviation = 0;
+	t_float mcpChDEV = ((4095 - _memread(x, 0, 15)) * 0.04884 ) - 100;
+	t_float qrPitch = (t_int)(mcpChDEV+0.5) * 0.01; 
+	//post("reading mcpChDEV %f", mcpChDEV);
+	setDeviation(x, qrPitch);
+	t_float mcpChDIR = _memread(x, 0, 10);
+	t_float SCPSCC = mcpChSCP + mcpChSCC;
+	SCPSCC = SCPSCC >= 4095 ? 4095 : SCPSCC < 0 ? 0 : SCPSCC;
+	t_float position = sr * SCPSCC * 2.442002442; // 10000 / 4095
+	//t_float spray = sr * mcpChSPR * 2.442002442;
+	t_float spray = pow(mcpChSPR/4095,3) * 480000;
+	spray = spray > 480000 ? 480000 : spray;
+	//post("spray %f", spray);
+	//t_float length = /*sr * */ mcpChLEN / 4095; //* 0.732600732; // 3000 / 4095
+	//length = length * length * 3000 * sr;
+	////post("length %f", length);
+	//length = length > 3000*sr ? 3000*sr : length;
+	t_float direction = mcpChDIR * 0.02442003; //100 / 4095
+	if(position+spray > sr * bufAccessSize)
+	{
+		t_float posCorrect = position+spray - (sr * bufAccessSize);
+		position = position - posCorrect;
+	}
+	t_float start = position;
+	t_float sprayVal = calcSprayFloat(spray);
+	g->g_startPos = (t_int)(start + sprayVal);
+	g->g_duration = (t_int)_calcGrainLength(x);
+	g->g_direction = (t_int)(random()%100 < direction ? 1 : -1);
+	return g;
+}
+
+
+static void arbhar_play_tilde_next(t_arbhar_play_tilde *x)
+{
+	//t_grain *grain = _getPositionRange(x, &x->x_grain[12]);
+	//post("* start: %d, length: %d, direction %d", grain->g_startPos, grain->g_duration, grain->g_direction);
+
+  int noOfNotes = 0;
+  // post("check polyphony: %d", x->x_polyphony);
+  if(x->x_polyphony > 0){
+    noOfNotes = _getChord(x) - 1;
+    noOfNotes = noOfNotes < 0 ? 0 : noOfNotes;
+    // post("getChord: %d", noOfNotes);
+  }
+  static int g = -1;
+  int k = 0;
+  for(int i=0;i<=noOfNotes;i++)
+  {
+    // post("startGrain");
+    int check = 0;
+    int add4St = x->x_playStereo > 0 ? 15 : 0;
+    g++;
+    g = g < NO_OF_GRAINS ? g : 0;
+    k = g + x->x_killOffset + add4St;
+    k = (int)fmod(k, NO_OF_GRAINS);
+    //post("play: %d - kill: %d", g, k);
+    x->x_grain[g].g_play = 1;
+    x->x_grain[g].g_cPosGrain = 0;
+    t_grain *grain = _getPositionRange(x, &x->x_grain[g]);
+    _setGrain(x, &x->x_grain[g], 1.0f);
+    arbhar_play_tilde_kill(x, k);
+    check++;
+  }
+  x->x_lastGrainNo = g;
+}
+
+static void arbhar_play_tilde_setInternTrig(t_arbhar_play_tilde *x, t_float f){
+  x->x_internTrigActive = f > 0 ? 1 : 0;
+  if(x->x_internTrigActive > 0) {
+	  arbhar_play_tilde_next(x);
+    clock_set(x->x_internTrig, 0.f);
+    x->x_internTrigCount = 0;
+  }
+  else
+    clock_unset(x->x_internTrig);
+}
+
+static void arbhar_play_tilde_setDuration(t_arbhar_play_tilde *x, t_float f)
+{
+    int temp = (int)f;
+    if (temp > 0)
+      x->x_duration = temp;
+    else
+      post("duration: %d ignored", temp);
+}
+
+static void arbhar_play_tilde_setGrainSpeed(t_arbhar_play_tilde *x, t_float f)
+{
+  if (f >= 0) {
+    for (int g=0;g<NO_OF_GRAINS;g++) {
+      // x->x_grain[g].g_grainSpeed = f;
+      x->x_speed = f;
+    }
+  }
+  else
+    post("no implementation for neg speed!");
+}
+
+static void arbhar_play_tilde_setStartPos(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_startPos = f >= 0 ? (int)f : 0;
+}
+
+
+
+static void arbhar_play_tilde_setStartPercent(t_arbhar_play_tilde *x, t_float p)
+{
+  if (p >= 0 && p <= 100)
+    x->x_startPos = (int)(p * 0.01 * (float)x->x_displayLength[x->x_playLayer]);
+  else
+    x->x_startPos = p < 0 ? 0 : x->x_displayLength[x->x_playLayer];
+}
+
+
+
+static void arbhar_play_tilde_setSpray(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_spray = f >= 1 ? (int)f : 1;
+}
+
+static void arbhar_play_tilde_setGrainVol(t_arbhar_play_tilde *x, t_float f)
+{
+    x->x_volume = f;
+}
+
+static void arbhar_play_tilde_setRandVol(t_arbhar_play_tilde *x, t_float f)
+{
+    x->x_randVolume = f;
+}
+
+static void arbhar_play_tilde_setIntensity(t_arbhar_play_tilde *x, t_float f)
+{
+  int val = f > 0 ? (int)f : 0;
+    x->x_intensity = val;
+}
+
+static void arbhar_play_tilde_setRandomIntensity(t_arbhar_play_tilde *x, t_float f)
+{
+  int val = f > 0 ? 1 : 0;
+    x->x_randIntensity = val;
+}
+
+static void arbhar_play_tilde_setPanning(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_panning = f;
+}
+
+static void arbhar_play_tilde_spacer(t_arbhar_play_tilde *x, t_float f, t_float a)
+{
+    t_float val = f > 1.0f ? f : 1.0f;
+    x->x_grainSpacer = val;
+    post("grain spacer set to %f.", val);
+}
+
+static void arbhar_play_tilde_dirPercent(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_dirPercent = f < 0 ? 0 : (f > 100 ? 100 : (int)f);
+}
+
+// static void arbhar_play_tilde_direction(t_arbhar_play_tilde *x, t_float f)
+// {
+//   x->x_playDirection = f < 0 ? -1 : 1;
+// }
+
+static void arbhar_play_tilde_layer(t_arbhar_play_tilde *x, t_float l)
+{
+  int layer = (int)(l + 0.5f);
+  if (layer >= 0 && layer <= 5) {
+    // post("play layer %d.", layer);
+    x->x_playLayer = layer;
+  } else {
+      post("layer %d out of range.", layer);
+  }
+}
+
+static void arbhar_play_tilde_adjustDuration(t_arbhar_play_tilde *x, t_float f)
+{
+    int temp = (int)f;
+    if (temp == 0){
+      x->x_adjustDuration = 0;
+      post("x_adjustDuration off.");
+    } else if (temp == 1){
+      x->x_adjustDuration = 1;
+      post("x_adjustDuration on.");
+    }
+    else {
+      post("value ignored.");
+    }
+}
+
+
+static void arbhar_play_tilde_setFollowMode(t_arbhar_play_tilde *x, t_float f)
+{
+    int temp = (int)f;
+    if (temp == 0){
+      x->x_followMode = 0;
+      post("x_followMode off.");
+    } else if (temp == 1){
+      x->x_followMode = 1;
+      x->x_followPosition = 0;
+      post("x_followMode on.");
+    }
+    else {
+      post("value ignored.");
+    }
+}
+
+static void arbhar_play_tilde_setFollowSpeed(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_followSpeed = f;
+}
+
+static void arbhar_play_tilde_followTrigger(t_arbhar_play_tilde *x)
+{
+  x->x_followPosition = 0;
+}
+
+static void arbhar_play_tilde_setStereo(t_arbhar_play_tilde *x, t_float f)
+{
+  x->x_playStereo = f;
+}
+
+static void arbhar_play_tilde_midiNoteCh(t_arbhar_play_tilde *x, t_float p, t_float v, t_float ch)
+{
+  post("midiNote: %d : %d : %d", (int)p, (int)v, (int)ch);
+}
+
+static void arbhar_play_tilde_midiNote(t_arbhar_play_tilde *x, t_float p, t_float v)
+{
+  if(v > 0) {
+    for(int i=0;i<8;i++){
+      if(x->x_polyPitches[i] == 0){
+        x->x_polyPitches[i] = p;
+        // post("saving pitch into slot %d", i);
+        break;
+      }
+    }
+  } else {
+    for(int i=0;i<8;i++){
+      if(x->x_polyPitches[i] == p){
+        x->x_polyPitches[i] = 0;
+        // post("deleting pitch from slot %d", i);
+        break;
+      }
+    }
+  }
+  _getChord(x);
+  // post("midiNote: %d : %d", (int)p, (int)v);
+}
+
+static void arbhar_play_tilde_tickInternTrig(t_arbhar_play_tilde *x){
+	t_float mcpChLEN = 4095 - _memread(x, 0, 1);
+	t_float duration = _calcGrainLength(x);//48 * mcpChLEN * 0.732600732; // 3000 / 4095
+	t_int intensity = (t_int)_getIntensity(x);
+	static t_int pIntensity = 0;
+	if(pIntensity != intensity){
+		post("intensity %d", intensity);
+		pIntensity = intensity;
+	}
+	
+  if(duration > 0 && x->x_internTrigActive > 0){
+    if(intensity > 0)
+    {
+    t_int triggerAt = ((duration / intensity)/ x->x_sampleRate * 10000.0f);// / x->x_speed;
+      if(x->x_internTrigCount >= triggerAt  && x->x_grainsActive <= NO_OF_GRAINS - KILLOFFSET) {
+        arbhar_play_tilde_next(x);
+        outlet_float(x->x_voicesInfo, 1.0f);
+        x->x_internTrigCount = 0;
+      }
+    x->x_internTrigCount++;
+    clock_delay(x->x_internTrig, 0.1f);
+    }
+  }
+}
+
+/**
+ * register a special perform-routine at the dsp-engine
+ * this function gets called whenever the DSP is turned ON
+ * the name of this function is registered in pan_tilde_setup()
+ */
+void arbhar_play_tilde_dsp(t_arbhar_play_tilde *x, t_signal **sp)
+{
+  /* add pan_tilde_perform() to the DSP-tree;
+   * the pan_tilde_perform() will expect "5" arguments (packed into an
+   * t_int-array), which are:
+   * the objects data-space, 3 signal vectors (which happen to be
+   * 2 input signals and 1 output signal) and the length of the
+   * signal vectors (all vectors are of the same length)
+   */
+
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[0], 0);
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[1], 1);
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[2], 2);
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[3], 3);
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[4], 4);
+  // arbhar_play_tilde_set_layer(x, x->x_buffer[5], 5);
+  // arbhar_play_tilde_set_w(x, x->x_window);
+
+  post("arbhar_play~ buffers");
+  int noStBuf = x->x_noOfBufUsed/2;
+   for(int i=0;i<noStBuf;i++){
+     arbhar_play_tilde_set_layer(x, x->x_buffer[i], i);
+     arbhar_play_tilde_set_layer(x, x->x_buffer[i+noStBuf], i+noStBuf);
+     post("name: %s, length: %d",x->x_buffer[i]->s_name, x->x_bufSize[i]);
+     post("name: %s, length: %d",x->x_buffer[i+noStBuf]->s_name, x->x_bufSize[i+noStBuf]);
+   }
+
+  dsp_add(arbhar_play_tilde_perform, 4, x,
+          sp[0]->s_vec, sp[1]->s_vec, sp[0]->s_n);
+
+  x->x_sampleRate = sp[0]->s_sr;
+
+ post("arbhar_play~ samplerate: %f):", x->x_sampleRate);
+  // post("arbhar_play~ wnd size: %d):", x->x_wndSize);
+
+  clock_set(x->x_internTrig, 0.0f);
+}
+
+/**
+ * this is the "destructor" of the class;
+ * it allows us to free dynamically allocated ressources
+ */
+void arbhar_play_tilde_free(t_arbhar_play_tilde *x)
+{
+  /* free any ressources associated with the given inlet */
+  // inlet_free(x->x_recPosIn);
+  // inlet_free(x->x_in3);
+  t_int section = 0;
+    if ( x->share_memory[section] ){
+    if ( shmdt (x->share_memory[section]) == -1) error("shmdt failed at %x", x->share_memory[section]);
+  }
+  x->share_memory[section]=NULL;
+
+  int shm_id = x->segment_id[section];
+  struct shmid_ds shm_desc;
+  if(shm_id>0){
+    if (shmctl(shm_id,IPC_STAT, &shm_desc) != -1){
+      if(shm_desc.shm_nattch<=0){
+        if (shmctl(shm_id,IPC_RMID, &shm_desc) == -1) error("shmctl remove failed for %d", shm_id);
+      }
+    }
+  }
+  shm_id=0;
+
+  /* free any ressources associated with the given outlet */
+  outlet_free(x->x_out_L);
+  outlet_free(x->x_out_R);
+  outlet_free(x->x_info);
+  outlet_free(x->x_infoStart);
+  outlet_free(x->x_trigger);
+  outlet_free(x->x_followInfo);
+  outlet_free(x->x_voicesInfo);
+}
+
+/**
+ * this is the "constructor" of the class
+ * the argument is the initial mixing-factor
+ * t_symbol *s, int argc, t_atom *argv
+ */
+void *arbhar_play_tilde_new( t_symbol *s, int argc, t_atom *argv)
+{
+  t_arbhar_play_tilde *x = (t_arbhar_play_tilde *)pd_new(arbhar_play_tilde_class);
+
+  x->x_clockTrigger = clock_new(x, (t_method)arbhar_play_tilde_tickTrigger);
+  x->x_clockActiveGrains = clock_new(x, (t_method)arbhar_play_tilde_tickGrainsActive);
+  x->x_clockFollow = clock_new(x, (t_method)arbhar_play_tilde_tickFollow);
+  x->x_internTrig = clock_new(x, (t_method)arbhar_play_tilde_tickInternTrig);
+  x->x_trigInfoOut = clock_new(x, (t_method)arbhar_play_tilde_tickInfoOut);
+
+  post("arbhar_play~ version %f", ARBHAR_PLAY_V);
+
+  // t_symbol *sw = atom_getsymbol(argv);
+  t_symbol *p = atom_getsymbol(argv+6);
+
+  int noOfBufs = argc - 1;
+  if(noOfBufs < 1)
+    noOfBufs = 12;
+
+  x->x_noOfBufUsed = noOfBufs;
+
+  t_int section = 0;
+  x->share_memory[section] = NULL;
+  arbhar_play_tilde_allocate(x, 0, 61019, 250);
+  arbhar_play_tilde_allocate(x, 1, 90521, 624000);
+  // arbhar_play_tilde_allocate(x, 2, 90522, 624000);
+  // arbhar_play_tilde_allocate(x, 3, 90523, 624000);
+  // arbhar_play_tilde_allocate(x, 4, 90524, 624000);
+  // arbhar_play_tilde_allocate(x, 5, 90525, 624000);
+  // arbhar_play_tilde_allocate(x, 6, 90526, 624000);
+  // arbhar_play_tilde_allocate(x, 7, 90521, 624000);
+  // arbhar_play_tilde_allocate(x, 8, 90522, 624000);
+  // arbhar_play_tilde_allocate(x, 9, 90523, 624000);
+  // arbhar_play_tilde_allocate(x, 10, 90524, 624000);
+  // arbhar_play_tilde_allocate(x, 11, 90525, 624000);
+  // arbhar_play_tilde_allocate(x, 12, 90526, 624000);
+
+  t_symbol *buf[noOfBufs];
+
+  if(argc < 2)
+  {
+     buf[0] = gensym("0l");//atom_getsymbol(argv+1);
+     buf[1] = gensym("1l");//atom_getsymbol(argv+2);
+     buf[2] = gensym("2l");//atom_getsymbol(argv+3);
+     buf[3] = gensym("3l");//atom_getsymbol(argv+4);
+     buf[4] = gensym("4l");//atom_getsymbol(argv+5);
+     buf[5] = gensym("5l");//atom_getsymbol(argv+6);
+     buf[6] = gensym("0r");//atom_getsymbol(argv+7);
+     buf[7] = gensym("1r");//atom_getsymbol(argv+8);
+     buf[8] = gensym("2r");//atom_getsymbol(argv+9);
+     buf[9] = gensym("3r");//atom_getsymbol(argv+10);
+     buf[10] = gensym("4r");//atom_getsymbol(argv+11);
+     buf[11] = gensym("5r");//atom_getsymbol(argv+12);
+  }
+  else {
+     // buf0 = atom_getsymbol(argv+1);
+     // buf1 = atom_getsymbol(argv+2);
+     // buf2 = atom_getsymbol(argv+3);
+     // buf3 = atom_getsymbol(argv+4);
+     // buf4 = atom_getsymbol(argv+5);
+     // buf5 = atom_getsymbol(argv+6);
+     // buf6 = atom_getsymbol(argv+7);
+     // buf7 = atom_getsymbol(argv+8);
+     // buf8 = atom_getsymbol(argv+9);
+     // buf9 = atom_getsymbol(argv+10);
+     // buf10 = atom_getsymbol(argv+11);
+     // buf11 = atom_getsymbol(argv+12);
+     for(int i=0;i<noOfBufs;i++)
+      buf[i] = atom_getsymbol(argv+i+1);
+  }
+
+
+  srand(time(NULL));
+  // post("arbhar_play~ first random number: %d):", rand());
+  // post("arbhar_play~ buffers: [ %s ][ %s ][ %s ][ %s ][ %s ][ %s ]", l0->s_name, l1->s_name, l2->s_name, l3->s_name, l4->s_name, l5->s_name );
+  // post("new name %s", strncat(l0->s_name, 'L', 1));
+
+  for (int i=0; i<noOfBufs; i++){
+    post("arbhar_play~ buffer: [ %s ]", buf[i]->s_name);
+    x->x_buffer[i] = buf[i];
+    x->x_bufPntr[i] = 0;
+  }
+
+  x->x_wndSize = 515;
+  x->x_killOffset = KILLOFFSET;
+
+  x->x_intensity = 8;
+  x->x_randIntensity = 0;
+
+  // x->x_buffer[0] = l0;
+  // x->x_buffer[1] = l1;
+  // x->x_buffer[2] = l2;
+  // x->x_buffer[3] = l3;
+  // x->x_buffer[4] = l4;
+  // x->x_buffer[5] = l5;
+  for (int i=0; i<x->x_noOfBufUsed; i++){
+    x->x_bufPntr[i] = 0;
+  }
+  x->x_playLayer = 0;
+  x->x_duration = 1 * 48000;
+  x->x_panning = 0;
+  for (int g=0;g<NO_OF_GRAINS;g++) {
+	  x->x_grain[g].g_id = g;
+    // int offset = g * (x->x_duration / NO_OF_GRAINS);
+    x->x_grain[g].g_duration = x->x_duration;
+    // x->x_grain[g].g_posOffset = 0; // offset;
+    x->x_grain[g].g_cPosGrain = 0; // offset;
+    x->x_grain[g].g_volume = 1.0f;
+    x->x_grain[g].g_grainSpeed = 1.0f;
+    // x->x_grain[g].g_loop = 0;
+    x->x_grain[g].g_play = 0;
+    x->x_grain[g].g_playLayer = 0;
+    x->x_grain[g].g_killVol = 1.0f;
+    x->x_grain[g].g_kill = 0;
+  }
+  x->x_triggerVal = 0;
+  x->x_pTriggerVal = 0;
+  x->x_volume = 1.0f;
+  x->x_randVolume = 0.0f;
+  x->x_startPos = 0;
+  x->x_spray = 1;
+  // x->x_playDirection = 1;  // 0 = fwd ; 1 = rev
+  x->x_dirPercent = 0; // used instead of x_playDirection
+  x->x_speed = 1.0f;
+  x->x_f = 0;
+
+  x->x_grainsActive = 0;
+
+  // x->x_recPosIn = inlet_new(&x->x_obj, &x->x_obj.ob_pd, &s_signal, &s_signal);
+
+  /* create a new signal-outlet */
+  x->x_out_L = outlet_new(&x->x_obj, &s_signal);
+  x->x_out_R = outlet_new(&x->x_obj, &s_signal);
+  x->x_info = outlet_new(&x->x_obj, &s_float);
+  // x->x_infoStart = outlet_new(&x->x_obj, &s_float);
+  x->x_infoStart = outlet_new(&x->x_obj, gensym("list"));
+  x->x_trigger = outlet_new(&x->x_obj, &s_float);
+  x->x_followInfo = outlet_new(&x->x_obj, gensym("list"));
+  x->x_voicesInfo = outlet_new(&x->x_obj, &s_float);
+
+  x->x_qPitch = 0;
+  x->x_qPitchVals[0] = 1.0f;
+  x->x_qPitchVals[1] = 1.0f;
+  x->x_qPitchVals[2] = 1.0f;
+  x->x_rPitch = 0;
+
+  x->x_grainSpacer = 1;
+
+  x->x_adjustDuration = 1;
+
+  x->x_recordingState = 0;
+  // x->x_recordingPos = 0;
+
+  setDisplayLength(x, -1, 480000);
+
+  x->x_followMode = 0;
+  x->x_followPosition = 0;
+  x->x_followSpeed = 1;
+
+  x->x_polyphony = 0;
+  for (int p=0;p<8;p++){
+    x->x_polyPitches[p] = 0;
+  }
+  x->x_pitchOrder = 1;
+
+
+  return (void *)x;
+}
+
+
+/**
+ * define the function-space of the class
+ * within a single-object external the name of this function is very special
+ */
+void arbhar_play_tilde_setup(void) {
+  arbhar_play_tilde_class = class_new(gensym("arbhar_play~"),
+        (t_newmethod)arbhar_play_tilde_new,
+        (t_method)arbhar_play_tilde_free,
+	       sizeof(t_arbhar_play_tilde),
+         CLASS_DEFAULT,
+         A_GIMME,
+        /*A_DEFFLOAT,*/ 0);
+
+  /* whenever the audio-engine is turned on, the "pan_tilde_dsp()"
+   * function will get called
+   */
+  class_addmethod(arbhar_play_tilde_class,
+        (t_method)arbhar_play_tilde_dsp, gensym("dsp"), A_CANT, 0);
+  // class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_set,
+  //           gensym("set"), A_GIMME, 0);
+  // class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_set_w,
+  //           gensym("set_w"), A_SYMBOL, 0);
+  // class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setIndex,
+  //           gensym("index"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setDuration,
+            gensym("duration"), A_FLOAT, 0);
+  // class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setOffset,
+  //           gensym("offset"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setStartPos,
+            gensym("startPos"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setStartPercent,
+            gensym("startPercent"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setSpray,
+            gensym("spray"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setGrainVol,
+            gensym("grainVol"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setRandVol,
+            gensym("randVol"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setGrainSpeed,
+            gensym("grainSpeed"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_fire,
+            gensym("fire"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_next,
+            gensym("next"), 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_kill,
+            gensym("kill"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_kill_selected,
+            gensym("killSelected"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_layer,
+            gensym("layer"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_adjustDuration,
+            gensym("adjustDuration"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_setPanning,
+            gensym("panning"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_dirPercent,
+            gensym("dirPercent"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_spacer,
+            gensym("spacer"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)setWindowShape,
+            gensym("setWindow"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)setDisplayLength,
+            gensym("setDisplayLength"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)observeRecording,
+            gensym("observeRecHead"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)setQuantisedPitch,
+            gensym("qPitch"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)setRandomPitch,
+            gensym("rPitch"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)setDeviation,
+            gensym("setDeviation"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_killOffset,
+            gensym("killOffset"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setFollowMode,
+            gensym("followMode"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setFollowSpeed,
+            gensym("followSpeed"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_followTrigger,
+            gensym("followTrigger"), 0);
+  class_addmethod(arbhar_play_tilde_class, (t_method)arbhar_play_tilde_chordPitches,
+            gensym("chord"), A_GIMME, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_midiNoteCh,
+            gensym("midiNoteCh"), A_FLOAT, A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_midiNote,
+            gensym("midiNote"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setInternTrig,
+            gensym("internTrig"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setIntensity,
+            gensym("intensity"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setRandomIntensity,
+            gensym("randomIntensity"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)arbhar_play_tilde_setStereo,
+            gensym("stereo"), A_FLOAT, 0);
+  class_addmethod(arbhar_play_tilde_class,  (t_method)writeToSharedMem,
+            gensym("writeToShMem"), A_FLOAT, A_FLOAT, A_FLOAT, 0);
+
+
+  /* if no signal is connected to the first inlet, we can as well
+   * connect a number box to it and use it as "signal"
+   */
+  // CLASS_MAINSIGNALIN(arbhar_play_tilde_class, t_arbhar_play_tilde, x_f);
+}

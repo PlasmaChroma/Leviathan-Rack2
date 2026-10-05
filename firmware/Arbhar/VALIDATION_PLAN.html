@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Validation plan and reverse-engineering backlog</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  :root{color-scheme:light dark;--bg:#f5f5f2;--paper:#fff;--ink:#152331;--muted:#536674;--line:#d5dde2;--accent:#237b86;--code:#edf3f5;}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0 auto;padding:3.5rem 2rem 5rem;max-width:1140px;font:17px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+  header{border-top:7px solid var(--accent);padding-top:1.3rem;margin-bottom:2rem}header h1{font-size:2.65rem;line-height:1.16;letter-spacing:-.035em}h1{font-size:2.2rem;line-height:1.24;letter-spacing:-.025em}h2{font-size:1.55rem;margin-top:2.7rem;border-bottom:1px solid var(--line);padding-bottom:.5rem}h3{font-size:1.15rem;margin-top:1.8rem}p{margin:.85rem 0}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}strong{font-weight:690}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em}code{padding:.14em .3em;background:var(--code);border-radius:4px;overflow-wrap:anywhere}pre{background:var(--code);padding:1.1rem 1.25rem;border:1px solid var(--line);border-radius:8px;overflow-x:auto;line-height:1.5}pre code{padding:0;background:none;overflow-wrap:normal}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;line-height:1.5;margin:1.4rem 0;display:block;overflow-x:auto}th,td{padding:.7rem .75rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;min-width:80px}th{background:var(--code);font-weight:700}tr:nth-child(even) td{background:color-mix(in srgb,var(--code) 45%,transparent)}
+  #TOC{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.7rem;font-size:.95rem;margin:1.8rem 0 2.8rem}#TOC>ul{columns:2;column-gap:3rem}#TOC li{break-inside:avoid;margin:.3rem 0}#TOC ul ul{font-size:.9em}blockquote{margin:1.2rem 0;border-left:4px solid var(--accent);padding:.3rem 1.2rem;background:var(--paper)}li{margin:.3rem 0}.title{margin-top:.2rem}.bundle-nav{font-size:.88rem;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}.bundle-nav a{margin-right:1.1rem}.footnote{font-size:.85rem;color:var(--muted)}
+  @media(max-width:700px){body{padding:1.5rem 1rem;font-size:16px}header h1{font-size:2.05rem}#TOC>ul{columns:1}table{font-size:.78rem}th,td{padding:.5rem}h2{font-size:1.35rem}}
+  @media(prefers-color-scheme:dark){:root{--bg:#10171f;--paper:#17212c;--ink:#e2eaf0;--muted:#9eafbd;--line:#334451;--accent:#80c9cc;--code:#1d2b36}}
+  @media print{body{background:white;color:black;max-width:none;padding:0;font-size:10pt}#TOC>ul{columns:2}pre{white-space:pre-wrap}a{color:inherit}h2,h3{break-after:avoid}table{display:table;font-size:8pt}tr{break-inside:avoid}.bundle-nav{display:none}}
+  </style>
+</head>
+<body>
+<div class="bundle-nav"><strong>ARBHAR / RESEARCH DOSSIER</strong><br><a href="index.html">Bundle index</a><a href="ARBHAR_REVERSE_ENGINEERING.html">Findings</a><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack handoff</a><a href="PARAMETER_BIBLE.html">Parameters</a><a href="STATE_MACHINES.html">State machines</a><a href="VALIDATION_PLAN.html">Validation</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#validation-plan-and-reverse-engineering-backlog"
+id="toc-validation-plan-and-reverse-engineering-backlog">Validation plan
+and reverse-engineering backlog</a>
+<ul>
+<li><a href="#existing-results" id="toc-existing-results">1. Existing
+results</a></li>
+<li><a href="#oracle-hierarchy" id="toc-oracle-hierarchy">2. Oracle
+hierarchy</a></li>
+<li><a href="#minimum-deterministic-fixture-format"
+id="toc-minimum-deterministic-fixture-format">3. Minimum deterministic
+fixture format</a></li>
+<li><a href="#test-matrix" id="toc-test-matrix">4. Test matrix</a></li>
+<li><a href="#metrics" id="toc-metrics">5. Metrics</a></li>
+<li><a href="#prioritized-backlog" id="toc-prioritized-backlog">6.
+Prioritized backlog</a></li>
+<li><a href="#reporting-gate" id="toc-reporting-gate">7. Reporting
+gate</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="validation-plan-and-reverse-engineering-backlog">Validation plan
+and reverse-engineering backlog</h1>
+<h2 id="existing-results">1. Existing results</h2>
+<p>The archive manifest verifier matches all 184 extracted files. Parsed
+Pd graph endpoints are valid for all 5,727 connections. The restricted
+<code>calculateFollowSpeed</code> instruction-text probe passes all
+12,288 integer-input/mode comparisons at tolerance <code>1e-5</code>.
+The native optimized and ASan/UBSan test runs each pass 107,421 checks,
+including those Follow fixture cases. These are not end-to-end audio or
+hardware results.</p>
+<p>Files: <code>tables/follow_probe_results.json</code>,
+<code>tables/native_test_results.json</code>,
+<code>tables/native_sanitizer_test_results.json</code>,
+<code>tables/structural_validation.json</code>. Commands and limitations
+are in <code>reference/README.md</code>.</p>
+<h2 id="oracle-hierarchy">2. Oracle hierarchy</h2>
+<p>Use several independent types of reference, without conflating
+them:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Oracle</th>
+<th>Appropriate use</th>
+<th>Limitation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Uploaded bytes and exact tables</td>
+<td>Identity, constants, enums, graph structure</td>
+<td>Presence does not prove an active normal path.</td>
+</tr>
+<tr class="even">
+<td>Inspected machine-code branch</td>
+<td>Arithmetic and state transitions with proven inputs</td>
+<td>Incomplete path coverage can misidentify a field or event
+order.</td>
+</tr>
+<tr class="odd">
+<td>Restricted instruction-text execution</td>
+<td>Small pure leaf routines, deterministic fixtures</td>
+<td>Interpreter itself can be wrong; not a complete CPU.</td>
+</tr>
+<tr class="even">
+<td>Native invariants</td>
+<td>Memory safety, finite outputs, expected algebra</td>
+<td>Can pass even when the chosen model is unlike the original.</td>
+</tr>
+<tr class="odd">
+<td>Original Pd process with appropriate environment</td>
+<td>Scheduler, message ordering, block behavior</td>
+<td>Requires dependencies and safely stubbed hardware/OS
+interactions.</td>
+</tr>
+<tr class="even">
+<td>Hardware recordings and control traces</td>
+<td>User-visible behavior, analog transfer, actual timing</td>
+<td>Measurement chain and device revision must be documented.</td>
+</tr>
+</tbody>
+</table>
+<p>This bundle has the first four, with restricted instruction-text
+execution for only one helper. It does not have the final two. A future
+emulation harness should start with leaf routines and substitute
+explicit Pd/OS/hardware stubs; never use the real privileged updater as
+a shortcut.</p>
+<h2 id="minimum-deterministic-fixture-format">3. Minimum deterministic
+fixture format</h2>
+<p>Store sample rate, processing block size, firmware hash,
+preset/configuration, input signal hashes, event timestamp convention,
+initial buffer contents, random seed/generator identity, and actual
+output length. Log both requested and actual event times. For
+cross-process originals, record how clocks align.</p>
+<p>Use a monotonic frame index and typed events rather than wall-clock
+sleeps. A JSON test case can reference small raw-float or WAV assets by
+hash. Capture source data and native outputs separately. Never overwrite
+golden fixtures automatically when a test fails.</p>
+<h2 id="test-matrix">4. Test matrix</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Area</th>
+<th>Stimulus</th>
+<th>Inspect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Grain interpolation</td>
+<td>DC, ramp, single impulse, alternating sign; fractional read
+positions</td>
+<td>DC preservation, exact neighborhood, forward/reverse boundary
+policy, non-finite reads.</td>
+</tr>
+<tr class="even">
+<td>Window shape</td>
+<td>All 101 rows and endpoint textures; short/long grains</td>
+<td>Endpoint zeros, shifted Gaussian behavior, square gain, phase
+alignment, reverse stepping.</td>
+</tr>
+<tr class="odd">
+<td>Duration/Spray</td>
+<td>Raw 0, 1, center-neighbors, 4094, 4095 plus MIDI additions</td>
+<td>Square law, integer conversion, clamp order, physical versus
+internal minimum.</td>
+</tr>
+<tr class="even">
+<td>Scheduler</td>
+<td>Fixed Length, swept Intensity, fixed random state</td>
+<td>Rate curve, duration coupling, random timing distribution,
+missed/merged events.</td>
+</tr>
+<tr class="odd">
+<td>Oversubscription</td>
+<td>Bursts and sustained dense triggers</td>
+<td>82-slot indexing, count threshold, retirement duration, repeated
+reuse, MIDI interactions.</td>
+</tr>
+<tr class="even">
+<td>Capture</td>
+<td>Impulses and ramps through starts/stops/retriggers</td>
+<td>Two-writer handover, 256-sample fades, exact final write index, no
+assumed ring wrap.</td>
+</tr>
+<tr class="odd">
+<td>Dub</td>
+<td>Constant input/old-buffer values, steps in Dub</td>
+<td>Write equation, slew, clipping placement, two-writer overlap.</td>
+</tr>
+<tr class="even">
+<td>Layer operations</td>
+<td>Distinct tagged waveforms per layer</td>
+<td>Record/play destination coupling, Omega boundaries, old-generation
+reader safety.</td>
+</tr>
+<tr class="odd">
+<td>Follow</td>
+<td>Every speed branch, loop changes, capture while following</td>
+<td>Plateau positions, stop/reverse transitions, placement offset,
+record-head avoidance.</td>
+</tr>
+<tr class="even">
+<td>Quantisation</td>
+<td>Every signed sequence entry and center departure</td>
+<td>Duplicate weighting, pair order, detent fix, random draw sequence,
+pitch-CV latch time.</td>
+</tr>
+<tr class="odd">
+<td>Onset</td>
+<td>Isolated hits, close hit pairs, noise floor, stereo changes</td>
+<td>Detector source, thresholds, holdoff, six profile actions, no
+unintended repeated capture.</td>
+</tr>
+<tr class="even">
+<td>Delay</td>
+<td>Impulse + signed macro sweep + MIDI offsets</td>
+<td>Actual delay milliseconds, dynamic multiplier, feedback sign/gain,
+event ordering.</td>
+</tr>
+<tr class="odd">
+<td>Reverb</td>
+<td>Impulse, Strike/onset during decay, routing changes</td>
+<td>Primary graph response, duck/restore, no unproven tank clear,
+auxiliary activation.</td>
+</tr>
+<tr class="even">
+<td>Stereo/phase</td>
+<td>Left-only/right-only/opposite-polarity signals</td>
+<td>Mono summing, panning selection, phase policy, effect routing,
+overall gain.</td>
+</tr>
+<tr class="odd">
+<td>WT mode</td>
+<td>Pitch ramp, Length boundary crossings, empty/filled layers</td>
+<td>0.976642 factor, oscillator tables, entry hysteresis, transitions,
+clocked-mode inhibition.</td>
+</tr>
+<tr class="even">
+<td>Files</td>
+<td>624000 and 638924 frames, multiple rates, truncated/empty data</td>
+<td>Conversion domain, tail handling, fallback behavior, atomic
+adoption.</td>
+</tr>
+<tr class="odd">
+<td>Host stress</td>
+<td>Multiple instances; 44.1/48/96/192 kHz; UI activity and imports</td>
+<td>CPU spikes, no callback allocation or locks, deterministic timing,
+safe rate change.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="metrics">5. Metrics</h2>
+<p>Use frame-exact comparisons only when sample rate, random state,
+block ordering, and interpolation are equivalent. Otherwise report
+controlled metrics: launch/stop frame error, grain count, peak/RMS gain,
+spectral differences, reverb decay envelopes, delay-time estimates, and
+onset-trigger latency distributions. Clearly distinguish a musical
+tolerance from numerical equivalence.</p>
+<p>For memory/race testing, use ASan/UBSan for scalar logic and a
+separate race-checking harness for worker/audio ownership. Instrument
+heap allocation and file/lock activity in the audio callback. No
+original hardware benchmark or Rack CPU percentage has been measured in
+this effort; do not invent one.</p>
+<h2 id="prioritized-backlog">6. Prioritized backlog</h2>
+<p><code>tables/open_questions.csv</code> and <code>.json</code> contain
+14 identified issues with priority, entry points, and next actions. P0
+means it materially blocks fidelity of the core instrument, not that a
+prototype cannot sound.</p>
+<p><strong>First:</strong> finish <code>play_next</code>/perform
+allocation and scheduler semantics. <strong>Second:</strong> finish
+recorder Dub/handover and capture boundaries. <strong>Third:</strong>
+resolve the delay macro’s actual incoming domain and Pd message order.
+These are stronger next investments than expanding unrelated
+experimental features.</p>
+<h2 id="reporting-gate">7. Reporting gate</h2>
+<p>Every new claim should include binary hash plus function/VA or
+patch/object path, its evidence grade, tested input range, and a known
+limitation. A small passing fixture cannot certify neighboring
+functions. A source symbol name cannot certify a signal path. A
+useful-sounding native approximation should be retained as a labelled
+option, not retroactively described as a decoded original algorithm.</p>
+</body>
+</html>

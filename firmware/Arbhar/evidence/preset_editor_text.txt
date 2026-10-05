@@ -1,0 +1,167 @@
+arbhar v2.1 Preset Editor
+arbhar
+v2.1
+Preset Editor
+[ about ]
+By default this editor starts with the 'arbhar Classic' factory preset.
+To start a new preset
+either select a factory preset and load it as a template
+alpha - Classic
+beta - Delay
+gamma - Stereo
+delta - Follow Mode
+epsilon - Panning
+zeta - Accumulative Recording
+Load Preset template
+or load a preset file as a template
+Drop an arbhar preset file here or click to upload one.
+[ show all parameter details ]
+Preset Name
+| details |
+Load Configuration: Presets, Layers, and Scenes
+0 - Load Nothing
+1 - Load Preset
+2 - Load Layers
+3 - Load Scene
+| details |
+Mono and Stereo Input Modes
+(UI: Shift + Capture + Grain Window
+)
+0 - Mono
+1 - Stereo
+| details |
+Analogue Emulation Mode
+0 - Disable
+1 - Enable
+| details |
+Phase Switch on Output 2
+(UI: Shift + Capture + Hold)
+0 - Phase-Inverted
+1 - Phase-Corrected
+| details |
+Capture Modes: Momentary, Latching, and Retrigger
+(UI: Shift + Capture + Dub)
+0 - Latching
+1 - Momentary
+2 - Retrigger
+| details |
+Capture Button Modes: Latching or Momentary
+0 - Latching
+1 - Momentary
+| details |
+Activate Capture On Button Up
+0 - Disable
+1 - Enable
+| details |
+Accumulative Capture Mode
+(UI: Capture + Shift)
+0 - Disable
+1 - Enable
+| details |
+Link Accumulative Capture and Button Mode:
+0 - Disable
+1 - Enable
+| details |
+Onset Control Modes
+(UI: Shift + Capture + Layer)
+1 - Alpha
+2 - Beta
+3 - Gamma
+4 - Delta
+5 - Epsilon
+6 - Zeta
+| details |
+Strike Button to Trigger Signal
+0 - Disable
+1 - Enable
+| details |
+Trigger Delay On Strike Input
+ms
+| details |
+Scan and Follow Mode
+(UI: Shift + Capture + Scan)
+0 - Scan Mode
+1 - Follow Mode
+| details |
+Follow Mode Speed Control
+0 - Unidirectional
+1 - Bidirectional
+2 - Inverted Unidirectional
+| details |
+Follow Mode Scan Offset
+ms
+| details |
+Follow Mode Scan Offset and Speed Control
+0 - Both Control
+1 - Scan Knob Only
+| details |
+Follow Mode Looping
+0 - Disable
+1 - Enable
+| details |
+Follow Mode Loop Length
+0 - Disable
+1 - Enable
+| details |
+Random Timing of Grains
+0 - Disable
+1 - Enable
+| details |
+Random Amplitude of Grains
+0 - Disable
+1 - Enable
+| details |
+Mod CV Input Modes
+0 - None
+1 - Panning
+2 - Hold
+3 - Reverb
+4 - Delay
+| details |
+Reverb Reset:
+0 - Disable
+1 - Enable Reset on Strike
+2 - Enable Reset on Onset
+3 - Enable Reset on Strike and Onset
+| details |
+Default Value for parameter controlled by Mod CV is disabled.
+Panning:
+%
+Reverb:
+%
+Delay:
+%
+| details |
+Effect Order:
+0 - Delay and Reverb in parallel
+1 - Delay and Reverb in series
+| details |
+Centre Frequency of Wavetable Mode
+Hz
+| details |
+Quantised Random Pitch Deviation Table
+| details |
+Generate Configuration
+[ hide instructions ]
+Once you have finished making alterations, click on
+Generate Configuration
+, scroll down to review the parameters and values and once happy with changes, click
+Download arbhar preset file
+.
+To load the preset file into arbhar there are two options:
+First, by placing the newly downloaded text file in a
+_arbhar_scenes
+folder of your choosing, and use the
+LOAD SCENE menu
+on arbhar.
+Enter the CLONE, LOAD, SAVE menu by pressing SHIFT, CAPTURE and STRIKE, then select the scene you would like to load and confirm your selection with double pressing SHIFT.
+Alternatively, arbhar is also capable of loading any custom behaviour via a preset file named
+preset.txt
+found in the root directory of the USB drive.
+Entering the CLONE, LOAD, SAVE menu by pressing SHIFT, CAPTURE and STRIKE, then immediately exiting via the same button combo will automatically load this "preset.txt" named file.
+Please note: The file preset.txt will be renamed to preset_wasLoaded.txt after loading! This is to prevent unintended loading of the same file after further user interaction on arbhar.
+Download arbhar preset file.
+Content of the generated arbhar preset file:
+Download arbhar preset file.
+arbhar Preset Editor v1.0 for arbhar v2.1
+© Instruo 2025

@@ -1,0 +1,45 @@
+echo "unmounting all usb devices"
+if [ -f "/media/usb/.nousb" ]
+then
+	echo "no usb mounted"
+else
+	umount /media/usb
+	echo "unmounting usb"
+
+	if [ -f "/media/usb/.nousb" ]
+	then
+		echo "succesfully unmounted usb"
+	else
+		umount /media/usb
+		if [ -f "/media/usb/.nousb" ]
+		then
+			echo "succesfully unmounted usb"
+		else	
+			umount /media/usb
+			if [ -f "/media/usb/.nousb" ]
+			then
+				echo "succesfully unmounted usb"
+			else
+				umount /media/usb
+				if [ -f "/media/usb/.nousb" ]
+				then
+					echo "sussesfully unmounted usb"
+				else
+					umount /media/usb
+					if [ -f "/media/usb/.nousb" ]
+					then
+						echo "succesfully unmounted usb"
+					else
+						umount /media/usb
+						if [ -f "/media/usb/.nousb" ]
+						then
+							echo "succesfully unmounted usb"
+						else 
+							echo "failed to unmount usb"
+						fi				
+					fi	
+				fi
+			fi
+		fi
+	fi
+fi

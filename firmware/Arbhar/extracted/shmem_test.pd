@@ -1,0 +1,11 @@
+#N canvas 146 351 450 300 10;
+#X floatatom 27 63 5 0 0 0 - - - 0;
+#X obj 29 120 shmem 61019 250;
+#X msg 28 88 memset 208 \$1;
+#X floatatom 136 63 5 0 0 0 - - - 0;
+#X obj 138 120 shmem 61019 250;
+#X msg 137 88 memset 209 \$1;
+#X connect 0 0 2 0;
+#X connect 2 0 1 0;
+#X connect 3 0 5 0;
+#X connect 5 0 4 0;

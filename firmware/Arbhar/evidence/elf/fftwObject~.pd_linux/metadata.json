@@ -1,0 +1,1223 @@
+{
+  "header": {
+    "type": 3,
+    "machine": 40,
+    "version": 1,
+    "entry": 1848,
+    "phoff": 52,
+    "shoff": 24524,
+    "flags": 83887104,
+    "ehsize": 52,
+    "phentsize": 32,
+    "phnum": 6,
+    "shentsize": 40,
+    "shnum": 26,
+    "shstrndx": 25
+  },
+  "sections": [
+    {
+      "nameoff": 0,
+      "type": 0,
+      "flags": 0,
+      "addr": 0,
+      "offset": 0,
+      "size": 0,
+      "link": 0,
+      "info": 0,
+      "align": 0,
+      "entsize": 0,
+      "name": ""
+    },
+    {
+      "nameoff": 27,
+      "type": 7,
+      "flags": 2,
+      "addr": 244,
+      "offset": 244,
+      "size": 36,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".note.gnu.build-id"
+    },
+    {
+      "nameoff": 46,
+      "type": 1879048182,
+      "flags": 2,
+      "addr": 280,
+      "offset": 280,
+      "size": 36,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".gnu.hash"
+    },
+    {
+      "nameoff": 56,
+      "type": 11,
+      "flags": 2,
+      "addr": 316,
+      "offset": 316,
+      "size": 464,
+      "link": 4,
+      "info": 3,
+      "align": 4,
+      "entsize": 16,
+      "name": ".dynsym"
+    },
+    {
+      "nameoff": 64,
+      "type": 3,
+      "flags": 2,
+      "addr": 780,
+      "offset": 780,
+      "size": 404,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".dynstr"
+    },
+    {
+      "nameoff": 72,
+      "type": 1879048191,
+      "flags": 2,
+      "addr": 1184,
+      "offset": 1184,
+      "size": 58,
+      "link": 3,
+      "info": 0,
+      "align": 2,
+      "entsize": 2,
+      "name": ".gnu.version"
+    },
+    {
+      "nameoff": 85,
+      "type": 1879048190,
+      "flags": 2,
+      "addr": 1244,
+      "offset": 1244,
+      "size": 64,
+      "link": 4,
+      "info": 2,
+      "align": 4,
+      "entsize": 0,
+      "name": ".gnu.version_r"
+    },
+    {
+      "nameoff": 100,
+      "type": 9,
+      "flags": 2,
+      "addr": 1308,
+      "offset": 1308,
+      "size": 64,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.dyn"
+    },
+    {
+      "nameoff": 109,
+      "type": 9,
+      "flags": 66,
+      "addr": 1372,
+      "offset": 1372,
+      "size": 176,
+      "link": 3,
+      "info": 18,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.plt"
+    },
+    {
+      "nameoff": 118,
+      "type": 1,
+      "flags": 6,
+      "addr": 1548,
+      "offset": 1548,
+      "size": 12,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".init"
+    },
+    {
+      "nameoff": 113,
+      "type": 1,
+      "flags": 6,
+      "addr": 1560,
+      "offset": 1560,
+      "size": 284,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".plt"
+    },
+    {
+      "nameoff": 124,
+      "type": 1,
+      "flags": 6,
+      "addr": 1848,
+      "offset": 1848,
+      "size": 15100,
+      "link": 0,
+      "info": 0,
+      "align": 8,
+      "entsize": 0,
+      "name": ".text"
+    },
+    {
+      "nameoff": 130,
+      "type": 1,
+      "flags": 6,
+      "addr": 16948,
+      "offset": 16948,
+      "size": 8,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".fini"
+    },
+    {
+      "nameoff": 136,
+      "type": 1,
+      "flags": 50,
+      "addr": 16956,
+      "offset": 16956,
+      "size": 156,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 1,
+      "name": ".rodata"
+    },
+    {
+      "nameoff": 144,
+      "type": 1,
+      "flags": 2,
+      "addr": 17112,
+      "offset": 17112,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".eh_frame"
+    },
+    {
+      "nameoff": 154,
+      "type": 14,
+      "flags": 3,
+      "addr": 85760,
+      "offset": 20224,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".init_array"
+    },
+    {
+      "nameoff": 166,
+      "type": 15,
+      "flags": 3,
+      "addr": 85764,
+      "offset": 20228,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".fini_array"
+    },
+    {
+      "nameoff": 178,
+      "type": 6,
+      "flags": 3,
+      "addr": 85768,
+      "offset": 20232,
+      "size": 248,
+      "link": 4,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".dynamic"
+    },
+    {
+      "nameoff": 187,
+      "type": 1,
+      "flags": 3,
+      "addr": 86016,
+      "offset": 20480,
+      "size": 120,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".got"
+    },
+    {
+      "nameoff": 192,
+      "type": 1,
+      "flags": 3,
+      "addr": 86136,
+      "offset": 20600,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".data"
+    },
+    {
+      "nameoff": 198,
+      "type": 8,
+      "flags": 3,
+      "addr": 86140,
+      "offset": 20604,
+      "size": 8,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".bss"
+    },
+    {
+      "nameoff": 203,
+      "type": 1,
+      "flags": 48,
+      "addr": 0,
+      "offset": 20604,
+      "size": 35,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 1,
+      "name": ".comment"
+    },
+    {
+      "nameoff": 212,
+      "type": 1879048195,
+      "flags": 0,
+      "addr": 0,
+      "offset": 20639,
+      "size": 49,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".ARM.attributes"
+    },
+    {
+      "nameoff": 1,
+      "type": 2,
+      "flags": 0,
+      "addr": 0,
+      "offset": 20688,
+      "size": 2320,
+      "link": 24,
+      "info": 119,
+      "align": 4,
+      "entsize": 16,
+      "name": ".symtab"
+    },
+    {
+      "nameoff": 9,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 23008,
+      "size": 1288,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".strtab"
+    },
+    {
+      "nameoff": 17,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 24296,
+      "size": 228,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".shstrtab"
+    }
+  ],
+  "symbols": [
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "raise",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__cxa_finalize",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "memcpy",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "inlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fftwf_execute",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fftwf_plan_dft_r2c_1d",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fftwf_plan_dft_c2r_1d",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "memset",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "post",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "inlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "dsp_add",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__pow_finite",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "s_signal",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_domainsignalin",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_addmethod",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "postfloat",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fftwObject_tilde_setup",
+      "value": 15680,
+      "size": 676,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "map",
+      "value": 13424,
+      "size": 28,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/8/../../../arm-linux-gnueabihf/crti.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "call_weak_fn",
+      "value": 1848,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/8/../../../arm-linux-gnueabihf/crtn.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "deregister_tm_clones",
+      "value": 1884,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "register_tm_clones",
+      "value": 1952,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "value": 2032,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "completed.10783",
+      "value": 86140,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux_fini_array_entry",
+      "value": 85764,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 16,
+      "table": ".symtab"
+    },
+    {
+      "name": "frame_dummy",
+      "value": 2136,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__frame_dummy_init_array_entry",
+      "value": 85760,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 15,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject~.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_record",
+      "value": 2144,
+      "size": 28,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_convLevel",
+      "value": 2172,
+      "size": 32,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_play",
+      "value": 2204,
+      "size": 36,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_blend",
+      "value": 2240,
+      "size": 56,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_dsp",
+      "value": 2296,
+      "size": 80,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_perform",
+      "value": 8484,
+      "size": 4940,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_free",
+      "value": 2376,
+      "size": 32,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_new",
+      "value": 2408,
+      "size": 1236,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_startPos",
+      "value": 3644,
+      "size": 1312,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_length",
+      "value": 4956,
+      "size": 1312,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_release",
+      "value": 6268,
+      "size": 1104,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_attack",
+      "value": 7372,
+      "size": 1112,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_releaseShape",
+      "value": 13452,
+      "size": 1108,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_attackShape",
+      "value": 14560,
+      "size": 1120,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_class",
+      "value": 86144,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "_divsi3.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": ".divsi3_skip_div0_test",
+      "value": 16364,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shift",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "_dvmd_lnx.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__FRAME_END__",
+      "value": 17112,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 14,
+      "table": ".symtab"
+    },
+    {
+      "name": "_fini",
+      "value": 16948,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 12,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idivmod",
+      "value": 16900,
+      "size": 32,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_ldiv0",
+      "value": 16932,
+      "size": 16,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__dso_handle",
+      "value": 86136,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "__divsi3",
+      "value": 16356,
+      "size": 544,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idiv0",
+      "value": 16932,
+      "size": 16,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_DYNAMIC",
+      "value": 85768,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__TMC_END__",
+      "value": 86140,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "_GLOBAL_OFFSET_TABLE_",
+      "value": 86016,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idiv",
+      "value": 16356,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_init",
+      "value": 1548,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 9,
+      "table": ".symtab"
+    },
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "raise@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwObject_tilde_setup",
+      "value": 15680,
+      "size": 676,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__cxa_finalize@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "memcpy@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "inlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwf_execute",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwf_plan_dft_r2c_1d",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "map",
+      "value": 13424,
+      "size": 28,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fftwf_plan_dft_c2r_1d",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "memset@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "post",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "inlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "dsp_add",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__pow_finite@@GLIBC_2.15",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "s_signal",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_domainsignalin",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_addmethod",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "postfloat",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    }
+  ]
+}

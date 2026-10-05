@@ -1,0 +1,64 @@
+{
+  "archive_sha256": "5d816f0b4a38e8660ddcea608d21602518e18223181dec3e63c3dca5f6fed306",
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "requested_jack": {
+    "rate_hz": 48000,
+    "period_frames": 128,
+    "periods": 3,
+    "literal_command": "jackd -P70 -dalsa -r48000 -p128 -n3 &"
+  },
+  "dsp_rate": {
+    "float_bits": "0x47401241",
+    "value": 49170.25390625,
+    "status": "literal arithmetic constant, not verified hardware sample clock"
+  },
+  "sox_file_rate_hz": 49148,
+  "deck_buffer_samples": 29502000,
+  "deck_buffer_bytes": 118008000,
+  "cubic_inv6": {
+    "float_bits": "0x3e2aaaad",
+    "value": 0.16666670143604279
+  },
+  "softclip": {
+    "A": 28.274333953857422,
+    "A_bits": "0x41e231d6",
+    "B": 9.42477798461914,
+    "B_bits": "0x4116cbe4"
+  },
+  "tape_filter_onepole_coefficients": {
+    "HP100": 156.5137939453125,
+    "HP150": 104.34252166748047,
+    "LP500": 31.30275535583496,
+    "LP1000": 15.65137767791748,
+    "LP3000": 5.21712589263916
+  },
+  "diffuser_delays_samples": [
+    68,
+    159,
+    251,
+    375
+  ],
+  "diffuser_wet_scale": 0.17499999701976776,
+  "input_hardware_gain_old": 3.0999999046325684,
+  "input_hardware_gain_new": 1.0,
+  "fade_table": {
+    "base_bss_va": "0x93f98",
+    "length": 256,
+    "initialization_va": "0x19c6c",
+    "step_bits": "0x3b808081",
+    "pi_bits": "0x40490fdb",
+    "ideal_shape": "(t + sin(pi*t/2))/2",
+    "table_status": "Reconstructed using host libm cosf; not extracted runtime memory or original uClibc output"
+  },
+  "first_input_adc_thresholds": {
+    "speed_change_strict_greater_than": 9,
+    "time_change_strict_greater_than": 29
+  },
+  "tap_structure": {
+    "logical_engines": 4,
+    "tap_slots_per_engine": 5,
+    "engine_stride_bytes": 680,
+    "tap_stride_bytes": 132,
+    "warning": "Transition storage is not equivalent to 20 musical voices"
+  }
+}

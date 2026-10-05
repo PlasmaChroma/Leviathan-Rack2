@@ -1,0 +1,19 @@
+/* 
+ ARBHAR V2 DEFAULT SETTING FILE
+
+ The  PARAMETER_1 does something
+*/
+
+  PARAMETER_1: 45
+
+/*
+ PARAMETER_2 does something els
+*/
+
+   PARAMETER_2: 6
+
+/*
+ not sure following will work
+*/
+
+	PARAMETER_3: FOLLOW

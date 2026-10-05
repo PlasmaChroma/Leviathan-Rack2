@@ -1,0 +1,2030 @@
+[
+  {
+    "address": 65844,
+    "text": "/lib/ld-uClibc.so.0"
+  },
+  {
+    "address": 67482,
+    "text": "e 0PI"
+  },
+  {
+    "address": 67514,
+    "text": "6|0!"
+  },
+  {
+    "address": 68146,
+    "text": ";whJ"
+  },
+  {
+    "address": 68310,
+    "text": "_)_3<"
+  },
+  {
+    "address": 68455,
+    "text": "8'>8"
+  },
+  {
+    "address": 68478,
+    "text": "dT>~"
+  },
+  {
+    "address": 68607,
+    "text": "N3jx"
+  },
+  {
+    "address": 68795,
+    "text": "!yIk"
+  },
+  {
+    "address": 72093,
+    "text": "__register_frame_info"
+  },
+  {
+    "address": 72115,
+    "text": "strftime"
+  },
+  {
+    "address": 72124,
+    "text": "__errno_location"
+  },
+  {
+    "address": 72141,
+    "text": "memcpy"
+  },
+  {
+    "address": 72148,
+    "text": "strlen"
+  },
+  {
+    "address": 72155,
+    "text": "_ITM_deregisterTMCloneTable"
+  },
+  {
+    "address": 72183,
+    "text": "_ITM_registerTMCloneTable"
+  },
+  {
+    "address": 72209,
+    "text": "memmove"
+  },
+  {
+    "address": 72217,
+    "text": "pthread_create"
+  },
+  {
+    "address": 72232,
+    "text": "memset"
+  },
+  {
+    "address": 72239,
+    "text": "nanosleep"
+  },
+  {
+    "address": 72249,
+    "text": "memcmp"
+  },
+  {
+    "address": 72256,
+    "text": "vsnprintf"
+  },
+  {
+    "address": 72266,
+    "text": "__pthread_key_create"
+  },
+  {
+    "address": 72287,
+    "text": "strchr"
+  },
+  {
+    "address": 72294,
+    "text": "__deregister_frame_info"
+  },
+  {
+    "address": 72318,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7compareEPKc"
+  },
+  {
+    "address": 72385,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE13_S_copy_charsEPcPKcS7_"
+  },
+  {
+    "address": 72463,
+    "text": "_ZNSt6localeD1Ev"
+  },
+  {
+    "address": 72480,
+    "text": "_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_c"
+  },
+  {
+    "address": 72534,
+    "text": "_ZNSt11logic_errorC2EPKc"
+  },
+  {
+    "address": 72559,
+    "text": "_ZSt20__throw_length_errorPKc"
+  },
+  {
+    "address": 72589,
+    "text": "_ZSt4swapISt6localeENSt9enable_ifIXsrSt6__and_IJSt6__not_ISt15__is_tuple_likeIT_EESt21is_move_constructibleIS5_ESt18is_move_assignableIS5_EEE5valueEvE4typeERS5_SF_"
+  },
+  {
+    "address": 72753,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_assignERKS4_"
+  },
+  {
+    "address": 72823,
+    "text": "_ZNSt14overflow_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 72902,
+    "text": "_ZNSt16invalid_argumentC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 72983,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcj"
+  },
+  {
+    "address": 73052,
+    "text": "_ZNSt14basic_ofstreamIcSt11char_traitsIcEEC1ERKNSt7__cxx1112basic_stringIcS1_SaIcEEESt13_Ios_Openmode"
+  },
+  {
+    "address": 73154,
+    "text": "_ZNSt6thread15_M_start_threadESt10unique_ptrINS_6_StateESt14default_deleteIS1_EEPFvvE"
+  },
+  {
+    "address": 73240,
+    "text": "_ZNSt6locale7classicEv"
+  },
+  {
+    "address": 73263,
+    "text": "_ZSt9terminatev"
+  },
+  {
+    "address": 73279,
+    "text": "_ZNSt11logic_errorD2Ev"
+  },
+  {
+    "address": 73302,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag"
+  },
+  {
+    "address": 73405,
+    "text": "_ZNSirsERd"
+  },
+  {
+    "address": 73416,
+    "text": "_ZNSirsERl"
+  },
+  {
+    "address": 73427,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5eraseEjj"
+  },
+  {
+    "address": 73490,
+    "text": "_ZNSirsERx"
+  },
+  {
+    "address": 73501,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE5clearESt12_Ios_Iostate"
+  },
+  {
+    "address": 73561,
+    "text": "_ZTISt11regex_error"
+  },
+  {
+    "address": 73581,
+    "text": "_ZNSt13runtime_errorD2Ev"
+  },
+  {
+    "address": 73606,
+    "text": "_ZNSt8ios_baseD2Ev"
+  },
+  {
+    "address": 73625,
+    "text": "_ZTISt9exception"
+  },
+  {
+    "address": 73642,
+    "text": "_ZNSt5ctypeIcE2idE"
+  },
+  {
+    "address": 73661,
+    "text": "_ZStlsIcSt11char_traitsIcESaIcEERSt13basic_ostreamIT_T0_ES7_RKNSt7__cxx1112basic_stringIS4_S5_T1_EE"
+  },
+  {
+    "address": 73761,
+    "text": "_ZTISt5ctypeIcE"
+  },
+  {
+    "address": 73777,
+    "text": "_ZdlPvj"
+  },
+  {
+    "address": 73785,
+    "text": "_ZNSt13runtime_errorC2ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 73863,
+    "text": "_ZNSt6chrono3_V212system_clock3nowEv"
+  },
+  {
+    "address": 73900,
+    "text": "_ZNSolsEd"
+  },
+  {
+    "address": 73910,
+    "text": "_ZNKSt6locale2id5_M_idEv"
+  },
+  {
+    "address": 73935,
+    "text": "_ZNSolsEi"
+  },
+  {
+    "address": 73945,
+    "text": "_ZNSolsEx"
+  },
+  {
+    "address": 73955,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6assignEjc"
+  },
+  {
+    "address": 74019,
+    "text": "_ZNSt7__cxx1119basic_ostringstreamIcSt11char_traitsIcESaIcEEC1Ev"
+  },
+  {
+    "address": 74084,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj"
+  },
+  {
+    "address": 74149,
+    "text": "__aeabi_atexit"
+  },
+  {
+    "address": 74164,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPKcEEvT_S8_St20forward_iterator_tag"
+  },
+  {
+    "address": 74268,
+    "text": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EERKS8_SA_"
+  },
+  {
+    "address": 74345,
+    "text": "_ZNSt6localeC1ERKS_"
+  },
+  {
+    "address": 74365,
+    "text": "_ZNSt13runtime_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "address": 74443,
+    "text": "_ZTISt14overflow_error"
+  },
+  {
+    "address": 74466,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEj"
+  },
+  {
+    "address": 74530,
+    "text": "__cxa_guard_acquire"
+  },
+  {
+    "address": 74550,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EOS4_"
+  },
+  {
+    "address": 74611,
+    "text": "_ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_"
+  },
+  {
+    "address": 74677,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv"
+  },
+  {
+    "address": 74727,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE14_M_replace_auxEjjjc"
+  },
+  {
+    "address": 74802,
+    "text": "_ZSt25__throw_bad_function_callv"
+  },
+  {
+    "address": 74835,
+    "text": "_ZNKSt13runtime_error4whatEv"
+  },
+  {
+    "address": 74864,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKc"
+  },
+  {
+    "address": 74929,
+    "text": "_ZNSt10filesystem7__cxx114path5_ListC1Ev"
+  },
+  {
+    "address": 74970,
+    "text": "_ZTVSt15basic_streambufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 75015,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9push_backEc"
+  },
+  {
+    "address": 75081,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_replaceEjjPKcj"
+  },
+  {
+    "address": 75154,
+    "text": "_ZSt18_Rb_tree_incrementPSt18_Rb_tree_node_base"
+  },
+  {
+    "address": 75202,
+    "text": "_ZNSt16invalid_argumentD1Ev"
+  },
+  {
+    "address": 75230,
+    "text": "_ZNSt8ios_base4InitD1Ev"
+  },
+  {
+    "address": 75254,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 75300,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4findEcj"
+  },
+  {
+    "address": 75363,
+    "text": "_Znaj"
+  },
+  {
+    "address": 75369,
+    "text": "_ZNSt10filesystem6statusERKNS_7__cxx114pathE"
+  },
+  {
+    "address": 75414,
+    "text": "_ZNKSt12__basic_fileIcE7is_openEv"
+  },
+  {
+    "address": 75448,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendERKS4_"
+  },
+  {
+    "address": 75515,
+    "text": "_ZNSt13basic_fstreamIcSt11char_traitsIcEEC1ERKNSt7__cxx1112basic_stringIcS1_SaIcEEESt13_Ios_Openmode"
+  },
+  {
+    "address": 75616,
+    "text": "_ZNSt6localeC1Ev"
+  },
+  {
+    "address": 75633,
+    "text": "__cxa_throw"
+  },
+  {
+    "address": 75645,
+    "text": "_ZTVN10__cxxabiv117__class_type_infoE"
+  },
+  {
+    "address": 75683,
+    "text": "_ZSt17__throw_bad_allocv"
+  },
+  {
+    "address": 75708,
+    "text": "_ZTVN10__cxxabiv120__si_class_type_infoE"
+  },
+  {
+    "address": 75749,
+    "text": "__cxa_begin_catch"
+  },
+  {
+    "address": 75767,
+    "text": "_ZTISt13runtime_error"
+  },
+  {
+    "address": 75789,
+    "text": "__cxa_guard_abort"
+  },
+  {
+    "address": 75807,
+    "text": "_ZSt4cerr"
+  },
+  {
+    "address": 75817,
+    "text": "_ZdlPv"
+  },
+  {
+    "address": 75824,
+    "text": "_ZNSt14overflow_errorD1Ev"
+  },
+  {
+    "address": 75850,
+    "text": "_ZNSt13runtime_errorC2EPKc"
+  },
+  {
+    "address": 75877,
+    "text": "_ZNKSt7__cxx1115basic_stringbufIcSt11char_traitsIcESaIcEE3strEv"
+  },
+  {
+    "address": 75941,
+    "text": "_ZNKSt10filesystem7__cxx114path5_List13_Impl_deleterclEPNS2_5_ImplE"
+  },
+  {
+    "address": 76009,
+    "text": "_ZSt16__throw_bad_castv"
+  },
+  {
+    "address": 76033,
+    "text": "__cxa_guard_release"
+  },
+  {
+    "address": 76053,
+    "text": "_ZNSt8ios_baseC2Ev"
+  },
+  {
+    "address": 76072,
+    "text": "_ZNSt6thread6_StateD2Ev"
+  },
+  {
+    "address": 76096,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_"
+  },
+  {
+    "address": 76157,
+    "text": "_ZTINSt6locale5facetE"
+  },
+  {
+    "address": 76179,
+    "text": "_ZNSt6localeaSERKS_"
+  },
+  {
+    "address": 76199,
+    "text": "__cxa_allocate_exception"
+  },
+  {
+    "address": 76224,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode"
+  },
+  {
+    "address": 76292,
+    "text": "__gxx_personality_v0"
+  },
+  {
+    "address": 76313,
+    "text": "_ZSt9use_facetINSt7__cxx117collateIcEEERKT_RKSt6locale"
+  },
+  {
+    "address": 76368,
+    "text": "_ZTINSt6thread6_StateE"
+  },
+  {
+    "address": 76391,
+    "text": "__cxa_end_cleanup"
+  },
+  {
+    "address": 76409,
+    "text": "_ZNSt13runtime_errorD1Ev"
+  },
+  {
+    "address": 76434,
+    "text": "_ZNSt12out_of_rangeC2EPKc"
+  },
+  {
+    "address": 76460,
+    "text": "_ZNSt7__cxx1118basic_stringstreamIcSt11char_traitsIcESaIcEEC1ERKNS_12basic_stringIcS2_S3_EESt13_Ios_Openmode"
+  },
+  {
+    "address": 76569,
+    "text": "_ZTVSt13basic_filebufIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 76612,
+    "text": "_ZSt16__ostream_insertIcSt11char_traitsIcEERSt13basic_ostreamIT_T0_ES6_PKS3_i"
+  },
+  {
+    "address": 76690,
+    "text": "_ZdaPv"
+  },
+  {
+    "address": 76697,
+    "text": "_ZNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEEC1ERKNS_12basic_stringIcS2_S3_EESt13_Ios_Openmode"
+  },
+  {
+    "address": 76807,
+    "text": "_ZNSo3putEc"
+  },
+  {
+    "address": 76819,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6appendEPKcj"
+  },
+  {
+    "address": 76885,
+    "text": "_ZNKSt9type_infoeqERKS_"
+  },
+  {
+    "address": 76909,
+    "text": "_ZNKSt5ctypeIcE13_M_widen_initEv"
+  },
+  {
+    "address": 76942,
+    "text": "_ZNSt10filesystem7__cxx114path14_M_split_cmptsEv"
+  },
+  {
+    "address": 76991,
+    "text": "_ZNSt14basic_ofstreamIcSt11char_traitsIcEE5closeEv"
+  },
+  {
+    "address": 77042,
+    "text": "_ZNSt12__basic_fileIcED1Ev"
+  },
+  {
+    "address": 77069,
+    "text": "_ZTISt16invalid_argument"
+  },
+  {
+    "address": 77094,
+    "text": "_ZTISt11logic_error"
+  },
+  {
+    "address": 77114,
+    "text": "_ZNKSt11logic_error4whatEv"
+  },
+  {
+    "address": 77141,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERjj"
+  },
+  {
+    "address": 77209,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_"
+  },
+  {
+    "address": 77271,
+    "text": "_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_PKc"
+  },
+  {
+    "address": 77327,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE13_S_copy_charsEPcS5_S5_"
+  },
+  {
+    "address": 77405,
+    "text": "_Znwj"
+  },
+  {
+    "address": 77411,
+    "text": "__cxa_bad_cast"
+  },
+  {
+    "address": 77426,
+    "text": "_ZTVSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 77469,
+    "text": "__dynamic_cast"
+  },
+  {
+    "address": 77484,
+    "text": "_ZTVSt9basic_iosIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 77522,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE4initEPSt15basic_streambufIcS1_E"
+  },
+  {
+    "address": 77591,
+    "text": "_ZNSt8ios_base4InitC1Ev"
+  },
+  {
+    "address": 77615,
+    "text": "_ZSt19__throw_regex_errorNSt15regex_constants10error_typeE"
+  },
+  {
+    "address": 77674,
+    "text": "_ZNSt13basic_filebufIcSt11char_traitsIcEEC1Ev"
+  },
+  {
+    "address": 77720,
+    "text": "_ZNSirsEPFRSt8ios_baseS0_E"
+  },
+  {
+    "address": 77747,
+    "text": "__cxa_rethrow"
+  },
+  {
+    "address": 77761,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 77819,
+    "text": "_ZNSt7__cxx1119basic_ostringstreamIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 77884,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_mutateEjjPKcj"
+  },
+  {
+    "address": 77955,
+    "text": "_ZTVSt11regex_error"
+  },
+  {
+    "address": 77975,
+    "text": "_ZSt9use_facetISt5ctypeIcEERKT_RKSt6locale"
+  },
+  {
+    "address": 78018,
+    "text": "_ZSt18_Rb_tree_incrementPKSt18_Rb_tree_node_base"
+  },
+  {
+    "address": 78067,
+    "text": "_ZSt28_Rb_tree_rebalance_for_erasePSt18_Rb_tree_node_baseRS_"
+  },
+  {
+    "address": 78128,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6insertEjRKS4_"
+  },
+  {
+    "address": 78196,
+    "text": "_ZNSt9basic_iosIcSt11char_traitsIcEE5imbueERKSt6locale"
+  },
+  {
+    "address": 78251,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEpLERKS4_"
+  },
+  {
+    "address": 78313,
+    "text": "_ZNKSt7__cxx117collateIcE9transformEPKcS3_"
+  },
+  {
+    "address": 78356,
+    "text": "_ZTTSt13basic_fstreamIcSt11char_traitsIcEE"
+  },
+  {
+    "address": 78399,
+    "text": "_ZTISt12out_of_range"
+  },
+  {
+    "address": 78420,
+    "text": "_ZNSt12out_of_rangeD2Ev"
+  },
+  {
+    "address": 78444,
+    "text": "_ZNSt7__cxx1118basic_stringstreamIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 78508,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_disposeEv"
+  },
+  {
+    "address": 78576,
+    "text": "_ZSt4cout"
+  },
+  {
+    "address": 78586,
+    "text": "_ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 78633,
+    "text": "_ZSt20__throw_out_of_rangePKc"
+  },
+  {
+    "address": 78663,
+    "text": "_ZStlsIcSt11char_traitsIcEERSt13basic_ostreamIT_T0_ES6_St8_SetfillIS3_E"
+  },
+  {
+    "address": 78735,
+    "text": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7compareERKS4_"
+  },
+  {
+    "address": 78804,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructEjc"
+  },
+  {
+    "address": 78875,
+    "text": "_ZStplIcSt11char_traitsIcESaIcEENSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_RKS8_"
+  },
+  {
+    "address": 78954,
+    "text": "_ZNSt11regex_errorD1Ev"
+  },
+  {
+    "address": 78977,
+    "text": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6insertEjPKc"
+  },
+  {
+    "address": 79043,
+    "text": "_ZNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEED1Ev"
+  },
+  {
+    "address": 79108,
+    "text": "_ZNSi3getERc"
+  },
+  {
+    "address": 79121,
+    "text": "_ZNSt13basic_fstreamIcSt11char_traitsIcEED1Ev"
+  },
+  {
+    "address": 79167,
+    "text": "__cxa_end_catch"
+  },
+  {
+    "address": 79183,
+    "text": "_ZNSolsEPFRSt8ios_baseS0_E"
+  },
+  {
+    "address": 79210,
+    "text": "_ZSt18_Rb_tree_decrementPSt18_Rb_tree_node_base"
+  },
+  {
+    "address": 79258,
+    "text": "_ZSt19__throw_logic_errorPKc"
+  },
+  {
+    "address": 79287,
+    "text": "__cxa_free_exception"
+  },
+  {
+    "address": 79308,
+    "text": "__aeabi_unwind_cpp_pr0"
+  },
+  {
+    "address": 79331,
+    "text": "__aeabi_unwind_cpp_pr1"
+  },
+  {
+    "address": 79354,
+    "text": "__aeabi_d2lz"
+  },
+  {
+    "address": 79367,
+    "text": "__aeabi_l2d"
+  },
+  {
+    "address": 79379,
+    "text": "__aeabi_ldivmod"
+  },
+  {
+    "address": 79395,
+    "text": "system"
+  },
+  {
+    "address": 79402,
+    "text": "sem_wait"
+  },
+  {
+    "address": 79411,
+    "text": "sem_trywait"
+  },
+  {
+    "address": 79423,
+    "text": "sem_post"
+  },
+  {
+    "address": 79432,
+    "text": "sem_unlink"
+  },
+  {
+    "address": 79443,
+    "text": "shm_open"
+  },
+  {
+    "address": 79452,
+    "text": "localtime"
+  },
+  {
+    "address": 79462,
+    "text": "ftruncate64"
+  },
+  {
+    "address": 79474,
+    "text": "sem_close"
+  },
+  {
+    "address": 79484,
+    "text": "__uClibc_main"
+  },
+  {
+    "address": 79498,
+    "text": "sem_open"
+  },
+  {
+    "address": 79507,
+    "text": "munmap"
+  },
+  {
+    "address": 79514,
+    "text": "signal"
+  },
+  {
+    "address": 79521,
+    "text": "sem_timedwait"
+  },
+  {
+    "address": 79535,
+    "text": "mmap64"
+  },
+  {
+    "address": 79542,
+    "text": "shm_unlink"
+  },
+  {
+    "address": 79553,
+    "text": "libstdc++.so.6"
+  },
+  {
+    "address": 79568,
+    "text": "libgcc_s.so.1"
+  },
+  {
+    "address": 79582,
+    "text": "libc.so.0"
+  },
+  {
+    "address": 79592,
+    "text": "GCC_3.5"
+  },
+  {
+    "address": 79600,
+    "text": "GLIBCXX_3.4.9"
+  },
+  {
+    "address": 79614,
+    "text": "CXXABI_ARM_1.3.3"
+  },
+  {
+    "address": 79631,
+    "text": "CXXABI_1.3.9"
+  },
+  {
+    "address": 79644,
+    "text": "GLIBCXX_3.4.14"
+  },
+  {
+    "address": 79659,
+    "text": "GLIBCXX_3.4.22"
+  },
+  {
+    "address": 79674,
+    "text": "GLIBCXX_3.4.19"
+  },
+  {
+    "address": 79689,
+    "text": "GLIBCXX_3.4.11"
+  },
+  {
+    "address": 79704,
+    "text": "CXXABI_1.3"
+  },
+  {
+    "address": 79715,
+    "text": "GLIBCXX_3.4.26"
+  },
+  {
+    "address": 79730,
+    "text": "GLIBCXX_3.4.15"
+  },
+  {
+    "address": 79745,
+    "text": "GLIBCXX_3.4"
+  },
+  {
+    "address": 79757,
+    "text": "GLIBCXX_3.4.21"
+  },
+  {
+    "address": 88232,
+    "text": "fff?"
+  },
+  {
+    "address": 88278,
+    "text": "L?0@-"
+  },
+  {
+    "address": 128968,
+    "text": "\"\"//\\\\a"
+  },
+  {
+    "address": 212436,
+    "text": "vector::_M_realloc_insert"
+  },
+  {
+    "address": 212464,
+    "text": "basic_string::_M_construct null not valid"
+  },
+  {
+    "address": 212508,
+    "text": "Left"
+  },
+  {
+    "address": 212516,
+    "text": "Right"
+  },
+  {
+    "address": 212524,
+    "text": "/LubadhShM_"
+  },
+  {
+    "address": 212536,
+    "text": "/LubadhSem_"
+  },
+  {
+    "address": 212548,
+    "text": "2.1.0"
+  },
+  {
+    "address": 212556,
+    "text": "PresetArray"
+  },
+  {
+    "address": 212568,
+    "text": "PresetToLoad"
+  },
+  {
+    "address": 212584,
+    "text": "PresetStatus"
+  },
+  {
+    "address": 212600,
+    "text": "LoadToChannels"
+  },
+  {
+    "address": 212616,
+    "text": "PresetInitLoad"
+  },
+  {
+    "address": 212632,
+    "text": "PresetTrigLoad"
+  },
+  {
+    "address": 212648,
+    "text": "PresetCopied"
+  },
+  {
+    "address": 212664,
+    "text": "PresetMap"
+  },
+  {
+    "address": 212676,
+    "text": "PresetName"
+  },
+  {
+    "address": 212688,
+    "text": "PresetSlot"
+  },
+  {
+    "address": 212700,
+    "text": "autosave/"
+  },
+  {
+    "address": 212712,
+    "text": "audio/"
+  },
+  {
+    "address": 212720,
+    "text": "settings/"
+  },
+  {
+    "address": 212732,
+    "text": ".dat"
+  },
+  {
+    "address": 212740,
+    "text": ".hjson"
+  },
+  {
+    "address": 212748,
+    "text": "tracker.txt"
+  },
+  {
+    "address": 212760,
+    "text": "AutosaveStart"
+  },
+  {
+    "address": 212776,
+    "text": "AutosaveData"
+  },
+  {
+    "address": 212792,
+    "text": "mkdir "
+  },
+  {
+    "address": 212800,
+    "text": "blank"
+  },
+  {
+    "address": 212808,
+    "text": "length"
+  },
+  {
+    "address": 212816,
+    "text": "monitoring"
+  },
+  {
+    "address": 212828,
+    "text": "playLoop"
+  },
+  {
+    "address": 212840,
+    "text": "recLoop"
+  },
+  {
+    "address": 212848,
+    "text": "modes"
+  },
+  {
+    "address": 212856,
+    "text": "active"
+  },
+  {
+    "address": 212864,
+    "text": "clkDiv"
+  },
+  {
+    "address": 212872,
+    "text": "feedback"
+  },
+  {
+    "address": 212884,
+    "text": "xfade"
+  },
+  {
+    "address": 212892,
+    "text": "slew"
+  },
+  {
+    "address": 212900,
+    "text": "tape"
+  },
+  {
+    "address": 212908,
+    "text": "file"
+  },
+  {
+    "address": 212916,
+    "text": "folder"
+  },
+  {
+    "address": 212924,
+    "text": "quantiseFlag"
+  },
+  {
+    "address": 212940,
+    "text": "quantiseGrid"
+  },
+  {
+    "address": 212956,
+    "text": "time"
+  },
+  {
+    "address": 212964,
+    "text": "slot_id"
+  },
+  {
+    "address": 212972,
+    "text": "RecordSpeed"
+  },
+  {
+    "address": 212984,
+    "text": "Looping"
+  },
+  {
+    "address": 212992,
+    "text": "Oneshot"
+  },
+  {
+    "address": 213000,
+    "text": "PlaybackSpeed"
+  },
+  {
+    "address": 213016,
+    "text": "MultiTap"
+  },
+  {
+    "address": 213028,
+    "text": "SpeedSlewTime"
+  },
+  {
+    "address": 213044,
+    "text": "RecordJack"
+  },
+  {
+    "address": 213056,
+    "text": "Average"
+  },
+  {
+    "address": 213064,
+    "text": "Resolution"
+  },
+  {
+    "address": 213076,
+    "text": "Timeout"
+  },
+  {
+    "address": 213084,
+    "text": "ExternalClock"
+  },
+  {
+    "address": 213100,
+    "text": "EraseRecord"
+  },
+  {
+    "address": 213112,
+    "text": "TimePot"
+  },
+  {
+    "address": 213120,
+    "text": "MinLength"
+  },
+  {
+    "address": 213132,
+    "text": "CrossfadeDuration"
+  },
+  {
+    "address": 213152,
+    "text": "RetrigDelay"
+  },
+  {
+    "address": 213164,
+    "text": "MaxDubLevel"
+  },
+  {
+    "address": 213176,
+    "text": "CapacativeTouchMode"
+  },
+  {
+    "address": 213196,
+    "text": "SpeedControl"
+  },
+  {
+    "address": 213212,
+    "text": "SpeedMarkers"
+  },
+  {
+    "address": 213228,
+    "text": "SpeedTable"
+  },
+  {
+    "address": 213240,
+    "text": "ClockDivisions"
+  },
+  {
+    "address": 213256,
+    "text": "Quantisation"
+  },
+  {
+    "address": 213272,
+    "text": "WowFlutterDepth"
+  },
+  {
+    "address": 213288,
+    "text": "CrinkleDepth"
+  },
+  {
+    "address": 213304,
+    "text": "Wear"
+  },
+  {
+    "address": 213312,
+    "text": "TapeAge"
+  },
+  {
+    "address": 213320,
+    "text": "Hysterisis"
+  },
+  {
+    "address": 213332,
+    "text": "Knee"
+  },
+  {
+    "address": 213340,
+    "text": "Compensation"
+  },
+  {
+    "address": 213356,
+    "text": "LowCutFreq"
+  },
+  {
+    "address": 213368,
+    "text": "LowCutQ"
+  },
+  {
+    "address": 213376,
+    "text": "HighCutFreq"
+  },
+  {
+    "address": 213388,
+    "text": "Reverb"
+  },
+  {
+    "address": 213396,
+    "text": "preset"
+  },
+  {
+    "address": 213408,
+    "text": " started running"
+  },
+  {
+    "address": 213428,
+    "text": "Data autosave starting"
+  },
+  {
+    "address": 213452,
+    "text": "basic_string::append"
+  },
+  {
+    "address": 213476,
+    "text": "Shared memory: error unmapping object "
+  },
+  {
+    "address": 213516,
+    "text": ": internal error"
+  },
+  {
+    "address": 213540,
+    "text": " error code "
+  },
+  {
+    "address": 213556,
+    "text": "Shared memory: error when unlinking shared memory "
+  },
+  {
+    "address": 213608,
+    "text": ": permission denied"
+  },
+  {
+    "address": 213628,
+    "text": ": file error"
+  },
+  {
+    "address": 213644,
+    "text": "Shared memory: could not open "
+  },
+  {
+    "address": 213676,
+    "text": ": invalid name"
+  },
+  {
+    "address": 213692,
+    "text": ": too many files open"
+  },
+  {
+    "address": 213716,
+    "text": ": filename too long"
+  },
+  {
+    "address": 213736,
+    "text": ": error code "
+  },
+  {
+    "address": 213752,
+    "text": "Shared memory: could not create shared memory object "
+  },
+  {
+    "address": 213808,
+    "text": " of size "
+  },
+  {
+    "address": 213824,
+    "text": " bytes"
+  },
+  {
+    "address": 213832,
+    "text": ": larger than maximum file size"
+  },
+  {
+    "address": 213864,
+    "text": ": interrupted by signal"
+  },
+  {
+    "address": 213888,
+    "text": "Shared memory: error mapping memory object "
+  },
+  {
+    "address": 213932,
+    "text": ": permissions/file error"
+  },
+  {
+    "address": 213960,
+    "text": ": locking error"
+  },
+  {
+    "address": 213976,
+    "text": ": too large"
+  },
+  {
+    "address": 213988,
+    "text": ": filesystem does not support mamory mapping"
+  },
+  {
+    "address": 214036,
+    "text": ": no memory available or too many mappings"
+  },
+  {
+    "address": 214080,
+    "text": ": file sealed or execution denied"
+  },
+  {
+    "address": 214116,
+    "text": "Shared memory: error when closing file "
+  },
+  {
+    "address": 214156,
+    "text": " with descriptor "
+  },
+  {
+    "address": 214176,
+    "text": "N3shm9FileErrorE"
+  },
+  {
+    "address": 214208,
+    "text": "N3shm11MemoryErrorE"
+  },
+  {
+    "address": 214240,
+    "text": "N3shm13_SharedMemoryILj17116EEE"
+  },
+  {
+    "address": 214280,
+    "text": "N3shm6ObjectIN6lubadh12AutosaveDataEEE"
+  },
+  {
+    "address": 214332,
+    "text": "NSt6thread11_State_implINS_8_InvokerISt5tupleIJPFvN6lubadh11_ChannelIDsEES4_EEEEEE"
+  },
+  {
+    "address": 214600,
+    "text": "Failed to open Semaphore "
+  },
+  {
+    "address": 214628,
+    "text": "initial value too big"
+  },
+  {
+    "address": 214652,
+    "text": "invalid name"
+  },
+  {
+    "address": 214668,
+    "text": "permission denied"
+  },
+  {
+    "address": 214688,
+    "text": "too many files open"
+  },
+  {
+    "address": 214708,
+    "text": "insufficient memory"
+  },
+  {
+    "address": 214728,
+    "text": "Semaphore "
+  },
+  {
+    "address": 214740,
+    "text": ": internal error (destructor)"
+  },
+  {
+    "address": 214772,
+    "text": ": permission denied to unlink"
+  },
+  {
+    "address": 214804,
+    "text": ": invalid name"
+  },
+  {
+    "address": 214820,
+    "text": "internal error (wait)"
+  },
+  {
+    "address": 214844,
+    "text": "interrupted by signal"
+  },
+  {
+    "address": 214868,
+    "text": ": internal error (post)"
+  },
+  {
+    "address": 214892,
+    "text": ": internal error (wait_for/until)"
+  },
+  {
+    "address": 214926,
+    "text": "cannot create std::vector larger than max_size()"
+  },
+  {
+    "address": 215011,
+    "text": "]|\\xc2\\xad|\\xd8[\\x80-\\x84]|\\xdc\\x8f|\\xe1\\x9e[\\xb4\\xb5]|\\xe2\\x80[\\x8c\\x8f]|\\xe2\\x80[\\xa8-\\xaf]|\\xe2\\x81[\\xa0-\\xaf]|\\xef\\xbb\\xbf|\\xef\\xbf[\\xb0-\\xbf]"
+  },
+  {
+    "address": 215158,
+    "text": "[\\\\\\\"\\x00-\\x1f"
+  },
+  {
+    "address": 215173,
+    "text": "^\\s|^\"|^'|^#|^/\\*|^//|^\\{|^\\}|^\\[|^\\]|^:|^,|\\s$|[\\x00-\\x1f"
+  },
+  {
+    "address": 215232,
+    "text": "'''|^[\\s]+$|[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f"
+  },
+  {
+    "address": 215272,
+    "text": "^(true|false|null)\\s*((,|\\]|\\}|#|//|/\\*).*)?$"
+  },
+  {
+    "address": 215318,
+    "text": "[,\\{\\[\\}\\]\\s:#\"']|//|/\\*"
+  },
+  {
+    "address": 215343,
+    "text": "\\r|\\n|\\r\\n"
+  },
+  {
+    "address": 215354,
+    "text": "Could not open file '"
+  },
+  {
+    "address": 215376,
+    "text": "' for writing"
+  },
+  {
+    "address": 215420,
+    "text": "alert"
+  },
+  {
+    "address": 215426,
+    "text": "backspace"
+  },
+  {
+    "address": 215436,
+    "text": "newline"
+  },
+  {
+    "address": 215444,
+    "text": "vertical-tab"
+  },
+  {
+    "address": 215457,
+    "text": "form-feed"
+  },
+  {
+    "address": 215467,
+    "text": "carriage-return"
+  },
+  {
+    "address": 215552,
+    "text": "exclamation-mark"
+  },
+  {
+    "address": 215569,
+    "text": "quotation-mark"
+  },
+  {
+    "address": 215584,
+    "text": "number-sign"
+  },
+  {
+    "address": 215596,
+    "text": "dollar-sign"
+  },
+  {
+    "address": 215608,
+    "text": "percent-sign"
+  },
+  {
+    "address": 215621,
+    "text": "ampersand"
+  },
+  {
+    "address": 215631,
+    "text": "apostrophe"
+  },
+  {
+    "address": 215642,
+    "text": "left-parenthesis"
+  },
+  {
+    "address": 215659,
+    "text": "right-parenthesis"
+  },
+  {
+    "address": 215677,
+    "text": "asterisk"
+  },
+  {
+    "address": 215686,
+    "text": "plus-sign"
+  },
+  {
+    "address": 215696,
+    "text": "comma"
+  },
+  {
+    "address": 215702,
+    "text": "hyphen"
+  },
+  {
+    "address": 215709,
+    "text": "period"
+  },
+  {
+    "address": 215716,
+    "text": "zero"
+  },
+  {
+    "address": 215729,
+    "text": "three"
+  },
+  {
+    "address": 215735,
+    "text": "four"
+  },
+  {
+    "address": 215740,
+    "text": "five"
+  },
+  {
+    "address": 215749,
+    "text": "seven"
+  },
+  {
+    "address": 215755,
+    "text": "eight"
+  },
+  {
+    "address": 215761,
+    "text": "nine"
+  },
+  {
+    "address": 215766,
+    "text": "semicolon"
+  },
+  {
+    "address": 215776,
+    "text": "less-than-sign"
+  },
+  {
+    "address": 215791,
+    "text": "equals-sign"
+  },
+  {
+    "address": 215803,
+    "text": "greater-than-sign"
+  },
+  {
+    "address": 215821,
+    "text": "question-mark"
+  },
+  {
+    "address": 215835,
+    "text": "commercial-at"
+  },
+  {
+    "address": 215875,
+    "text": "left-square-bracket"
+  },
+  {
+    "address": 215895,
+    "text": "backslash"
+  },
+  {
+    "address": 215905,
+    "text": "right-square-bracket"
+  },
+  {
+    "address": 215926,
+    "text": "circumflex"
+  },
+  {
+    "address": 215937,
+    "text": "underscore"
+  },
+  {
+    "address": 215948,
+    "text": "grave-accent"
+  },
+  {
+    "address": 215979,
+    "text": "left-curly-bracket"
+  },
+  {
+    "address": 215998,
+    "text": "vertical-line"
+  },
+  {
+    "address": 216012,
+    "text": "right-curly-bracket"
+  },
+  {
+    "address": 216032,
+    "text": "tilde"
+  },
+  {
+    "address": 216042,
+    "text": "alnum"
+  },
+  {
+    "address": 216048,
+    "text": "alpha"
+  },
+  {
+    "address": 216054,
+    "text": "blank"
+  },
+  {
+    "address": 216060,
+    "text": "cntrl"
+  },
+  {
+    "address": 216066,
+    "text": "graph"
+  },
+  {
+    "address": 216072,
+    "text": "lower"
+  },
+  {
+    "address": 216078,
+    "text": "print"
+  },
+  {
+    "address": 216084,
+    "text": "punct"
+  },
+  {
+    "address": 216090,
+    "text": "upper"
+  },
+  {
+    "address": 216096,
+    "text": "xdigit"
+  },
+  {
+    "address": 216103,
+    "text": "Unexpected end of regex when escaping."
+  },
+  {
+    "address": 216142,
+    "text": "Unexpected end of regex when reading control code."
+  },
+  {
+    "address": 216193,
+    "text": "Unexpected end of regex when ascii character."
+  },
+  {
+    "address": 216239,
+    "text": "basic_string::_M_construct null not valid"
+  },
+  {
+    "address": 216284,
+    "text": "vector::_M_default_append"
+  },
+  {
+    "address": 216310,
+    "text": "Unexpected escape character."
+  },
+  {
+    "address": 216339,
+    "text": "Unexpected end of regex when in an open parenthesis."
+  },
+  {
+    "address": 216392,
+    "text": "Invalid special open parenthesis."
+  },
+  {
+    "address": 216426,
+    "text": "Unexpected end of regex when in brace expression."
+  },
+  {
+    "address": 216476,
+    "text": "Unexpected character in brace expression."
+  },
+  {
+    "address": 216518,
+    "text": "vector::_M_realloc_insert"
+  },
+  {
+    "address": 216544,
+    "text": "Unexpected end of character class."
+  },
+  {
+    "address": 216579,
+    "text": "Unexpected end of regex when in bracket expression."
+  },
+  {
+    "address": 216631,
+    "text": "Unexpected character class open bracket."
+  },
+  {
+    "address": 216672,
+    "text": ".[\\()*+?{|^$"
+  },
+  {
+    "address": 216685,
+    "text": ".[\\*^$"
+  },
+  {
+    "address": 216692,
+    "text": "^$\\.*+?()[]{}|"
+  },
+  {
+    "address": 216707,
+    "text": ".[\\()*+?{|^$"
+  },
+  {
+    "address": 216721,
+    "text": ".[\\*^$"
+  },
+  {
+    "address": 216729,
+    "text": "Nothing to repeat before a quantifier."
+  },
+  {
+    "address": 216768,
+    "text": "cannot create std::deque larger than max_size()"
+  },
+  {
+    "address": 216816,
+    "text": "Invalid character class."
+  },
+  {
+    "address": 216841,
+    "text": "Number of NFA states exceeds limit. Please use shorter regex string, or use smaller brace expression, or make _GLIBCXX_REGEX_STATE_LIMIT larger."
+  },
+  {
+    "address": 216986,
+    "text": "Unexpected back-reference in polynomial mode."
+  },
+  {
+    "address": 217032,
+    "text": "Back-reference index exceeds current sub-expression count."
+  },
+  {
+    "address": 217091,
+    "text": "Back-reference referred to an opened sub-expression."
+  },
+  {
+    "address": 217144,
+    "text": "Unexpected token in brace expression."
+  },
+  {
+    "address": 217182,
+    "text": "Unexpected end of brace expression."
+  },
+  {
+    "address": 217218,
+    "text": "Invalid range in brace expression."
+  },
+  {
+    "address": 217253,
+    "text": "Invalid equivalence class."
+  },
+  {
+    "address": 217280,
+    "text": "Invalid range in bracket expression."
+  },
+  {
+    "address": 217317,
+    "text": "Invalid collate element."
+  },
+  {
+    "address": 217342,
+    "text": "Unexpected dash in bracket expression. For POSIX syntax, a dash is not treated literally only when it is at beginning or end."
+  },
+  {
+    "address": 217468,
+    "text": "Character is expected after a dash."
+  },
+  {
+    "address": 217504,
+    "text": "Unexpected character in bracket expression."
+  },
+  {
+    "address": 217548,
+    "text": "Parenthesis is not closed."
+  },
+  {
+    "address": 217575,
+    "text": "St11_Mutex_baseILN9__gnu_cxx12_Lock_policyE2EE"
+  },
+  {
+    "address": 217632,
+    "text": "St19_Sp_make_shared_tag"
+  },
+  {
+    "address": 217664,
+    "text": "St16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE"
+  },
+  {
+    "address": 217728,
+    "text": "N5Hjson10file_errorE"
+  },
+  {
+    "address": 217764,
+    "text": "St23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIS5_ELN9__gnu_cxx12_Lock_policyE2EE"
+  },
+  {
+    "address": 217892,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb0EEE"
+  },
+  {
+    "address": 217972,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb1EEE"
+  },
+  {
+    "address": 218052,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb0EEE"
+  },
+  {
+    "address": 218132,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb1EEE"
+  },
+  {
+    "address": 218212,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb1ELb0ELb0EEE"
+  },
+  {
+    "address": 218292,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb1ELb0ELb1EEE"
+  },
+  {
+    "address": 218372,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb1ELb1ELb0EEE"
+  },
+  {
+    "address": 218452,
+    "text": "NSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb1ELb1ELb1EEE"
+  },
+  {
+    "address": 218532,
+    "text": "NSt8__detail12_CharMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0EEE"
+  },
+  {
+    "address": 218608,
+    "text": "NSt8__detail12_CharMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1EEE"
+  },
+  {
+    "address": 218684,
+    "text": "NSt8__detail12_CharMatcherINSt7__cxx1112regex_traitsIcEELb1ELb0EEE"
+  },
+  {
+    "address": 218760,
+    "text": "NSt8__detail12_CharMatcherINSt7__cxx1112regex_traitsIcEELb1ELb1EEE"
+  },
+  {
+    "address": 218836,
+    "text": "NSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0EEE"
+  },
+  {
+    "address": 218916,
+    "text": "NSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1EEE"
+  },
+  {
+    "address": 218996,
+    "text": "NSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb1ELb0EEE"
+  },
+  {
+    "address": 219076,
+    "text": "NSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb1ELb1EEE"
+  },
+  {
+    "address": 219336,
+    "text": "The values must be of the same type for this operation."
+  },
+  {
+    "address": 219392,
+    "text": "The values must be of type Double, Int64 or String for this operation."
+  },
+  {
+    "address": 219463,
+    "text": "The value must be of type String for this operation."
+  },
+  {
+    "address": 219516,
+    "text": "The values must be of type Double or Int64 for this operation."
+  },
+  {
+    "address": 219579,
+    "text": "The values must be of the Int64 type for this operation."
+  },
+  {
+    "address": 219636,
+    "text": "Must be of type Double or Int64 for that operation."
+  },
+  {
+    "address": 219688,
+    "text": "Must be of type String for that operation."
+  },
+  {
+    "address": 219731,
+    "text": "Index out of bounds."
+  },
+  {
+    "address": 219752,
+    "text": "Must be of type Map for that operation."
+  },
+  {
+    "address": 219792,
+    "text": "The value must be of type Double or Int64 for this operation."
+  },
+  {
+    "address": 219854,
+    "text": "Key not found."
+  },
+  {
+    "address": 219869,
+    "text": "map::at"
+  },
+  {
+    "address": 219877,
+    "text": "Illegal type for this operation."
+  },
+  {
+    "address": 219910,
+    "text": "true"
+  },
+  {
+    "address": 219915,
+    "text": "false"
+  },
+  {
+    "address": 219921,
+    "text": "null"
+  },
+  {
+    "address": 219929,
+    "text": "Must be of type Undefined, Vector or Map for that operation."
+  },
+  {
+    "address": 219990,
+    "text": "Must be of type Vector or Map for that operation."
+  },
+  {
+    "address": 220040,
+    "text": "Must be of type Undefined or Map for that operation."
+  },
+  {
+    "address": 220093,
+    "text": "Must be of type Undefined or Vector for that operation."
+  },
+  {
+    "address": 220149,
+    "text": "N5Hjson13type_mismatchE"
+  },
+  {
+    "address": 220188,
+    "text": "N5Hjson19index_out_of_boundsE"
+  },
+  {
+    "address": 220232,
+    "text": "St15_Sp_counted_ptrIPN5Hjson5Value8CommentsELN9__gnu_cxx12_Lock_policyE2EE"
+  },
+  {
+    "address": 220320,
+    "text": "St23_Sp_counted_ptr_inplaceIN5Hjson5Value9ValueImplESaIS2_ELN9__gnu_cxx12_Lock_policyE2EE"
+  },
+  {
+    "address": 220552,
+    "text": "N5Hjson5ValueE"
+  },
+  {
+    "address": 220576,
+    "text": "N5Hjson8MapProxyE"
+  },
+  {
+    "address": 220608,
+    "text": "[INFO]"
+  },
+  {
+    "address": 220616,
+    "text": "[WARNING]"
+  },
+  {
+    "address": 220628,
+    "text": "[ERROR]"
+  },
+  {
+    "address": 220636,
+    "text": "YYYY-MM-DD "
+  },
+  {
+    "address": 220648,
+    "text": "%Y-%m-%d "
+  },
+  {
+    "address": 220660,
+    "text": "HH:MM:SS"
+  },
+  {
+    "address": 220672,
+    "text": "%H:%M:%S"
+  },
+  {
+    "address": 220684,
+    "text": "%lld"
+  },
+  {
+    "address": 220692,
+    "text": "Failed to log message with error: "
+  },
+  {
+    "address": 220728,
+    "text": "log.txt"
+  }
+]

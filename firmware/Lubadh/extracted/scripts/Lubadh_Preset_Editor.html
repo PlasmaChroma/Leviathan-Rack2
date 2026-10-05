@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<!-- saved from url=(0053)http://incalcando.com/stuff/Lubadh_Preset_Editor.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lubadh v2.1.0 Preset Editor</title>
+    <!-- <link href="./Lubadh Preset Configuration Tool_files/css2" rel="stylesheet"> -->
+
+    <style>
+
+       .header-container {
+            width: 95%;           /* Set width to 95% */
+            max-width: 800px;      /* Set max width to 800px */
+            margin: 0 left;        /* Center the container horizontally */
+            display: flex;
+            flex-direction: column; /* Stack items vertically */
+            position: relative;    /* Use relative positioning for absolute placement */
+        }
+
+        /* Style for the image aligned on the right */
+        .header-container img {
+            position: absolute;
+            right: -10px;
+            top: 0px;
+        }
+
+        /* Flex container for the headers */
+        .header-text {
+            font-family: 'Jost', sans-serif;
+            display: flex;
+            justify-content: space-between; /* Align h1 to the left and h2 to the right */
+            align-items: center;            /* Vertically align both headers */
+            width: 100%;                    /* Take the full width of the container */
+        }
+
+        h1, h2 {
+            margin: 0;
+            padding: 10px 0;
+        }
+        /* Basic styling for form elements */
+        body {
+            font-family: 'Jost', sans-serif; /* Define font family */
+            padding: 20px;
+            font-size: 14px; /* Body text size */
+            color: #333; /* Body text color */
+        }
+
+        ul {
+            margin-top: 10px; /* Adjust the value as needed */
+            margin-bottom: 0px; /* Adjust the value as needed */
+            padding-left: 20px; /* Optional: Adjust the left padding */
+        }
+
+        li {
+            margin-top: 0px; /* Adjust the value as needed */
+            margin-bottom: 0px; /* Adjust the value as needed */
+        }
+
+        .infoSection {
+            font-family: 'Jost', sans-serif;
+            display: block; /* Make the span behave like a block element */
+            /* color: #e1c590; */
+            width: 95%;
+            max-width: 800px;
+            box-sizing: border-box; /* Ensure padding is included in width */
+            padding: 10px; /* Add padding for consistency */
+            background-color: #f9f9f9; /* Optional: Add a subtle background color */
+            border: 1px solid #ccc; /* Optional: Add a border for consistency */
+            margin-bottom: 20px; /* Add spacing below the section */
+        }
+
+        .infoToggle {
+            font-family: 'Jost', sans-serif;
+            display: block; /* Make sure the first sentence behaves like a block */
+            margin-bottom: 10px; /* Add spacing between the first sentence and the expandable content */
+        }
+
+        .extraInfo {
+            display: none;
+            font-family: 'Jost', sans-serif;
+            font-size: 15px;
+            /* display: block; Ensure the expandable text acts like a block */
+            margin-top: 10px; /* Add spacing between the toggle and the extra content */
+            margin-bottom: 10px; /* Add spacing between the toggle and the extra content */
+            
+            padding: 10px; /* Add padding to match the rest */
+            /* background-color: #e1c590; Keep background color consistent */
+            border-top: 1px solid #ccc; /* Optional: Add a top border for separation */
+        }
+
+        .download-button {
+            font-family: 'Jost', sans-serif;
+            width: 95%;
+            max-width: 800px;
+            box-sizing: border-box; /* Ensures padding is included in the width calculation */
+            margin-top: 10px;
+        }
+
+        .download-button:disabled {
+            background-color: #ccc; /* Grey background when disabled */
+            cursor: not-allowed;    /* Change cursor to indicate disabled state */
+        }
+
+        .download-button:hover {
+            background-color: #1e1e1e; /* Grey background when disabled */
+            color: #e1c590;
+        }
+
+        .download-button:disabled:hover {
+            color: black;
+            background-color: #ccc; /* Grey background when disabled */
+            cursor: not-allowed;    /* Change cursor to indicate disabled state */
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            width: 95%;
+            max-width: 800px;
+            box-sizing: border-box; /* Ensure padding (if any) is included in width */
+        }
+
+        label {
+            font-family: 'Jost', sans-serif;
+            display: block;  /* Makes the label a block element */
+            margin-top: 2px;
+            margin-bottom: 1px; /* Space between label and input */
+        }
+
+        input, select {
+            font-family: 'Jost', sans-serif;
+            display: block;
+            border: 1px solid #e1c590;
+            font-size: 16px; /* Change this value to your desired font size */
+            padding: 5px; /* Optional: Add some padding for better usability */
+            margin-bottom: 2px; /* Space between inputs */
+            width: 100%; /* Make inputs and selects take full width */
+            box-sizing: border-box; /* Include padding in width calculation */
+            position: relative;
+            z-index: 1;
+        }
+
+        input:hover, select:hover {
+            /* background-color: #e1c590; Green background on hover */
+            color: black; /* White text on hover */
+        }
+
+        button {
+            font-family: 'Jost', sans-serif;
+            padding: 10px;
+            background-color: #e1c590;
+            color: black;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1e1e1e; /* Grey background when disabled */
+            color: #e1c590;
+        }
+
+        select {
+            border: 1px solid #e1c590;
+            color: rgb(19, 19, 19);  /* Set the text color to black */
+            background-color: white; /* Background color for options (limited support) */
+        }   
+        
+        option {
+            color: #e1c590; /* Text color of the options when dropdown is open */
+            background-color: white; /* Background color for options (limited support) */
+
+        }
+
+        pre {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f5f5f5;
+            font-size: 13px;
+            width: 95%;
+            max-width: 800px;
+            padding-left: 5px;
+            padding-right: 0px;
+            /* border: 1px solid #ccc; */
+            white-space: pre-wrap;
+        }
+
+        .label-container_template_selection {
+            width: 95%;       /* Ensure full width for all form elements */
+            max-width: 800px; /* Keep the same max width for consistency */
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            margin-bottom: 15px; /* Space between each label-container */
+            padding: 10px; /* Add padding inside the container */
+            border: 2px solid #e1c590; /* Optional border for the container */
+            border-radius: 5px; /* Optional rounded corners */
+            background-color: white; /* Optional background color */
+        }
+
+        /* Style to make the label and info appear inline */
+        .label-container {
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            margin-bottom: 0px; /* Space between each label-container */
+            padding: 10px; /* Add padding inside the container */
+            border: 2px solid #e1c590; /* Optional border for the container */
+            border-radius: 5px; /* Optional rounded corners */
+            background-color: white; /* Optional background color */
+        }
+
+        .label-container-row {
+            display: flex;
+            flex-direction: row; /* Stack children vertically */
+            margin-bottom: 0px; /* Space between each label-container */
+            padding: 10px; /* Add padding inside the container */
+            border: 1px solid #e1c590; /* Optional border for the container */
+            border-radius: 5px; /* Optional rounded corners */
+            background-color: #f9f9f9; /* Optional background color */
+        }
+
+        .info {
+            color: #e1c590;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-left: 2px;
+            margin-bottom: 2px;
+        }
+
+        /* Initially hide all expandable info */
+        .expandable-info {
+            display: none;
+            /* position: absolute;
+            top: 50px;
+            z-index: 10; */
+            margin-top: 0px;
+            /* margin-left: 20px;
+            margin-right: 20px;
+            margin-bottom: 20px; */
+            /* padding: 20px; */
+            padding-top: 0px;
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-bottom: 20px;
+            font-family: Arial, sans-serif; /* Ensure it uses the same font */
+            font-size: 14px; /* Match the body text size */
+            background-color: #dcdcdc;
+            border: 1px solid #e1c590;
+            color: #333; /* Match the body text color */
+            white-space: pre-wrap;
+        }
+
+        hr {
+            border: 2px solid #e1c590; /* Divider line style */
+            margin: 20px 0; /* Space above and below the divider */
+        }
+
+        /* .drop-zone {
+            border: 2px dashed #007BFF;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        } */
+        .drop-zone {
+            border: 2px dashed #e1c590;
+            padding: 20px;
+            margin-top: 0px;
+            margin-bottom: 20px;
+            text-align: center;
+            /* width: 95%; */
+            max-width: 800px;
+            background-color: #dcdcdc;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box; /* Ensure padding is included in width */
+        }
+
+        .drop-zone.active {
+            background-color: #e1c590;
+            border: 5px;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        .slider {
+            width: 300px;
+        }
+
+        .slider-value {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+
+        .input-with-unit {
+            position: relative;           /* Relative positioning for the container */
+            width: 100%;                  /* Make the container take up 100% width */
+        }
+
+        .input-with-unit input {
+            width: 100%;                  /* Input takes up 100% width */
+            padding-right: 40px;          /* Add space for the unit */
+            font-family: 'Jost', sans-serif;
+            display: block;
+            border: 1px solid #e1c590;
+            font-size: 16px; 
+            margin-bottom: 2px;
+            box-sizing: border-box;       /* Include padding in width calculation */
+            z-index: 0;
+        }
+
+        .input-with-unit .unit {
+            position: absolute;           /* Position the unit inside the input field */
+            right: 10px;                  /* Place it 10px from the right edge */
+            top: 50%;                     /* Vertically center the unit */
+            transform: translateY(-50%);  /* Adjust for perfect vertical centering */
+            font-family: 'Jost', sans-serif;
+            font-size: 16px;
+            color: #666;                  /* Slightly dimmer color for a subtle effect */
+            pointer-events: none;         /* Prevent interaction with the unit text */
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="header-container">
+        <img src="data:image/webp;base64,UklGRloZAABXRUJQVlA4WAoAAAAQAAAAKwEAKwEAQUxQSF8NAAAB8Eds2zc32/7txmmcxogxakREzB9RFREREbeKuERUREVUVEVVxf2jIioqKirK9aOq4hKXiIqKS1RcKqoqKiriFrmfH1ERFRERj4iIGDVGjDHGaWx/dPatycx5Hsfp+SsiJkAstb6FbJawM3YE8lno8RTkkYSdqTzhDYceb0CuS9h5E2ShI+yIbDOvJex8APIsHna458wTCTt/BbnthB3pPDMoYec6yHcSdnZ7xEVz2BE9BPlCws77II+TYUcyxzyUsHMB5FY07GgGWbgpRhsbNcD1U/LrqD5gJM42Ar/YIvogyH8aiQwG37To8XNiTwz1XdBlksQM9HKfqbSXAu6+6I1FYlGM9UWw7Tpa5CP0UrO5JI8DrVv0LpBTYrAPg2xedHePyCRMJroVXF4jMQ5yWIz2p+CaED2RI9ajZhNZCqqzOmIOZLsYbvpbQN0WvbVILIrxTgXTmkOsQc/Xm0/iIIi8NtEHy8SkGPBwEL0W3T2FvueakLMRPLkUMQm9PCBG3OkFzhPR6/PEmhjyTNDsCbkIvdhqSg3ZYCn3Ee0g58SYx4Llg+jRXSKXMCfnKEhKzcQwyBEx6IEgmRE9kSH2XJOSteDIJIgpkF1i1De8wBgWvblEfIyYlTwPit0o8QF6sVEMO5kNiHbR+8rEUzHukWD4KOQe9PO4ebn7QZCvJ/4JclAMvCsIJkVPnRO7YuTL/nfqEq+hl9rNrKngd+VB0ds8YkEM/We/2xbdWYOeS5mae+ZvxVbiNshJMfZ7/jYnet1X4ihqbrLhZ7kEMQFySAy+3fOxcdEbPWI1YnKy4F97LjEPMi1Gfy3vW/2id4P8XQx/0q8+RTRnncgkTC926E/FVtHvg3wkxt/jTzOi1x0SXx3zi2z40XmcmIbu9YsFpks+NCp6S5FYFSt87T+7Qi5Bv2iwg7qM35T6iFsgZ8USR/xmRXRnkzh1bEEO/CWXIsZAjok1dnm+8lL0hlNiSyxy1U+OosQsdK/dJhryPjIqelueeCtWOe0f6xFiFXo2ZRexY99oFX3AI34Vy7znFwuixw+g77u24Wz6Q6aeeApyQKyzwx+mRG/KEJ/FQhf84KtLvIFe6LCRZK72vH7RO0rEvFjpRO2tih7ZgH7WaCfRw1q7aCP+DnJcLHXIq7FZ0WOHxI5Y63ptndYTr6B7/faSztfUmOjX8sR7sdj5WtoS8j30/A2bcc9rx+sj+j3ilVjtRO28FXIH+mHMbiLbtXJxnRgH+Xex3Ju18qvo7hmxEbEd+as29l1iHnq5V6y3KV8TD0TvKBBvxIJf1sJnIT9DzzTZUN1R9Xk9xADIp2LFd6pvXnR3nziI25FsVttZI/EY5B2x5L8VqmxC9FSWWHNsSRar62uceAs93ybWnM5U1W3R2z1iVix6qpo+OcQW9NMGm0rsV0/+huh3QY6JVd8pV80r0Z1TYidmV/KxWk5SxCzIW2LZ7cUq+bvoDRfEklj3H9WxEyVWoRdb7Kv+vBrKvaJ3esS0WPh4NbwR3fkKPZO0MWfr6grXiUcg74uVD5Sv7KnoiQyx7tiZvL2qb3Hid5DdYumtxSu6I3oa5LxY+/Or+eJokVXCa7S3xNGVdIg+BHJCLH7kKuZEjx4RZ3U2525eXrGBmAR5W6y+6/LGRE/liDXH7iKLl3USIxage21i+Y2ZS7olenuJeC3W/+RyPgm5AT2Xsr/43mUUW4hBkE8kBBy8jD9Ej58TexIKbvxYNkk8hV7uCwfaSz80LnpjkfggIeGLH9l1tMgi9FJzWJDK/UC36F0gZyQ0fMi9E93dIzKJ8CB6wHiNxAjIYQkRf2JeiJ7IEbvRMCGypJ3VEc9BtkuomNZui95aJD5KyDhV6YtDrEHP14cNicx3XpvoA2ViUkLH4e9WRHf3oJ+6WnsyLHA2gFyKGIdeHhQ1mck+dsMB6fTwRPT6c2Jb9GkA+wPhgPx5LOQi9GKr1lLE9587QoHuaaId5JzoS6hcmHdDgJVcQomuE7mEdgvk/yWsbwh4rgyDHBc1tsM8Fdt3vgDF1gqJfWLP1cZAfotb3yQAvK0wBbJf1IZT5o7YfvLsu/KAiDSXiI8RbRbkF8f65lFxzxVZhF5sFLUtz3SI7Xd5lTAufWViRvRVkH+J9X+Cel6/Cf08rg14RLHB+kZAHoAcFf0A5HOxfeeAWSZ2RX8M8iRmfc9BHsY+K6V2rSnD3BLbb84yQ9JUqLQi+huQ22L9yyA3IiLzFXIpraNEFFusr6dIlNIi4p5991LUyAbIZbH+bZCv5ft7AI6i2hDIbNL6RkBm6irIDjAkauyQ+VlsP3nCPJbKnd56RJsEeeBY3wzIA9EftIp6Lc+MiO03FwmvS4u/79EWQH4S6/8AclX0GRzFKnV6hNdsfb0g8w1aYxEYrbQDcl5s39llZkWNfASQT313D+RZ0vqmQB7HtC58/0ZE3DNmUmw//o25J6q7VwFtIj+D/OJY3yLITUcbQeXNSFOBGRLbv15gOkRN5BQ8WAa5Ita/CXJJ9Dno5yC9duu7WyZyTVprkVg8IF6K7UePQU6IvgY9X39HO75mfdMgD6PaQJmYFGdNGRXbT10Q3pCo7h70U1ekLV/hv2LWtwxyXfRx6OVBEZHZCj1i+zdB5ju1+nNiW75vOAXwLmJ7zjYzL/of0IutFWQMKKXF9h+APHe19iIxJ5VjO/hVrL/3iJgQNboOPZdQ5Famzv7EncxW2o5owyDHRW/8LycEEGlarnBb1MQ+secS87gXCoh0bQJ/iT4Fsl/0buA4Fg6IO7LTpKUzxKeI5qwDmA4J+EXoxVbR7wNAviF0+FuBmBO97vA7rIYOm9DP64lpVPS6QoY7IEdFbylWwkG4UHdE7Aq5BP1xqPASeqmPuAUyUxciNOWJFdGdTQavQ4S/oOdaiDHQpXRocBPkS9Fjxxw2IiFBZJs4ThGz+NGhkOAByFHRG/I/dBgLBdxz4n9ixCp+fDIU+BVkj+gD3iXkr4UA6TyxIOQBLvN9CLAO/aKZeIxL9Tqtr9sjpkSvy1wOdmwvegj9JE68xmWPW959kPdET5cu7cy1umSO+C/RIxu4/HmrewG93EX04AoLTRbXDHJJ9NjhVeCzvTkrRLGemMTVDlhbH8gx0a/lr2jftbTYMXEcJxZw1Y8t7RHIPtHbvSvLpqysIU9sOcQGrv6tlf0OvXRd9CFUodduYV0e8VZ096gasGVhH6FnE8QkqnPMuu6CfCZ6U7ZKTh3Liu4SR0Iuo1pnLesZdK+X6ELVXrRZVTpLrIvublYPVq3qT+iFNDGCKvb6Laq7RLwWPXlUTfjq2NO/oZ/Fieeo7kfW9KBMPBG9OVtlmXpbOoa+7RDLqPYFS3oJclD0nmLVodWKUjninejONqp/PWJDK9Avmokx1OKoBfV6xAvRkyc1cRS1HucL9OMkMYPafGk9D0E+FL25WCO5FsupOyO2osQH1OqK5bwA+ZPovajZUp/VNHrEUkRzdmsHu1bzDmRa9H+ilkctphvklOjxbzV1Xm8tzi5xkCAWUdtz1jIOclj064UaK7ZaSjJLbDjEJmr9U8RO/oDudYreW6453LeSliLxp+jRY9T+nmsjn6BfNBCP4Ic/W8gtkM9ET134Qq7ZOmI7xKlD/AF/XLaOMZB3Rb8Bnyz2WEbDKbEmurPtF9i2jDno3g3iNnyzPGoVHSDnRI+f+QdOUxbhrBHZJDEBP/3dIu6AfCx6uuAr+VZriB8Q+y4xD3/9aA1PQQ6I3uP5DO5aQlOG+CzkZ/jtbtQO3kAvdBAP4L/PrKCjRMyLnjjxoWzaAiIb0M9c4lf48Z8W8HeQ46Jfv/ClUrfxxQ6JHSHfwp//K2Z6r6B7/USf51MYNbxreeK9kFvw6+NrZvceev4GMQb/fml0nR7xSnTn1MdyN0xuB/pJipiFn68Y3D2Qfxe97cLXMGRs7hmxESFW4e9fHFObh17uFb3f8zlMGlpTgXgjuvMVfp9tMrPP0AvXiUfw/3kj6wL5VPREJgC8LgNz94lvceJ3BOGma14jIO+InkYwjhhXMkt8cbTIakAcJU3rOcgO0YcQlD8b1g2PmBM9ehQY2WazWoNebCAmEZzLRjUAckz0VC5AMGBQzhFxEiMWEKTbjjmNgbwlenspUDBmTA1ZYlvIDQRrtsGUZqAXW4hBBO2MIXV6xLLo8b3A8TrN6AP0bJJ4iuDdcExoGOS46I3FAMKwASUOiANHiywiiA8S5jMFsl/0LgTzlPGkvxGfRHc3Awpp01mE7jUTIwjqpYjZ3CwQ86InjgILP5nNJvSzJPEcwb0VNZm7ZWJS9OZsgOGhwUSPoX9xiLcI8lzKXKahe72iD5QDDS+MpfmCWBHd2UKwl9pN5R303A1iHEG/YSg3Qb4UPX4ceBg0Emeb+NbToi8iCE/2r3bRTBr1jjzIe41B6IrJr4D8LGFnm0cUOsIO5wvIeQk7b4M8aww76s6YCQk7J0B+jYcdjR7h9UvY+Q7kewk7u0Hmb4Qdzi7zSsLO+yBPUmFHMsP8XcLOaZA70bCjpUiUeyXsXAL5QcLOWyAL18MO9+Mp+Vj+HyAAVlA4INQLAACQTACdASosASwBPm02l0gkIyIhJVYpSIANiWVu4XHOABmmyGxLz2/Yeddb/1U8zfcB41/mfOF8k/ifRT/d/UV5gf8F///Sl/+3Ro+mz9/+CY6G70yckK8t/6n8Of0A8xN4A5/sjq5h2I/wn/r5dN2997kbpmSoJ/k1+P3r6f/WFHZxPx2VHEOuaRJ0N9o3zcI2RuGQnVms6kM4R1mOyuTRmJwpsclw+gQkdIolTpxgPLfHrqrH47KbrkNMVTo8Qc62j/i+8dEkxoXUOc0ttQmwEoGQn4xwbp9Ba6Qp5I5/BXCUVrGcrxewLXbYaTHVbKjkclxHLmvjgVjCYIk4TWTIsrRA+Q1Kxj8dlRfI0LXmyxaAOnZJkIkr07s6qkHI6VuGQnWaWSL4E6973vBoBy6QiBkYkHH25SeQn47KjkTIK21ZEGfRpqSiP/0B/FGnmovg5HStwyE6y8rjrtWQikp7IsakA4VPe3TZck5g146VuGQn4zRWP/TR9mbzqwN+hMv6VDGPx2VHI6PMEJOViYXi6eBsBf9WLCKdyH6Wjh0UljpW4ZCfjOIFyRsDpszUG/jufqublAkbhkJ+OyotxQDhXnYAxJpRvLNTVF+jHwBv846VuGQnb5Bo2p0SvYvp805PcT3oOWhkzyN+bwcjpW4XFnt9s61rOlK0ViswuOEZBFl54sqsOJ+Ool9xkGRcyhe7UWvr9zkHp2idIT8dkI26khCLIec2/qxwOs0qNBQp2fmp/g5HSBwTZWZCQECum7m9VJiDvVGZ7L/4A69okwGHiL6119wyD56705Kb4b7Iup8PvU25EwNcltlx+gAA/vfzgJXyUFCvOsgy4E0OeQ7bDhFafxjJpXphOLkWy0vixVi1T4Hb5GsD/7z81BFuDePMe86/Ib4HnnP/9yU//ceP//uKvyOZij/riDIn0z75i9RwNgM9MDf5lOVeu+cXskIGYzZcQ02PaH+JE/2NWiebkxdjQGPprwsSIsENXWeYOmPWzFF/MKoqyIyR4XXvHSR+W2Fk1xEzc7VhOqZx9c7Im1Xi4cpW1lmfHB/Bk7jqFqRuAiPjGdpJ3BSlfGKuSc7ARRWeXx8TDnU2zhSFDbOyv5Gw135AdG1PQ9sfiIDwYq8q/h9DFgaUqqBqJfmHm3R43ZJJ2jghlAddnaz5aXqBCPYzBcJ4+hB6fhs77rh1KHFLwNIDbAAAEa1BS5PBHFybT1hRomEgQdYpqIsRi1wIWMRfQpOJOxPHLfwg8OTNRUThJ5ZehAnpcKSIaSQcjCWKHZzsMy1PXf+26g9ReTTsgYhgsvdyfRF76lxH+usGxx2z+parHFcMxDXqnx355BFQywnPBdr3Ip5uQAlMAWKFhLPPcR+Obl0u6XCYQTRAWnG++WAV52yCjWhGOEYMQ1k/OVl7zaVoVMLIvuEX9dk1IQ/uZJTvwz2JG79xrtzmKyIVfHUIIu+4p2V0aLCZwBFSf/uS0pwa4+tRGKAQzDRexVXCriQ7NtkdMV7Gpz3+/rYT3tfJTi32EgCPAoeLhxGY2nQkbwexHsKOYaVUCOP4sZvUZhRQTMHc8HGFcqLJBN8+G12CbVMKqRRAWKKgU6X/ghxSAMyjj55IcLm4hHWzdkKJkDXsrx03WCuCrhwcMRHyWofJhAr3l2rqJVkkYmmq8ZrQ5nvo4GlZXAOkaYXizlP4d/MXoIc4fbjHgfV1PNNeL6biV4RSKjnN7a+yHB588fW+yR8ubGTMZOZwg2XdRnMiU7j/kAQCzR15PqMug1P6KoN2E1OquupO9ZhvDzADFEyEv+/Tr9gCoANPmSvvKj9V6oqZON4YcZ98yjFIs7IM/nRh3B+HJ+IZwYS917Xid5qv/NS8LKJLTF8P+ix56c7htGk8vNPEMzGZeK9ze54STSsDO5nvxl7rtLUbrbKW/ESKNCrECTMMS6aPwN19Pu93ccGHdrQb5PX7ONLw26qBzArDqefFAB0o4kEnz1+UoYiLut+4Xt/sqbEZheIFq2rqQF9teTULp7Z87QutA380imL1h087YPyBoFJuVID4uj4EjPgA++/jiaGhQmKevFTOrFZbMnzCarYFcsuSAZiNcs7FZRiFMTKaYC4Ok1O6Icn5c97qdh/+TqJ6riARgwCtB9IVXPGQPSz5KnVH0Kep40DUU1GvAIwmvvTQN2q9QqpvdSdF/hIRmrDw3y+AEhmQgz9Md2dIpi9x2FkHivQ5ZIGQfCnqWd+f3ZNq6oV7K0I/afa00UJyuTrquYkpzr4pa7btILTKVnKM+XJBnETP4hvJoBFRM2NsAoWCgN8YW1UCuAtueMFDQnUOIh+zSZolTRxvMmTXJOWAFP+E7capji/mss7MY+MaAYIIBe7MAMLcNNBPj3miezhs3dpRWdYdqNWJ8+ZYu5E/JBjcyQEHUfdj/lRDCBv1Fql1LaIMLnTC+S683XmEsSc0/OcLziH0tDwBVbuMt/rjUOrMMPC+jiRmKd/JUm7kRRO6z2/GkmY4MUviF963MF/+J3a+Dk6PFFrcH8JQz/4DXgEPZgCJr+N2GmdONZPqRfUve+Ks750imuZb5Juv0UJMUGX6bPXezxW1o9K5M78lrpXXRGxLxSt09TrDO3pTXrW4SeR9Vl1D1PkzERn3kC2+JzZFcxEkJNYB1quTRZfan6j4Tk2wmXsncQwg2TU3UYgIzaAnwJF2Oi2GuzbZMCWM5+DGYQzX/Rl8C/uHYlDhBY98PJqF0+rxBMAB37LoyXf9a105EEW8hDAiA2O5vOv/ISFA5wni2iyFZjvrjKxMTwH7hFtvH+GtMyfwhOvPL7DJK6XY7pSjTHXzEuES4rmOd5CndRHsc7uKNbadxA6Osv/3fgbmXkPMVdXj2olgWm0NP9338M9AD7631CqN6rQRT/g0OXGMmk2EimCJyzQLtrbQsZd7XRbTruybW8EGEXdQ0gfuWkZikyPy+O1ndMzcLTfeb8lvnOMd2eVv4fUbSC+vmWnPVcjsViHefBo2HhvAgnh37AqgoLynMlVgni0D3RxleVW3Ur9RRYefFaE+xurPAQX44sxQp8ZrSuABuiy1bn05v7J4vJrL9RziBD44XtCWgXeF69hb1wUGoYkkLbRPuss8LxPzLfsj9z3EIN2QXDcVbTOrSbcRLUS4rezwk2zhIEc5BUboPO/BldApL7+At2sWuSkmxbcR4fbeHaYG2cXzBkxiJRt86c8KiCloQ+RxaYkyZtRUzFJ0MgQ2pyYa+wdMgzQhpTVTRMaSdzR3j/QWRXzQXHStujxCe1GVALbv5tFhkmwyRGmO8qZ+UnEMh9uhRD1NFhZSG73qSpUkjfUUlDmtazTu5QOKGEJ+3Rb0knL18B/0Sdh94XZAu7xLphhYqrnThznC5x/MjTnCnaNkKI2rgekc6brhRdBzy+YwDRS8dX8nMDSghKAZBOWZENC34WDLXFPKNOSWcg0m/nVbC3/UlwX8IPXdLnTevlwjH08gEblp6dGrIvfCeeLokIeqoF1KAKBff2Y4oxFmpbmYuwzToFCEG+ptcUuWHF58p4eIKBh/E2QC7CHsuOG0zVaAOa9W8nogfZQx5BXjNYDQveZM7vTXoju19TadPmJplriFbMptLpPLn1vRytew53bY6FfGBMAckx8YMUUC66YBl1fd8DB2OEtpZzUe6TQpFxlz7rmN+rv/F3xyAIIVU4ok/qzRwBb3aqDKvg6FV7ZSWGU+iMmoH7x259lN3SK6ATYOuzcqXytHr6Try/Wpi762PujfhQOv70xRryHuBhSyWzy0AKYOw+wZKP9sHSDt4dUMteE5ZUW5ykOpJDhGqlVyg8TJfQL9f6IHUVwOE/ivbQ8gljubxm6ob1fbNi8bYt+45zRgewzYYcxSldosyyaXQILL7RQ/zo1LSyDJxtq8MiWlAzTgRBhy733DnGtq4xf/O/ReszoA3LBOmBsCFEpWA96CC0ZD1aM1+zI1rnagsIMlrSvlDflO4e48QmLPEELl1ZDvNrU3dqmvskwqhr2cxCdn9V7nUFXSfthxAAAAAAAA" width="70" height="70" alt="Instruo Logo">
+
+        <div class="text-container">
+            <span style="font-size: 2em; font-weight: bold;">Lubadh </span> <span style="font-size: 1.7em;">v2.1.0</span>
+            <p></p>
+        </div>
+    </div>
+    <form id="configForm">
+        <span style="font-size: 1.7em;">Preset Editor </span>
+        <!-- <div class="label-container"> -->
+            <span id="infoSection">
+                <span id="infoToggle" style="cursor: pointer; color: #e1c590; text-decoration: underline;">
+                    [ about ]
+                </span>
+                <p class="extraInfo" id="extraInfo">The Lubadh now features user-configurable presets. Each deck of Lúbadh can independently toggle between two active presets. A preset folder on the USB drive contains a file called PresetLoader.txt which can be used to select the active presets. The preset folder is also populated with a selection of factory preset files to get you started. Within the PresetLoader.txt file, insert the name of the desired presets within the quotation marks next to “PresetA:” and “PresetB:”<br><br>Presets are curated, edited, and accessed via the USB drive. Edits made to any of the preset files will be saved between power cycles. To revert a preset back to the factory settings, delete it and a fresh copy will be recreated upon power up. Keep in mind that they’re just text (.txt) files - Edit them, rename them, play with them, and share your favourite settings with the community.<br><br>To toggle between presets on deck 1, press and hold the Retrigger/Shift Buttons of deck 1 and deck 2, then press the Erase Button of deck 1. This action is mirrored for toggling between presets on deck 2.<br></p> <!-- The expandable content will be injected here via JavaScript -->
+            </span>
+            <p></p>
+            <!-- </div> -->
+    <!-- Expandable Information Section -->
+    <div class="label-container">
+
+    <!-- <div class="label-container_template_selection"> -->
+        <label for="presetTemplate">By default this editor starts with the <b>Tape-Looper</b> factory preset.</label>
+        <label for="presetTemplate" style="display: none;">To start from a diffent template</label>
+        <!--<ul><li>either select a factory preset and load it as a template</b></label>
+        </li></ul>
+    -->
+        <select id="presetTemplate"style="display: none;">
+            <option value="preset1" selected="">01-Tape-Looper</option>
+            <option value="preset2">02-Clean</option>
+            <option value="preset3">03-Classic</option>
+            <option value="preset4">04-Multi-Tape</option>
+            <option value="preset5">05-Clockable</option>
+            <option value="preset6">06-Octave-Delay</option>
+            <option value="preset7">07-SequencingMono</option>
+            <option value="preset8">08-SequencingPoly</option>
+            <option value="preset9">09-Melontron</option>
+            <option value="preset10">10-Broken-Tape</option>
+
+        </select>
+        <button type="button" style="display: none;" id="loadPresetButton">Load Preset template</button>
+    <!-- </div> -->
+
+     <!-- File Drop/Load Area -->
+        <label for="presetTemplate">Alternatively load a preset file as a template.</label>
+     <div class="drop-zone" id="dropZone">Drop a Lubadh preset file here or click to upload one.</div>
+     <input type="file" id="fileInput" style="display:none">
+    </div>
+    <!-- </form> -->
+
+    <!-- Link to expand/collapse all expandable-info fields -->
+    <p style="cursor: pointer; color: #e1c590; text-decoration: underline;" id="toggleAll">[ show all parameter details ]</p>
+
+    <script>
+        // Function to toggle the visibility of all expandable-info fields
+        function toggleAllInfo() {
+            const allInfo = document.querySelectorAll('.expandable-info');
+            const toggleAll = document.getElementById('toggleAll');
+            const isExpanded = toggleAll.getAttribute('data-expanded') === 'true';
+
+            allInfo.forEach(info => {
+                info.style.display = isExpanded ? 'none' : 'block';
+            });
+
+            toggleAll.textContent = isExpanded ? '[ show all parameter details ]' : '[ collapse all parameter details ]';
+            toggleAll.setAttribute('data-expanded', !isExpanded);
+        }
+
+        // Add event listener to the toggleAll link
+        document.getElementById('toggleAll').addEventListener('click', toggleAllInfo);
+    </script>
+    
+    
+    <form id="configForm">
+        <!-- Preset Name -->
+        <div class="label-container">
+            <label for="presetName"><b>Preset Name</b></label>
+            <!-- <div class="label-container-row"> -->
+            <input type="text" id="presetName" name="presetName" value="Tape-Looper Template">
+            <span class="info" data-target="presetNameInfo">| details |</span>
+            <!-- </div> -->
+        
+        <p class="expandable-info" id="presetNameInfo"></p>
+        </div>
+
+         <hr> <!-- Divider line -->
+
+        <!-- Record Speed -->
+        <div class="label-container">
+            <label for="recordSpeed"><b>Record Speed:</b></label>
+            <!-- <div class="label-container-row"> -->
+                <select id="recordSpeed" name="recordSpeed">
+                    <option value="0" selected="">0 - Variable</option>
+                    <option value="1">1 - Fixed</option>
+                </select>
+            <span class="info" data-target="recordSpeedInfo">| details |</span>
+            <!-- </div> -->
+        
+        <p class="expandable-info" id="recordSpeedInfo"></p>
+        </div>
+
+        <!-- <hr> Divider line -->
+        
+        <!-- playback Speed -->
+        <div class="label-container">
+            <label><b>Playback Speed</b></label>
+            <label for="playbackSpeedLooping"><b>when Looping:</b></label>
+            <select id="playbackSpeedLooping" name="playbackSpeedLooping">
+                <option value="0" selected="">0 - Follow</option>
+                <option value="1">1 - Hold</option>
+            </select>
+            <label for="playbackSpeedOneshot"><b>when Oneshot:</b></label>
+            <select id="playbackSpeedOneshot" name="playbackSpeedOneshot">
+                <option value="0" selected="">0 - Follow</option>
+                <option value="1">1 - Hold</option>
+            </select>
+            <span class="info" data-target="playbackSpeedInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="playbackSpeedInfo"></p>
+
+    </div>
+
+         <!-- <hr> Divider line -->
+
+        <!-- multiTapEngine -->
+        <div class="label-container">
+            <label for="multiTapEngine"><b>Multi-Tap engine</b></label>
+            <select id="multiTapEngine" name="multiTapEngine">
+                <option value="0" selected="">0 - Off (Single-Tap)</option>
+                <option value="1">1 - On  (Multi-Tap)</option>
+            </select>
+            <span class="info" data-target="multiTapEngineInfo">| details |</span>
+        <!--  -->
+        <p class="expandable-info" id="multiTapEngineInfo"></p>
+    </div>
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Speed Control-->
+        <div class="label-container">
+            <label for="speedControl"><b>Speed Control</b></label>
+            <select id="speedControl" name="speedControl">
+                <option value="0" selected="">0 - Notched</option>
+                <option value="1">1 - Stepped</option>
+                <option value="2">2 - Smooth</option>
+                <option value="3">3 - V/Oct</option>
+            </select>
+
+                <label for="speedMarkers"><b>Speed Markers:</b></label>
+                <input type="text" id="speedMarkers" name="speedMarkers" value="0, 0.5, 1.0, 2.0, 4.0" oninput="checkSpeedMarkers()">
+                <p id="warningMessage" style="color: red; display: none;">Values must be between 0 and 4.</p>
+                
+                <script>
+                function checkSpeedMarkers() {
+                    const inputField = document.getElementById("speedMarkers");
+                    const warningMessage = document.getElementById("warningMessage");
+                
+                    let values = inputField.value
+                        .split(",")                // Split by commas
+                        .map(v => v.trim())        // Remove extra spaces
+                        .filter(v => v !== "");    // Remove empty values
+                
+                    let hasInvalid = values.some(v => {
+                        let num = parseFloat(v);
+                        return isNaN(num) || num < 0 || num > 4; // Check for out-of-range values
+                    });
+                
+                    warningMessage.style.display = hasInvalid ? "block" : "none";
+                }
+                </script>            <span class="info" data-target="speedControlInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="speedControlInfo"></p>
+        </div>
+
+        <!-- <hr> Divider line -->
+
+        <!-- Time Pot -->
+        <div class="label-container">
+            <label for="timePot"><b>User-definable Time Pot function:</b></label>
+            <select id="timePot" name="timePot">
+                <option value="0">0 - Crossfade Duration</option>
+                <option value="1">1 - Speed Slew Time</option>
+                <option value="2" selected="">2 - Tape Emulation Amount</option>
+            </select>
+            <span class="info" data-target="timePotInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="timePotInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Record jack! recordJackInfo-->
+        <!-- <div class="label-container"> -->
+            <label for="recordJack"><b>Record Jack:</b></label>
+            <select id="recordJack" name="recordJack">
+                <option value="0" selected="">0 - Latching Record</option>
+                <option value="1">1 - Gated Record</option>
+                <option value="2">2 - External Clock</option>
+            </select>
+            <span class="info" data-target="recordJackInfo">| details |</span>
+        
+        <p class="expandable-info" id="recordJackInfo"></p>
+        </div>
+
+         <hr> <!-- Divider line -->
+
+        <!-- External Clock -->
+        <div class="label-container">
+            <label> <b>External Clock:</b></label>
+            <label for="externalClockAverage"><b>Average</b></label>
+            <input type="number" id="externalClockAverage" name="externalClockAverage" value="4" min="1" step="1">
+            <label for="externalClockResolution"><b>Resolution</b></label>
+            <input type="number" id="externalClockResolution" name="externalClockResolution" value="64" min="1" step="1">
+            <label for="externalClockTimeout"><b>Timeout</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="externalClockTimeout" name="externalClockTimeout" value="0" min="0" step="1" style="padding-right: 40px;">
+                <span class="unit">sec</span>
+            </div>
+            <span class="info" data-target="externalClockInfo">| details |</span>
+        
+        <p class="expandable-info" id="externalClockInfo"></p>
+        </div>
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Clock Divions-->
+        <div class="label-container">
+            <label for="clockDivisions"><b>Clock Divisions:</b></label>
+            <select id="clockDivisions" name="clockDivisions">
+                <option value="0" selected="">0 - All [1,2,3,4,5,6,7,8,9,10,11,12,16,24,32,64]</option>
+                <option value="1">1 - Even [2,4,6,8,10,12,16,24,32,64]</option>
+                <option value="2">2 - Odd [1,3,5,7,9,11]</option>
+                <option value="3">3 - Powers Of Two [1,2,4,8,16,32,64]</option>
+            </select>
+            <span class="info" data-target="clockDivisionsInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="clockDivisionsInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Quantisation-->
+        <!-- <div class="label-container"> -->
+            <label for="quantisation"><b>Start/Length Quantisation</b></label>
+            <select id="quantisation" name="quantisation">
+                <option value="0">0 - All [1,2,3,4,5,6,7,8,9,10,11,12,16,24,32,64]</option>
+                <option value="1">1 - Even [2,4,6,8,10,12,16,24,32,64]</option>
+                <option value="2">2 - Odd [1,3,5,7,9,11]</option>
+                <option value="3" selected="">3 - Powers Of Two [1,2,4,8,16,32,64]</option>
+            </select>
+            <span class="info" data-target="quantisationInfo">| details |</span>
+        </div>
+        <p class="expandable-info" id="quantisationInfo"></p>
+
+        <hr> <!-- Divider line -->
+
+        <!-- eraseRecord -->
+        <div class="label-container">
+            <label for="eraseRecord"><b>Erase + Record Button Combination:</b></label>
+            <select id="eraseRecord" name="eraseRecord">
+                <option value="0" selected="">0 - Punch-In Record</option>
+                <option value="1">1 - Tap Tempo</option>
+            </select>
+            <span class="info" data-target="eraseRecordInfo">| details |</span>
+        </div>
+        <p class="expandable-info" id="eraseRecordInfo"></p>
+
+        <!-- <hr> Divider line -->
+
+        <!-- minLength -->
+        <div class="label-container">
+            <label for="minLength"><b>Minimum Loop Length:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="minLength" name="minLength" value="1280" min="1" step="1" style="padding-right: 40px;">
+                <span class="unit">samp</span>
+            </div>
+            <span class="info" data-target="minLengthInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="minLengthInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- CrossfadeDuration -->
+        <!-- <div class="label-container"> -->
+            <label for="crossfadeDuration"><b>Default Crossfade Duration:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="crossfadeDuration" name="crossfadeDuration" value="250" min="0" max="250" step="1" style="padding-right: 40px;">
+                <span class="unit">ms</span>
+            </div>
+            <span class="info" data-target="crossfadeDurationInfo">| details |</span>
+        </div>
+        <p class="expandable-info" id="crossfadeDurationInfo"></p>
+
+        <!-- <hr> Divider line -->
+
+        <!-- Retrigger delay: -->
+        <div class="label-container">
+            <label for="retrigDelay"><b>Retrigger delay:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="retrigDelay" name="retrigDelay" value="0" min="0" step="1" style="padding-right: 40px;">
+                <span class="unit">ms</span>
+            </div>
+            <span class="info" data-target="retrigDelayInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="retrigDelayInfo"></p>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Max Dub Level: -->
+        <!-- <div class="label-container"> -->
+            <label for="maxDubLevel"><b>Max Dub Level:</b></label>
+            <input type="number" id="maxDubLevel" name="maxDubLevel" value="0.9" min="0" max="1" step="0.01">
+            <span class="info" data-target="maxDubLevelInfo">| details |</span>
+        <p class="expandable-info" id="maxDubLevelInfo"></p>
+    </div>
+
+         <hr> <!-- Divider line -->
+
+        <!-- Tape Emulation Settings: -->
+        <div class="label-container">
+            <label for="tapeEmulation"><b>Tape Emulation Settings:</b></label>
+            <label for="wowFlutterDepth"><b>Wow Flutter Depth:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="wowFlutterDepth" name="wowFlutterDepth" value="0.5" min="0" max="1" step="0.01" style="padding-right: 40px;">
+                <span class="unit">Hz</span>
+            </div>
+            <label for="crinkleDepth"><b>Crinkle Depth:</b></label>
+            <input type="number" id="crinkleDepth" name="crinkleDepth" value="0.2" min="0" max="1" step="0.01">
+            <label for="tapeAge"><b>Tape Age:</b></label>
+            <input type="number" id="tapeAge" name="tapeAge" value="0.3" min="0" max="1" step="0.01">
+            <label for="hysterisis"><b>Hysterisis:</b></label>
+            <input type="number" id="hysterisis" name="hysterisis" value="0.2" min="0" max="1" step="0.01">
+            <label for="wear"><b>Wear:</b></label>
+            <input type="number" id="wear" name="wear" value="0.125" min="0" max="1" step="0.01">
+            <!-- <label for="tapeSaturation"><b>Tape Saturation:</b></label> -->
+            <label for="knee"><b>Saturation Knee:</b></label>
+            <input type="number" id="knee" name="knee" value="0" min="0" max="1" step="0.01">
+            <label for="compensation"><b> Saturation Compensation:</b></label>
+            <input type="number" id="compensation" name="compensation" value="0.2" min="0" max="1" step="0.01">
+            <label for="reverb"><b>Reverb:</b></label>
+            <input type="number" id="reverb" name="reverb" value="0.6" min="0" max="1" step="0.01">
+            <span class="info" data-target="tapeEmulationInfo">| details |</span>
+        <!--  -->
+        <p class="expandable-info" id="tapeEmulationInfo"></p>
+     </div>
+    
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Input Filtering: -->
+        <div class="label-container">
+            <label for="inputFiltering"><b>Input Filtering:</b></label>
+            <label for="lowCutFreq"><b>Low Cut Frequency:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="lowCutFreq" name="lowCutFreq" value="20" min="1" step="1" style="padding-right: 40px;">
+                <span class="unit">Hz</span>
+            </div>
+            <label for="lowCutQ"><b>Low Cut Q:</b></label>
+            <input type="number" id="lowCutQ" name="lowCutQ" value="0.2" min="0" max="1" step="0.01">
+            <label for="highCutFreq"><b>High Cut Frequency:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="highCutFreq" name="highCutFreq" value="15000" min="1" step="1" style="padding-right: 40px;">
+                <span class="unit">Hz</span>
+            </div>
+            <span class="info" data-target="inputFilteringInfo">| details |</span>
+        <!--  -->
+        <p class="expandable-info" id="inputFilteringInfo"></p>
+
+    </div>
+
+         <!-- <hr> --> <!-- Divider line -->
+
+        <!-- Speed Slew Time: -->
+        <div class="label-container">
+            <label for="speedSlewTime"><b>Speed Slew Time:</b></label>
+            <div class="input-with-unit">
+                <input type="number" id="speedSlewTime" name="speedSlewTime" value="25" min="0" step="1" style="padding-right: 40px;">
+                <span class="unit">ms</span>
+            </div>
+            <span class="info" data-target="speedSlewTimeInfo">| details |</span>
+        </div>
+        <p class="expandable-info" id="speedSlewTimeInfo"></p>
+        
+
+        <hr> <!-- Divider line -->
+
+        <!-- Capacitive Touch Mode: -->
+        <div class="label-container">
+            <label for="capacativeTouchMode"><b>Capacitive Touch Mode:</b></label>
+            <select id="capacativeTouchMode" name="capacativeTouchMode">
+                <option value="0" selected="">0 - Off</option>
+                <option value="1">1 - Stall</option>
+                <option value="2">2 - Dip</option>
+            </select>
+            <span class="info" data-target="capacativeTouchModeInfo">| details |</span>
+        <!-- </div> -->
+        <p class="expandable-info" id="capacativeTouchModeInfo"></p>
+
+    </div>
+        <hr> <!-- Divider line -->
+        
+    
+
+     <!-- End of main form container -->
+
+        <!-- Button to Generate Configuration -->
+     <!-- Button to Generate Configuration -->
+        <button type="button" id="generateConfig">Generate Configuration</button>
+    </form>
+    <style>
+        .collapsible-container {
+            width: 98%;
+            max-width: 800px;
+            margin: 0 left; /* Center the container */
+        }
+    </style>
+    <div class="collapsible-container">
+        <p style="cursor: pointer; color: #e1c590; text-decoration: underline;" id="toggleInstructions">[ hide instructions ]</p>
+        <div class="collapsible-container" id="instructionsContent" style="display: block;">
+            <p>Once you have finished making alterations, click on <b>Generate Configuration</b>, scroll down to review the parameters and values and once happy with changes, click <b>Download Lúbadh preset file</b>.</p>
+
+            <p>Lúbadh V2.1 uses a new method of loading preset files.<br>
+            <p>Factory presets and user created presets can be copied into the folder named <b>presets</b>. By default this folder will be empty. Once filled with preset files, a new preset selection menu can be accessed on Lúbadh by pressing and holding both <b>Shift/Retrigger</b> buttons and the <b>Erase</b> button of the corresponding deck.</p>
+            <p>Up to 12 presets can be loaded via the preset selection menu, but as many presets as memory allows can be stored on the USB. Preset files in this folder will be sorted alphanumerically. With this in mind, factory presets have a 01, 02, 03... 12 prefixed naming convention for clear loading. We would recommend any user created presets also follow this naming convention.</p>
+
+            <p>Once in the preset selection menu, the first 12 alphanumerically sorted preset files are represented by LED segments around the relating to their 1-12 position. Use the <b>Time Pot</b> on the corresponding deck to select from up to 12 of these locations. Pressing <b>Record</b> will load the preset.
+            If you wish to cancel, press <b>Erase</b> to exit the preset selection menu.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript to toggle the visibility of the collapsible instructions
+        document.getElementById('toggleInstructions').addEventListener('click', function() {
+            const instructionsContent = document.getElementById('instructionsContent');
+            const isVisible = instructionsContent.style.display === 'block';
+            instructionsContent.style.display = isVisible ? 'none' : 'block';
+            this.textContent = isVisible ? '[ show instructions ]' : '[ hide instructions ]';
+        });
+    </script>
+
+    <!-- Button to Download Configuration -->
+    <button class="download-button" id="downloadButton" disabled="" style="margin-top: 10px;">Download Lubadh preset file.</button>
+
+    <!-- Display Configuration Output -->
+    <h2>Content of the generated Lubadh preset file:</h2>
+    <pre id="output"></pre>
+    <!-- Button to Download Configuration -->
+    <button class="download-button" id="downloadButton2" disabled="" style="margin-top: 10px;">Download Lubadh preset file.</button>
+
+    <p> Lubadh Preset  Editor v1.0 for Lubadh v2.1.0<br>
+        © Instruo 2025</p>
+
+
+    <script>
+        // JavaScript to toggle the visibility of the extra information
+        document.getElementById('infoToggle').addEventListener('click', function() {
+            const extraInfo = document.getElementById('extraInfo');
+            if (extraInfo.style.display === 'none' || extraInfo.style.display === '') {
+                extraInfo.style.display = 'block';
+            } else {
+                extraInfo.style.display = 'none';
+            }
+        });
+
+        // JavaScript to toggle visibility for any info section
+        document.querySelectorAll('.info').forEach(item => {
+            item.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const infoText = document.getElementById(targetId);
+
+                if (infoText.style.display === "none" || infoText.style.display === "") {
+                    infoText.style.display = "block";
+                } else {
+                    infoText.style.display = "none";
+                }
+            });
+        });
+
+        // JavaScript for generating the configuration
+        document.getElementById("generateConfig").addEventListener("click", function() {
+            const presetName = document.getElementById("presetName").value;
+            const recordSpeed = document.getElementById("recordSpeed").value;
+            const playbackSpeedLooping = document.getElementById("playbackSpeedLooping").value;
+            const playbackSpeedOneshot = document.getElementById("playbackSpeedOneshot").value;
+            const multiTapEngine = document.getElementById("multiTapEngine").value;
+            const speedControl = document.getElementById("speedControl").value;
+            const speedMarkers = document.getElementById("speedMarkers").value;
+            const timePot = document.getElementById("timePot").value;
+            const recordJack = document.getElementById("recordJack").value;
+            const externalClockAverage = document.getElementById("externalClockAverage").value;
+            const externalClockResolution = document.getElementById("externalClockResolution").value;
+            const externalClockTimeout = document.getElementById("externalClockTimeout").value;
+            const clockDivisions = document.getElementById("clockDivisions").value;
+            const quantisation = document.getElementById("quantisation").value;
+            const eraseRecord = document.getElementById("eraseRecord").value;
+            const minLength = document.getElementById("minLength").value;
+            const crossfadeDuration = document.getElementById("crossfadeDuration").value;
+            const retrigDelay = document.getElementById("retrigDelay").value;
+            const maxDubLevel = document.getElementById("maxDubLevel").value;
+            const wowFlutterDepth = document.getElementById("wowFlutterDepth").value;
+            const crinkleDepth = document.getElementById("crinkleDepth").value;
+            const tapeAge = document.getElementById("tapeAge").value;
+            const hysterisis = document.getElementById("hysterisis").value;
+            const wear = document.getElementById("wear").value;
+            const reverb = document.getElementById("reverb").value;
+            const knee = document.getElementById("knee").value;
+            const compensation = document.getElementById("compensation").value;
+            const lowCutFreq = document.getElementById("lowCutFreq").value;
+            const lowCutQ = document.getElementById("lowCutQ").value;
+            const highCutFreq = document.getElementById("highCutFreq").value;
+            const speedSlewTime = document.getElementById("speedSlewTime").value;
+            const capacativeTouchMode = document.getElementById("capacativeTouchMode").value;
+            // Get current date and time
+            const generatedTime = getCurrentDateTime();
+
+        // Configuration text with dynamic values from the form
+        const configText =  `
+#LUB
+/*
+    Instruō Lubadh V2 Configuration
+    ------------------------------------------------------------------
+    Preset Name: ${presetName}
+    Config generated on: ${generatedTime}
+    ------------------------------------------------------------------
+
+    ${lubadhInfoText}
+
+*/
+
+{
+    /* Record Speed: */
+    RecordSpeed: ${recordSpeed}
+
+    /* Playback Speed: */
+    PlaybackSpeed: {
+        Looping: ${playbackSpeedLooping}
+        Oneshot: ${playbackSpeedOneshot}
+    }
+
+    /* Multi-Tap engine: */
+    MultiTap: ${multiTapEngine}
+
+    /* Speed control: */
+    SpeedControl: ${speedControl}
+    SpeedMarkers: [${document.getElementById("speedMarkers").value}]
+
+    /* User-definable Time Pot function: */
+    TimePot: ${timePot}
+
+    /* Record Jack Functionality: */
+    RecordJack: ${recordJack}
+
+    /* External Clock: */
+    ExternalClock:
+    {
+        Average: ${externalClockAverage}
+        Resolution: ${externalClockResolution}
+        Timeout: ${externalClockTimeout}
+    }
+    
+    /* Clock Divisions: */
+    ClockDivisions: ${clockDivisions}
+
+    /* Start/Length Quantisation: */
+    Quantisation: ${quantisation}
+
+    /* Erase + Record Button Combination: */
+    EraseRecord: ${eraseRecord}
+
+    /* Minimum Loop Length: */
+    MinLength: ${minLength}
+
+    /* Default Crossfade Duration: */
+    CrossfadeDuration: ${crossfadeDuration}
+
+    /* Retrigger delay: */
+    RetrigDelay: ${retrigDelay}
+
+    /* Max Dub Level: */
+    MaxDubLevel: ${maxDubLevel}
+
+    /* Tape Emulation Settings */
+    WowFlutterDepth: ${wowFlutterDepth}
+    CrinkleDepth: ${crinkleDepth}
+    TapeAge: ${tapeAge}
+    Hysterisis: ${hysterisis}
+    Wear: ${wear}
+    Reverb: ${reverb}
+
+    /* Tape Saturation: */
+    Knee: ${knee}
+    Compensation: ${compensation}
+
+    /* Input Filtering: */
+    LowCutFreq: ${lowCutFreq}
+    LowCutQ: ${lowCutQ}
+    HighCutFreq: ${highCutFreq}
+
+    /* Speed Slew Time: */
+    SpeedSlewTime: ${speedSlewTime}
+
+    /* Capacitive Touch Mode: */
+    CapacativeTouchMode: ${capacativeTouchMode}
+    
+}
+    
+    `;
+
+            // Display the configuration text in the output preformatted block
+            document.getElementById("output").textContent = configText;
+
+            // Enable the download buttons after generating the configuration
+            document.getElementById("downloadButton").disabled = false;
+            document.getElementById("downloadButton2").disabled = false;
+        });
+
+        function getCurrentDateTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');  // Months are zero-based
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        }
+
+        // Function to download the configuration as a text file
+        function downloadConfig(content, filename) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const anchor = document.createElement('a');
+            anchor.download = filename;
+            anchor.href = window.URL.createObjectURL(blob);
+            anchor.click();
+        }
+
+        function downloadConfig(content) {
+            // Get the preset name
+            const presetName = document.getElementById('presetName').value;
+            
+            // Replace spaces with underscores in the preset name and append .txt suffix
+            const fileName = presetName.replace(/\s+/g, '_') + '.txt';  // Replace spaces with underscores and add .txt
+
+
+            // Create the blob and trigger download
+            const blob = new Blob([content], { type: 'text/plain' });
+            const anchor = document.createElement('a');
+            anchor.download = fileName;
+            anchor.href = window.URL.createObjectURL(blob);
+            anchor.click();
+        }
+
+        // Event listener for the download button
+        document.getElementById("downloadButton").addEventListener("click", function() {
+            // Get the configuration content (this could be generated based on the form)
+            const configContent = document.getElementById("output").textContent;
+
+            // Call downloadConfig function with the generated content
+            downloadConfig(configContent);
+        });
+        document.getElementById("downloadButton2").addEventListener("click", function() {
+            // Get the configuration content (this could be generated based on the form)
+            const configContent = document.getElementById("output").textContent;
+
+            // Call downloadConfig function with the generated content
+            downloadConfig(configContent);
+        });
+    </script>
+
+<script>
+    // Define the content for the expandable information in a variable
+    const lubadhInfoText = `
+Presets are curated, edited, and accessed via the USB drive. Edits made to any of the preset files will be saved between power cycles. To revert a preset back to the factory settings, delete it and a fresh copy will be recreated upon power up. Keep in mind that they’re just text (.txt) files - Edit them, rename them, play with them, and share your favourite settings with the community.
+
+As of v2.1, in addition to the .logs, firmware, presets, and samples folders a lubadh_Preset_Editor.html file and factory_presets folder will also be populated into the root directory of a USB drive present during power up.
+
+This preset editor offers a quicker and clearer way to utilise the powerful custom preset functionality. 
+
+Use the drop down menus to fine tune the behavior of your Lúbadh or drag and drop any of the 10 existing preset files from factory_presets to edit. 
+
+Once you have finished making alterations, click on Generate Configuration, scroll down to review the parameters and values and once happy with changes, click Download Lúbadh Preset File.`;
+
+// Insert the extra info text into the 'extraInfo' span on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('extraInfo').innerHTML = lubadhInfoText.replace(/\n/g, '<br>'); // Replace newlines with <br> for HTML rendering
+});
+
+
+const presetInfoText = `
+The preset name is used to generate a filename for the preset file. 
+Use it for your own purpose to identify different preset configurations.`;
+
+const recordSpeedInfoText = `
+Record Speed:
+
+This function changes the behavior of the record speed. When set to 0 (Variable Speed), the record speed will follow the speed set by the speed pot. This is how a tape machine would behave if it had continuously variable, bi-directional speed control. Setting the speed control to 1 (Fixed Speed) will fix the record speed at original speed forwards, or sample rate. This is how the record functioned in version 1 of the firmware and enables pitch shifting functionality.
+
+0 - Variable Record Speed
+1 - Fixed Record Speed
+`;
+
+const playbackSpeedInfoText = `
+Playback Speed:
+
+In <b>Follow</b> mode, playback taps on the Lubadh will always follow the speed as determined by the speed pot. 
+
+Alternatively, the Playback Speed can be set to sample the speed set by the speed pot when a new tap is spawned and hold that speed regardless of changes to the speed pot (<b>Hold</b> mode). Used in combination with Multi-Tap mode (see below), this allows you to have multiple simultaneous playback taps, each playing at different pitches. This setting can be set separately and independently for looping and oneshot playback.
+
+0 - Follow
+1 - Hold
+`;
+
+const multiTapEngineInfoText = `
+Multi-Tap Engine:
+
+As of firmware version 2, the Lubadh utilizes a multi-tap engine. In Single-Tap mode, when a new tap is triggered, the current tap fades out, giving the perception of a seamless loop monitored through a single playhead. When Multi-Tap mode is enabled, the retrig button will trigger additional playback taps. This can be useful for Multi-Tap delays or granular type effects, and even polyphony when used in combination with Playback Speed Hold functionality (see above).
+
+0 - Off (Single-Tap)
+1 - On (Multi-Tap)
+`;
+
+const speedControlInfoText = `
+Speed Control:
+
+There are four possible <b>Speed Control</b> options that can be assigned to Lúbadh:
+
+0 - Notched
+1 - Stepped
+2 - Smooth
+3 - V/Oct
+
+
+In <b>Notched</b> mode, values defined in the <b>Speed Marker</b> list will be visible via illumination of the Speed Indicator LED. When sweeping the Speed Knob from one notch to another, audio will ramp up/down to the new target speed (speed range -4x to 4x).
+
+In <b>Stepped</b> mode movement from one Speed Marker to the next is immediate (speed range determined by marker list).
+
+<b>Smooth</b> control ignores the values in the <b>Speed Markers</b> list altogether. This mode can be useful for obtaining a smooth response when using external CV for pitch modulation (speed range -4x to 4x).
+
+<b>V/Oct</b> mode also ignores the <b>Speed Marker</b> list and maps the speed for an exponential response from 0.25x to 4.00x speed, with reverse speed accessed by 'flipping the deck'—holding the opposite Erase button and pressing Erase of the deck you wish to flip (see quick start guide). In <b>V/Oct</b> mode, the 5V range of the pot and CV input is mapped like so:
+
+0V-1V = 0.00x to 0.25x (Linear)
+1V-2V = 0.25x to 0.50x
+2V-3V = 0.50x to 1.00x
+3V-4V = 1.00x to 2.00x
+4V-5V = 2.00x to 4.00x
+
+<b>Notched</b> and <b>Stepped</b> modes use a <b>Speed Marker</b> list that maps to the position of the <b>Speed Knob</b>.
+
+By default the <b>Speed Marker</b> list contain 0x, 0.5x, 1x, 2x and 4x speed in both forward and reverse playback directions. This list can be customised with any <b>values between 0. and 4.</b> to suit the users needs. A comma (,) should be used to separate the speed values in the list. Values in the list will be applied to forward and reverse playback, and 0 will always be added to the markers, whether present in the list or not.
+
+`;
+
+
+
+
+const timePotInfoText = `
+User-Definable Time Pot Function:
+
+The functionality of the third time pot mode can be used to control various parameters. Select Crossfade Duration to have dynamic control over, you guessed it, the duration of the crossfades. Select Speed Slew Time, and the time pot will act as an attenuator over the Speed Slew Time, as set above. Tape Emulation Amount allows the time pot to act as an attenuator over the depth of Wow, Flutter, and Crinkle, as set in the Tape Emulation settings (see below).
+
+0 - Crossfade Duration
+1 - Speed Slew Time
+2 - Tape Emulation Amount
+`;
+
+const recordJackInfoText = `
+Record Jack Functionality:
+
+The Record Jack can be set to Latching Record, whereby Record latches on or off in response to a trigger. In this mode, the behavior of the Record Jack input mirrors the behavior of the Record Button. Set to Gated Record, and recording is active whenever a high gate is present at the Record Jack; recording is toggled off when the gate returns to low.
+
+Alternatively, the Record Jack can be used as a clock input. This offers an additional way to sync the Lubadh to other modules within a patch. Using this clocking functionality re-pitches the loop in response to an external clock source. The expected behavior of the external clock can be set using the External Clock settings (see below).
+
+0 - Latching Record
+1 - Gated Record
+2 - External Clock
+`;
+
+const externalClockInfoText = `
+External Clock:
+
+As discussed above, the Lubadh can be externally clocked. These settings determine how the clock input pulses are used to set the speed.
+
+<b>Average</b>: This sets the number of clock pulses (or rather, the durations between them) used to set the appropriate speed. Higher values give more stable speed synchronization at the cost of a slower response to changes in the clock speed.
+
+<b>Resolution</b>: This enables an internal clock divider, allowing you to use a higher resolution clock for more precision when syncing. Similar to MIDI-sync PPQ, but instead of setting clock pulses-per-quarter note, this sets the number of clock pulses per full loop. Setting this value to 0 ties the external clock resolution to the currently selected Clock Division.
+
+<b>Timeout</b>: This sets the timeout (in seconds) for the external clock input. A timeout may be useful if you use the external clocking capabilities as more of an external tap tempo, where there is likely to be occasional large gaps between clock pulses. However, having a timeout will introduce a minimum clockable speed. Setting the timeout to zero will disable this function.
+
+Note: this setting only has an effect if the Record Jack Functionality is set to External Clock (see above).
+`;
+
+const clockDivisionsInfoText = `
+Clock Divisions:
+
+Select between the list of clock divisions available in the original firmware, or choose to limit the list to either Even divisions, Odd divisions, or Powers Of Two. Handy for keeping sync functionality rhythmically intuitive by only doubling or halving the clock pulse (Powers of Two) or incorporating degrees of 'awkwardness' (Odd) for less obvious shifting timing relationships.
+
+0 - All [1,2,3,4,5,6,7,8,9,10,11,12,16,24,32,64]
+1 - Even [2,4,6,8,10,12,16,24,32,64]
+2 - Odd [1,3,5,7,9,11]
+3 - Powers Of Two [1,2,4,8,16,32,64]
+`;
+
+const quantisationInfoText = `
+Start/Length Quantisation:
+
+Select the list of divisions available for quantizing the start point and length of loops. When selected, start and length values will snap to the nearest division of the total loop length. When quantized, holding shift/retrig while adjusting start/length will add an unquantized offset. Selecting 0 will disable quantization.
+
+0 - All [2,3,4,5,6,7,8,9,10,11,12,16,24,32,64]
+1 - Even [2,4,6,8,10,12,16,24,32,64]
+2 - Odd [3,5,7,9,11]
+3 - Powers Of Two [2,4,8,16,32,64]
+`;
+
+const eraseRecordInfoText = `
+Erase + Record Button Combination:
+
+This setting changes what happens when you hold Erase and press the Record Button. The Punch-In Record setting allows you to overwrite sections of the loop. Alternatively, this button combination can be used as a Tap-Tempo, which allows you to re-pitch the loop so that its timing matches the tempo tapped in. The currently active clock division is used as a clock divider over this value. This is useful, for example, if you have a 1-bar loop and want to tap in the quarter-note pulse: you can set clock divisions to 4, and the tap tempo duration will then set the quarter note duration. For longer loops, try higher clock divisions.
+
+0 - Punch-In Record
+1 - Tap Tempo
+`;
+
+const minLengthInfoText = `
+Minimum Loop Length:
+
+Sets the loop length, in samples, when the length pot is at its minimum position. Smaller lengths can be good for resonant Karplus delay lengths or for granular-like effects with Multi-Tap engaged. Longer lengths can sound smoother, more natural, and less clicky.
+
+(number of samples * sample rate (48k) = length in seconds)
+For example, set to 1280 samples for roughly 25ms.
+`;
+
+const crossfadeDurationInfoText = `
+Default Crossfade Duration:
+
+This is the crossfade duration used as a default when the crossfade duration isn't being set by the alternate time-pot function (above). Durations are set in milliseconds from 0ms - 250ms.
+`;
+
+const retrigDelayInfoText= `
+Retrigger Delay:
+
+Adds an optional delay (in milliseconds) to the Retrig Jack Input. This is useful when sequencing the Lubadh, to compensate for timing differences between pitch and gate signals from external sequencers. Optimum timings will vary from sequencer to sequencer; try 25ms as a starting point and adjust to suit. Too long, and you may notice a timing lag; too short, and the next note will be triggered before the pitch is updated.
+`;
+
+const maxDubLevelInfoText= `
+Max Dub Level:
+
+Sets the maximum dub level that can be set using the time-pot. Useful for having a slight attenuation of material over time so you can layer sounds for longer before they become overly distorted.
+`;
+
+const tapeEmulationInfoText= `
+Tape Emulation Settings
+
+The below settings can be used for fine-tuning certain elements of the Lubadh's tape emulation engine. The Time Pot can also be used to give you top-level control over Tape Emulation Amount, which acts as an attenuator over the depth of Wow, Flutter, Crinkle, Tape Age, Hysteresis, Wear, and Tape Saturation settings. Tape Emulation settings compound over time with successive overdubs.
+
+<b>Wow and Flutter</b>: Models changes in speed caused by irregular tape motion during recording or playback. Wow is specifically used to model the lower frequency cyclical modulations, often in the range of 0Hz - 5Hz. Flutter is often the resultant noise induced from flaws in the capstan or pinch-roller and so tends to have higher frequency components, around 5 - 50Hz.
+
+<b>Crinkle</b>: Is used to add irregularity to the Tape Emulation, like that which you find from a crinkle or crease in analogue tape. This is particularly common when making, manipulating, using, and re-using tape loops. It's also found in tape delays, such as the Space Echo, where the tape is left free-running in a compartment rather than feeding directly from spool to spool.
+
+<b>Tape Age</b>: Reflects the loss of bandwidth in older tape. 0 gives the crisp full range response of fresh tape, while settings approaching 1 will soften, darken, and eventually begin to muffle like a piece of tape found lying around in a dusty old cupboard.
+
+<b>Hysteresis</b>: In tape results from lingering magnetic charge in the tape heads, causing a characteristic non-linear smudging of the input signal.
+
+<b>Wear</b>: Reflects the uneven way in which magnetic tape wears out. Areas with a weaker magnetic charge wear out first, whilst the areas of the tape with a stronger charge persist. Over time, quieter sounds begin to fade, whilst louder sounds persist.
+
+Tape Saturation:
+
+<b>Knee</b> sets the curvature of the amplitude response used in the tape saturator. Lower values introduce soft-clipping, while higher values reduce the effect but open up the possibility of hard-clipping from successive overdubs.
+
+<b>Compensation</b> is used to compensate for gain lost from the saturation curve. This can drive the signal hotter onto the tape and has a slight low-frequency emphasis. Non-zero settings result in positive feedback, which can cause distortion as the overdub level increases. This setting is also attenuated by the Tape Amount time-pot parameter.
+
+Setting Knee to 0 will select a tanh-like curve.
+
+<b>Reverb</b>: a one-knob reverb effect.
+
+Each of these parameters is set in a range from 0-1.
+`;
+
+const inputFilteringInfoText = `
+Input Filtering:
+
+The input filter consists of a resonant 2-pole low-cut filter, which provides the characteristic low frequency bump associated with tape machines. A single pole high-cut filter provides the high frequency roll-off. More affected worn tape sounds can be achieved by raising the cutoff and resonance of the Low-Cut filter and reducing the cutoff frequency of the High-Cut filter, achieving a boosted bandpass effect, like that of old tape.
+
+Frequencies are set in Hz, and Q or resonance is set from 0-1, with 0 being off and 0.4 - 0.6 being resonant. More than 0.6 is too much.
+`;
+
+const speedSlewTimeInfoText = `
+Speed Slew Time:
+
+Sets Slew Time in milliseconds for the speed control. Higher settings (>15 ms) will give a tape-like lag to any speed changes. This is also responsible for the lovely pitch-whip artifacts when speed changes are used to vary delay length. Extreme settings (>100 ms) are fun for a wobbly, unpredictable mess. Set to 0 to disable the slew. This is handy if you want to CV the speed and have it jump to new pitches immediately, and especially handy when used with a sequencer in combination with V/Oct speed control.
+`;
+
+const capacativeTouchModeInfoText= `
+Capacitive Touch Mode:
+
+The Capacitive Touch response can be configured either to Stall mode, where holding your finger on the Capacitive Touch plate will cause the playback speed to slow and eventually stall altogether. As the charge dissipates, playback speed will ramp back up to the previous speed. In Dip mode, touching the Capacitive Touch plate will cause the speed to momentarily dip down before it pings back up to the previous speed. This can be nice for adding pitch artifacts into loops or delays.
+`;
+
+
+
+    // Wait until the DOM content is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+            // Set the text of the expandable info paragraph
+            document.getElementById('presetNameInfo').innerHTML = presetInfoText;
+            document.getElementById('recordSpeedInfo').innerHTML = recordSpeedInfoText;
+            document.getElementById('playbackSpeedInfo').innerHTML = playbackSpeedInfoText;
+            document.getElementById('multiTapEngineInfo').innerHTML = multiTapEngineInfoText;
+            document.getElementById('speedControlInfo').innerHTML = speedControlInfoText;
+            document.getElementById('timePotInfo').innerHTML = timePotInfoText;
+            document.getElementById('recordJackInfo').innerHTML = recordJackInfoText;
+            document.getElementById('externalClockInfo').innerHTML = externalClockInfoText;
+            document.getElementById('clockDivisionsInfo').innerHTML = clockDivisionsInfoText;
+            document.getElementById('quantisationInfo').innerHTML = quantisationInfoText;
+            document.getElementById('eraseRecordInfo').innerHTML = eraseRecordInfoText;
+            document.getElementById('minLengthInfo').innerHTML = minLengthInfoText;
+            document.getElementById('crossfadeDurationInfo').innerHTML = crossfadeDurationInfoText;
+            document.getElementById('retrigDelayInfo').innerHTML = retrigDelayInfoText;
+            document.getElementById('maxDubLevelInfo').innerHTML = maxDubLevelInfoText;
+            document.getElementById('tapeEmulationInfo').innerHTML = tapeEmulationInfoText;
+            document.getElementById('inputFilteringInfo').innerHTML = inputFilteringInfoText;
+            document.getElementById('speedSlewTimeInfo').innerHTML = speedSlewTimeInfoText;
+            document.getElementById('capacativeTouchModeInfo').innerHTML = capacativeTouchModeInfoText;
+        });
+
+
+</script>
+
+<script>
+    // Define preset templates
+    
+
+    // Function to clear output and disable buttons
+    function clearOutputAndDisableButtons() {
+        // console.log('clearOutputAndDisableButtons() was called');
+        // Clear the configuration output in the <pre> tag
+        document.getElementById("output").textContent = "";
+
+        // Disable the download buttons after resetting the form
+        const downloadButtons = document.querySelectorAll(".download-button");
+        downloadButtons.forEach(function(button) {
+            button.disabled = true;
+        });
+
+        // Optionally, you can reset form fields here if needed
+        const form = document.querySelector("form");
+        if (form) {
+            form.reset();
+        }
+    }
+
+    // Event listener for the load preset button
+    document.getElementById('loadPresetButton').addEventListener('click', function() {
+
+        const selectedPreset = document.getElementById('presetTemplate').value;
+
+        // Store the selected preset in local storage
+        localStorage.setItem('selectedPreset', selectedPreset);
+
+        document.getElementById('presetTemplate').value = selectedPreset;
+
+        if (presets[selectedPreset]) {
+            const preset = presets[selectedPreset];  // Correctly access the selected preset's data
+            
+            // Set the form values to the selected preset's values
+            document.getElementById("presetName").value = preset.presetName;
+            document.getElementById("recordSpeed").value = preset.recordSpeed;
+            document.getElementById("playbackSpeedLooping").value = preset.playbackSpeedLooping;
+            document.getElementById("playbackSpeedOneshot").value = preset.playbackSpeedOneshot;
+            document.getElementById("multiTapEngine").value = preset.multiTapEngine;
+            document.getElementById("speedControl").value = preset.speedControl;
+            document.getElementById("timePot").value = preset.timePot;
+            document.getElementById("recordJack").value = preset.recordJack;
+            document.getElementById("externalClockAverage").value = preset.externalClockAverage;
+            document.getElementById("externalClockResolution").value = preset.externalClockResolution;
+            document.getElementById("externalClockTimeout").value = preset.externalClockTimeout;
+            document.getElementById("clockDivisions").value = preset.clockDivisions;
+            document.getElementById("quantisation").value = preset.quantisation;
+            document.getElementById("eraseRecord").value = preset.eraseRecord;
+            document.getElementById("minLength").value = preset.minLength;
+            document.getElementById("crossfadeDuration").value = preset.crossfadeDuration;
+            document.getElementById("retrigDelay").value = preset.retrigDelay;
+            document.getElementById("maxDubLevel").value = preset.maxDubLevel;
+            document.getElementById("wowFlutterDepth").value = preset.wowFlutterDepth;
+            document.getElementById("crinkleDepth").value = preset.crinkleDepth;
+            document.getElementById("tapeAge").value = preset.tapeAge;
+            document.getElementById("hysterisis").value = preset.hysterisis;
+            document.getElementById("wear").value = preset.wear;
+            document.getElementById("reverb").value = preset.reverb;
+            document.getElementById("knee").value = preset.knee;
+            document.getElementById("compensation").value = preset.compensation;
+            document.getElementById("lowCutFreq").value = preset.lowCutFreq;
+            document.getElementById("lowCutQ").value = preset.lowCutQ;
+            document.getElementById("highCutFreq").value = preset.highCutFreq;
+            document.getElementById("speedSlewTime").value = preset.speedSlewTime;
+            document.getElementById("capacativeTouchMode").value = preset.capacativeTouchMode;
+                
+        } else {
+            alert('Please select a valid preset.');
+        }
+        clearOutputAndDisableButtons();
+    });
+
+    
+    // Handle the file drop or upload
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    // Click on the drop zone opens the file dialog
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // fileInput.addEventListener('change', () => {
+    //     const file = fileInput.files[0];
+    //     if (file) {
+    //         dropZone.textContent = `File "${file.name}" uploaded successfully!`;
+    //         dropZone.style.backgroundColor = '#e1c590'; // Optional visual change
+    //     }
+    // });
+
+    // Drag and drop functionality
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#0056b3'; // Change border color
+    });
+
+    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '#007BFF');
+    
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#007BFF'; // Reset border color
+        const file = e.dataTransfer.files[0];
+        // setPresetNameFromFile(file);  // Set the preset name from the file
+        readFile(file);
+    });
+
+    // Handle file upload via file dialog
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        // setPresetNameFromFile(file);  // Set the preset name from the file
+        readFile(file);
+    });
+
+    // Function to set the preset name from the file
+    function setPresetNameFromFile(file) {
+        const presetNameField = document.getElementById('presetName');
+        const fileNameWithoutExtension = file.name.replace(/\.[^/.]+$/, ""); // Remove the file extension
+        presetNameField.value = fileNameWithoutExtension; // Set the preset name to the file name
+    }
+
+
+    // Function to read and parse the preset file
+    function readFile(file) {
+        clearOutputAndDisableButtons();
+        setPresetNameFromFile(file);
+        const reader = new FileReader();
+        document.getElementById("output").textContent = '';
+        reader.onload = function(event) {
+            const text = event.target.result;
+            parsePresetFile(text);
+        };
+        reader.readAsText(file);
+    }
+
+    // Function to parse the preset file content and populate form fields
+    function parsePresetFile(content) {
+            // console.log('parsePresetFile() was called');
+            const recordSpeed = extractValueNumber(content, 'RecordSpeed');
+            const playbackSpeedLooping = extractValueNumber(content, 'PlaybackSpeed', 'Looping');
+            const playbackSpeedOneshot = extractValueNumber(content, 'PlaybackSpeed', 'Oneshot');
+            const multiTapEngine = extractValueNumber(content, 'MultiTap');
+            const speedControl = extractValueNumber(content, 'SpeedControl');
+            // console.log('speedControl:', speedControl);
+        const speedMarkers = extractArrayValue(content, 'SpeedMarkers');
+        if (speedMarkers) document.getElementById('speedMarkers').value = speedMarkers.join(', ');
+
+        // Helper function to extract array values from the file
+        function extractArrayValue(text, key) {
+            const regex = new RegExp(`${key}:\\s*\\[([^\\]]+)\\]`, 'i'); // Matches content inside square brackets
+            const match = text.match(regex);
+            if (match) {
+            return match[1]
+                .split(',')
+                .map(item => item);
+            }
+            return null;
+        }
+            // const speedMarkers = extractValue(content, 'SpeedMarkers');
+            // const speedMarkers = extractValue(content, 'SpeedMarkers');
+            const timePot = extractValueNumber(content, 'Timepot');
+            const recordJack = extractValueNumber(content, 'RecordJack');
+            const externalClockAverage = extractValueNumber(content, 'ExternalClock', 'Average');
+            const externalClockResolution = extractValueNumber(content, 'ExternalClock', 'Resolution');
+            const externalClockTimeout = extractValueNumber(content, 'ExternalClock', 'Timeout');
+            const clockDivisions = extractValueNumber(content, 'ClockDivisions');
+            const quantisation = extractValueNumber(content, 'Quantisation');
+            const eraseRecord = extractValueNumber(content, 'EraseRecord');
+            const minLength = extractValueIntFloat(content, 'MinLength');
+            const crossfadeDuration = extractValueIntFloat(content, 'CrossfadeDuration');
+            const retrigDelay = extractValueIntFloat(content, 'RetrigDelay');
+            const maxDubLevel = extractValueIntFloat(content, 'MaxDubLevel');
+            const wowFlutterDepth = extractValueIntFloat(content, 'WowFlutterDepth');
+            // console.log('wowFlutterDepth:', wowFlutterDepth);
+            const crinkleDepth = extractValueIntFloat(content, 'CrinkleDepth');
+            // console.log('crinkleDepth:', crinkleDepth);
+            const tapeAge = extractValueIntFloat(content, 'TapeAge');
+            // console.log('tapeAge:', tapeAge);
+            const hysterisis = extractValueIntFloat(content, 'Hysterisis');
+            // console.log('hysterisis:', hysterisis);
+            const wear = extractValueIntFloat(content, 'Wear');
+            const reverb = extractValueIntFloat(content, 'Reverb');
+            const knee = extractValueIntFloat(content, 'Knee');
+            const compensation = extractValueIntFloat(content, 'Compensation');
+            const lowCutFreq = extractValueIntFloat(content, 'LowCutFreq');
+            const lowCutQ = extractValueIntFloat(content, 'LowCutQ');
+            const highCutFreq = extractValueIntFloat(content, 'HighCutFreq');
+            const speedSlewTime = extractValueIntFloat(content, 'SpeedSlewTime');
+            const capacativeTouchMode = extractValueNumber(content, 'CapacativeTouchMode');
+            
+            
+            // Set form values based on parsed content
+            if (recordSpeed) document.getElementById('recordSpeed').value = recordSpeed;
+            if (playbackSpeedLooping) document.getElementById('playbackSpeedLooping').value = playbackSpeedLooping;
+            if (playbackSpeedOneshot) document.getElementById('playbackSpeedOneshot').value = playbackSpeedOneshot;
+            if (multiTapEngine) document.getElementById('multiTapEngine').value = multiTapEngine;
+            if (speedControl) document.getElementById('speedControl').value = speedControl;
+            if (speedMarkers) document.getElementById('speedMarkers').value = speedMarkers;
+            if (timePot) document.getElementById('timePot').value = timePot;
+            if (recordJack) document.getElementById('recordJack').value = recordJack;
+            if (externalClockAverage) document.getElementById("externalClockAverage").value = externalClockAverage;
+            if (externalClockResolution) document.getElementById("externalClockResolution").value = externalClockResolution;
+            if (externalClockTimeout) document.getElementById("externalClockTimeout").value = externalClockTimeout;
+            if (clockDivisions) document.getElementById("clockDivisions").value = clockDivisions;
+            if (quantisation) document.getElementById("quantisation").value = quantisation;
+            if (eraseRecord) document.getElementById("eraseRecord").value = eraseRecord;
+            if (minLength) document.getElementById("minLength").value = minLength;
+            if (crossfadeDuration) document.getElementById("crossfadeDuration").value = crossfadeDuration;
+            if (retrigDelay) document.getElementById("retrigDelay").value = retrigDelay;
+            if (maxDubLevel) document.getElementById("maxDubLevel").value = maxDubLevel;
+            if (wowFlutterDepth) document.getElementById("wowFlutterDepth").value = wowFlutterDepth;
+            if (crinkleDepth) document.getElementById("crinkleDepth").value = crinkleDepth;
+            if (tapeAge) document.getElementById("tapeAge").value = tapeAge;
+            if (hysterisis) document.getElementById("hysterisis").value = hysterisis;
+            if (wear) document.getElementById("wear").value = wear;
+            if (reverb) document.getElementById("reverb").value = reverb;
+            if (knee) document.getElementById("knee").value = knee;
+            if (compensation) document.getElementById("compensation").value = compensation;
+            if (lowCutFreq) document.getElementById("lowCutFreq").value = lowCutFreq;
+            if (lowCutQ) document.getElementById("lowCutQ").value = lowCutQ;
+            if (highCutFreq) document.getElementById("highCutFreq").value = highCutFreq;
+            if (speedSlewTime) document.getElementById("speedSlewTime").value = speedSlewTime;
+            if (capacativeTouchMode) document.getElementById("capacativeTouchMode").value = capacativeTouchMode;
+            // You can add more form field assignments here for other parameters
+        alert('Preset loaded successfully!');
+    }
+
+    // Helper function to extract parameter values from the file
+    function extractValue(text, key) {
+        const regex = new RegExp(`${key}:\\s*([\\w\\s.\\-]+)`, 'i');
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+    function extractValueNumber(text, key) {
+        const regex = new RegExp(`${key}:\\s*([\\d]+)`, 'i'); // Only looking for numbers
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+    function extractValueIntFloat(text, key) {
+        const regex = new RegExp(`${key}:\\s*([-+]?[\\d]*\\.?[\\d]+)`, 'i'); // Matches integers and floats
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+    function extractValueName(text, key) {
+        const regex = new RegExp(`${key}:\\s*"?([\\w\\s.\\-]+)?"`, 'i');  // Updated regex to handle quotes
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    }
+</script>
+<script>
+    // JavaScript code as provided
+    const presetTemplateSelect = document.getElementById('presetTemplate');
+    const loadPresetButton = document.getElementById('loadPresetButton');
+
+    // Event listener for when the user changes the selected option
+    presetTemplateSelect.addEventListener('change', function() {
+        // Store the selected value in localStorage
+        localStorage.setItem('selectedPresetTemplate', presetTemplateSelect.value);
+    });
+
+    // Event listener for the load button
+    loadPresetButton.addEventListener('click', function() {
+        // Retrieve the selected option from localStorage
+        const selectedPresetValue = localStorage.getItem('selectedPresetTemplate');
+        if (selectedPresetValue) {
+            // Set the value of the select object to the stored value
+            presetTemplateSelect.value = selectedPresetValue;
+            // Call your existing function to load the preset using the selected value
+            loadPreset(selectedPresetValue);
+        }
+    });
+
+    // When the page is loaded, set the select object to the last selected value
+    window.addEventListener('DOMContentLoaded', (event) => {
+        const storedValue = localStorage.getItem('selectedPresetTemplate');
+        if (storedValue) {
+            presetTemplateSelect.value = storedValue;
+        }
+    });
+</script>
+
+
+
+</body></html>

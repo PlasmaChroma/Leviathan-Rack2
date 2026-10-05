@@ -1,0 +1,1758 @@
+{
+  "header": {
+    "type": 3,
+    "machine": 40,
+    "version": 1,
+    "entry": 3400,
+    "phoff": 52,
+    "shoff": 12568,
+    "flags": 83887104,
+    "ehsize": 52,
+    "phentsize": 32,
+    "phnum": 6,
+    "shentsize": 40,
+    "shnum": 27,
+    "shstrndx": 26
+  },
+  "sections": [
+    {
+      "nameoff": 0,
+      "type": 0,
+      "flags": 0,
+      "addr": 0,
+      "offset": 0,
+      "size": 0,
+      "link": 0,
+      "info": 0,
+      "align": 0,
+      "entsize": 0,
+      "name": ""
+    },
+    {
+      "nameoff": 27,
+      "type": 7,
+      "flags": 2,
+      "addr": 244,
+      "offset": 244,
+      "size": 36,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".note.gnu.build-id"
+    },
+    {
+      "nameoff": 46,
+      "type": 1879048182,
+      "flags": 2,
+      "addr": 280,
+      "offset": 280,
+      "size": 104,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".gnu.hash"
+    },
+    {
+      "nameoff": 56,
+      "type": 11,
+      "flags": 2,
+      "addr": 384,
+      "offset": 384,
+      "size": 1088,
+      "link": 4,
+      "info": 3,
+      "align": 4,
+      "entsize": 16,
+      "name": ".dynsym"
+    },
+    {
+      "nameoff": 64,
+      "type": 3,
+      "flags": 2,
+      "addr": 1472,
+      "offset": 1472,
+      "size": 693,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".dynstr"
+    },
+    {
+      "nameoff": 72,
+      "type": 1879048191,
+      "flags": 2,
+      "addr": 2166,
+      "offset": 2166,
+      "size": 136,
+      "link": 3,
+      "info": 0,
+      "align": 2,
+      "entsize": 2,
+      "name": ".gnu.version"
+    },
+    {
+      "nameoff": 85,
+      "type": 1879048190,
+      "flags": 2,
+      "addr": 2304,
+      "offset": 2304,
+      "size": 32,
+      "link": 4,
+      "info": 1,
+      "align": 4,
+      "entsize": 0,
+      "name": ".gnu.version_r"
+    },
+    {
+      "nameoff": 100,
+      "type": 9,
+      "flags": 2,
+      "addr": 2336,
+      "offset": 2336,
+      "size": 112,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.dyn"
+    },
+    {
+      "nameoff": 109,
+      "type": 9,
+      "flags": 66,
+      "addr": 2448,
+      "offset": 2448,
+      "size": 368,
+      "link": 3,
+      "info": 19,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.plt"
+    },
+    {
+      "nameoff": 118,
+      "type": 1,
+      "flags": 6,
+      "addr": 2816,
+      "offset": 2816,
+      "size": 12,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".init"
+    },
+    {
+      "nameoff": 113,
+      "type": 1,
+      "flags": 6,
+      "addr": 2828,
+      "offset": 2828,
+      "size": 572,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".plt"
+    },
+    {
+      "nameoff": 124,
+      "type": 1,
+      "flags": 6,
+      "addr": 3400,
+      "offset": 3400,
+      "size": 4072,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".text"
+    },
+    {
+      "nameoff": 130,
+      "type": 1,
+      "flags": 6,
+      "addr": 7472,
+      "offset": 7472,
+      "size": 8,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".fini"
+    },
+    {
+      "nameoff": 136,
+      "type": 1,
+      "flags": 50,
+      "addr": 7480,
+      "offset": 7480,
+      "size": 232,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 1,
+      "name": ".rodata"
+    },
+    {
+      "nameoff": 144,
+      "type": 1,
+      "flags": 2,
+      "addr": 7712,
+      "offset": 7712,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".eh_frame"
+    },
+    {
+      "nameoff": 154,
+      "type": 14,
+      "flags": 3,
+      "addr": 73476,
+      "offset": 7940,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".init_array"
+    },
+    {
+      "nameoff": 166,
+      "type": 15,
+      "flags": 3,
+      "addr": 73480,
+      "offset": 7944,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".fini_array"
+    },
+    {
+      "nameoff": 178,
+      "type": 1,
+      "flags": 3,
+      "addr": 73484,
+      "offset": 7948,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".jcr"
+    },
+    {
+      "nameoff": 183,
+      "type": 6,
+      "flags": 3,
+      "addr": 73488,
+      "offset": 7952,
+      "size": 240,
+      "link": 4,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".dynamic"
+    },
+    {
+      "nameoff": 192,
+      "type": 1,
+      "flags": 3,
+      "addr": 73728,
+      "offset": 8192,
+      "size": 240,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".got"
+    },
+    {
+      "nameoff": 197,
+      "type": 1,
+      "flags": 3,
+      "addr": 73968,
+      "offset": 8432,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".data"
+    },
+    {
+      "nameoff": 203,
+      "type": 8,
+      "flags": 3,
+      "addr": 73972,
+      "offset": 8436,
+      "size": 8,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".bss"
+    },
+    {
+      "nameoff": 208,
+      "type": 1,
+      "flags": 48,
+      "addr": 0,
+      "offset": 8436,
+      "size": 52,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 1,
+      "name": ".comment"
+    },
+    {
+      "nameoff": 217,
+      "type": 1879048195,
+      "flags": 0,
+      "addr": 0,
+      "offset": 8488,
+      "size": 49,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".ARM.attributes"
+    },
+    {
+      "nameoff": 1,
+      "type": 2,
+      "flags": 0,
+      "addr": 0,
+      "offset": 8540,
+      "size": 2448,
+      "link": 25,
+      "info": 88,
+      "align": 4,
+      "entsize": 16,
+      "name": ".symtab"
+    },
+    {
+      "nameoff": 9,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 10988,
+      "size": 1346,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".strtab"
+    },
+    {
+      "nameoff": 17,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 12334,
+      "size": 233,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".shstrtab"
+    }
+  ],
+  "symbols": [
+    {
+      "name": "s_list",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "strcmp",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__cxa_finalize",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "binbuf_getvec",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "read",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "getuid",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bug",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "getbytes",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_addbang",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "binbuf_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "dup2",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "seteuid",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "clock_delay",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "waitpid",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "strcpy",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "sys_rmpollfn",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "error",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "malloc",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "system",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "clock_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "kill",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "exit",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "clock_unset",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "binbuf_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "strlen",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "sys_addpollfn",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "post",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "write",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "pipe",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fork",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_float",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_list",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_Jv_RegisterClasses",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "binbuf_text",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "verbose",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_anything",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "s_bang",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_addanything",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "close",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "pd_error",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "binbuf_getnatom",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "sched_setscheduler",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "atom_string",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_bss_end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_edata",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 20,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_cleanup",
+      "value": 6156,
+      "size": 112,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_end",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_setup",
+      "value": 7332,
+      "size": 140,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_check",
+      "value": 6268,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__bss_end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_bang",
+      "value": 3772,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_read",
+      "value": 3796,
+      "size": 1580,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__bss_start",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_init",
+      "value": 2816,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 9,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__bss_start__",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_fini",
+      "value": 7472,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 12,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shell_free",
+      "value": 3788,
+      "size": 8,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/6/../../../arm-linux-gnueabihf/crti.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "call_weak_fn",
+      "value": 3400,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/6/../../../arm-linux-gnueabihf/crtn.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__JCR_LIST__",
+      "value": 73484,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 17,
+      "table": ".symtab"
+    },
+    {
+      "name": "deregister_tm_clones",
+      "value": 3436,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "register_tm_clones",
+      "value": 3512,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "value": 3592,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "completed.10395",
+      "value": 73972,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux_fini_array_entry",
+      "value": 73480,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 16,
+      "table": ".symtab"
+    },
+    {
+      "name": "frame_dummy",
+      "value": 3696,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__frame_dummy_init_array_entry",
+      "value": 73476,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 15,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_new",
+      "value": 5376,
+      "size": 200,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_send.isra.0",
+      "value": 5576,
+      "size": 580,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_anything",
+      "value": 6404,
+      "size": 928,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_class",
+      "value": 73976,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__FRAME_END__",
+      "value": 7712,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 14,
+      "table": ".symtab"
+    },
+    {
+      "name": "__JCR_END__",
+      "value": 73484,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 17,
+      "table": ".symtab"
+    },
+    {
+      "name": "__dso_handle",
+      "value": 73968,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "_DYNAMIC",
+      "value": 73488,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__TMC_END__",
+      "value": 73972,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "_GLOBAL_OFFSET_TABLE_",
+      "value": 73728,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "s_list",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "strcmp@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__cxa_finalize@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "binbuf_getvec",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__bss_start__",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "read@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "getuid@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bug",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "getbytes",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_bss_end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "_edata",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_cleanup",
+      "value": 6156,
+      "size": 112,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_check",
+      "value": 6268,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_addbang",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_fini",
+      "value": 7472,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 12,
+      "table": ".symtab"
+    },
+    {
+      "name": "__bss_end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "binbuf_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "dup2@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_bang",
+      "value": 3772,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "seteuid@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "clock_delay",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "waitpid@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "strcpy@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "sys_rmpollfn",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "error@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "malloc@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "system@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "clock_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "kill@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "exit@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "clock_unset",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "binbuf_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "strlen@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_read",
+      "value": 3796,
+      "size": 1580,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "sys_addpollfn",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_end",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "post",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "write@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__end__",
+      "value": 73980,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "__bss_start",
+      "value": 73972,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 21,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "pipe@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fork@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_float",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_list",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_Jv_RegisterClasses",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "binbuf_text",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "verbose",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_anything",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "s_bang",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_setup",
+      "value": 7332,
+      "size": 140,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_addanything",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_init",
+      "value": 2816,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 9,
+      "table": ".symtab"
+    },
+    {
+      "name": "close@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "pd_error",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "binbuf_getnatom",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "shell_free",
+      "value": 3788,
+      "size": 8,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "sched_setscheduler@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "atom_string",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    }
+  ]
+}

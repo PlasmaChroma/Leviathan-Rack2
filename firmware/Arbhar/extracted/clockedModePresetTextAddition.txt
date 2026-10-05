@@ -1,0 +1,70 @@
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE Switch
+    ---------------------------------------------------------------------------------------------
+    Description of features:
+        0 - Clock Mode is disabled and inaccessible via the UI of the arbhar.
+        1 - Clock Mode can be toggled with shift+capture and turning Scan Knob fully clockwise.
+    */
+
+    PARAMETER: EnableClockedModeSwitch: 1
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE
+    ---------------------------------------------------------------------------------------------
+    Description of features:
+        0 - Clocked Mode is inactive / Scan mode is active
+        1 - Clocked Mode is active / Scan mode is disabled.
+    */
+
+  PARAMETER: ClockedMode: 0
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE Internal Clock Speed in BPM
+    ---------------------------------------------------------------------------------------------
+    Description of features:
+        Define internal bpm clock speed in beats per minute. Float value is accepted.
+    */
+
+    PARAMETER: ClockBPM: 120.0
+
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE Clock Multiplier 
+    ---------------------------------------------------------------------------------------------
+    Intensity becomes clock multiplier from mid knob position to fully clockwise:
+        
+          Define multiplier values starting with 1 as the value to get triggers in the speed of the
+          internal bpm clock.
+    */
+
+  PARAMETER: ClockMultiplications: 1 1.5 2 3 4 6 8 12 16 24 32
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE CLOCK DIVISIONS 
+    ---------------------------------------------------------------------------------------------
+    Intensity becomes clock divisor from mid knob position to fully anticlockwise:
+        
+          Define divisor values starting with 1 as the value to get triggers in the speed of the
+          internal bpm clock.
+    */
+
+  PARAMETER: ClockDivisions: 1 1.5 2 3 4
+
+    /*
+    ---------------------------------------------------------------------------------------------
+    CLOCKED MODE INPUT CLOCK DIVISION 
+    ---------------------------------------------------------------------------------------------
+    Define a clock divisor for the incoming clock patched into the Strike CV input.
+        
+          1 - The measured time between each received trigger will be used to calculate the Clock BPM.
+          2 - The measured time between every second received trigger will be used to calculate the Clock BPM.
+          ... etc.
+   */
+
+  PARAMETER: InputClockDivision: 1

@@ -1,0 +1,4675 @@
+
+
+// going to use #ARB as preset ID, or where else it might be useful
+
+
+/**
+ * include the interface to Pd
+ */
+#include "m_pd.h"
+#include <bcm2835.h>
+#include <math.h>
+#include <time.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <string.h>
+#include "arbhar_functions.h"
+#include "arbhar_config.h"
+
+#define ADC_SAMP_RATE 0.123 //0.66 //1.33 //2.33 //0.11
+#define STRIKE_SAMP_RATE 0.011
+#define CALIBRATION_VPO_MIN 700
+#define CALIBRATION_VPO_MAX 890
+
+#define POT_HIGHEST 4070
+#define POT_LOWEST 0
+
+#define ENABLE_CLOCKED_MODE_SWITCH 0
+#define USE_BPM_CLOCK 0  // to set x_internalBpmClock
+#define INPUT_CLOCK_DIVISION 1
+#define CLOCK_SETS_LENGTH 1
+//TODO: add parameter ClockSetsGrainLength to preset file
+#define BPM_FILTER_VAL 0.7
+#define PRINT_CLOCK_TRIGGER_TIME_DIFF 0
+
+
+/**
+ * define a new "class"
+ */
+static t_class *arbhar_gpio_tilde_class;
+
+/**
+enum mcpCh: {
+0	VPO = 2, //V/Oct
+1	LYC = 4, //Layer CV
+2	SCC = 7, //Scan CV
+3	TEX = 14, //texture
+4	DIR = 10, //Direction
+6	MOD = 13, // Mod
+5	LEN = 1, //Length
+7	SCP = 0, // Scan Pot
+8	DW = 6, // Dry/Wet
+9	PI = 3, //Pitch
+10	INT = 12, //Intensity
+11	LYP = 5, //Layer Pot
+12	SPR = 9, //Spray
+13	HOL = 8, //Hold
+14	DUB = 11, //Overdub
+15	DEV = 15 //Deviation
+	
+};*/
+
+typedef struct _mcp_ch_struct {
+	uint8_t ch;
+	t_float raw;
+	uint8_t ignore;
+	uint16_t val;
+	t_float	last;
+	t_float buf[100];
+	uint16_t lowest;
+	uint16_t highest;
+	t_float mid;
+	t_float avg;
+	t_float notch;
+	uint16_t bufCount;
+	uint16_t bufCountMax;
+	uint8_t freeze;
+	uint16_t freezeCount;
+	uint16_t freezeThresh;
+	uint16_t freezeCountMax;
+	t_float	lastFrozen;
+	t_symbol *name;
+
+} t_mcp_ch;
+
+typedef struct _gpioButton {
+	uint8_t value;
+	uint8_t state;
+	uint8_t order;
+	uint8_t raising;
+	uint8_t falling;
+	uint8_t ignore;
+	uint8_t prev;
+	uint8_t changed;
+	uint32_t timePressed;
+	uint32_t prevTimePressed;
+} t_button;
+
+
+typedef struct _gpioButtons {
+	uint8_t mode;
+	uint8_t changed;
+	uint8_t combined;
+	t_button shift;
+	t_button capture;
+	t_button strike;
+	t_button *buttonPointers[3];
+} t_buttons;
+
+
+typedef struct _arbhar_gpio_tilde {
+  t_object  x_obj;
+  t_sample f;
+  t_int x_vpo3VoltValue;
+  uint8_t x_recording;
+  uint8_t x_recOnButtonUp;
+  uint8_t x_awaitRecording;
+  uint8_t x_accumRecording;
+  uint8_t x_captureButtonMode;
+  uint8_t x_linkAccumCaptureAsGate;
+  uint8_t x_captureCvAsGate;
+  t_float x_recordingPos;
+  uint8_t x_arbharMode;
+  uint8_t x_playRecCoupled;
+  uint8_t x_playLayer;
+  uint8_t x_copyLayerTo;
+  uint8_t x_copyFileNumber;
+  uint8_t x_previewEnable;
+  uint8_t x_omegaPlayLayer;
+  uint8_t x_recLayer;
+  uint8_t x_protectPlayLayerValue;
+  uint8_t x_omega;
+  t_paramMode x_paramModeInfo;
+  uint8_t x_stereo;
+  t_float x_scanPosition;
+  uint8_t x_followMode;
+  t_float x_followPosition;
+  t_float x_followSpeed;
+  t_float x_followPosOffset;
+  uint8_t x_followBiDirectional;
+  uint8_t x_followPosOffsetByScanCV;
+  uint8_t x_followLoop;
+  uint8_t x_followLengthAsHold;
+  uint8_t x_shiftMode;
+  uint8_t x_paramMode;
+  uint8_t x_paramPage;
+  t_outlet *layerBufOp;
+  t_outlet *toSerial;
+  uint8_t x_gpio_ins;
+  uint8_t x_blockAllButtons;
+  uint8_t x_buttonsPressed;
+  uint8_t x_buttonsOrder[3];
+  uint8_t x_functionCalled;
+  t_onsetMode x_onsetModes[7]; //modes start from INVALID (0), ALPHA (1) etc. !
+  t_onsetMode * x_currentOnsetMode;
+  uint8_t x_showOnsetMode;
+  uint8_t x_allowOnsetModeChange;
+  uint8_t x_useHoldToSwitch;
+  uint8_t x_dspSynced;
+  uint8_t x_modToPanning;
+  uint8_t x_modToHold;
+  uint8_t x_modToReverb;
+  uint8_t x_modToDelay;
+  float x_quantisedTrackAndHoldPitch;
+  uint8_t x_strikeToTrigger;
+  t_clock *x_getFromGpio;
+  t_clock *x_getStrike;
+  t_clock *x_setOnGpio;
+  t_clock *x_playPosLedOff;
+  t_clock *x_layerLedControl;
+  t_clock *x_strikeLed;
+  t_clock *x_strikeCvLed;
+  t_clock *x_strikeTrigger;
+  t_clock *x_captureCvLed;
+  t_float x_strikeCvDelay;
+  t_clock *x_buttonDown;
+  t_clock *x_buttonUp;
+  t_clock *x_scheduleRecordingStart;
+  t_clock *x_clockTriggeringGrains;
+  t_clock *x_bpmClock;
+  uint8_t x_strikeColour;
+  uint8_t lyr_rgb[16]; 
+  t_outlet*x_out;
+  //uint16_t x_mcpVals[16];
+  //uint8_t x_chOrder[16];// = {2,4,7,14,10,13,0,6,3,12,1,5,9,8,11,15};
+  t_mcp_ch x_ch[16];
+  ////////
+  t_buttons x_buttons;
+  t_ctlFunctions x_ctl_functions;
+  t_outlet *g_info_out;
+  t_outlet *eeprom_out;
+  t_outlet *config_out;
+  t_outlet *calibrated_out;
+  int segment_id;
+  t_float *share_memory;
+  int segment_size;
+  /////////
+  t_float adc_samp_rate;
+  t_float main_adc_samp_rate;
+  t_float strike_samp_rate;
+  t_float printMcpChValue;
+  ////layer LED controls
+  uint8_t whiteLayerValue;
+  uint8_t orangeLayerValue;
+  uint32_t x_dspFrameClock;
+  uint8_t x_lastParamPage;
+  uint8_t x_checkFileProcess;
+  t_float x_timeBetweenStrikeCV;
+  t_float x_bpmStrikeCV;
+  t_float x_timeBetweenStrikeButton;
+  t_float x_bpmStrikeButton;
+  uint8_t x_enableClockedModeSwitch; //ENABLE_CLOCKED_MODE_SWITCH
+  uint8_t x_internalBpmClock;
+  t_float x_bpm;
+  t_float x_bpm_suggestedFromManual;
+  t_float x_bpm_suggestedFromCV;
+  t_float x_clockMultiplier;
+  t_float clockMult[50];
+  t_int   clockMultLength;
+  t_float clockDiv[50];
+  t_int	  clock_sets_length;
+  t_int   clockDivLength;
+  t_int   x_inputClockDivision;
+  t_int   lastExternalClockFrame;
+  t_int   lastInternalClockFrame;
+  
+} t_arbhar_gpio_tilde;
+
+t_int _checkForCalibrationFileOnBoot(t_arbhar_gpio_tilde *x);
+void _setWhiteLyrLedPulse(t_arbhar_gpio_tilde *x, uint8_t val);
+void _setModCvProcessesToMidValues(t_arbhar_gpio_tilde *x, t_float val);
+void _setAdcSampRate(t_arbhar_gpio_tilde *x, t_float val);
+//void _setStrikeSampRate(t_arbhar_gpio_tilde *x, t_float val);
+//void _setModCVMode(t_arbhar_gpio_tilde *x, t_float cvMode);
+//t_float scaleLedToMid(float val);
+//static void _changeParamMode(t_arbhar_gpio_tilde *x, t_float mode);
+//void _setCurrentParamMode(t_arbhar_gpio_tilde *x, t_float mode);
+//void _displayOnsetMode(t_arbhar_gpio_tilde *x, t_float mode);
+//uint8_t _getCurrentParamMode(t_arbhar_gpio_tilde *x);
+//uint8_t _getPreviousParamMode(t_arbhar_gpio_tilde *x);
+//static void printMcpChValues(t_arbhar_gpio_tilde *x, t_float f);
+//uint16_t readADC(int _device, int _channel);
+//static t_float _getPlayLayer(t_arbhar_gpio_tilde *x);
+//void setMid(t_mcp_ch* ch, t_float val);
+//void setNotch(t_mcp_ch* ch, t_float val);
+//void setBufCountMax(t_mcp_ch* ch, t_float val);
+//void setFreezeCountMax(t_mcp_ch* ch, t_float val); 
+//void setFreezeThresh(t_mcp_ch* ch, uint16_t val);
+//void _setFreezeThresh(t_arbhar_gpio_tilde* x, t_float ch, t_float v);
+//void _setFreezeCount(t_arbhar_gpio_tilde* x, t_float ch, t_float v) ;
+void animateFileActivityBusy(t_arbhar_gpio_tilde *x);
+
+void _setModCvProcessesToMidValues(t_arbhar_gpio_tilde *x, t_float val)
+{
+	writeToSharedMem(x,SHM_MOD_PANNING, (int)val);
+	writeToSharedMem(x,SHM_MOD_HOLD, (int)val);
+	writeToSharedMem(x,SHM_MOD_REVERB, (int)val);
+	writeToSharedMem(x,SHM_MOD_DELAY, (int)val);
+}
+
+void _setAdcSampRate(t_arbhar_gpio_tilde *x, t_float val){
+	x->adc_samp_rate = val;
+	if(val < 0.125)
+		x->adc_samp_rate = x->main_adc_samp_rate;
+	post("x->adc_samp_rate: %f",x->adc_samp_rate);
+	if(val < 1)
+		x->strike_samp_rate = STRIKE_SAMP_RATE;
+	post("x->strike_samp_rate: %f",x->strike_samp_rate);
+}
+
+void _setStrikeSampRate(t_arbhar_gpio_tilde *x, t_float val){
+	x->strike_samp_rate = val;
+	post("x->strike_samp_rate: %f",x->strike_samp_rate);
+}
+
+void _setModCVMode(t_arbhar_gpio_tilde *x, t_float cvMode)
+{
+	_setModCvProcessesToMidValues(x, 2048);
+	int mode = (int)cvMode;
+	post("mode: %d - %f", mode, cvMode);
+	switch (mode) {
+		case 1: {
+			x->x_modToPanning = 1;
+			x->x_modToHold = 0;
+			x->x_modToReverb = 0;
+			x->x_modToDelay = 0;
+			break;
+		}
+		case 2: {
+			x->x_modToPanning = 0;
+			x->x_modToHold = 1;
+			x->x_modToReverb = 0;
+			x->x_modToDelay = 0;
+			break;
+		}
+		case 3: {
+			x->x_modToPanning = 0;
+			x->x_modToHold = 0;
+			x->x_modToReverb = 1;
+			x->x_modToDelay = 0;
+			break;
+		}
+		case 4: {
+			x->x_modToPanning = 0;
+			x->x_modToHold = 0;
+			x->x_modToReverb = 0;
+			x->x_modToDelay = 1;
+			break;
+		}
+		default: {
+			x->x_modToPanning = 0;
+			x->x_modToHold = 0;
+			x->x_modToReverb = 0;
+			x->x_modToDelay = 0;
+			break;
+		}
+	}
+	post("modCV: %d, %d, %d, %d", x->x_modToPanning, x->x_modToHold, x->x_modToReverb, x->x_modToDelay);
+}
+
+t_float scaleAdcToReducedRange(t_float input, t_float mid_val, t_float notch_width, t_float low_thresh, t_float high_thresh)
+{
+	const t_float max_out = 4095;
+	const t_float mid_out = 2048;
+
+	if(input < low_thresh)
+		return 0;
+	else if (input > high_thresh)
+		return max_out;
+	else if (input >= mid_val - notch_width && input <= mid_val + notch_width)
+		return mid_out;
+	else if (input < mid_val - notch_width)
+		return (input - low_thresh) * (mid_out) / (mid_val - low_thresh);
+	else
+		return (input - mid_val) * (max_out - mid_out) / (high_thresh - mid_val) + mid_out;
+}
+
+
+t_float scaleLedToMid(float val) {
+	t_float retVal;
+	if (val < 36) {
+		retVal = (val / 36) * 46;
+	}
+	else {
+		retVal = (((val - 36) / 36) * 26) + 46;
+	}
+	return retVal;
+}
+
+static void _changeParamMode(t_arbhar_gpio_tilde *x, t_float mode){
+	static t_float prevMode = 0;
+	t_float cMode = mode;
+	if(prevMode != cMode){
+		x->x_paramModeInfo.time_entered = x->x_dspFrameClock;
+		x->x_paramModeInfo.prev_param_mode = x->x_paramModeInfo.current_param_mode;
+		x->x_paramModeInfo.prev_had_param_changes = x->x_paramModeInfo.current_has_param_changes > 0 ? 1 : 0;
+		x->x_paramModeInfo.prev_time_entered = x->x_paramModeInfo.time_entered;
+		x->x_paramModeInfo.current_param_mode = (uint8_t)cMode;
+		x->x_paramModeInfo.time_entered = x->x_dspFrameClock;
+
+	/*	post("changed parameter mode from %s to %s at %d", 
+					getModeName(x->x_paramModeInfo.prev_param_mode), 
+					getModeName(x->x_paramModeInfo.current_param_mode), 
+					x->x_paramModeInfo.time_entered);*/
+		prevMode = cMode;
+		
+	}
+}
+
+void _setCurrentParamMode(t_arbhar_gpio_tilde *x, t_float mode)
+{
+	led_onsetModeControl(x,mode);
+	_setWhiteLyrLedPulse( x, 0);
+}
+
+void _displayOnsetMode(t_arbhar_gpio_tilde *x, t_float mode)
+{
+	led_onsetModeControl(x,mode);
+	_setWhiteLyrLedPulse( x, 0);
+}
+
+uint8_t _getCurrentParamMode(t_arbhar_gpio_tilde *x){
+	return x->x_paramModeInfo.current_param_mode;
+}
+
+uint8_t _getPreviousParamMode(t_arbhar_gpio_tilde *x){
+	return x->x_paramModeInfo.prev_param_mode;
+}
+
+static void printMcpChValues(t_arbhar_gpio_tilde *x, t_float f){
+	t_float ch = f;
+	if(ch < 0 || ch > 15) ch = -1;
+	x->printMcpChValue = ch;
+	post("printMcpChValue %f", ch);
+}
+
+uint16_t readADC(int _device, int _channel){
+	char spi_data[3];
+	uint8_t input_mode = 1; // single ended = 1, differential = 0
+	uint16_t result;
+	uint8_t dev = (uint8_t)_device;
+	
+	//bcm2835_spi_begin();
+	//bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64);
+
+	if(_channel > 7 | _channel < 0){
+		return -1;
+	}
+
+	spi_data[0] = 0x04; // start flag
+	spi_data[0] |= (input_mode<<1); // shift input_mode
+	spi_data[0] |= (_channel>>2) & 0x01; // add msb of channel in our first command byte
+
+	spi_data[1] = _channel<<6;
+	spi_data[2] = 0x00;
+	bcm2835_spi_chipSelect(dev);
+	bcm2835_spi_transfern(spi_data, 3);
+	//bcm2835_spi_end();
+	//bcm2835_st_delay(0, 100);
+
+	result = ((spi_data[1] & 0x0f)<<8) | spi_data[2];
+	return result;
+}
+
+static t_float _getPlayLayer(t_arbhar_gpio_tilde *x)
+{
+	t_float pLayer = x->x_playLayer;
+	if(x->x_omega)
+		pLayer = x->x_omegaPlayLayer;
+	return (pLayer + 1);
+}
+
+void setMid(t_mcp_ch* ch, t_float val) 
+{ 
+	ch->mid = val; 
+	ch->freeze = 0;
+	ch->lastFrozen = 0;
+	ch->last = 0; 
+}
+	
+void setNotch(t_mcp_ch* ch, t_float val) 
+{ 
+	ch->notch = val; 
+};
+
+void setBufCountMax(t_mcp_ch* ch, t_float val) 
+{ 
+	ch->bufCountMax = val; 
+};
+
+void setFreezeCountMax(t_mcp_ch* ch, t_float val) 
+{ 
+	ch->freezeCountMax = val; 
+};
+
+void setFreezeThresh(t_mcp_ch* ch, uint16_t val) 
+{ 
+	ch->freezeThresh = val; 
+	//post("frrzeThresh %d: %d", ch->ch, ch->freezeThresh);
+};
+
+void _setFreezeThresh(t_arbhar_gpio_tilde* x, t_float ch, t_float v) 
+{
+	uint8_t channel = (uint8_t)ch;
+	uint16_t value = (uint16_t)v;
+	setFreezeThresh(&x->x_ch[channel], value);
+}
+
+
+void _setFreezeCount(t_arbhar_gpio_tilde* x, t_float ch, t_float v) 
+{
+	uint8_t channel = (uint8_t)ch;
+	uint16_t value = (uint16_t)v;
+	setFreezeCountMax(&x->x_ch[channel], value);
+}
+
+void _learnMid(t_arbhar_gpio_tilde* x) 
+{ 
+	post("raw mcp values copied to set mid:");
+	for(int i=0;i<16;i++) 
+	{
+		x->x_ch[i].mid = x->x_ch[i].avg;
+		post("mcpCh %d: %d -- %d", i, (int)x->x_ch[i].mid, MCP_CH_SEQUENTIALLY[i]);
+	}
+	
+};
+
+void _setMidValue(t_arbhar_gpio_tilde* x, t_symbol *s, t_int argc, t_atom *argv)
+{
+	//t_symbol *unused, int argc, t_atom *argv
+	post("received %d elements", argc);
+	t_int offset = (t_int)atom_getfloat(argv);
+	post("start setting at %d", offset);
+	for(int i=1;i<argc;i++){
+		t_float mid = atom_getfloat(argv+i);
+		t_int ch = 0;
+		t_int ordNo = 0;
+		for(int j=0;j<16;j++) 
+		{
+			if(i+offset-1 == x->x_ch[j].ch) {
+				ch = x->x_ch[j].ch;
+				ordNo = j;
+			}
+		}
+		post("received %f, channel: %d as element %d.", mid, ch, ordNo);
+		setMid(&x->x_ch[ordNo],mid);
+	}
+}
+
+
+
+void _setMidValueByCh(t_arbhar_gpio_tilde* x, t_symbol *s, t_int argc, t_atom *argv)
+{
+	//t_symbol *unused, int argc, t_atom *argv
+	//post("received %d elements", argc);
+	if(argc > 1){
+		static int count = 0;
+		t_int midVal = (t_int)atom_getfloat(argv+1);
+		if(midVal < 0)
+			count = 0;
+		else{
+			if(count < 16){
+				post("received mid value: count %d: order: %d midVal: %d", count, MCP_CH_SEQUENTIALLY[count], midVal);
+				x->x_ch[MCP_CH_SEQUENTIALLY[count]].mid = (t_float)midVal;
+				//if(count == 13)
+					//_setModCvProcessesToMidValues(x,2048);
+				post("set mid value: count %d: order: %d midVal: %d", count, MCP_CH_SEQUENTIALLY[count], (int)x->x_ch[MCP_CH_SEQUENTIALLY[count]].mid);
+				count++;
+			}
+			else
+				_setVpo3VoltValue(x,midVal);
+		}
+	}
+
+}
+
+static void _takeCalibrationValues(t_arbhar_gpio_tilde *x, t_float notUsed){
+	
+	//mid value saving routine
+	static int count = 0;
+	
+	if(count == 0) {
+	_learnMid(x);
+	post("---------------------");
+	for (int p=0;p<16;p++)
+	{ 
+		int i = MCP_CH_SEQUENTIALLY[p];
+		t_int mcpCh = x->x_ch[i].ch;
+		t_int eepromId = mcpCh + 192;
+		x->x_ch[i].mid = x->x_ch[i].last;
+		t_int midVal = (t_int)x->x_ch[i].last;
+		t_int msb = makeSixBitMsb(midVal);
+		t_int lsb = makeSixBitLsb(midVal);
+		t_int check = combineSixBitMsbLsb(msb, lsb);
+		post("order %d: ch %d mid value: %d to be saved at %d as %d %d | check: %d",i, mcpCh, midVal, eepromId, msb, lsb, check);
+		t_atom eepromData[3];
+		SETFLOAT(eepromData, eepromId);
+		SETFLOAT(eepromData+1, lsb);
+		SETFLOAT(eepromData+2, msb);
+		outlet_list(x->eeprom_out, gensym("list"),3,eepromData);
+	}
+	t_int threeOctaveValue = x->x_vpo3VoltValue;
+	t_atom vpo3volt[3];
+	t_int msb = makeSixBitMsb(threeOctaveValue);
+	t_int lsb = makeSixBitLsb(threeOctaveValue);
+	SETFLOAT(vpo3volt, 16 + 192);
+	SETFLOAT(vpo3volt+1, lsb);
+	SETFLOAT(vpo3volt+2, msb);
+	outlet_list(x->eeprom_out, gensym("list"),3,vpo3volt);
+	post("vpo3Volt: %d to be saved at %d as %d %d | check: %d",threeOctaveValue, 16 + 192, msb, lsb, combineSixBitMsbLsb(msb, lsb));
+	
+	t_atom calibrationEnd[2];
+	SETFLOAT(calibrationEnd, 255);
+	SETFLOAT(calibrationEnd+1, 255);
+	outlet_list(x->eeprom_out, gensym("list"),2,calibrationEnd);
+	
+	//exit calibration mode
+	//TODO: enter testing mode
+	t_atom ctlInfo[1];
+	SETFLOAT(ctlInfo, 254);
+	outlet_list(x->eeprom_out, gensym("list"),1,ctlInfo);
+	x->x_arbharMode = TESTING_MODE; 
+	
+	t_atom calibrationInfo[1];
+	SETSYMBOL(calibrationInfo, gensym("finishedCalibration"));
+	//SETFLOAT(calibrationInfo+1, p);
+	//SETFLOAT(calibrationInfo+2, v);
+	if(x->x_arbharMode >= CALIBRATION_MODE)
+		outlet_list(x->layerBufOp, gensym("list"),1,calibrationInfo);
+	}
+	count++;
+}
+
+
+//static void lopassCalc(t_arbhar_gpio_tilde* x, float sr)
+//{
+	//double costh;
+	//for (int i=0;i<16;i++)
+	//{
+		//costh = 2.0 - cos(TWOPI * 150 / sr);
+		//float coef = (t_float)(sqrt(costh * costh - 1.0) - costh);
+	//}
+//}
+
+void _stabliseADC_DuringCalibration(t_mcp_ch *s)
+{
+	uint16_t bufSize = s->bufCountMax;
+	bufSize = bufSize > 100 ? 100 : bufSize < 1 ? 1 : bufSize;
+	uint16_t bufCount = s->bufCount;
+	//uint16_t freezeThresh = s->freezeThresh;
+	t_float sum = 0;
+	t_float check = 0;	
+	check = s->raw - s->last;
+	//if(s->ch == 7)
+	//	post("raw: %f", s->raw);
+	if(abs(check) > 700 || s->raw < 2 || s->raw > 4093)
+	{
+		for(int i=0;i<bufSize;i++)
+			s->buf[i] = s->raw;
+	} else
+		s->buf[bufCount] = s->raw;
+	bufCount++;
+	if(bufCount >= bufSize)
+		bufCount = 0;
+	s->bufCount = bufCount;	
+	for(int i=0;i<bufSize;i++) {
+		sum += s->buf[i];
+	}
+	sum /= (t_float)bufSize;
+	s->avg = sum;
+	//if(s->ch == 7)
+	//	post("avg: %f", s->avg);
+	check = s->last - sum;
+	if(abs(check) < 50){
+		s->last = s->last + (check * -0.9);
+	}
+	else {
+		s->last = sum;
+	}
+
+	s->val = s->last;
+	//post("value for %d: %d", s->ch, s->val);
+	
+}
+
+void _stabliseADC(t_mcp_ch *s)
+{	uint16_t bufSize = s->bufCountMax;
+	bufSize = bufSize > 100 ? 100 : bufSize < 1 ? 1 : bufSize;
+	uint16_t bufCount = s->bufCount;
+	uint16_t freezeThresh = s->freezeThresh;
+	t_float sum = 0;
+	t_float check = 0;
+	t_float raw = scaleAdcToReducedRange(s->raw, s->mid, s->notch, s->lowest, s->highest);
+	// if(s->ch == 3) post("ch: %d raw: %f", s->ch, raw);
+	s->raw = raw;
+	check = s->raw - s->last;
+	//TODO: is this where to add maximum correction?
+	if(abs(check) > 700 || s->raw < 2 || s->raw > 4093)
+	{
+		for(int i=0;i<bufSize;i++)
+			s->buf[i] = s->raw;
+	} else {
+		if(s->raw > s->highest){
+			s->buf[bufCount] = 4095;
+		} else if (s->raw < s->lowest){
+			s->buf[bufCount] = 0;
+		} else {
+			s->buf[bufCount] = s->raw;
+		}
+	}
+	bufCount++;
+	if(bufCount >= bufSize)
+		bufCount = 0;
+	s->bufCount = bufCount;	
+	for(int i=0;i<bufSize;i++) {
+		sum += s->buf[i];
+	}
+	sum /= (t_float)bufSize;
+	s->avg = sum;
+	check = s->last - sum;
+	if(abs(check) < 50){
+		s->last = s->last + (check * -0.9);
+	}
+	else {
+		s->last = sum;
+		//if(no == 5)
+			//post("check>20");
+	}
+	//if(s->ch == 0 && bufCount == 0)
+	//	post("checkThresh ch %d: %d", s->ch, s->freezeThresh);
+	
+	check = s->last - s->lastFrozen;
+	if(abs(check) < freezeThresh && s->freeze < 1) {
+		s->freezeCount++;
+		//if(s->ch == 0)
+			//post("count++, %d", s->freezeCount);
+		if(s->freezeCount > s->freezeCountMax){
+			s->freeze = 1;
+			s->lastFrozen = s->last;
+			//if(s->ch == 0)
+			  //post("frozen %f", check);
+		}
+	}
+	else if(abs(check) >= freezeThresh) {
+		s->freezeCount = 0;
+		s->freeze = 0;
+		s->lastFrozen = s->last;
+		//if(s->ch == 0)
+			  //post("unfrozen %f", check);
+	}
+	
+	if(s->freeze < 1){
+		s->val = s->last; //(uint16_t)scaleToMid(s->last, s->mid, s->notch);	
+	}
+	else
+		s->val = s->val;
+	//x->x_ch[no].val = x->x_ch[no].last;
+}
+
+t_float readFromSharedMem(t_arbhar_gpio_tilde *x, t_float index)
+{
+    if ( !x->share_memory ) return 0.0f;
+    int shmem_offset;
+
+	shmem_offset = index;
+  t_float retval;
+	if (shmem_offset < 0) shmem_offset = 0;
+	if (shmem_offset > x->segment_size-1) shmem_offset = x->segment_size-1;
+  retval = x->share_memory[shmem_offset];
+  //if(retval != 0)
+	 //post("%d=%f", shmem_offset,retval);
+	//outlet_float(x->x_obj.ob_outlet, x->share_memory[shmem_offset]);
+  return retval;
+}
+
+void _setPlayParameters(t_arbhar_gpio_tilde *x)
+{
+	/* dependent on paramMode, combine SCC and SCP - done
+	 * dependent on followMode, set position (SCC) and playback speed (SCP)
+	 * write to shMem 61019 id 100 
+	 * sharing playack speed seperately?
+	 * */
+	t_float bufAccessSizeInSamp = 480000;
+	t_float bufAccessSizeInPerCent = 100000;  //for percentage
+	static t_float mcpChSCP = 0;
+	if(_getCurrentParamMode(x) <= PARAM_SHIFT)
+		mcpChSCP = 4095 - x->x_ch[7].val;
+	// if(x->x_paramMode == PARAM_MOMENTARY)
+	 //	
+	t_float mcpChSCC = (4095 - x->x_ch[2].val) - 2048;//- (4095 - x->x_ch[2].mid);
+	//post("mcpChSCC: %f", mcpChSCC);
+	t_float SCPSCC = mcpChSCP + mcpChSCC;
+	SCPSCC = SCPSCC >= 4095 ? 4095 : SCPSCC < 0 ? 0 : SCPSCC;
+	//t_float bufActualSize = 13000;
+	t_float position = 0;
+	if(x->x_followMode && x->x_omega == 0) {
+		position = x->x_followPosition;// / 4.8f;
+		
+		if(x->x_followBiDirectional == 1 && x->x_followLoop == 0) {
+			x->x_followBiDirectional = 0;
+		}
+		
+		if(x->x_followPosOffsetByScanCV > 0) {
+			x->x_followSpeed = calculateFollowSpeed(mcpChSCP, x->x_followBiDirectional);
+			//post("follow position: %f", position);
+			x->x_followPosOffset = (mcpChSCC / 2048) * bufAccessSizeInSamp;
+			//post("follow position offset: %f | %f | %f", (mcpChSCC / 2048), mcpChSCC, x->x_ch[2].mid);
+			position += x->x_followPosOffset;
+			if(position > bufAccessSizeInSamp){
+				position -= bufAccessSizeInSamp;
+			} 
+			else if (position < 0) {
+				position += bufAccessSizeInSamp;
+			}
+			//post("follow position: %f", position / 4.8f);
+		}
+		else {
+			x->x_followSpeed = calculateFollowSpeed(SCPSCC, x->x_followBiDirectional);
+		}
+	}
+	else
+		position = SCPSCC / 4095 * bufAccessSizeInSamp; //2.442002442; // 10000 / 4095  //
+	//post("position %f", position);
+	x->x_scanPosition = position;
+	//post("position at %f %",(float)position/1000);
+	//TODO: position/layer for omega:
+	if(x->x_omega > 0){
+		//static t_float prevOmPos = -1;
+		t_float omegaPosition = SCPSCC / 4095 * bufAccessSizeInPerCent * 6;
+		t_float omegaLayer = omegaPosition / bufAccessSizeInPerCent;
+		omegaPosition = fmod(omegaPosition, bufAccessSizeInPerCent - 1);
+		//if(prevOmPos != omegaPosition)
+			//post("omega position %f  in layer %d", omegaPosition, (uint8_t)omegaLayer);
+		//prevOmPos = omegaPosition;
+		if((uint8_t)omegaLayer <= 5){
+			//post("omega position %f  in layer %d", omegaPosition, (uint8_t)omegaLayer);
+			_setPlayAndRecLayerInOmega(x, (uint8_t)omegaLayer);
+			writeToSharedMem(x,SHM_POS_PERCENT,(uint32_t)omegaPosition);
+		}
+	} else {
+		writeToSharedMem(x,SHM_POS_PERCENT,(uint32_t)(position / 4.8f));
+	}
+	
+	
+	//LENGTH
+	t_float mcpChLEN = 4095 - x->x_ch[5].val;
+	//t_float length = /*sr * */ mcpChLEN / 4095; //* 0.732600732; // 3000 / 4095
+	t_float length = 10000;
+	//TODO: Add clock devision dependent length setting
+	if(x->x_internalBpmClock && x->clock_sets_length)
+	{
+		float bias = (mcpChLEN / 4095.f) + 0.5;
+		bias = bias * bias;
+		length = ((60000 / x->x_bpm) / 3000) * bufAccessSizeInPerCent;
+		if(x->x_clockMultiplier != 0.f)
+			length /= x->x_clockMultiplier;
+		else
+			length = 1000;
+		length *= bias;
+		//  post("bias: %f",bias) ; 
+	} else 
+	{
+		length = _makeExponential(mcpChLEN / 4095.f) * bufAccessSizeInPerCent;
+	}
+	length = (length > bufAccessSizeInPerCent) ? bufAccessSizeInPerCent : length;
+	// post("length at %f",length);
+	writeToSharedMem(x,SHM_LENGTH_MS,(uint32_t)length);
+
+
+
+	
+	//SPRAY
+	t_float mcpChSPR = 4095 - x->x_ch[12].val;
+	t_float spray = _makeExponential(mcpChSPR / 4095.f) * bufAccessSizeInPerCent;
+	spray = spray > bufAccessSizeInPerCent ? bufAccessSizeInPerCent : spray;
+	//post("position at %f %",spray);
+	writeToSharedMem(x,SHM_SPRAY,(uint32_t)spray);
+}
+
+void _getAllAdcsDuringCalibration(t_arbhar_gpio_tilde *x)
+{
+	//static int slowCh = 0;
+	uint16_t raw = 0;
+	for (uint8_t i=0; i<16; i++){
+			uint8_t n = x->x_ch[i].ch;
+			raw = readADC((uint8_t)(n / 8), n % 8);
+			x->x_ch[i].raw = (t_float)raw;
+			//arbhar_gpio_tilde_toMem(x,n,val);
+			_stabliseADC_DuringCalibration(&x->x_ch[i]);
+	}
+
+}
+
+void _getAllAdcs(t_arbhar_gpio_tilde *x)
+{
+	//static uint8_t frame = 0;
+	//if(frame == 0) {
+		static uint16_t values[16]; 
+	
+		uint16_t raw = 0;
+		//bcm2835_spi_begin();
+		//bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_128);
+		//priority order ch 2,4,7,14,10,1 and 3
+		for (uint8_t i=0; i<6; i++){
+			uint8_t n = x->x_ch[i].ch;
+			raw = readADC((uint8_t)(n / 8), n % 8);
+			x->x_ch[i].raw = (t_float)raw;
+			//arbhar_gpio_tilde_toMem(x,n,val);
+			
+			if(i == 0) {
+				x->x_ch[8].raw = (t_float)readADC(0,3);
+			}
+		}
+		static uint8_t slowCh = 0;
+		//priority order ch 13,0,6,3,12,5,9,8,11,15
+		uint8_t getCh = slowCh + 6;
+		uint8_t m = x->x_ch[getCh].ch;
+		values[getCh] = x->x_ch[getCh].val;
+		raw = readADC((uint8_t)(m / 8), m % 8);
+		
+		x->x_ch[getCh].raw = (t_float)raw;
+
+		//arbhar_gpio_tilde_toMem(x,m,val);
+		
+		_stabliseADC(&x->x_ch[getCh]);
+		
+		if(getCh == 6) {
+			if(x->x_modToPanning > 0)
+				writeToSharedMem(x,SHM_MOD_PANNING,x->x_ch[getCh].val);
+			//else
+			//	writeToSharedMem(x,SHM_MOD_PANNING,x->x_ch[getCh].mid);
+			if(x->x_modToHold > 0)
+				writeToSharedMem(x,SHM_MOD_HOLD,x->x_ch[getCh].val);
+			//else
+			//	writeToSharedMem(x,SHM_MOD_HOLD,x->x_ch[getCh].mid);
+			if(x->x_modToReverb > 0)
+				writeToSharedMem(x,SHM_MOD_REVERB,x->x_ch[getCh].val);
+			//else
+			//	writeToSharedMem(x,SHM_MOD_REVERB,x->x_ch[getCh].mid);
+			if(x->x_modToDelay > 0)
+				writeToSharedMem(x,SHM_MOD_DELAY,x->x_ch[getCh].val);
+			//else
+			//	writeToSharedMem(x,SHM_MOD_DELAY,x->x_ch[getCh].mid);
+		}
+		
+		for(uint8_t i=0; i<16; i++){
+			if(i < 6)
+				_stabliseADC(&x->x_ch[i]);
+			//uint8_t n = x->x_ch[i].ch;
+			values[i] = x->x_ch[i].val;
+			//writeToSharedMem(x,n,x->x_ch[i].val);
+		}
+		if(_getCurrentParamMode(x) != TRACK_AND_HOLD){
+			writeChunkToSharedMem(x,0,values,16);
+		
+			_setPlayParameters(x);
+			_setPlayAndRecLayer(x);
+		} 
+		
+		
+		//_stabliseADC(x,64,7);
+		//writeToSharedMem(x,m,x->x_ch[getCh].val);
+		if(x->x_currentOnsetMode->triggerGrain) {
+			int currentTrigVal = (int)readFromSharedMem(x,SHM_TRIG_OUT_VOL);
+			static int prevTrigVal = 0;
+			if(currentTrigVal > prevTrigVal) {
+				_setTriggerOut(1);
+				prevTrigVal = currentTrigVal;
+				//post("setting trugger high");
+				clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+			} else {
+				prevTrigVal = currentTrigVal;
+			}
+		} 
+		//{
+			//int ledState = 1 - readFromSharedMem(x,SHM_HOLD_ACTIVE);
+			//if(x->x_stereo < 1)
+				//ledState *= x->x_currentOnsetMode->plusLedColour;
+			//_setPlusLed(ledState);
+			////post("plus led state: %d",ledState);
+		//}
+	
+		if(x->x_currentOnsetMode->triggerHold && x->x_currentOnsetMode->triggerOnset) {
+			int cHoldVal = readFromSharedMem(x,SHM_HOLD_ACTIVE);
+			int cDirectVal = readFromSharedMem(x,SHMEM_ONSET_FOR_TRIGGER);
+			if (cHoldVal > 0 || (cDirectVal > 0 && x->x_useHoldToSwitch < 1)) {
+				_setTriggerOut(1);
+				//if(cDirectVal > 0)
+					//post("receiving additional trigger to output");
+				clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+			}
+			//else
+				//_setTriggerOut(0);
+			writeToSharedMem(x,SHMEM_ONSET_FOR_TRIGGER,0);
+		} else if(x->x_currentOnsetMode->triggerOnset && x->x_currentOnsetMode->triggerHold < 1) {
+			int cDirectVal = readFromSharedMem(x,SHMEM_ONSET_FOR_TRIGGER);
+			int cHoldVal = readFromSharedMem(x,SHM_HOLD_ACTIVE);
+			static int pHoldVal = 0;
+			if (cDirectVal > 0) {
+				_setTriggerOut(1);
+				//if(cDirectVal > 0)
+					//post("receiving additional trigger to output");
+				clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+			}
+			else if (pHoldVal < cHoldVal) {
+				_setTriggerOut(1);
+				clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+			}
+			pHoldVal = cHoldVal;
+				//_setTriggerOut(0);
+			writeToSharedMem(x,SHMEM_ONSET_FOR_TRIGGER,0);
+		}
+	
+		
+
+		
+		//post("getCh: %d",getCh);
+		slowCh++;
+		slowCh = slowCh % 10;
+		
+		if(x->printMcpChValue >= 0) {
+			int checkCh = (int)x->printMcpChValue;
+			if(slowCh == 0){
+				post("shMem slot: %d val: %d,  value: %d read from mcpCh: %d", checkCh, (int)x->x_ch[checkCh].val, values[checkCh],x->x_ch[checkCh]);
+			}
+		}
+		
+		if(slowCh == 0)
+		{
+			int ledState = 1 - readFromSharedMem(x,SHMEM_CURRENT_HOLD_VALUE);
+			if(x->x_stereo < 1)
+				ledState *= x->x_currentOnsetMode->plusLedColour;
+			_setPlusLed(ledState);
+			//post("plus led state: %d",ledState);
+		}
+}
+
+void _setOmega(t_arbhar_gpio_tilde *x, uint8_t omega){
+	//post("omega: %d", omega);
+	x->x_omega = omega;
+}
+
+uint8_t _setFollowModeSwitch(t_arbhar_gpio_tilde *x, t_float val) {
+	static uint8_t enable = 0;
+	static uint8_t switch_state = 0;
+	if(_getCurrentParamMode(x) == PARAM_MOMENTARY) {
+		if(val < 3800 && val > 300)
+			{
+				enable = 1;
+			}
+		else if (val >= 3800 && enable == 1){
+			switch_state = 1 - switch_state;
+			enable = 0;
+			if(switch_state > 0)
+				changeInternalClockState(x,0, 0);
+			_setFollowMode(x,switch_state);
+		}
+		else if (val <= 300 && enable == 1){
+			switch_state = 1 - switch_state;
+			enable = 0;
+			if(x->x_enableClockedModeSwitch == 0)
+				_setFollowMode(x,switch_state);
+			else {
+				switch_state = 1 - x->x_internalBpmClock;
+				if(x->x_followMode > 0){
+					_setFollowMode(x,0);
+				}
+				changeInternalClockState(x,switch_state, 0);
+			}
+		}
+	} else {
+		enable = 0;
+	}
+	//post("check follow switch: %f", switch_state);
+	return switch_state;
+	
+}
+
+void _setFollowMode(t_arbhar_gpio_tilde *x, uint8_t follow){
+	//post("should try to set follow mode %f", follow);
+	static uint8_t prevFollow = 255;
+	uint8_t cFollow = follow;
+	if(prevFollow != cFollow) {
+		//post("does it set follow mode %f?", follow);
+		x->x_followMode = cFollow;
+		writeToSharedMem(x,SHM_FOLLOW_MODE,(int)x->x_followMode);
+		if(cFollow > 0)
+			x->x_followPosition = 0;
+
+		t_atom configurationInfo[2];
+		SETSYMBOL(configurationInfo, gensym("FollowMode"));
+		SETFLOAT(configurationInfo+1, x->x_followMode);
+		//SETFLOAT(configurationInfo+2, v);
+		if(x->x_arbharMode < CALIBRATION_MODE)
+			outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+
+		prevFollow = cFollow;
+	}
+	
+}
+
+void _setWhiteLyrLedPulse(t_arbhar_gpio_tilde *x, uint8_t val){
+	static uint8_t pVal = 255;
+	if(pVal != val) {
+		post("led pulse = %d", val);
+		t_atom ctlInfo[2];
+		SETFLOAT(ctlInfo, (t_float)val);
+		SETFLOAT(ctlInfo+1, 157);
+		outlet_list(x->toSerial, gensym("list"),2,ctlInfo);
+		pVal = val;
+	}
+}
+
+t_int _controlLayerCoupling(t_arbhar_gpio_tilde *x,t_float lypVal) {
+	static t_int recLayer = 0;
+	//post("rec layer %d, protect layer %d", x->x_recLayer, x->x_protectPlayLayerValue);
+	if(_getCurrentParamMode(x) == PARAM_SHIFT /*&& x->x_protectPlayLayerValue == 0*/){
+		//post("set rec layer %f", ((((4095.f - x->x_ch[11].val) * 0.0002442) * 6.0f)+0.5));
+		t_int recLayer = x->x_recLayer;
+		if(x->x_playLayer != (t_int)lypVal)
+			recLayer = (t_int)lypVal;
+		if(x->x_playLayer != recLayer)
+			recLayer = (t_int)lypVal;
+		if(recLayer <= 5) {
+			if(recLayer != x->x_playLayer && x->x_protectPlayLayerValue != 1){
+				x->x_playRecCoupled = 0;
+				x->x_protectPlayLayerValue = 1;
+				_setWhiteLyrLedPulse(x,1);
+				writeToSharedMem(x,SHM_REC_LYR,recLayer);
+				x->x_recLayer = recLayer;
+			//	post("setting recLayer %d", recLayer);
+			}
+		}
+		if(recLayer > 5){
+			x->x_playRecCoupled = 1;
+			x->x_recLayer = recLayer = x->x_playLayer;
+			//post("check play layer %d", recLayer);
+			//writeToSharedMem(x,SHM_REC_LYR,recLayer);
+		}
+		if(x->x_playRecCoupled < 1 && recLayer <= 5){
+			writeToSharedMem(x,SHM_REC_LYR,recLayer);
+			x->x_recLayer = recLayer;
+			//post("set rec layer %d", recLayer);
+		}
+	}
+	return recLayer;
+}
+
+void _setPlayAndRecLayer(t_arbhar_gpio_tilde *x)
+{
+	/* dependent on paramMode, combine LYC abd LYP
+	 * dependent on shift, uncouple and set rec mode
+	 * write to shMem 61019 id 30 and 31
+	 * */
+	t_float lypVal = ((((4095.f - x->x_ch[11].val) * 0.0002442) * 6.0f)+0.5);
+	
+	t_int recLayer = _controlLayerCoupling(x,lypVal);
+	
+	//if(x->x_playRecCoupled > 0){
+		static t_float lyp = 0;
+		static t_float lyc = 2048;
+		static int playLayer = 0;
+		playLayer = x->x_playLayer;
+		//static int recLayer = 0;
+		//static count = 0;
+		//post("line 657 mode: %d getMode: %d", x->x_paramMode, getCurrentParamMode(x));
+		//if(x->x_paramMode < 1){
+			//TODO: Why does this differ from ... ???  
+		if(_getCurrentParamMode(x) == PERFORMANCE){
+			lyp = lypVal;
+			uint8_t omega = (uint8_t)lyp > 5 ? 1 : 0;
+			static uint8_t prevOm = 0;
+			if(prevOm != omega)
+				_setOmega(x, omega);
+			prevOm = omega;
+			lyp = lyp >= 5 ? 5 : lyp;
+		//	int val = (int)((((float)(4095 - x->x_adcValues[5]) * 0.0002442) * 6.0f)+0.5); // 0.0002442 = 1 / 4095
+		} 
+		if(x->x_omega < 1) {
+			lyc = (((2048.f - x->x_ch[1].val) * 0.0002442) * 24.0f);
+			int lycMod = ((int)lyc) % 6;
+			playLayer = (int)lyp + lycMod;
+			if(playLayer < 0)
+				playLayer = 6 + playLayer;
+			else
+				playLayer = playLayer % 6;
+			// if(count < 1)
+			// 	post("LYP: %d + LYC: %d = playLayer %d", (int)lyp,lycMod, playLayer);
+			// count++;
+			// count = count < 50 ? count : 0;
+			if(x->x_protectPlayLayerValue > 0 && _getCurrentParamMode(x) == PERFORMANCE){
+				if(playLayer == x->x_playLayer){
+					x->x_protectPlayLayerValue = 0;
+					_setWhiteLyrLedPulse(x,0);
+				}
+			}
+			//static uint8_t prevProtectStatus = 0;
+		//	static uint8_t setProtectSign = 0;
+			if(x->x_protectPlayLayerValue < 1){
+				writeToSharedMem(x,SHM_PLY_LYR,playLayer);
+				x->x_playLayer = playLayer;
+				if(x->x_playRecCoupled > 0){
+					writeToSharedMem(x,SHM_REC_LYR,playLayer);
+					x->x_recLayer = playLayer;
+				}
+				//prevProtectStatus != protectPlayLayerValue && 
+			}
+			else if(x->x_protectPlayLayerValue > 0 && _getCurrentParamMode(x) == PERFORMANCE){
+				_setWhiteLyrLedPulse(x,1);
+			} 
+			
+		//	prevProtectStatus = x->x_protectPlayLayerValue;
+			//outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+		} //else {
+			//_setPlayAndRecLayerInOmega(x); 
+		//}
+		
+	//} else {
+		////post("recPlayDecoupled");
+	//}
+	//post("recLayer %d playLayer %d", x->x_recLayer, x->x_playLayer);
+}
+
+void _setPlayAndRecLayerInOmega(t_arbhar_gpio_tilde *x, uint8_t layer)
+{
+	x->x_omegaPlayLayer = layer;
+	
+	writeToSharedMem(x,SHM_PLY_LYR,layer);
+	if(x->x_playRecCoupled > 0){
+		writeToSharedMem(x,SHM_REC_LYR,layer);
+		//x->x_playLayer = layer;
+	}
+}
+
+void _setCaptureLed(t_arbhar_gpio_tilde *x, t_float c){
+	t_atom ctlInfo[2];
+	SETFLOAT(ctlInfo,c);
+	SETFLOAT(ctlInfo+1,144);
+	outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+}
+
+void tick_scheduleRecordingStart(t_arbhar_gpio_tilde *x){
+	_toggleRecordingState(x);
+}
+
+void checkInternalClock(t_arbhar_gpio_tilde *x){
+	if(x->x_internalBpmClock > 0){
+		clock_delay(x->x_clockTriggeringGrains, 1000);
+		clock_delay(x->x_bpmClock,1000);
+	} else {
+		clock_unset(x->x_clockTriggeringGrains);
+		clock_unset(x->x_bpmClock);
+	}
+}
+
+void changeInternalClockState(t_arbhar_gpio_tilde *x, int clocked, int time){
+	static uint8_t prevClocked= 255;
+	uint8_t cClocked = clocked;
+	if(prevClocked != cClocked) {
+		x->x_internalBpmClock = cClocked;
+		writeToSharedMem(x,140,cClocked);
+		t_atom configurationInfo[2];
+		SETSYMBOL(configurationInfo, gensym("ClockedMode"));
+		SETFLOAT(configurationInfo+1, x->x_internalBpmClock);
+		if(x->x_arbharMode < CALIBRATION_MODE)
+			outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+		prevClocked = cClocked;
+	}
+	if(x->x_internalBpmClock > 0){
+		clock_delay(x->x_clockTriggeringGrains, time);
+		clock_delay(x->x_bpmClock,time);
+	} else {
+		clock_unset(x->x_clockTriggeringGrains);
+		clock_unset(x->x_bpmClock);
+	}
+}
+
+void tick_strikeLed(t_arbhar_gpio_tilde *x){
+	static t_float val = 0;
+	uint8_t col = x->x_strikeColour;
+	val = 1-val;
+	//post("LED %f",val);
+	//writeToSharedMem(x, SHM_STR_B, val > 0 ? 1 : 0);
+	if(_getCurrentParamMode(x) == PERFORMANCE)
+	{	
+		writeToSharedMem(x, SHM_STR_B, val > 0 ? 1 : 0);
+		if(val > 0){
+			_setStrikeLed(x,col);
+			clock_delay(x->x_strikeLed, 50);
+		}
+		else {
+			_setStrikeLed(x,WHITE_AMBER_OFF);
+		}
+	}	
+}
+
+void tick_captureCvLed(t_arbhar_gpio_tilde *x) {
+	_setCaptureLed(x,0);
+}
+
+void tick_clockedGrains(t_arbhar_gpio_tilde *x) {
+
+	static t_float triggerSpeed = 1;
+	static int speedId = 0;
+	x->x_clockMultiplier = x->x_ch[10].val > 4000 ? 0 : 1;
+	if(x->x_clockMultiplier != 0) {
+		triggerSpeed = ((t_float)(2048 - x->x_ch[10].val) / 2048) * 10;
+		speedId = (int)(triggerSpeed + 0.5);
+		//post("triggerSpeed: %d",speedId);
+		if(speedId >= 0)
+			x->x_clockMultiplier = x->clockMult[speedId];
+		else {
+			t_float div = x->clockDiv[abs(speedId / 2)];
+			if (div > 0)
+				x->x_clockMultiplier = 1 / div;
+		}
+	}
+	//post("mult: %f",x->x_clockMultiplier);
+
+	t_float dur = 60000 / x->x_bpm;
+	if (x->x_clockMultiplier == 0) {
+		clock_delay(x->x_clockTriggeringGrains, dur);
+		// clock_delay(x->x_strikeCvLed,0.f);
+	} else {
+	 	clock_delay(x->x_clockTriggeringGrains, dur / x->x_clockMultiplier);
+	 	//writeToSharedMem(x,SHM_STR_CV,1); // set the flag to play a grain
+		writeToSharedMem(x,SHM_CLOCKED_GRAIN, 1);
+	 }
+}
+
+void tick_bpmClock(t_arbhar_gpio_tilde *x){
+	static float pBpm = 120;
+	static int bpmGotAdapted = 0;
+	x->lastInternalClockFrame = x->x_dspFrameClock;
+	int adapted = _adaptInternalBpm(x);
+	if(pBpm != x->x_bpm || bpmGotAdapted != adapted)
+	 	post("adapted BPM: %d : %f",adapted, x->x_bpm);
+	bpmGotAdapted = adapted;
+	t_float dur = 60000 / x->x_bpm;
+	t_int frame = x->lastInternalClockFrame - x->lastExternalClockFrame;
+	t_float timeInMs = ((float)frame * 64.f) / 48.f;
+	if(timeInMs <= dur*1.1){
+		//if(PRINT_CLOCK_TRIGGER_TIME_DIFF)
+			// post("internal clock happened %f after external clock (clock duration %f)", timeInMs, dur);
+		float diff = timeInMs / dur;
+		// post("bpm factor %f", diff);
+		if(timeInMs <= dur * 0.5){
+			x->x_bpm *= 1. + (diff * 0.1);
+		} else {
+			x->x_bpm *= 1. - ((1 - diff) * 0.1);
+		} /* else {
+			x->x_bpm *= 1.2;
+		} */
+	}
+	pBpm = x->x_bpm;
+	static uint32_t val = 0;
+	static t_float triggerSpeed = 1;
+	static int speedId = 0;
+	static t_float pTriggerState = 0;
+	x->x_clockMultiplier = x->x_ch[10].val > 4000 ? 0 : 1;
+	if(x->x_clockMultiplier != 0) {
+		triggerSpeed = ((t_float)(2048 - x->x_ch[10].val) / 2048) /* * 10 */;
+		if(triggerSpeed >= 0){
+			speedId = (int)((triggerSpeed * x->clockMultLength)+0.5);
+			x->x_clockMultiplier = x->clockMult[speedId];
+		} else {
+			speedId = (int)((triggerSpeed * x->clockDivLength)+0.5);
+			t_float div = x->clockDiv[abs(speedId)];
+			if (div > 0)
+				x->x_clockMultiplier = 1 / div;
+		}
+	}	
+	val++;
+	t_float triggerState = 0;
+	if(x->x_clockMultiplier > 0)
+		triggerState = x->x_clockMultiplier;
+	if(pTriggerState != triggerState){
+		if(triggerState > 0){
+			if(triggerState > 1)
+				clock_unset(x->x_clockTriggeringGrains);
+			clock_delay(x->x_clockTriggeringGrains, 0);
+		}
+	}
+	pTriggerState = triggerState;
+
+	// if(timeInMs <= dur / 2){
+	// 	dur = (60000 / x->x_bpm) - ((timeInMs / 2) + 1);
+	// } else {
+	// 	dur = (60000 / x->x_bpm) + ((timeInMs / 2) + 1);
+	// }
+	// post("mult/div: %f", x->x_clockMultiplier);
+	dur = (60000 / x->x_bpm);
+	if (x->x_internalBpmClock > 0) {
+		clock_delay(x->x_bpmClock, dur);
+		clock_delay(x->x_strikeCvLed,0.f);
+	}
+	else
+	{
+		clock_unset(x->x_bpmClock);
+	}
+}
+
+
+void tick_strikeTrigger(t_arbhar_gpio_tilde *x){
+	writeToSharedMem(x, SHM_STR_CV, 1);
+	//writeToSharedMem(x, SHM_STR_CV_VAL, 0);
+}
+
+void tick_strikeCvLed(t_arbhar_gpio_tilde *x){
+	if(x->x_arbharMode != CALIBRATION_MODE)
+	{
+		static t_float val = 0;
+		uint8_t col = AMBER_STRONG;
+		if(x->x_internalBpmClock > 0 && x->x_clockMultiplier > 0){
+			col = WHITE_STRONG;
+		} 
+		// else if(x->x_internalBpmClock > 0 && x->x_clockMultiplier == 0){
+		// 	col = WHITE_AMBER_OFF;
+		// }
+		val = 1-val;
+		//post("CV LED %f",val);
+		//writeToSharedMem(x, SHM_STR_B, val > 0 ? 1 : 0);	
+		if(val > 0){
+			if(_getCurrentParamMode(x) == PERFORMANCE){
+				_setStrikeLed(x,col);
+				if(x->x_internalBpmClock > 0 && x->x_clockMultiplier == 0)
+					clock_delay(x->x_strikeCvLed, 50);
+				else
+					clock_delay(x->x_strikeCvLed, 15);
+			}
+		}
+		else {
+			if(_getCurrentParamMode(x) == PERFORMANCE) {
+				if(x->x_internalBpmClock > 0)
+					_setStrikeLed(x,AMBER_DIM);
+				else
+					_setStrikeLed(x,WHITE_AMBER_OFF);
+			}
+		}
+	}
+}
+
+void _setStrikeLed(t_arbhar_gpio_tilde *x, uint8_t col){
+		static float pTime = 0;
+		float cTime = x->x_dspFrameClock;
+		if(cTime - pTime > 4) {
+			t_atom ctlInfo[2];
+			//post("strike LED %d", col);
+			SETFLOAT(ctlInfo, col);
+			SETFLOAT(ctlInfo+1,145);
+			outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+		}
+		pTime = cTime;
+	
+}
+
+
+static void _decideLayerBufOp(t_arbhar_gpio_tilde *x, t_int lyr, t_int state) {
+	t_int layer = lyr;
+	//t_int layerState = state;
+	switch(state) {
+		case 1:
+		{
+			post("delete layer %d", layer);
+			writeToSharedMem(x,layer+SHM_ALPHA_STATE,0);
+			break;
+		}
+		case 2:
+		{
+			post("undo layer %d", layer);
+			writeToSharedMem(x,layer+SHM_ALPHA_STATE,1);
+			break;
+		}
+		default:
+			break;
+	}
+	
+	t_atom ctlInfo[3];
+	//SETFLOAT(ctlInfo, 255);
+	//SETFLOAT(ctlInfo+1, p);
+	//SETFLOAT(ctlInfo+2, v);
+	if(x->x_arbharMode < CALIBRATION_MODE)
+		outlet_list(x->layerBufOp, gensym("list"),3,ctlInfo);
+}
+
+//static void _sendMenuComand(t_arbhar_gpio_tilde *x, t_float p, t_float v) {
+	//t_atom ctlInfo[3];
+	//SETFLOAT(ctlInfo, 255);
+	//SETFLOAT(ctlInfo+1, p);
+	//SETFLOAT(ctlInfo+2, v);
+	//if(x->x_arbharMode < CALIBRATION_MODE)
+		//outlet_list(x->layerBufOp, gensym("list"),3,ctlInfo);
+//}
+
+void _testButtonsChanged(t_arbhar_gpio_tilde *x, t_buttons *temp){
+	//testing button states
+	if(x->x_buttons.changed > 0 && x->x_arbharMode < CALIBRATION_MODE){
+		int buttonComboVal = 0;
+		static int prevComboVal = 0;
+		buttonComboVal += temp->shift.order * 100;
+		buttonComboVal += temp->capture.order * 10;
+		buttonComboVal += temp->strike.order;
+		temp->combined = buttonComboVal;
+		
+		static t_float pTime = 0;
+		if(buttonComboVal != 0){
+		 if(buttonComboVal == 100 && prevComboVal == 100 ){
+		 	t_float cTime = x->x_dspFrameClock;
+			t_float diff = cTime-pTime;
+			if(diff < 500 && x->x_paramMode == PERFORMANCE) {
+				post("track&hold: %f", diff);
+				pTime = cTime;
+				//post("time between  : %f",(cTime-pTime) * DSP_FRAME_IN_MS);
+			}
+			else if(diff < 500 && x->x_paramMode != PERFORMANCE) {
+				post("double shift during paramMode: %f", diff);
+				pTime = cTime;
+			}
+			else if(diff >= 500 && x->x_paramMode != PERFORMANCE) {
+				post("shift during paramMode: %f", diff);
+				pTime = cTime;
+			}
+			else
+				pTime = cTime;
+		 }
+		 prevComboVal = buttonComboVal;
+		}
+		//post("buttons changed %d: shift %d, capt %d, strike %d", x->x_buttons.changed, x->x_buttons.shift.order, x->x_buttons.capture.order, x->x_buttons.strike.order);
+		x->x_buttons.changed = 0;
+	}
+	else if(x->x_buttons.changed > 0 && x->x_arbharMode == CALIBRATION_MODE){
+		int buttonComboVal = 0;
+		static int prevComboVal = 0;
+		buttonComboVal += temp->shift.order * 100;
+		buttonComboVal += temp->capture.order * 10;
+		buttonComboVal += temp->strike.order;
+		temp->combined = buttonComboVal;
+		prevComboVal = buttonComboVal;
+		post("buttons changed %d: shift %d, capt %d, strike %d", x->x_buttons.changed, x->x_buttons.shift.order, x->x_buttons.capture.order, x->x_buttons.strike.order);
+		x->x_buttons.changed = 0;
+	}
+}
+
+static void led_menuPagesIndicator(t_arbhar_gpio_tilde *x, t_float paramMode) {
+	if(readFromSharedMem(x, SHM_FILE_PROCESSING) < 1){
+		static int prevParamMode = 0;
+		static int direction = 1;
+		int prevPage = x->x_lastParamPage;
+		//post("prevParamMode: %d, paramMode: %d", prevParamMode, (int)paramMode);
+		if(prevParamMode != paramMode)
+			prevPage = -1;
+		//if(paramMode > 0) {
+		if(_getCurrentParamMode(x) >= PARAM_TOGGLED) {
+			static int count = 1;
+			int p = x->x_paramPage;
+			//post("page: %d, prevPage: %d", p, prevPage);
+			//if(p != prevPage){
+				int raw[3] = {20, 42, 60};//{10+25, 21+25, 32+25};//= {5, 18, 32}; //= {5, 15, 25}; //{4, 15, 26}
+				int pos[3];
+				pos[0] = raw[p];
+				pos[1] = raw[(p+1)%3];
+				pos[2] = raw[(p+2)%3];
+				
+				pos[0] -= count;
+				
+				//post("x->x_paramPage: %d",x->x_paramPage);
+				
+				t_atom ctlInfo[12];
+				SETFLOAT(ctlInfo, pos[0]);
+				SETFLOAT(ctlInfo+1, 128);
+				SETFLOAT(ctlInfo+2, count*2);
+				SETFLOAT(ctlInfo+3, 131);
+				SETFLOAT(ctlInfo+4, 1);
+				SETFLOAT(ctlInfo+5, 142);
+				SETFLOAT(ctlInfo+6, pos[1]);
+				SETFLOAT(ctlInfo+7, 143);
+				SETFLOAT(ctlInfo+8, 1);
+				SETFLOAT(ctlInfo+9, 140);
+				SETFLOAT(ctlInfo+10, pos[2]);
+				SETFLOAT(ctlInfo+11, 141);
+				
+				count += direction;
+				if(count > 6){
+					direction = -1;
+				}
+				if(count <= 1){
+					direction = 1;
+				}
+				prevParamMode = paramMode;
+				if(x->x_arbharMode < CALIBRATION_MODE)
+					outlet_list(x->g_info_out, gensym("list"),12,ctlInfo);
+				//uint8_t bgrColour = ((x->x_paramMode > 0 ? 1 : 0) * x->x_paramPage) + ((x->x_paramMode > 0 ? 1 : 0) * 7);
+			if(p != prevPage){
+				uint8_t bgrColour = ((_getCurrentParamMode(x) > 0 ? 1 : 0) * x->x_paramPage) + ((_getCurrentParamMode(x) > 0 ? 1 : 0) * 7);
+				//post("colour: %d",bgrColour);
+				led_backgroundControl(x,bgrColour,1);
+				prevPage = p;
+				count = 1;
+				x->x_lastParamPage = prevPage;
+			}
+		} else {
+			uint8_t playLayer = (uint8_t)_getPlayLayer(x);
+			//post("playLayer: %d", playLayer);
+			led_backgroundControl(x,playLayer,1);
+			if(paramMode != prevParamMode)
+			{
+				t_atom ctlInfo[4];
+				SETFLOAT(ctlInfo, 0);
+				SETFLOAT(ctlInfo+1, 142);
+				SETFLOAT(ctlInfo+2, 0);
+				SETFLOAT(ctlInfo+3, 140);
+				if(x->x_arbharMode < CALIBRATION_MODE)
+					outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+			}
+			
+		}
+		prevParamMode = paramMode;
+	}
+}
+
+
+
+uint8_t _checkAnyButtonPressed(t_buttons *temp){
+	uint8_t check = 0;
+	for(int i=0;i<3;i++)
+		check += temp->buttonPointers[i]->state;
+	return check > 0 ? 1 : 0;
+	//if(temp->shift.changed || temp->capture.changed || temp->strike.changed)
+		//return 1;
+	//else
+		//return 0;
+}
+
+t_int checkForCalibrationModeOnStartup(t_arbhar_gpio_tilde *x)
+{
+	t_int calibrationMode = 0;
+	if( !bcm2835_gpio_lev(CAPTURE_BUTTON) && !bcm2835_gpio_lev(STRIKE_BUTTON) && !bcm2835_gpio_lev(SHIFT))
+		calibrationMode = 1;
+	
+	if (calibrationMode > 0)
+		x->x_arbharMode = CALIBRATION_MODE;
+	
+	return calibrationMode;
+}
+
+
+static void arbhar_gpio_tilde_bang(t_arbhar_gpio_tilde *x) {
+	
+	//post("mod: %f",readFromSharedMem(x,SHM_ADC_MOD));
+	
+	//if(x->x_arbharMode >= CALIBRATION_MODE)
+		//post("calubration mode!!");
+		//checkForCalibrationModeOnStartup(x);
+	static int checkButtonsOnStartup = 1;
+	if(checkButtonsOnStartup > 0) {
+		t_buttons *temp = &x->x_buttons;
+		if(temp->shift.state > 0 && temp->capture.state > 0 && temp->strike.state){
+			post("block buttons!!");
+			x->x_blockAllButtons = 1;
+		}
+		else
+		{
+			checkButtonsOnStartup = 0;
+			x->x_blockAllButtons = 0;
+		}
+		
+	}
+	
+	if(x->x_arbharMode < CALIBRATION_MODE) {
+
+	writeToSharedMem(x,SHM_ARBHAR_MODE,x->x_arbharMode);
+	writeToSharedMem(x,SHM_SHIFT_MODE,_getCurrentParamMode(x));
+	
+	static int quantiseTakenAt = 2048;
+	int pitchKnobVal = x->x_ch[9].val;
+	static int quantisedVal = 0;
+
+	// if(x-ENABLE_CLOCKED_MODE_SWITCH > 0){
+	// 	checkInternalClock(x);
+	// }
+	
+	if(_getCurrentParamMode(x) == TRACK_AND_HOLD) {	
+		//static int quantisedVal = 0;
+		t_float quantTrans = ((t_float)(2048 - pitchKnobVal) / 2048) * 24.5;
+		t_int qTrans = (t_int)quantTrans;
+		x->x_quantisedTrackAndHoldPitch = (float)qTrans;
+		if(quantisedVal != x->x_quantisedTrackAndHoldPitch) {
+			//post("quantised trasposition %f", x->x_quantisedTrackAndHoldPitch);
+			quantisedVal = x->x_quantisedTrackAndHoldPitch;
+		//	writeToSharedMem(x,SHM_USING_QUENTISED_PITCH,1);
+			quantiseTakenAt = pitchKnobVal;
+		}	
+		
+	}
+	//post("qunt - pitch %d",quantiseTakenAt - pitchKnobVal);
+	if(abs(quantiseTakenAt - pitchKnobVal) > 120 && _getCurrentParamMode(x) != TRACK_AND_HOLD) {
+		//post("quantise off");
+		writeToSharedMem(x,SHM_USING_QUENTISED_PITCH,0);
+		quantisedVal = 0;
+		x->x_quantisedTrackAndHoldPitch = 0;
+	}
+		
+	static int prevQuantiseStatus = 0;
+	int currentQuantStatus = readFromSharedMem(x,SHM_USING_QUENTISED_PITCH);
+	if(prevQuantiseStatus != currentQuantStatus){
+		prevQuantiseStatus = currentQuantStatus;
+	}
+	
+	
+	static uint8_t pFM = 0;
+	static uint8_t pCM = 0;
+	if(x->x_followMode > 0 && _getCurrentParamMode(x) <= PARAM_MOMENTARY && _getCurrentParamMode(x) != PARAM_SHIFT)
+		_setStrikeLed(x,WHITE_DIM);
+	else if(x->x_internalBpmClock > 0 && _getCurrentParamMode(x) == PARAM_MOMENTARY)
+		_setStrikeLed(x,AMBER_DIM);
+	else
+	{
+		if(pFM != x->x_followMode)
+		{
+			if(x->x_followMode == 0)
+				_setStrikeLed(x,WHITE_AMBER_OFF);
+		}
+		if(pCM != x->x_internalBpmClock)
+		{
+			if(x->x_internalBpmClock == 0 && _getCurrentParamMode(x) == PARAM_MOMENTARY)
+				_setStrikeLed(x,WHITE_AMBER_OFF);
+		}
+	}
+	pFM = x->x_followMode;
+	pCM = x->x_internalBpmClock;
+	
+	if(_getCurrentParamMode(x) == PARAM_TOGGLED)
+	{
+		t_buttons *temp = &x->x_buttons;
+		static int timeCount = 0;
+		int availableSlots = readFromSharedMem(x,SHM_NO_OF_SLOTS);
+		if(availableSlots > 6) {
+			if(x->x_paramPage == 0 && temp->shift.state > 0 && temp->capture.state == 0 && temp->strike.state == 0)
+			{
+				timeCount++;
+				int fileBank = (x->x_copyFileNumber / 6) + 1;
+				int fileSlot = (x->x_copyFileNumber % 6) + 1;
+				int previewFileNo = 0;
+				previewFileNo = fileBank*10;
+				previewFileNo += fileSlot;
+				//post("preview=%d", previewFileNo);
+				if(fileBank < 7 && x->x_previewEnable > 0 && timeCount > 50) {
+					writeToSharedMem(x,SHM_PREVIEW_FILE,previewFileNo);
+					post("preview file %d %d - enabled?= %d - previewSlot=%d | %d", fileBank, fileSlot, x->x_previewEnable, (int)readFromSharedMem(x,SHM_PREVIEW_FILE), (int)previewFileNo);
+					x->x_previewEnable = 0;
+				} else if(fileBank < 7 && x->x_previewEnable == 0) {
+					
+				} else
+					writeToSharedMem(x,SHM_PREVIEW_FILE,0);
+			} else {
+				writeToSharedMem(x,SHM_PREVIEW_FILE,0);
+				timeCount = 0;
+			}
+		}
+	}
+	
+	if(x->x_checkFileProcess > 0)
+		checkFileProcessProgress(x);
+
+	// clock_t t;
+	// t = clock();
+    // post("current time is : %ld",t);
+    
+    
+	}
+	static uint8_t fireLayerLedTick = 0;
+    //if(x->x_paramMode != _getCurrentParamMode(x))
+		//post("mode: %d getMode: %d", x->x_paramMode, _getCurrentParamMode(x));
+	if(x->x_arbharMode < CALIBRATION_MODE) {
+		if(_getCurrentParamMode(x) == PERFORMANCE) {
+			led_ScanLengthControl(x);
+			led_PlayPosControl(x);
+			//led_controlForRecording(x);
+		} else if(_getCurrentParamMode(x) >= PARAM_TOGGLED){
+			fireLayerLedTick = 1;
+			//post("lYP? %d", x->x_ch[MCP_CH_SEQUENTIALLY[_LYP]].val);
+		}
+		
+		if(fireLayerLedTick && _getCurrentParamMode(x) == PERFORMANCE){
+			fireLayerLedTick = 0;
+		//->//	clock_delay(x->x_layerLedControl, 0.f);
+		}
+	
+		led_directionControl(x);
+	} else if (x->x_arbharMode == TESTING_MODE) {
+		static int pCVal = 0;
+		int cVal = !bcm2835_gpio_lev(CAPTURE_CV);
+		static int pSVal = 0;
+		int sVal = !bcm2835_gpio_lev(STRIKE_CV);
+		if(pCVal != cVal){
+			_setCaptureLed(x,cVal);
+			pCVal = cVal;
+		}
+		if(pSVal != sVal){
+			_setStrikeLed(x,sVal);
+			pSVal = sVal;
+		}
+	}
+	
+	if (x->x_arbharMode == TESTING_MODE){
+		static int triggerTestSignalFrame = 0;
+		static int triggerState;
+		triggerTestSignalFrame++;
+		if(triggerTestSignalFrame > 30){
+			triggerState = 1 - triggerState;
+			triggerTestSignalFrame = 0;
+			_setTriggerOut(triggerState);
+		}
+		
+	}
+	
+
+	//tick_layerLedControl(x);
+	//clock_delay(x->x_layerLedControl,0);
+	
+	int slowPrint = 250;
+	static int frame = -1;
+	static int count = 0;
+	//static int i = 0;
+	//if(frame == -1) //this will only happen once on very first call - suitable for initialisation?
+	//{
+		
+		 //x->x_currentOnsetMode = &x->x_onsetModes[DEFAULT_ONSET_MODE]; //TODO: check does this actually work here?
+		 //post("checking onset mode %d",x->x_currentOnsetMode->name);
+		//post("plus led %d, default: %d", x->x_currentOnsetMode->plusLedColour, DEFAULT_ONSET_MODE);
+		//_setPlusLed(x->x_currentOnsetMode->plusLedColour); //causes segmentation fault in arbhar_gpio_tilde_new!!
+	//}
+	if(frame > slowPrint && count < 3)
+	{
+		post("x_vpo3VoltValue: %d",x->x_vpo3VoltValue);
+		post("shmem id 104: %f", readFromSharedMem(x,SHM_VPO3V_VAL));
+		post("AdcSpeed: %f", x->adc_samp_rate);
+		//post("check file: %d",x->x_checkFileProcess);
+		// _takeCalibrationValues(x,0);
+		//post("buttons changed %d: shift %d, capt %d, strike %d", x->x_buttons.changed, x->x_buttons.shift, x->x_buttons.capture, x->x_buttons.strike);
+		//static int val = 0;
+		//val = val > 0 ? 0 : 1;
+		//_setTriggerOut(val);
+		
+		//post("%d, %d modCV: %f", _MOD, MCP_CH_SEQUENTIALLY[_MOD], x->x_ch[MCP_CH_SEQUENTIALLY[_MOD]].raw);
+		//post("follow pos: %d scanCV=%d mid=%d", (int)x->x_followPosition, x->x_ch[2].val, x->x_ch[2].mid);
+		
+		// //_setPlayPosition(x);
+		 frame = 0;
+		 count++;
+		// i++;
+		// if(i>15) i= 0;
+	}
+		//	post("follow pos: %d scanCV=%d mid=%d", (int)x->x_followPosition, x->x_ch[2].val, x->x_ch[2].mid);
+
+	frame++;
+    
+	//for(int i=0;i<1;++i){
+		//post("shMem slot: %d raw: %d,  value: %d read from mcpCh: %d", i, (uint16_t)x->x_ch[i].raw, (uint16_t)x->x_ch[i].val,x->x_ch[i]);
+	//}
+	
+	//post("length: %d", (int)x->x_ch[5].last);
+	
+	//for(int i=0;i<16;++i){
+		//uint8_t n = x->x_ch[i].ch;
+		//post("mcp %d: %d", (uint8_t)n, x->x_ch[i].freezeThresh);
+	//}
+	
+	//uint8_t val = x->x_gpio_ins;
+	//static uint8_t pVal = 0;
+	//if(val != pVal) {
+		//uint8_t val0 = val % 2;
+		//uint8_t val1 = (val >> 1) % 2;
+		//uint8_t val2 = (val >> 2) % 2;
+		//uint8_t val3 = (val >> 3) % 2;
+		//uint8_t val4 = (val >> 4) % 2;
+		//uint8_t val5 = (val >> 5) % 2;
+		//uint8_t val6 = (val >> 6) % 2;
+		//uint8_t val7 = (val >> 7) % 2;
+		//post(" All: %d\n Scv: %d\n Sb: %d\n Ccv: %d\n Cb: %d\n shift: %d\n s+S: %d\n s+C: %d", val0,val1,val2,val3,val4,val5,val6,val7);
+		//pVal = val;
+	//}
+	if(x->x_arbharMode < CALIBRATION_MODE) {
+		static int pOffset = -1;
+		static int pState = -1;
+		static int update = 0;
+		t_int offset = 124+(t_int)x->x_recLayer;
+		t_int state = readFromSharedMem(x,offset);
+		if(_getCurrentParamMode(x) == PARAM_SHIFT){
+			update = 1;
+			if (pOffset != offset || pState != state)
+			{
+			switch(state) {
+				case 1:
+				{
+					_setStrikeLed(x,WHITE_FLASHING);
+					break;
+				}
+				case 2:
+				{
+					_setStrikeLed(x,AMBER_FLASHING);
+					break;
+				}
+				default:
+					_setStrikeLed(x,WHITE_AMBER_OFF);
+					break;
+			}
+			pOffset = offset;
+			pState = state;
+			}
+		} else {
+			if(update == 1) {
+				_setStrikeLed(x,WHITE_AMBER_OFF);
+				update = 0;
+				pOffset = -1;
+				pState = -1;
+			}
+		}
+	}	
+	
+	if(x->x_arbharMode == TESTING_MODE) {
+			//post("testing mode");
+		//	post("testing scan %f", x->x_ch[7].raw);
+			float ch[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+			static float pCh[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+			static int use = 0;
+			for(int i=0; i<16;i++){
+				//float pVal = ch[i];
+				float val = (float)(4095 - x->x_ch[i].val) / 2048.f;
+				ch[i] = val;
+				if(fabs(pCh[i] - ch[i]) > 0.02)
+					use = i;
+				pCh[i] = ch[i];
+			}
+			t_atom ctlInfo[4];
+			float setLED = (int)((float)(4095 - x->x_ch[use].val) / 2048.f * 35.5);
+			setLED = setLED > 71 ? 71 : setLED < 0 ? 0 : setLED;
+			SETFLOAT(ctlInfo, (int)setLED);
+			
+			SETFLOAT(ctlInfo+1,128);
+			outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+		}
+		
+		 //post("arbhar_mode %d",x->x_arbharMode);
+		 if(x->x_arbharMode >= CALIBRATION_MODE) {
+			 //static int enableVpo = 1;
+			 static int enableCalibration = 0;
+			int shift = !bcm2835_gpio_lev(SHIFT);
+			int capt = !bcm2835_gpio_lev(CAPTURE_BUTTON);
+			int str = !bcm2835_gpio_lev(STRIKE_BUTTON);
+			//post("%d - %d - %d",shift,capt,str);
+			if(x->x_arbharMode == CALIBRATION_MODE) {
+				static int directionLeds = 2;
+				static int duration = 0;
+				_setFwdLed(directionLeds);
+				_setRevLed(directionLeds);
+				if(directionLeds > 0 /*&& duration > 4*/) {
+					directionLeds = 0;
+					duration = 0;
+				}
+				else {
+					directionLeds = 2;
+					duration++;
+				}
+			} else if (x->x_arbharMode == TESTING_MODE) {
+				_setFwdLed(1);
+				_setRevLed(1);
+			}
+			if(capt > 0 && shift == 0 && str == 0) {
+				//if(enableVpo > 0){
+					_setVpo3VoltValue(x,x->x_vpo3VoltValue);
+				//	enableVpo = 0;
+				//}
+			} else if(capt == 0 && shift == 0 && str == 0) {
+				//enableVpo = 1;
+				enableCalibration = 1;
+			} else if(capt>0 && shift>0 && str>0 && enableCalibration > 0) {
+				_takeCalibrationValues(x,0);
+			}
+		}
+
+}
+
+void _printOnsetModeInfo(t_arbhar_gpio_tilde *x)
+{
+	post("mode: %s",getOnsetModeName(x->x_currentOnsetMode->name));
+	post("mode capt ctrl: %d",x->x_currentOnsetMode->captureCtrl);
+	post("mode strike ctrl: %d",x->x_currentOnsetMode->strikeCtrl);
+	post("mode trigger onset: %d",x->x_currentOnsetMode->triggerOnset);
+	post("mode trigger grain: %d",x->x_currentOnsetMode->triggerGrain);
+	post("mode trigger hold: %d",x->x_currentOnsetMode->triggerHold);
+	post("mode EOC in Follow Mode: %d",x->x_currentOnsetMode->followModeEOC);
+	
+}
+
+void led_onsetModeControl(t_arbhar_gpio_tilde *x, uint8_t pMode)
+{
+	uint8_t white = 1;
+	uint8_t yellow = 1;
+	if(pMode == 0)
+		pMode = 1;
+	t_atom ctlInfo[4];
+	SETFLOAT(ctlInfo, white << (7 - pMode));
+	SETFLOAT(ctlInfo+1, 146);
+	SETFLOAT(ctlInfo+2, 126 - (yellow << (7 - pMode)));
+	SETFLOAT(ctlInfo+3, 147);
+	if(x->x_arbharMode < CALIBRATION_MODE) 
+		outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+	
+}
+
+void _setOnsetMode(t_arbhar_gpio_tilde *x, t_int lyp)
+{
+	//post("set onset mode");
+	uint8_t pMode = x->x_currentOnsetMode->name; //DEFAULT_ONSET_MODE; //TODO: mode should be read from config file!
+	uint8_t allowChange = x->x_allowOnsetModeChange;
+	static uint8_t pAllowChange = 0; //x->x_allowOnsetModeChange;
+
+	uint8_t modeVal = (uint8_t)((((4095 - (t_float)lyp) / 4095) * 6) + 0.5) + 1; //ALPHA mode starts at 1, 0 is INVALID
+	static uint8_t pModeVal = 0;
+	
+	
+	
+	//if(pModeVal != modeVal){
+		//post("modeVal %d", modeVal);
+		//t_atom ctlPulse[2];
+		//SETFLOAT(ctlPulse, 1 - allowChange);
+		//SETFLOAT(ctlPulse+1, 157);
+		//if(x->x_arbharMode < CALIBRATION_MODE) 
+			//outlet_list(x->toSerial, gensym("list"),2,ctlPulse);
+		if(x->x_arbharMode < CALIBRATION_MODE && pModeVal != modeVal)
+			_setWhiteLyrLedPulse(x,1 - allowChange);
+		if(pMode == modeVal){
+			allowChange = 1;
+		}
+		if(allowChange && pModeVal != modeVal){
+			x->x_currentOnsetMode = &x->x_onsetModes[modeVal];
+			pMode = modeVal;
+			//post("current mode: %d", x->x_currentOnsetMode->name);
+			_setPlusLed(x->x_currentOnsetMode->plusLedColour);
+			_printOnsetModeInfo(x);
+			x->x_protectPlayLayerValue = 1;
+			t_atom configurationInfo[2];
+			SETSYMBOL(configurationInfo, gensym("OnsetMode"));
+			SETFLOAT(configurationInfo+1, pMode);
+			//SETFLOAT(configurationInfo+2, v);
+			if(x->x_arbharMode < CALIBRATION_MODE)
+				outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+		}
+		pModeVal = modeVal;
+	//}
+	if(pAllowChange != allowChange){
+		//post("allowChange %d", allowChange);
+	}
+	pAllowChange = allowChange;
+
+	x->x_allowOnsetModeChange = allowChange	;
+	
+	led_onsetModeControl(x,pMode);
+
+}
+
+void led_ScanLengthControl (t_arbhar_gpio_tilde *x)
+{
+	t_atom ctlInfo[4];
+	t_float scan = (x->x_ch[2].val - 2048) + x->x_ch[7].val;
+	t_float length = pow((4095 - (t_float)x->x_ch[5].val)/4095,2) * 71;
+	scan = scan > 4095 ? 4095 : (scan < 0 ? 0 : scan);
+	scan = 4095 - scan;
+	//TODO: somthing is wrong here!! fixed bar a small discrepency!
+	if(x->x_omega > 0){
+		scan = fmod(scan * 6, 4095);
+		// post("testscan led: %d", (int)testscan);
+	}
+	else if(x->x_followMode){
+		scan = (x->x_followPosition + x->x_followPosOffset);
+		scan = scan > MAX_BUFFER_DISPLAY ? scan - MAX_BUFFER_DISPLAY : scan < 0 ? scan + MAX_BUFFER_DISPLAY : scan;
+		scan = (scan / MAX_BUFFER_DISPLAY) * 4095;
+		//post("x->x_followPosition %f", x->x_followPosition);
+	}
+		
+		
+	scan *= 0.0172; //(71 leds / 4095 range)
+	// static int led = 0;
+	// if(led != (int)scan)
+	scan = scaleLedToMid(scan);
+		
+	// led = (int)scan;
+	SETFLOAT(ctlInfo,(int)scan);
+	SETFLOAT(ctlInfo+1,128);
+	SETFLOAT(ctlInfo+2,(int)(((int)length) * 0.3334));
+	SETFLOAT(ctlInfo+3,131);
+	if(x->x_arbharMode < CALIBRATION_MODE)
+		outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+		
+}
+
+void led_PlayPosOff(t_arbhar_gpio_tilde *x) {
+	//clock_unset(x->x_playPosLedOff);
+	t_atom ctlInfo[2];
+	SETFLOAT(ctlInfo,0);
+	SETFLOAT(ctlInfo+1,140);
+	if(x->x_arbharMode < CALIBRATION_MODE)
+		outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+}
+
+void led_PlayPosControl(t_arbhar_gpio_tilde *x) {
+	//static int frame = 0;
+	static int state = 0;
+	static int pPos = 0;
+	t_float rawPos = readFromSharedMem(x,SHM_LED_POS);
+	t_float calPos = rawPos;
+	//if(x->x_omega > 0) 
+	//	calPos = (calPos / 480000) * 71; //calPos = scaleToMid(calPos, 4095 - x->x_ch[7].mid,0) / 480000 * 72;
+	//else 
+		calPos = (calPos / 480000) * 71;
+	//int cPos = (int)(calPos);
+	int cPos = (int)scaleLedToMid(calPos);
+	
+	if(cPos != pPos) {
+		state = 1;
+		//post("state:%d",state);
+		clock_delay(x->x_playPosLedOff,25);
+	} 
+
+	if(state > 0){
+		state = 0;
+		t_atom ctlInfo[4];
+		SETFLOAT(ctlInfo, cPos);
+		SETFLOAT(ctlInfo+1,141);
+		SETFLOAT(ctlInfo+2,1);
+		SETFLOAT(ctlInfo+3,140);
+		if(x->x_arbharMode < CALIBRATION_MODE)
+			outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+		//post("cPos:%f",calPos);
+	
+	}
+	pPos = cPos;
+
+}
+
+void led_directionControl(t_arbhar_gpio_tilde *x)
+{
+	//post("direction: %f", readFromSharedMem(x,SHM_FWD_INT));
+	// sharedMem index 113 is direction from externally triggered grains
+
+
+	// sharedMem index 112 is direction from internally triggered grains
+	// led offs are disabled to let the reverse settings to come through, 
+	// however visually it does look that internally triggered grains 
+	// have preference.
+	if(readFromSharedMem(x,SHM_ADC_LENGTH) < 4000 || x->x_internalBpmClock) // is this the direction led bug?
+	{ 
+		if(readFromSharedMem(x,SHM_FWD_INT))
+		{
+			_setFwdLed(1);
+		} else if(readFromSharedMem(x,SHM_FWD_EXT))
+		{
+			_setFwdLed(2);
+		} 
+		else {
+			_setFwdLed(0);
+		}
+	
+		if(readFromSharedMem(x,SHM_REV_INT))
+		{
+			_setRevLed(1);
+		} else if(readFromSharedMem(x,SHM_REV_EXT))
+		{
+			_setRevLed(2);
+		}
+		else
+			_setRevLed(0);
+	} else {
+		_setFwdLed(2);
+		_setRevLed(2);
+	}
+	
+	// else
+	// 	_setFwdLed(0);
+
+	
+	// else
+	// 	_setRevLed(0);
+}
+
+void led_shiftMode(t_arbhar_gpio_tilde *x, uint8_t val)
+{
+	t_float v = (t_float)val;
+	v = v != 1 ? 0 : 1;
+	t_atom ctlInfo[2];
+	SETFLOAT(ctlInfo,v * 3);
+	SETFLOAT(ctlInfo+1,150);
+	outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+}
+
+void led_controlForRecording(t_arbhar_gpio_tilde *x)
+{
+	static int prevState = 0;
+	t_float recPos = (t_float)readFromSharedMem(x,SHM_REC_POS);
+	//int led = (int)(x->x_recordingPos / 480000.f * 71);
+	int led = (int)(recPos / 480000.f * 71);
+	static int pLed = -1;
+	if(pLed != led || prevState != x->x_recording) {
+		t_atom ctlInfo[4];
+		SETFLOAT(ctlInfo,x->x_recording);
+		SETFLOAT(ctlInfo+1,142);
+		SETFLOAT(ctlInfo+2,led);
+		SETFLOAT(ctlInfo+3,143);
+		//if(prevState){
+			////post("led: %d pos: %f", led,x->x_recordingPos);
+			//int captLedValue = 0;
+			//if(x->x_accumRecording)
+				//captLedValue = AMBER_FLASHING;
+			//if(x->x_recording)
+				//captLedValue = AMBER_STRONG;
+			//_setCaptureLed(x,captLedValue);
+		if(led <= 72)
+			outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+		//}
+		pLed = led;
+	}
+	if(prevState != x->x_recording){
+			//post("led: %d pos: %f", led,x->x_recordingPos);
+			int captLedValue = 0;
+			if(x->x_accumRecording)
+				captLedValue = AMBER_FLASHING;
+			if(x->x_recording)
+				captLedValue = AMBER_STRONG;
+			_setCaptureLed(x,captLedValue);
+		}
+	prevState = x->x_recording;
+}
+
+void led_backgroundControl(t_arbhar_gpio_tilde *x, uint8_t val, uint8_t translate)
+{
+	uint8_t amp = 0; //TODO: insert playback amplitude value
+	uint8_t colour = 0;
+	if(translate)
+		colour = x->lyr_rgb[val];
+	else
+		colour = val;
+	//post("set val %d to bg colour: %d", val, colour);
+	if(_getCurrentParamMode(x) >= PARAM_TOGGLED || _getCurrentParamMode(x) == TRACK_AND_HOLD)
+		amp = 127;
+	else if(_getCurrentParamMode(x) == PERFORMANCE){
+		amp = (uint8_t)readFromSharedMem(x,SHM_OUT_VOL);
+	}
+	
+	if(_getCurrentParamMode(x) >= PARAM_SHIFT &&_getCurrentParamMode(x) <= TRACK_AND_HOLD) {
+		colour = 34; 
+		//amp = 90;
+	}
+
+	t_atom ctlInfo[4];
+	SETFLOAT(ctlInfo,colour);
+	SETFLOAT(ctlInfo+1,129);
+	SETFLOAT(ctlInfo+2,amp);
+	SETFLOAT(ctlInfo+3,130);
+	
+	if(x->x_arbharMode < CALIBRATION_MODE)
+		outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+	
+}
+
+void _shmem_allocate(t_arbhar_gpio_tilde *x, t_float fId, t_float fSize)
+{
+  int id = (int) fId;
+  if ( id < 1 ){
+    error("id should be > 0"); // shmid 0 doesn't seem to work
+    return;
+  }
+
+  x->segment_size = (int) fSize;
+  int size = sizeof(t_float)*x->segment_size;
+
+  struct shmid_ds shmbuffer;
+  if (x->share_memory) {
+    shmdt (x->share_memory);
+    x->share_memory=NULL;
+  }
+  if (x->segment_id != -1) {
+    shmctl (x->segment_id, IPC_RMID, 0);
+    x->segment_id = -1;
+  }
+
+  x->segment_id  =  shmget  (id,  sizeof(t_float)*x->segment_size,
+        IPC_CREAT | S_IRUSR | S_IWUSR | S_IROTH | S_IWOTH); // AV it should safer to use ftok() to generate an id
+
+  if(x->segment_id != -1) { // 0 could be a valid value, -1 means error
+    x->share_memory = (t_float*) shmat (x->segment_id, 0, 0);
+    // post("shmem memory attached at address %p\n", x->share_memory);
+
+    shmctl (x->segment_id, IPC_STAT, &shmbuffer);
+    // post ("segment size: %d\n", shmbuffer.shm_segsz);
+
+    if ((int)shmbuffer.shm_segsz < (int)sizeof(t_float)*x->segment_size) {
+      // there was a problem, set object meme size to 0
+      error("could not allocate shmem memory Id : %d, size %d", (int)id,  x->segment_size );
+      x->segment_size = 0;
+      x->share_memory=NULL;
+    //  outlet_float(x->m_info_out, -1);
+    }
+  }
+  else {
+    error("could not allocate shmem memory Id : %d, size %d", (int)id,  x->segment_size );
+    x->segment_size = 0;
+   // outlet_float(x->m_info_out, -1);
+  }
+  //  outlet_float(x->m_info_out, id);
+}
+
+int _shmem_writeValues(t_arbhar_gpio_tilde *x, const t_symbol *table, int src_offset, int dest_offset, int size)
+{
+	int npoints, i=0, index_max;
+	//t_garray *a;
+    //t_word *vec;
+
+	//i=0;
+	//t_symbol *s = table;
+	//if (!(a = (t_garray *)pd_findbyclass(s, garray_class)))
+		//pd_error(x, "%s: no such array", s->s_name);
+	//else if (!garray_getfloatwords(a, &npoints, &vec))
+		//pd_error(x, "%s: bad template for tabread", s->s_name);
+	//else {
+		//index_max = min(x->segment_size-dest_offset, npoints-src_offset);
+		//index_max = min(index_max, size);
+		//for (i=0; i < index_max; i++)
+			//x->share_memory[i+dest_offset] = vec[i+src_offset].w_float;
+	//}
+	// post("copied=%d", i);
+	return(i);
+}
+
+void _shmem_writeValue(t_arbhar_gpio_tilde *x, t_symbol *unused, int argc, t_atom *argv)
+{
+    if ( !x->share_memory ){
+        error("Create a valid shared memory before setting data !");
+        return;
+    }
+
+    int i, j, index_max, shmem_offset, array_offset, size;
+
+	if (argc < 1) {
+		pd_error(x, "shmem usage : [memset table_name [table_name []]< or [memset src_offset data [dest_offset]< (data can be a float, a list, or a table name)");
+		return;
+	}
+
+  for ( int i=0; i<argc; ++i){
+    int j = 0;
+    if ( argv[i].a_type == A_SYMBOL ){
+      _shmem_writeValues(x, atom_getsymbolarg(i,argc,argv), 0, j, x->segment_size);
+    } else {
+      break;
+    }
+  }
+
+ if ((argc > 1) && (argv[0].a_type == A_FLOAT) ) {
+		shmem_offset = atom_getfloatarg(0,argc,argv);
+		if (shmem_offset < 0) shmem_offset=0;
+
+		if (argv[1].a_type == A_SYMBOL) { // argument is an arrayname
+			array_offset = 0;
+			size = x->segment_size;
+			if ((argc > 2) && (argv[2].a_type == A_FLOAT))
+				array_offset = atom_getfloatarg(2,argc,argv);
+			if (array_offset < 0) array_offset=0;
+			if ((argc > 3) && (argv[2].a_type == A_FLOAT))
+				size = atom_getfloatarg(3,argc,argv);
+			_shmem_writeValues(x, atom_getsymbolarg(1,argc,argv), array_offset, shmem_offset, size);
+		}
+		else if (argv[1].a_type == A_FLOAT) { // argument is a float
+			index_max = x->segment_size - shmem_offset;
+			if (index_max > argc-1) index_max = argc-1;
+			for (i=0; i<index_max ; i++)
+				x->share_memory[i+shmem_offset]=atom_getfloatarg(i+1, argc, argv);
+		}
+	}
+}
+
+void writeToSharedMem(t_arbhar_gpio_tilde *x, uint8_t n, u_int32_t val)
+{
+    if ( !x->share_memory ){
+        error("Create a valid shared memory before setting data !");
+        return;
+    }
+
+    int index_max, shmem_offset, array_offset, size;
+
+	shmem_offset = n;
+	if (shmem_offset < 0) shmem_offset=0;
+
+	index_max = x->segment_size - shmem_offset;
+	x->share_memory[shmem_offset]=(t_float)val;
+}
+
+
+
+void writeFloatToSharedMem(t_arbhar_gpio_tilde *x, uint8_t n, t_float val)
+{
+    if ( !x->share_memory ){
+        error("Create a valid shared memory before setting data !");
+        return;
+    }
+    
+    float v = (float)val;
+
+    int index_max, shmem_offset, array_offset, size;
+
+	shmem_offset = n;
+	if (shmem_offset < 0) shmem_offset=0;
+
+	index_max = x->segment_size - shmem_offset;
+	x->share_memory[shmem_offset]=v;
+}
+
+void writeChunkToSharedMem(t_arbhar_gpio_tilde *x, uint8_t offset, uint32_t *val, uint16_t n)
+{
+    if ( !x->share_memory ){
+        error("Create a valid shared memory before setting data !");
+        return;
+    }
+    uint16_t *values = val;
+
+    int /*i, j, */index_max, shmem_offset, array_offset, size;
+
+	shmem_offset = offset;
+	if (shmem_offset < 0) shmem_offset=0;
+
+	index_max = x->segment_size - shmem_offset;
+	for(int i=0; i<n; i++){
+		uint8_t ch = x->x_ch[shmem_offset+i].ch;
+		x->share_memory[ch]=(t_float)values[i];
+		//post("value %d: %d", ch, values[i]);
+	}
+}
+
+void _getCaptureCvToShMem(t_arbhar_gpio_tilde *x){
+	writeToSharedMem(x, SHM_CPT_CV_VAL, !bcm2835_gpio_lev(CAPTURE_CV));
+}
+
+int _adaptInternalBpm(t_arbhar_gpio_tilde *x){
+	int notAdapted = 1;
+	float filterVal = BPM_FILTER_VAL;
+	if(x->x_bpm_suggestedFromCV > 0){
+		filterVal = 0.1;
+		x->x_bpm_suggestedFromManual = -1; //cancel potential manual tempo change
+		if(fabs(x->x_bpm - x->x_bpm_suggestedFromCV) > (x->x_bpm * 0.1)){
+			x->x_bpm = (x->x_bpm * filterVal) + (x->x_bpm_suggestedFromCV * (1 - filterVal));
+		} else {
+			x->x_bpm = x->x_bpm_suggestedFromCV;
+		}
+		notAdapted = 0;
+	} else if(x->x_bpm_suggestedFromManual > 0){
+		if(fabs(x->x_bpm - x->x_bpm_suggestedFromManual) > (x->x_bpm * 0.1)){
+			x->x_bpm = (x->x_bpm * filterVal) + (x->x_bpm_suggestedFromManual * (1 - filterVal));
+		} else {
+			x->x_bpm = x->x_bpm_suggestedFromManual;
+		}
+		t_atom configurationInfo[2];
+		SETSYMBOL(configurationInfo, gensym("ClockBPM"));
+		SETFLOAT(configurationInfo+1, x->x_bpm_suggestedFromManual);
+		if(x->x_arbharMode < CALIBRATION_MODE)
+			outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+		notAdapted = 0;
+	}
+	if(x->x_bpm == x->x_bpm_suggestedFromCV){
+		x->x_bpm_suggestedFromCV = -1;
+	}
+	if(x->x_bpm == x->x_bpm_suggestedFromManual){
+		x->x_bpm_suggestedFromManual = -1;
+	}
+
+	return notAdapted;
+}
+
+void _getTimeFromStrikeCV(t_arbhar_gpio_tilde *x) {
+	static int pFrame = 0;
+	int frame = x->x_dspFrameClock;
+	x->lastExternalClockFrame = frame;
+	x->x_timeBetweenStrikeCV = ((float)(frame - pFrame) * 64.f) / 48.f;
+	if(x->x_timeBetweenStrikeCV < 2500 && x->x_timeBetweenStrikeCV >= 1) {
+		x->x_bpmStrikeCV = 60000 / (x->x_timeBetweenStrikeCV * x->x_inputClockDivision);
+
+		//x->x_bpm = x->x_bpmStrikeCV;
+		x->x_bpm_suggestedFromCV = x->x_bpmStrikeCV;
+	}
+	//post("duration: %f \ bpm: %f",x->x_timeBetweenStrikeCV, x->x_bpmStrikeCV);
+	pFrame = frame;
+}
+
+void _getTimeFromStrikeButton(t_arbhar_gpio_tilde *x) {
+	static int pFrame = 0;
+	int frame = x->x_dspFrameClock;
+	x->x_timeBetweenStrikeButton = ((float)(frame - pFrame) * 64.f) / 48.f;
+	if(x->x_timeBetweenStrikeButton < 2500) {
+		x->x_bpmStrikeButton = 60000 / x->x_timeBetweenStrikeButton;
+		//x->x_bpm = x->x_bpmStrikeButton;
+		x->x_bpm_suggestedFromManual = x->x_bpmStrikeButton;
+	}
+	post("button duration: %f \ bpm: %f",x->x_timeBetweenStrikeButton, x->x_bpmStrikeButton);
+	pFrame = frame;
+}
+
+void _getStrikeCvToShMem(t_arbhar_gpio_tilde *x){
+	static uint8_t pCvVal = 0;
+	static int strikeCount = 0;
+	uint8_t cvVal = !bcm2835_gpio_lev(STRIKE_CV);
+	if(pCvVal != cvVal){ 
+		//post("strike: %d",cvVal);
+		if (cvVal > 0) {
+			if(x->x_internalBpmClock == 0) {
+				writeToSharedMem(x, SHM_STR_CV_VAL, strikeCount++);
+				if(strikeCount > 10000) strikeCount = 0;
+				clock_delay(x->x_strikeTrigger, x->x_strikeCvDelay);
+				_setStrikeLed(x,AMBER_STRONG);
+				clock_delay(x->x_strikeCvLed, 10);
+			//	post("strike: %d",strikeCount);
+			} else {
+				if( x->x_internalBpmClock > 0) {
+					//clock_unset(x->x_clockTriggeringGrains);
+					_getTimeFromStrikeCV(x);
+					//(x->x_clockTriggeringGrains,0);
+				}
+			}
+			//_setStrikeLed(x,AMBER_STRONG);
+			//clock_delay(x->x_strikeCvLed, 10);
+		}
+	}
+	pCvVal = cvVal;
+	clock_delay(x->x_getStrike, x->strike_samp_rate);
+}
+
+
+void _setDspSynced(t_arbhar_gpio_tilde *x, t_float val)
+{
+	x->x_dspSynced = (uint8_t)val;
+	post("dspSynced: %d", x->x_dspSynced);
+	
+	if(val) {
+		//if(!bcm2835_spi_begin())
+			//post("Error starting SPI!");
+		clock_set(x->x_getFromGpio, 0.f);
+		clock_set(x->x_getStrike, 0.f);
+	}
+}
+
+void _setCalibrationMode(t_arbhar_gpio_tilde *x) {
+	static count = 0;
+	t_int calibrate = _checkForCalibrationFileOnBoot(x);
+	if(count > 0)
+		outlet_float(x->calibrated_out, calibrate);
+	if( calibrate == 1)
+		x->x_arbharMode = CALIBRATION_MODE;
+	post("Arbhar Mode: %d", x->x_arbharMode);
+	count++;
+}
+
+void _setVpo3VoltValue(t_arbhar_gpio_tilde *x, t_float v){
+	t_int vpo = 0; //(t_int)v;
+	//if(/*x->x_arbharMode == CALIBRATION_MODE && */ v <= 0){
+		//for(int i=0; i<20; i++){
+		//	x->x_ch[0].raw = (t_float)readADC(0,2);
+		//	_stabliseADC(&x->x_ch[0]);
+		//}
+		vpo = (int)x->x_ch[0].avg;
+		post("vpo val: %d, raw: %d, avg: %d", (int)x->x_ch[0].val, (int)x->x_ch[0].raw, (int)x->x_ch[0].avg);
+	//} else {
+	//	vpo = (int)v;
+	//}
+
+	//if(x->x_arbharMode == CALIBRATION_MODE){
+		if(vpo > CALIBRATION_VPO_MIN && vpo < CALIBRATION_VPO_MAX) {
+			_setPlusLed(1);
+			post("vpo > %d && vpo < %d || vpo val: %d", CALIBRATION_VPO_MIN, CALIBRATION_VPO_MAX, vpo);
+			x->x_vpo3VoltValue = vpo;
+			writeToSharedMem(x,SHM_VPO3V_VAL,vpo);
+			post("calibration: vpo 3 volt: %d", x->x_vpo3VoltValue);
+			return 0;
+		}
+		else if(v > CALIBRATION_VPO_MIN && v < 850) {
+			_setPlusLed(1);
+			x->x_vpo3VoltValue = v;
+			writeToSharedMem(x,SHM_VPO3V_VAL,v);
+			post("stored vpo val: %d",x->x_vpo3VoltValue);
+			return 0;
+		}
+		else {
+			_setPlusLed(2);
+			return 1;
+		}
+		//else if (vpo > 2000 && vpo < 2100) {
+		//	vpo = x->x_vpo3VoltValue;
+		//	post("vpo > 2000 && vpo < 2100 || vpo val ignored as vpo is 0V, stored value: %d", vpo);
+		//}
+		//else if (vpo > 2000 && vpo < 2100) {
+		//	_setPlusLed(2);
+		//	vpo = 824;
+		//	post("vpo val unsuitable, as vpo is 0V, stored value: %d", vpo);
+		//}
+		
+	//} else {
+	//	x->x_vpo3VoltValue = vpo;
+	//	writeToSharedMem(x,SHM_VPO3V_VAL,vpo);
+	//	post("vpo 3 volt: %d", x->x_vpo3VoltValue);
+	//}
+	//if(vpo > 800 && vpo < 850){
+	//	t_int threeOctaveValue = x->x_vpo3VoltValue;
+	//	t_atom vpo3volt[3];
+	//	t_int msb = makeSixBitMsb(threeOctaveValue);
+	//	t_int lsb = makeSixBitLsb(threeOctaveValue);
+	//	SETFLOAT(vpo3volt, 16 + 192);
+	//	SETFLOAT(vpo3volt+1, lsb);
+	//	SETFLOAT(vpo3volt+2, msb);
+	//	outlet_list(x->eeprom_out, gensym("list"),3,vpo3volt);
+	//	  post("vpo3Volt: %d to be saved at %d as %d %d | check: %d",threeOctaveValue, 16 + 192, msb, lsb, combineSixBitMsbLsb(msb, lsb));
+	//}
+}
+
+
+void _getButton(t_arbhar_gpio_tilde *x, t_button *b, uint8_t val) {
+	uint8_t block = x->x_blockAllButtons;
+	if(val != 255){
+		b->value = val;
+		b->prev = b->state;
+		if(!b->ignore) { b->state = b->value; }
+		b->changed = 1; 
+		if(b->value > 0){
+			if(!block)
+				clock_delay(x->x_buttonDown, 0.f);
+			b->falling = 0;
+			b->raising = 1;
+			b->timePressed = x->x_dspFrameClock;
+		}
+		else{
+			if(!block)
+				clock_delay(x->x_buttonUp, 0.f);
+			b->prevTimePressed = b->timePressed;
+			b->falling = 1;
+			b->raising = 0;
+		}
+	} else {
+		b->changed = 0 ;
+	}
+}
+
+uint8_t _setOrder_button(t_buttons *temp, t_button *b){
+	uint8_t order = 0;
+	//if(b->changed ){
+		if(b->state > 0){
+			order = temp->shift.state;;
+			order += temp->capture.state;
+			order += temp->strike.state;
+		} 
+	//}
+	b->order = order;
+	return order;
+}
+
+uint8_t _setOrder_shift(t_buttons *temp){
+	uint8_t order = temp->shift.order;
+	if(temp->shift.changed ){
+		if(temp->shift.state > 0){
+			order = temp->shift.state;;
+			order += temp->capture.state;
+			order += temp->strike.state;
+		} 
+	}
+	temp->shift.order = order;
+	return order;
+}
+
+uint8_t _setOrder_capture(t_buttons *temp){
+	uint8_t order = temp->capture.order;
+	if(temp->capture.changed){
+		if(temp->capture.state > 0){
+			order = temp->capture.state;
+			order += temp->shift.state;
+			order += temp->strike.state;
+		} 
+	}
+	temp->capture.order = order;
+	return order;
+}
+
+uint8_t _setOrder_strike(t_buttons *temp){
+	uint8_t order = temp->strike.order;
+	if(temp->strike.changed){
+		if(temp->strike.state > 0){
+			order = temp->strike.state;
+			order += temp->shift.state;
+			order += temp->capture.state;
+		}
+	}
+	temp->strike.order = order;
+	return order;
+}
+
+uint8_t _getButtonState(t_button *b)
+{
+	return b->state;
+}
+
+uint8_t _getButtonRelease(t_button *b)
+{
+	return b->falling;
+}
+
+uint8_t _getButtonOrder(t_button *b)
+{
+	return b->order;
+}
+
+uint8_t _getButtonIgnore(t_button *b)
+{
+	return b->ignore;
+}
+
+void _setButtonIgnore(t_button *b, uint8_t val)
+{
+	 b->ignore = val;
+}
+
+void _shareRecordingStateToShMem(t_arbhar_gpio_tilde *x)
+{
+	writeToSharedMem(x,SHM_REC_POS,x->x_recordingPos);
+	//post("sharing x_recording = %d, record head set to %d", x->x_recording, x->x_recordingPos);
+	writeToSharedMem(x, SHM_RECORD, x->x_recording);
+	if(x->x_recording > 0) {
+		int layer = x->x_recLayer + SHM_ALPHA_STATE;
+		int current = readFromSharedMem(x,layer);
+	//	post("RecordingState %d = %d",layer, current);
+		if(current < 2)
+			current += 1;
+		writeToSharedMem(x,layer,current);
+	//	post("writing %d into layer slot %d",current,layer);
+	}
+	
+}
+
+void _toggleRecordingState(t_arbhar_gpio_tilde *x) {
+	x->x_recording = 1 - x->x_recording;
+	if(!x->x_accumRecording){
+		x->x_recordingPos = 0;
+		if(x->x_recording > 0)
+			x->x_followPosition = 0;
+	}
+	else {
+		if(x->x_recordingPos > MAX_BUFFER_DISPLAY)
+			x->x_recordingPos = 0;
+	}
+	_shareRecordingStateToShMem(x);
+}
+
+void _setRecordingStateWithReset(t_arbhar_gpio_tilde *x, uint8_t val) {
+	x->x_recording = val;
+	if(val > 0){
+		x->x_recordingPos = 0;
+		//writeToSharedMem(x,SHM_REC_POS,0);
+	}
+	//post("GATE CAPTURE with reset = %d pos %d", x->x_recording, x->x_recordingPos);
+	_shareRecordingStateToShMem(x);
+}
+
+void _setRecordingState(t_arbhar_gpio_tilde *x, uint8_t val) {
+	x->x_recording = val;
+	if(val > 0 && x->x_recordingPos > MAX_BUFFER_DISPLAY)
+		x->x_recordingPos = 0;
+	//post("CAPTURE = %d from sample %f", x->x_recording, x->x_recordingPos);
+	_shareRecordingStateToShMem(x);
+}
+
+void _copyScanPositionToRecordingPos(t_arbhar_gpio_tilde *x) {
+	
+	post("COPY SCAN POS %f to replace REC POS %f", x->x_scanPosition, x->x_recordingPos);
+	x->x_recordingPos = x->x_scanPosition;
+	writeToSharedMem(x,SHM_REC_POS,x->x_scanPosition);
+}
+
+void _toggleAccumRecording(t_arbhar_gpio_tilde *x, t_int force) {
+
+	static uint8_t pLink = 255;
+	static uint8_t pCaptGate = 255;
+	static uint8_t pButtonUp = 255;
+	if(pLink == 255)
+		pLink = x->x_linkAccumCaptureAsGate;
+	if(pCaptGate == 255)
+		pCaptGate = x->x_captureButtonMode;
+	if(pButtonUp == 255)
+		pButtonUp = x->x_recOnButtonUp;
+	
+	if(force < 0)
+		x->x_accumRecording = 1 - x->x_accumRecording;
+	else
+		x->x_accumRecording = force;
+	writeToSharedMem(x, SHM_ACCUM_REC, x->x_accumRecording);
+	post("ACCUM RECORDING = %d", x->x_accumRecording);
+	_shareRecordingStateToShMem(x);
+	if(x->x_linkAccumCaptureAsGate > 0 && x->x_accumRecording > 0) {
+		x->x_captureButtonMode = 1;
+		x->x_recOnButtonUp = 0;
+	} else if (x->x_accumRecording == 0){
+		x->x_captureButtonMode = pCaptGate;
+		x->x_recOnButtonUp = pButtonUp;
+	}
+	t_atom configurationInfo[2];
+	//SETSYMBOL(configurationInfo, gensym("AccumulateRecordingsInLayer"));
+	SETSYMBOL(configurationInfo, gensym("AccumulativeCaptureMode"));
+	SETFLOAT(configurationInfo+1, x->x_accumRecording);
+	//SETFLOAT(configurationInfo+2, v);
+	if(x->x_arbharMode < CALIBRATION_MODE)
+		outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+}
+
+void _strikeToPlayGrain(t_arbhar_gpio_tilde *x) {
+	x->x_strikeColour = AMBER_STRONG;
+	//clock_delay(x->x_strikeLed,0.0f);
+	//post("strike to play grain");
+	if(x->x_followMode) {
+		x->x_followPosition = 0;
+		//x->x_followPosition = x->x_followPosOffset;
+	}
+}
+
+void _strikeCvToPlayGrain(t_arbhar_gpio_tilde *x) {
+	clock_delay(x->x_strikeCvLed,x->x_strikeCvDelay);
+
+}
+
+void checkFileProcessProgress(t_arbhar_gpio_tilde *x) {
+	
+	static int prevActivityVal = 0;
+	int activityVal = readFromSharedMem(x, SHM_FILE_PROCESSING) > 0 ? 1 : 0;
+	
+	if(prevActivityVal != activityVal)
+	{
+		t_buttons *temp = &x->x_buttons;
+		if(temp->mode >= PARAM_TOGGLED && activityVal == 0)
+		{
+			//post("activity: %d -- %d", activityVal, temp->mode);
+			temp->mode = PERFORMANCE;
+			_changeParamMode(x,temp->mode);
+			x->x_checkFileProcess = 0;
+			tick_processButtonDown(x);
+			tick_processButtonUp(x);
+		}
+		prevActivityVal = activityVal;
+	}
+}
+
+void tick_processButtonDown(t_arbhar_gpio_tilde *x) {
+	static int initialisationCount = 0;
+	if(x->x_arbharMode < CALIBRATION_MODE)
+	{
+		//post("_______\\/________\n|processing button down event");
+		t_buttons *temp = &x->x_buttons;
+		_setOrder_shift(temp);
+		_setOrder_capture(temp);
+		_setOrder_strike(temp);
+		if(temp->mode == PARAM_TOGGLED  && _getButtonOrder(&temp->shift) == 0 && _getButtonOrder(&temp->capture) == 0 && _getButtonOrder(&temp->strike) == 3){
+			//post("*********\nCOUNT FOR INITIALISATION\n*********");
+			//post(">> %d <<>> %d <<>> %d",_getButtonOrder(&temp->shift), _getButtonOrder(&temp->capture), _getButtonOrder(&temp->strike));
+			int timer = temp->strike.timePressed - temp->strike.prevTimePressed;
+			if(timer > 200)
+				initialisationCount = 0;
+			else
+				initialisationCount++;
+			post("initialisationCount = %d", initialisationCount);
+			if(initialisationCount > 6){
+				t_atom initAllInfo[1];
+				SETSYMBOL(initAllInfo, gensym("INIT_ALL"));
+				//SETFLOAT(initAllInfo + 1, section);
+				outlet_list(x->config_out, gensym("list"), 1, initAllInfo);
+				temp->mode = PERFORMANCE;
+				_changeParamMode(x,temp->mode);
+				t_atom ctlInfo[4];
+				SETFLOAT(ctlInfo, 85);
+				SETFLOAT(ctlInfo+1, 147);
+				SETFLOAT(ctlInfo+2, 42);
+				SETFLOAT(ctlInfo+3, 146);
+				outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+			}
+		}
+		if(temp->mode >= PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 && _getButtonOrder(&temp->capture) == 2 && _getButtonOrder(&temp->strike) == 3) {
+			temp->mode = PERFORMANCE;
+			//led_controlForRecording(x);
+			_changeParamMode(x,temp->mode);
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 && _getButtonOrder(&temp->capture) == 2 && _getButtonOrder(&temp->strike) == 3) {
+			temp->mode = PARAM_TOGGLED;
+			_setRecordingState(x,0);
+			//post("*********\nCOUNT FOR INITIALISATION?\n*********");
+			temp->shift.order = 0;
+			temp->capture.order = 0; 
+			temp->strike.order = 0;
+			_changeParamMode(x,temp->mode);
+			_setWhiteLyrLedPulse(x,0);
+			writeToSharedMem(x,SHM_PARAM_TOGGLED,1);
+			x->x_protectPlayLayerValue = 1;
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 
+											&& _getButtonOrder(&temp->capture) == 2 
+											&& _getButtonOrder(&temp->strike) != 3 
+											&& _getCurrentParamMode(x) != TRACK_AND_HOLD) {
+			temp->mode = PARAM_MOMENTARY;
+			_changeParamMode(x,temp->mode);
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 
+											&& _getButtonOrder(&temp->capture) == 2 
+											&& _getButtonOrder(&temp->strike) != 3 
+											&& _getCurrentParamMode(x) == TRACK_AND_HOLD) {
+			post("*********\nRESET RECORDING SETTINGS\n*********");
+			x->x_recordingPos = 0;
+			_toggleAccumRecording(x, 0);
+			_setRecordingStateWithReset(x,0);
+			_toggleAccumRecording(x, 1);
+			post("rec position %d", (int)x->x_recordingPos);
+			
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 
+											&& _getButtonOrder(&temp->capture) != 2 
+											&& _getButtonOrder(&temp->strike) == 2
+											&& _getCurrentParamMode(x) != TRACK_AND_HOLD) {
+			//temp->mode = PERFORMANCE;
+			//_changeParamMode(x,temp->mode);
+			post("*********\nBUFFER OPERATION\n*********");
+			int layer = x->x_recLayer;
+			int state = (int)readFromSharedMem(x,layer + 124);
+			post("Layer %d has state %d", x->x_recLayer, state);
+			_decideLayerBufOp(x,layer,state);
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 
+											&& _getButtonOrder(&temp->capture) != 2 
+											&& _getButtonOrder(&temp->strike) == 2
+											&& _getCurrentParamMode(x) == TRACK_AND_HOLD) {
+			post("*********\nCOPY SCAN POSITION AS RECORDING POSITION\n*********");
+			_copyScanPositionToRecordingPos(x);
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 
+											&& _getButtonOrder(&temp->capture) != 2 
+											&& _getButtonOrder(&temp->strike) != 3) {
+			temp->mode = PARAM_SHIFT;
+			int timeDelta = temp->shift.timePressed - temp->shift.prevTimePressed;
+			//post("time between shift presses: %d",timeDelta);
+			if(timeDelta < 200 && _getCurrentParamMode(x) == PERFORMANCE){
+	//			post("TRACK_AND_HOLD: time between shift presses: %d",timeDelta);
+				temp->mode = TRACK_AND_HOLD;
+				led_backgroundControl(x,55,0);
+			}
+			_changeParamMode(x,temp->mode);
+			//post("param mode: %d", _getCurrentParamMode(x));
+		}
+		else if(temp->mode < PARAM_TOGGLED && _getButtonOrder(&temp->shift) < 1 && _getButtonOrder(&temp->capture) <= 2 && _getButtonOrder(&temp->strike) <= 3) {
+			temp->mode = PERFORMANCE;
+			_changeParamMode(x,temp->mode);
+			if(_getButtonState(&temp->capture) && x->x_recOnButtonUp && !x->x_captureButtonMode) {
+				//post("*********\nAWAIT CAPTURE ACTION\n*********");
+				x->x_awaitRecording = 1;
+			}
+			else if(_getButtonState(&temp->capture) && !x->x_recOnButtonUp && !x->x_captureButtonMode) {
+				if( x->x_dspFrameClock - temp->capture.timePressed < 2){
+					//post("*********\nCAPTURE\n*********");
+					//post("capture %d - %d", temp->capture.timePressed, x->x_dspFrameClock);
+					_toggleRecordingState(x);
+				}
+			}
+			else if(_getButtonState(&temp->capture) && x->x_captureButtonMode) {
+				if( x->x_dspFrameClock - temp->capture.timePressed < 2){
+					if(x->x_accumRecording)
+						_setRecordingState(x,1);
+					else
+						_setRecordingStateWithReset(x,1);
+				}
+			}
+			if(_getButtonState(&temp->strike)) {
+				if( x->x_dspFrameClock - temp->strike.timePressed < 2){
+					//post("*********\nSTRIKE\n*********");
+					if( x->x_internalBpmClock > 0 && temp->mode == PERFORMANCE)
+						_getTimeFromStrikeButton(x);
+					else
+					{
+						_strikeToPlayGrain(x);
+						clock_delay(x->x_strikeLed,0.0f);
+					}
+					
+					if(x->x_strikeToTrigger > 0){
+						_setTriggerOut(1);
+						clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+						post("*********\nTRIGGER_GATE_OUT_FROM_STRIKE\n*********");
+					} else if (x->x_currentOnsetMode->strikeCtrl > 0) {
+						_setTriggerOut(1);
+						clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+						//post("*********\nTRIGGER_GATE_OUT_FROM_STRIKE\n*********");
+					}
+				}
+			}
+		}
+		else if(temp->mode == PERFORMANCE && _getButtonOrder(&temp->shift) == 2 && _getButtonOrder(&temp->capture) == 1 && _getButtonOrder(&temp->strike) == 0) {
+			//post("*********\ncapture followed by shift for amending recordings\n*********");
+			_toggleAccumRecording(x, -1);
+		}
+		/*else if(temp->mode >= PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 && _getButtonOrder(&temp->capture) == 0 && _getButtonOrder(&temp->strike) == 0) {
+			post("*********\nLOAD_SOMETHING\n*********");
+		}*/
+		else if(temp->mode >= PARAM_TOGGLED && _getButtonOrder(&temp->shift) == 1 && _getButtonOrder(&temp->capture) == 2 && _getButtonOrder(&temp->strike) == 3) {
+			temp->mode = PERFORMANCE;
+			_changeParamMode(x,temp->mode);
+		} else if (temp->mode >= PARAM_TOGGLED && _getButtonOrder(&temp->shift) < 2 && _getButtonOrder(&temp->capture) < 2 && _getButtonOrder(&temp->strike) < 2) {
+			//post("*********\nfile manager stuff\n*********");
+			if(_getButtonState(&temp->capture)){
+				//post("*********\ndec page\n*********");
+				x->x_paramPage--;
+				if (x->x_paramPage == 255) x->x_paramPage = 2;  //x->x_paramPage is a uint8_t !!
+	//			_sendMenuComand(x,112,x->x_paramPage);
+			}
+			if(_getButtonState(&temp->strike)) {
+				//post("*********\ninc page\n*********");
+				x->x_paramPage++;
+				if (x->x_paramPage > 2) x->x_paramPage = 0;  //x->x_paramPage is a uint8_t !!
+	//			_sendMenuComand(x,112,x->x_paramPage);
+			}
+			if(_getButtonState(&temp->shift)) {
+				uint32_t timeSinceLast = temp->shift.timePressed - temp->shift.prevTimePressed;
+				//post("*********\nPREVIEW_SOMETHING\n*********");
+				if(x->x_copyFileNumber < 255 && timeSinceLast < 200 && x->x_paramPage == 0){
+					x->x_previewEnable = 0;
+					int loadInfo = x->x_playLayer * 100;
+					int fileBank = (x->x_copyFileNumber / 6) + 1;
+					int fileSlot = (x->x_copyFileNumber % 6) + 1;
+					loadInfo += fileBank * 10;
+					loadInfo += fileSlot;
+					post("LOADING into layer %d file no %d: shmem 122: %d", x->x_playLayer, x->x_copyFileNumber, loadInfo);
+					writeToSharedMem(x,SHM_LAOD_FILE,loadInfo);
+					x->x_checkFileProcess = 1;
+				} else if(x->x_copyFileNumber < 255 && timeSinceLast >= 200 && x->x_paramPage == 0){
+					post("*********\nPREVIEW_ENABLE\n*********");
+					x->x_previewEnable = 1;
+				}
+				if(x->x_copyLayerTo < 255 && timeSinceLast < 200 && x->x_paramPage == 0){
+					int copyInfo = (x->x_playLayer+1) * 100;
+					copyInfo += x->x_copyLayerTo;
+					writeToSharedMem(x,SHM_BUFFER_COPY,copyInfo);
+					post("page %d: COPYING from layer %d to %d: shmem 120: %d", x->x_paramPage, x->x_playLayer, x->x_copyLayerTo, copyInfo);
+					writeToSharedMem(x,SHM_SHMEM_COPY,1);
+				} else {
+					writeToSharedMem(x,SHM_BUFFER_COPY,0);
+					writeToSharedMem(x,SHM_SHMEM_COPY,0);
+				}
+				//LOADING ARBHAR SCENE FROM USB
+				if(x->x_copyFileNumber < 255 && timeSinceLast < 200 && x->x_paramPage == 1){
+					int loadInfo = x->x_playLayer * 100;
+					int fileBank = (x->x_copyFileNumber / 6) + 1;
+					int fileSlot = (x->x_copyFileNumber % 6) + 1;
+					loadInfo += fileBank * 10;
+					loadInfo += fileSlot;
+					post("LOADING arbhar scene %d", loadInfo);
+					writeToSharedMem(x,SHM_LOAD_SCENE_USB,loadInfo);
+					x->x_checkFileProcess = 1;
+				} else {
+					writeToSharedMem(x,SHM_LOAD_SCENE_USB,0);
+				}
+				if(x->x_copyLayerTo < 255 && timeSinceLast < 200 && x->x_paramPage == 1){
+					int copyInfo = (x->x_playLayer+1) * 100;
+					copyInfo += x->x_copyLayerTo;
+					writeToSharedMem(x,SHM_LOAD_SCENE_LOCAL,copyInfo);
+					x->x_checkFileProcess = 1;
+					post("page %d: loading scene %d from local: shmem 107: %d", x->x_paramPage, x->x_copyLayerTo, copyInfo);
+				} else {
+				//	writeToSharedMem(x,SHM_LOAD_SCENE_LOCAL,0);
+				}
+				//SAVING ARBHAR SCENE TO USB
+				if(x->x_copyFileNumber < 255 && timeSinceLast < 200 && x->x_paramPage == 2){
+					int loadInfo = x->x_playLayer * 100;
+					int fileBank = (x->x_copyFileNumber / 6) + 1;
+					int fileSlot = (x->x_copyFileNumber % 6) + 1;
+					loadInfo += fileBank * 10;
+					loadInfo += fileSlot;
+					post("SAVE arbhar scene %d", loadInfo);
+					writeToSharedMem(x,SHM_SAVE_SCENE_USB,loadInfo);
+					x->x_checkFileProcess = 1;
+				} else {
+				//	writeToSharedMem(x,SHM_SAVE_SCENE_USB,0);
+				}
+				if(x->x_copyLayerTo < 255 && timeSinceLast < 200 && x->x_paramPage == 2){
+					int copyInfo = (x->x_playLayer+1) * 100;
+					copyInfo += x->x_copyLayerTo;
+					writeToSharedMem(x,SHM_SAVE_SCENE_LOCAL,copyInfo);
+					x->x_checkFileProcess = 1;
+					post("page %d: saving scene %d to local: shmem 108: %d", x->x_paramPage, x->x_copyLayerTo, copyInfo);
+				} else {
+				//	writeToSharedMem(x,SHM_SAVE_SCENE_LOCAL,0);
+				}
+			}
+		}
+		
+		//post("|check \\/ mode: %s, shift %d, capture %d, strike %d \n======================", 
+		//			getModeName(temp->mode), _getButtonOrder(&temp->shift), _getButtonOrder(&temp->capture), _getButtonOrder(&temp->strike));
+		led_shiftMode(x,_getCurrentParamMode(x));
+	} else /* in CALIBRATION_MODE or TESTING_MODE*/
+	{
+		t_buttons *temp = &x->x_buttons;
+		static int shiftNo = 0;
+		static int captNo = 0;
+		static int strikeNo = 0;
+				
+		_setOrder_shift(temp);
+		_setOrder_capture(temp);
+		_setOrder_strike(temp);
+		
+		if(x->x_arbharMode == TESTING_MODE) {
+			if(_getButtonOrder(&temp->shift) > 0)
+			{
+				shiftNo++;
+				captNo = 0;
+				captNo = 0;
+				if(shiftNo > 7)
+					strikeNo = 0;
+				_setCaptureLed(x,captNo);
+				_setStrikeLed(x,strikeNo);
+			}
+			if(_getButtonOrder(&temp->capture) > 0)
+			{
+				captNo++;
+				if(captNo > 7)
+					captNo = 0;
+				_setCaptureLed(x,captNo);
+			}
+			if(_getButtonOrder(&temp->strike) > 0)
+			{
+				strikeNo++;
+				if(strikeNo > 7)
+					strikeNo = 0;
+				_setStrikeLed(x,strikeNo);
+			}
+			
+			
+		}
+
+		post("button pressed in CALIBRATION or TESTING mode: arbhar_mode = %d", x->x_arbharMode);
+		post("|check \\/ mode: %s, shift %d, capture %d, strike %d \n======================", 
+					getModeName(temp->mode), _getButtonOrder(&temp->shift), _getButtonOrder(&temp->capture), _getButtonOrder(&temp->strike));
+	}
+}
+
+void tick_processButtonUp(t_arbhar_gpio_tilde *x) {
+	if(x->x_arbharMode < CALIBRATION_MODE)
+	{
+		//post("________/\\_______\n|processing button up event");
+		t_buttons *temp = &x->x_buttons;
+		//if(temp->mode != PARAM_TOGGLED) {
+			if(temp->mode != PARAM_TOGGLED && _getButtonState(&temp->shift) == 0 && _getButtonState(&temp->capture) == 0 && _getButtonState(&temp->strike) == 0) {
+				if(_getCurrentParamMode(x) == TRACK_AND_HOLD){
+	//				post("TRACK_AND_HOLD: set held values");
+					writeFloatToSharedMem(x,SHM_Q_PITCH_HZ,x->x_quantisedTrackAndHoldPitch);
+					writeToSharedMem(x,SHM_USING_QUENTISED_PITCH,1);
+				}
+				if(x->x_protectPlayLayerValue == 0)
+					_setWhiteLyrLedPulse(x,0);
+				temp->shift.order = 0;
+				temp->capture.order = 0; 
+				temp->strike.order = 0;
+				temp->mode = PERFORMANCE;
+				writeToSharedMem(x,SHM_PARAM_TOGGLED,0);
+				writeToSharedMem(x,SHM_PREVIEW_FILE,0);
+				writeToSharedMem(x,SHM_LAOD_FILE,0);
+				_changeParamMode(x,temp->mode);
+			}
+		//}
+		if(x->x_awaitRecording == 1 && temp->capture.prev == 1) {
+			//post("*********\nEXECUTE CAPTURE ACTION\n*********");
+			_toggleRecordingState(x);
+			x->x_awaitRecording = 0;
+		}
+		if(temp->capture.prev == 1 && x->x_recording == 1 && x->x_captureButtonMode) {
+			_setRecordingState(x,0);
+		}
+		//post("|check /\\ mode: %s, shift %d, capture %d, strike %d \n======================", 
+		//			getModeName(temp->mode), temp->shift.order, temp->capture.order, temp->strike.order);
+		led_shiftMode(x,_getCurrentParamMode(x));
+
+		if(_getCurrentParamMode(x) == PERFORMANCE){
+			x->x_allowOnsetModeChange = 0;
+			x->x_lastParamPage = 255;
+			writeToSharedMem(x,SHM_PREVIEW_FILE,0);
+			writeToSharedMem(x,SHM_LAOD_FILE,0);
+			if(x->x_recording < 1){
+				t_atom ctlInfo[2];
+				SETFLOAT(ctlInfo,0);
+				SETFLOAT(ctlInfo+1,142);
+				outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+			}
+			//post("returned to PERFORMANCE");
+		} else if(_getCurrentParamMode(x) >= PARAM_TOGGLED){
+			//if(_getButtonRelease(&temp->shift)) {
+				//static uint32_t prevTime = 0;
+				//post("*********\nLOAD_SOMETHING\n*********");
+				//post("shift time: %d", x->x_dspFrameClock - temp->shift.timePressed);
+				//if(x->x_dspFrameClock - temp->shift.timePressed < 255 && x->x_copyLayerTo < 255){
+					//int copyInfo = x->x_playLayer * 100;
+					//copyInfo += x->x_copyLayerTo;
+					//post("COPYING from layer %d to %d: shmem 120: %d", x->x_playLayer, x->x_copyLayerTo, copyInfo);
+				//}
+				//if(x->x_dspFrameClock - temp->shift.timePressed < 255 && x->x_copyFileNumber < 255){
+					//int loadInfo = x->x_playLayer * 100;
+					//loadInfo += x->x_copyFileNumber;
+					//post("LOADING indo layer %d file no %d: shmem 122: %d", x->x_playLayer, x->x_copyFileNumber, loadInfo);
+				//}
+				//prevTime = x->x_dspFrameClock;
+			//}
+			led_PlayPosOff(x);
+		}
+	} else if (x->x_arbharMode == TESTING_MODE) {
+		t_buttons *temp = &x->x_buttons;
+		temp->shift.order = 0;
+		temp->capture.order = 0; 
+		temp->strike.order = 0;
+	}
+}
+
+void setIgnore(t_button *b, uint8_t val)
+{
+	b->ignore = val;
+}
+
+void releaseButton(t_button *b) {
+	b->state = 0;
+	b->order = 0;
+	b->ignore = 0;
+	b->changed = 1;
+	post("state: %d", b->state);
+}
+
+void getModeFromOrder(t_buttons *temp){
+	uint8_t shift, capture, strike;
+	shift = _setOrder_shift(temp);
+	capture = _setOrder_capture(temp);
+	strike = _setOrder_strike(temp);
+	
+	if(shift == 1 && capture == 2 && strike == 3) {
+		temp->mode = PARAM_TOGGLED;
+		setIgnore(&temp->shift, 1);
+		setIgnore(&temp->capture, 1);
+		setIgnore(&temp->strike, 1);
+	}
+	else if(shift == 1 && capture == 2 && strike == 0) {
+		temp->mode = PARAM_MOMENTARY;
+		setIgnore(&temp->shift, 1);
+		setIgnore(&temp->capture, 1);
+	}
+	else if(shift == 1 && capture == 0 && strike == 0) {
+		temp->mode = PARAM_SHIFT;
+		setIgnore(&temp->shift, 1);
+	}
+	else if(shift == 0 && capture == 0 && strike == 0) {
+		temp->mode = PERFORMANCE;
+	}
+}
+
+void tick_setBCM2835(t_arbhar_gpio_tilde *x)
+{ 
+	_setTriggerOut(0);
+	//post("setting trugger low");
+	writeToSharedMem(x,SHM_TRIG_OUT_VOL,0);
+}
+
+void tick_getBCM2835(t_arbhar_gpio_tilde *x)
+{ 
+	if(readFromSharedMem(x,SHM_FILE_PROCESSING) == 0)
+	{
+		if(x->x_arbharMode != CALIBRATION_MODE)
+			_getAllAdcs(x);
+		else
+			_getAllAdcsDuringCalibration(x);
+	}
+	//button state container
+	t_buttons *temp = &x->x_buttons;
+	
+	uint8_t captureCV = readFromSharedMem(x,SHM_CPT_CV_VAL); // !bcm2835_gpio_lev(CAPTURE_CV);
+	uint8_t strikeCV = readFromSharedMem(x,SHM_STR_CV_VAL); // !bcm2835_gpio_lev(STRIKE_CV);
+	//if (captureCV > 0)
+	//	writeToSharedMem(x, SHM_CPT_CV_VAL, 0);
+	//if (strikeCV > 0)
+	//	writeToSharedMem(x, SHM_STR_CV_VAL, 0);
+	//post("strikeCV: %d", strikeCV);
+	
+	if(x->x_arbharMode < CALIBRATION_MODE) {
+		//post("strikeCV %d", strikeCV);
+		uint8_t recCvToggle = 0;
+		static uint8_t pCaptCV = 0;
+		if(pCaptCV != captureCV) {
+			writeToSharedMem(x, SHM_CPT_CV, captureCV);
+		//	post("dsp frame: %d %d", captureCV, x->x_dspFrameClock);
+			if(x->x_captureCvAsGate == 1) {
+				if(x->x_recording){
+					if(captureCV > 0){
+						//post("recording already");
+					} else {
+						_setRecordingState(x,0);
+					}	
+				} else {
+					if(captureCV > 0){
+						if(x->x_accumRecording > 0)
+							_setRecordingState(x,1);
+						else
+							_setRecordingStateWithReset(x,1);
+					}
+					else {
+						_setRecordingState(x,0);
+					}	
+						
+				}
+			} else if (x->x_captureCvAsGate == 2) {
+				if(captureCV > 0){
+					//post("recording already");
+					if(x->x_recording > 0){
+						_setRecordingState(x,0);
+						//_toggleRecordingState(x);
+						x->x_recordingPos = 0;
+						clock_delay(x->x_scheduleRecordingStart, 25);
+					} else if (_getCurrentParamMode(x) == PERFORMANCE){
+						
+						_setCaptureLed(x,WHITE_DIM);
+						clock_delay(x->x_captureCvLed, 25);
+					}
+				}
+			} else {
+				if(captureCV > 0){
+					_toggleRecordingState(x);
+				}
+			}
+			//post("captureCV");
+			pCaptCV = captureCV;
+		}
+		if(_getCurrentParamMode(x) == PERFORMANCE) {
+		led_controlForRecording(x);
+		}
+	
+		static uint8_t pStrikeCV = 0;
+		
+		
+		if(pStrikeCV != strikeCV) {
+			
+			//if(strikeCV == 0) {
+			//	writeToSharedMem(x, SHM_STR_CV_VAL, 0);
+			//}
+			//if(readFromSharedMem(x, SHM_STR_CV_VAL)){
+			//	clock_delay(x->x_strikeCvLed, 0);
+				//clock_delay(x->x_strikeTrigger, x->x_strikeCvDelay);
+			//	static int pTime = 0;
+				//post("strikeCV: %d", x->x_dspFrameClock - pTime);
+			//	pTime = x->x_dspFrameClock;
+			if(strikeCV && x->x_followMode) {
+				x->x_followPosition = 0;	
+			}
+			pStrikeCV = strikeCV;
+		}
+		
+	} 
+
+	
+	
+	//post("start: mode: %d, shift %d, capture %d, strike %d", temp->mode, temp->shift.state, temp->capture.state, temp->strike.state);
+	
+	uint8_t shift = shiftFilter(bcm2835_gpio_lev(SHIFT));
+	_getButton(x, &temp->shift, shift);
+	
+	uint8_t capture = captureFilter(bcm2835_gpio_lev(CAPTURE_BUTTON));
+	_getButton(x, &temp->capture, capture);
+	
+	uint8_t strike = strikeFilter(bcm2835_gpio_lev(STRIKE_BUTTON));
+	_getButton(x, &temp->strike, strike);
+
+	if(x->x_arbharMode < CALIBRATION_MODE) {
+		static int pHoldVal = 0;
+		int holdVal = readFromSharedMem(x,SHMEM_CURRENT_HOLD_VALUE);
+		int directTriggerVal = 0;
+		if(x->x_useHoldToSwitch < 1) {
+			directTriggerVal = readFromSharedMem(x,SHMEM_ONSET_FOR_CAPTURE);
+			//if(directTriggerVal > 0)
+				//post("receiving additional trigger to initiate recording");
+		}
+		//ost(" recording? 106:  %d", directTriggerVal);
+		//x->adc_samp_rate = ADC_SAMP_RATE;
+		//if(x->x_currentOnsetMode->captureCtrl && x->x_accumRecording == 0 && x->x_stereo < 1) {
+			//if((holdVal > 0 && pHoldVal != holdVal) || readFromSharedMem(x,106) > 0){
+				//post("initiate recording");
+				//writeToSharedMem(x,SHMEM_ONSET_FOR_CAPTURE,0);
+			//}
+		//}
+		if(x->x_currentOnsetMode->captureCtrl && x->x_accumRecording == 0 && x->x_stereo < 1) {
+			//_setTriggerOut(readFromSharedMem(x,SHM_HOLD_ACTIVE));
+			
+			if((holdVal > 0 && pHoldVal != holdVal) || directTriggerVal > 0 ){
+				if(x->x_recording > 0)
+					_toggleRecordingState(x);
+				if(x->x_recording == 0)
+					clock_delay(x->x_scheduleRecordingStart, 50);
+			// post(" recording? 106:  %d", directTriggerVal);
+			}
+			pHoldVal = holdVal;
+		} else if(x->x_currentOnsetMode->captureCtrl && x->x_accumRecording == 1 && x->x_stereo < 1) {
+				if((pHoldVal != holdVal) || directTriggerVal > 0) {
+				if(holdVal > 0  || readFromSharedMem(x,SHMEM_ONSET_FOR_CAPTURE) > 0){
+					_setRecordingState(x,1);
+					post("continue recording");
+				}
+				else if(holdVal == 0  && directTriggerVal == 0){
+					post("pause recording");
+					_setRecordingState(x,0);
+				}
+			}
+			pHoldVal = holdVal;
+			
+		}
+		writeToSharedMem(x,SHMEM_ONSET_FOR_CAPTURE,0);
+	} else {
+		x->adc_samp_rate = 5;
+		x->strike_samp_rate = 3;
+	}
+	//post("getFromGpio");
+	clock_delay(x->x_getFromGpio, x->adc_samp_rate);
+}
+
+void _setWhiteLayerLeds(t_arbhar_gpio_tilde *x, t_float slot, t_float bank)
+{
+	//x->whiteLayerValue[0] = (uint8_t)bank;
+	//x->whiteLayerValue[1] = 0;//(uint8_t)slot;
+	//x->orangeLayerValue[0] = 0;//(uint8_t)bank;
+	//x->orangeLayerValue[1] = (uint8_t)slot;
+	
+	x->orangeLayerValue = (uint8_t)bank;
+	x->whiteLayerValue = (uint8_t)slot;
+	
+	
+}
+
+
+void _setCopyOrFileSlot(t_arbhar_gpio_tilde *x, uint8_t slot)
+{
+	if(slot < 7) {
+		x->x_copyLayerTo = slot;
+		x->x_copyFileNumber = 255;
+		//post("copy from %d to %d", x->x_recLayer, x->x_copyLayerTo);
+	}
+	else {
+		x->x_copyFileNumber = slot - 7;
+		x->x_copyLayerTo = 255;
+		//post("selected file to load: %d", x->x_copyFileNumber);
+	}
+}
+
+t_float _getLayerCopyAndLibraryLoadSlot(t_arbhar_gpio_tilde *x)
+{
+	static t_float lastPotVal = 0;
+	int availableSlots = readFromSharedMem(x,SHM_NO_OF_SLOTS);
+	lastPotVal = (t_float)quantisePot(x->x_ch[MCP_CH_SEQUENTIALLY[_LYP]].avg, availableSlots);
+	int offset = 0;
+	if(availableSlots <= 6)
+		offset = 36;
+	int slotNo = (42-offset)-lastPotVal;
+	slotNo = slotNo < 0 ? 0 : slotNo;
+	_setCopyOrFileSlot(x,slotNo);
+	return lastPotVal;
+}
+
+
+void led_setLayerFileSlots(t_arbhar_gpio_tilde *x, t_float layerPot)
+{
+	static int prevId = 255;
+	int availableSlots = readFromSharedMem(x,SHM_NO_OF_SLOTS) - 1;
+
+		int getId = availableSlots - (int)layerPot;
+		int getPage = x->x_paramPage;
+		if(prevId != getId){
+			prevId = getId;
+		}
+		_setWhiteLayerLeds(x,FILE_SLOT_LED[getId][0],FILE_SLOT_LED[getId][1]);
+		t_atom ctlInfo[4];
+		SETFLOAT(ctlInfo, x->orangeLayerValue);
+		SETFLOAT(ctlInfo+1, 147);
+		SETFLOAT(ctlInfo+2, x->whiteLayerValue);
+		SETFLOAT(ctlInfo+3, 146);
+		outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+		clock_delay(x->x_layerLedControl, 25);
+		
+		
+}
+
+void led_setSelectedLayerLed(t_arbhar_gpio_tilde *x)
+{
+	t_atom ctlInfo[4];
+	uint8_t play = 1;
+	uint8_t rec = 1;
+	uint8_t shiftPlay = 0;
+	uint8_t shiftRec = 7 - (x->x_recLayer + 1);
+	if(x->x_omega < 1) 
+	{
+		shiftPlay = 7 - (x->x_playLayer + 1); // (uint8_t)_getPlayLayer(x);
+		shiftRec = 7 - (x->x_recLayer + 1);
+	}
+	if(x->x_omega == 1 && x->x_playRecCoupled > 0)
+		shiftRec = 0;
+		
+		SETFLOAT(ctlInfo, play << shiftPlay);
+		SETFLOAT(ctlInfo+1, 146);
+		SETFLOAT(ctlInfo+2, rec << shiftRec);
+		SETFLOAT(ctlInfo+3, 147);
+		if(x->x_arbharMode < CALIBRATION_MODE) 
+			outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+		//clock_delay(x->x_layerLedControl, 25);
+}
+
+
+
+void _setHoldValue(t_arbhar_gpio_tilde *x, t_float val) {
+	if(_getCurrentParamMode(x) == PERFORMANCE) {
+		t_float potVal = val;
+		t_float cvVal = readFromSharedMem(x,SHM_MOD_HOLD) - 2048;
+		t_float holdVal = potVal + cvVal;
+		//post("holdVal: %f", holdVal);
+		holdVal = holdVal >= 4095 ? 4095 : holdVal <= 0 ? 0 : holdVal; 
+		t_float holdValInMS = ((4095 - holdVal) / 4095);
+		holdValInMS = holdValInMS * holdValInMS;
+		holdValInMS *= 10000; 
+		holdValInMS = holdValInMS < 0 ? 0 : holdValInMS;
+		int holdAsInt = (int)holdValInMS;
+		static int pVal = 0;
+		
+		
+		
+		if(pVal != holdAsInt) {
+			writeToSharedMem(x,SHM_HOLD_AS_INT,(float)holdAsInt);
+			pVal = holdAsInt;
+			//post("hold value: %d", holdAsInt);
+		}
+	}
+}
+
+void _setPhaseSwitch(t_arbhar_gpio_tilde *x, t_float val) {
+	static uint8_t enable = 0;
+	static uint8_t switch_state = 0;
+	if(_getCurrentParamMode(x) == PARAM_MOMENTARY) {
+		if(val < 3800 && val > 300)
+			{
+				enable = 1;
+			}
+		else if (val >= 3800 && enable == 1){
+			switch_state = 0;
+			enable = 0;
+			writeToSharedMem(x,SHM_PHASE_SHIFT,switch_state);
+			post("check phase switch: %d", switch_state);
+		}
+		else if (val <= 300 && enable == 1){
+			switch_state = 1;
+			enable = 0;
+			writeToSharedMem(x,SHM_PHASE_SHIFT,switch_state);
+			post("check phase switch: %d", switch_state);
+		}
+		//post("check phase switch: %f", val);
+		if(enable == 0) {
+			static uint8_t pState = 255;
+			if(pState != switch_state) {
+				t_atom configurationInfo[2];
+				SETSYMBOL(configurationInfo, gensym("OutputPhaseSwitch"));
+				SETSYMBOL(configurationInfo, gensym("PhaseSwitch"));
+				SETFLOAT(configurationInfo+1, switch_state);
+				//SETFLOAT(configurationInfo+2, v);
+				if(x->x_arbharMode < CALIBRATION_MODE)
+					outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+				pState = switch_state;
+			}
+		}
+	} else {
+		enable = 0;
+	}
+	
+}
+
+void _setStereoSwitch(t_arbhar_gpio_tilde *x, t_float val) {
+	static uint8_t enable = 0;
+	static uint8_t switch_state = 0;
+	if(_getCurrentParamMode(x) == PARAM_MOMENTARY) {
+		if(val < 3800 && val > 300)
+			{
+				enable = 1;
+			}
+		else if (val >= 3800 && enable == 1){
+			switch_state = 0;
+			x->x_stereo = switch_state;
+			enable = 0;
+			writeToSharedMem(x,SHM_STEREO_INPUT,switch_state);
+			//post("check stereo switch: %d", switch_state);
+		}
+		else if (val <= 300 && enable == 1){
+			switch_state = 1;
+			x->x_stereo = switch_state;
+			enable = 0;
+			writeToSharedMem(x,SHM_STEREO_INPUT,switch_state);
+			//post("check stereo switch: %d", switch_state);
+		}
+		if(enable == 0) {
+			static uint8_t pState = 255;
+			if(pState != switch_state) {
+				t_atom configurationInfo[2];
+				SETSYMBOL(configurationInfo, gensym("InputMode"));
+				SETFLOAT(configurationInfo+1, switch_state);
+				//SETFLOAT(configurationInfo+2, v);
+				if(x->x_arbharMode < CALIBRATION_MODE)
+					outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+				pState = switch_state;
+			}
+		}
+	//post("check phase switch: %f", val);
+	} else {
+		enable = 0;
+	}
+	
+}
+
+void _setCaptureToggleGateSwitch(t_arbhar_gpio_tilde *x, t_float val) {
+	static uint8_t enable = 0;
+	static uint8_t switch_state = 0;
+	if(_getCurrentParamMode(x) == PARAM_MOMENTARY) {
+		if(val < 3800 && val > 300)
+			{
+				enable = 1;
+			}
+		else if (val >= 3800 && enable == 1){
+			switch_state = 0;
+			enable = 0;
+			x->x_captureCvAsGate = 1 - switch_state;
+			//post("check capture toggle/gate: %d", switch_state);
+		}
+		else if (val <= 300 && enable == 1){
+			switch_state = 1;
+			enable = 0;
+			x->x_captureCvAsGate = 1 - switch_state;
+			//post("check capture toggle/gate: %d", switch_state);
+		}
+		//post("capture gate (0) / toggle (1): %d", x->x_captureCvAsGate);
+		if(enable == 0) {
+			static uint8_t pState = 255;
+			if(pState != switch_state) {
+				t_atom configurationInfo[2];
+				SETSYMBOL(configurationInfo, gensym("CaptureCVMode"));
+				SETFLOAT(configurationInfo+1, switch_state);
+				//SETFLOAT(configurationInfo+2, v);
+				if(x->x_arbharMode < CALIBRATION_MODE)
+					outlet_list(x->config_out, gensym("list"),2,configurationInfo);
+				pState = switch_state;
+			}
+		}
+	} else {
+		enable = 0;
+	}
+}
+
+void layerCopyAndLibraryLoadingSlot(t_arbhar_gpio_tilde *x, int val)
+{
+	int availableSlots = readFromSharedMem(x,SHM_NO_OF_SLOTS);
+	int copyToLayer = -1;
+	int loadFromLibrary = -1;
+	int libraryBankSlot[2] = {0, 0};
+	if(val <= 6)
+		copyToLayer = val;
+	else if(val >= 7 && availableSlots > 6) {
+		loadFromLibrary = val - 6;
+		libraryBankSlot[0] = ((loadFromLibrary - 1) / 6) + 1;
+		libraryBankSlot[1] = ((loadFromLibrary - 1) % 6) + 1;
+	}
+}
+
+void tick_layerLedControl(t_arbhar_gpio_tilde *x) 
+{	
+	//post("check");
+	static int initFrame = 75;
+	static int showForNoFrames = 300;
+	static int showOnsetModeCount = 0;
+	if(x->x_showOnsetMode == 1)
+	{
+		initFrame = 0;
+		if(showOnsetModeCount > 0)
+			showForNoFrames = 100;
+		showOnsetModeCount++;
+		x->x_showOnsetMode = 0;
+	}
+	if(initFrame < showForNoFrames)
+	{
+		//post("onsetMode: %d for frames %d of %d",x->x_currentOnsetMode->name, initFrame, showForNoFrames);
+		led_onsetModeControl(x,x->x_currentOnsetMode->name);
+		initFrame++;
+		clock_delay(x->x_layerLedControl, 15);
+	}
+	else
+	{
+	 if(x->x_arbharMode != CALIBRATION_MODE)
+	{
+		if(_getCurrentParamMode(x) >= PARAM_TOGGLED){
+			static int prevSlotNo = -1;
+			int copyLibrarySlot = _getLayerCopyAndLibraryLoadSlot(x);
+			int currentSlotNo = 42-copyLibrarySlot;
+			led_setLayerFileSlots(x, copyLibrarySlot); 
+			if(prevSlotNo != currentSlotNo || readFromSharedMem(x,SHM_CHECK_USB) == 1){
+				layerCopyAndLibraryLoadingSlot(x,currentSlotNo);
+			}
+			prevSlotNo = currentSlotNo;
+			static int resetLed = 0;
+			if (readFromSharedMem(x,SHM_FILE_PROCESSING) > 0 || readFromSharedMem(x,SHM_SHMEM_COPY) > 0) {
+				//post("animateFileActivity");
+				animateFileActivityBusy(x);
+				resetLed = 1;
+			} else {
+				if(resetLed) {
+					post("resetPosLed");
+					resetLed = 0;
+					t_atom ctlInfo[2];
+					SETFLOAT(ctlInfo,18);
+					SETFLOAT(ctlInfo+1,143);
+					outlet_list(x->g_info_out, gensym("list"),2,ctlInfo);
+				}
+			}
+		} 
+		else if (_getCurrentParamMode(x) == PERFORMANCE) {
+			led_setSelectedLayerLed(x);
+			_setHoldValue(x, x->x_ch[MCP_CH_SEQUENTIALLY[_HOL]].val);
+		} 
+		else if (_getCurrentParamMode(x) == PARAM_SHIFT) {
+			led_setSelectedLayerLed(x);
+		}
+		else if (_getCurrentParamMode(x) == PARAM_MOMENTARY) {
+			_setOnsetMode(x,x->x_ch[MCP_CH_SEQUENTIALLY[_LYP]].val);
+		}
+		else if(_getCurrentParamMode(x) == TRACK_AND_HOLD)
+		{
+			int quantVal = (int)x->x_quantisedTrackAndHoldPitch + 24;
+			static int pQuantVal = 0;
+			if(pQuantVal != quantVal)
+			{
+				int whiteLed = 0;
+				int yellowLed = 0;
+				whiteLed = (quantVal % 12);
+				yellowLed = (quantVal % 12);
+				int ctlWhite = 1;
+				int ctlYellow = 1;
+				if(whiteLed != 0) {
+					whiteLed = whiteLed > 6 ? 0 : whiteLed;
+					yellowLed = yellowLed > 6 ? yellowLed - 6 : 0;
+					 ctlWhite = 64 >> (whiteLed - 1);
+					 ctlYellow = 1 << (6 - yellowLed);
+					ctlYellow = ctlYellow > 32 ? 0 : ctlYellow == 1 ? 0 : ctlYellow;
+					//post("yellowLed: %d", yellowLed);
+					ctlWhite = ctlWhite > 64 ? 0 : ctlWhite;
+				}
+				t_atom ctlInfo[4];
+				SETFLOAT(ctlInfo, ctlWhite);
+				SETFLOAT(ctlInfo+1, 146);
+				SETFLOAT(ctlInfo+2, ctlYellow);
+				SETFLOAT(ctlInfo+3, 147);
+				if(x->x_arbharMode < CALIBRATION_MODE) 
+					outlet_list(x->toSerial, gensym("list"),4,ctlInfo);
+				//post("quatVal: %d", (int)x->x_quantisedTrackAndHoldPitch);
+				pQuantVal = quantVal;
+			}
+		}
+		_setPhaseSwitch(x,x->x_ch[MCP_CH_SEQUENTIALLY[_HOL]].val);
+		//t_float pFollowSwitch = (t_float)x->x_followMode;
+		//t_float cFollowSwitch = _setFollowModeSwitch(x, x->x_ch[MCP_CH_SEQUENTIALLY[_SCP]].val);
+		_setFollowModeSwitch(x, x->x_ch[MCP_CH_SEQUENTIALLY[_SCP]].val);
+		//if(pFollowSwitch != cFollowSwitch) {
+		//	post("setting follo mode? %d - %d",pFollowSwitch, cFollowSwitch);
+		//	_setFollowMode(x,cFollowSwitch);
+		//}
+		//pFollowSwitch = cFollowSwitch;
+		_setStereoSwitch(x,x->x_ch[MCP_CH_SEQUENTIALLY[_TEX]].val);
+		_setCaptureToggleGateSwitch(x,x->x_ch[MCP_CH_SEQUENTIALLY[_DUB]].val);
+	
+		static int frame = 0;
+		frame++;
+		if(frame > 5){
+			led_menuPagesIndicator(x,(x->x_paramMode >= PARAM_TOGGLED ? 1 : 0)); //page indicator is working
+			frame = 0;
+		}
+		
+		if (_getCurrentParamMode(x) <= PARAM_MOMENTARY)
+			clock_delay(x->x_layerLedControl, 15);
+			
+	}
+}
+}
+
+void animateFileActivityBusy(t_arbhar_gpio_tilde *x)
+{
+	static int led = 19;
+	static int add = 1;
+	//static int frameCount = 0;
+	//if(frameCount % 2 == 0) {
+		t_atom ctlInfo[4];
+		SETFLOAT(ctlInfo,1);
+		SETFLOAT(ctlInfo+1,142);
+		SETFLOAT(ctlInfo+2,led);
+		SETFLOAT(ctlInfo+3,143);
+		led += add;
+		if(led <= 72 && led >= 0) {
+			outlet_list(x->g_info_out, gensym("list"),4,ctlInfo);
+		}
+		if (led > 62){
+			led = 19;
+			add = 1;
+		} else if (led < 0)
+			add = 1;
+	//}
+	//frameCount++;
+	//if(frameCount > 2)
+	//	frameCount = 0;
+	
+}
+
+
+
+/**
+ * this is the core of the object
+ * this perform-routine is called for each signal block
+ * the name of this function is arbitrary and is registered to Pd in the
+ * pan_tilde_dsp() function, each time the DSP is turned on
+ *
+ * the argument to this function is just a pointer within an array
+ * we have to know for ourselves how many elements inthis array are
+ * reserved for us (hint: we declare the number of used elements in the
+ * pan_tilde_dsp() at registration
+ *
+ * since all elements are of type "t_int" we have to cast them to whatever
+ * we think is apropriate; "apropriate" is how we registered this function
+ * in pan_tilde_dsp()
+ */
+t_int *arbhar_gpio_tilde_perform(t_int *w)
+{
+  t_arbhar_gpio_tilde *x = (t_arbhar_gpio_tilde *)(w[1]);
+  t_sample  *out =    (t_sample *)(w[2]);
+  int          n =           (int)(w[3]);
+  //int i;
+
+  //if(_getCurrentParamMode(x) == PERFORMANCE) {
+		//led_ScanLengthControl(x);
+		//led_PlayPosControl(x);
+		//led_controlForRecording(x);
+	//}
+	
+	_getCaptureCvToShMem(x);
+	
+	
+	if(x->x_arbharMode != CALIBRATION_MODE)
+	{
+		if(x->x_followMode){
+		  x->x_followPosition += n * x->x_followSpeed;
+		  int followLengthInSamp = 480000;
+			if(x->x_followLengthAsHold)
+				followLengthInSamp = readFromSharedMem(x,SHM_HOLD_AS_INT) * 48;
+		  if(x->x_followLoop){
+			  if(x->x_followPosition > followLengthInSamp - 1){
+				if(x->x_currentOnsetMode->followModeEOC){
+					_setTriggerOut(1);
+					clock_delay(x->x_setOnGpio, TRIGGER_LENGTH);
+				}
+				x->x_followPosition = 0;
+			}
+			  else if(x->x_followPosition < 0 && x->x_followSpeed < 0)
+				x->x_followPosition = followLengthInSamp;
+			} else {
+				if(x->x_followPosition >= followLengthInSamp) {
+					x->x_followPosition = followLengthInSamp;
+					//post("follow pos: %d scanCV=%d mid=%d", (int)x->x_followPosition, x->x_ch[2].val, x->x_ch[2].mid);
+				}
+			}
+			//post("pos: %d", (int)x->x_followPosition);
+		}
+	  x->x_dspFrameClock++;
+	  if(x->x_recording > 0){
+		x->x_recordingPos = x->x_recordingPos + 64;
+		//post("pos: %d", (int)x->x_recordingPos);
+		if(x->x_recordingPos > 624000)
+			_toggleRecordingState(x); //x->x_recording = 0;
+	  }
+	}
+  //for(i=0; i<n; i++)
+    //{
+      //out[i]=x->x_gpio_ins;
+    //}
+
+  /* return a pointer to the dataspace for the next dsp-object */
+  return (w+4);
+}
+
+
+/**
+ * register a special perform-routine at the dsp-engine
+ * this function gets called whenever the DSP is turned ON
+ * the name of this function is registered in pan_tilde_setup()
+ */
+void arbhar_gpio_tilde_dsp(t_arbhar_gpio_tilde *x, t_signal **sp)
+{
+	
+	  bcm2835_spi_begin();
+  bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_128);
+   
+  dsp_add(arbhar_gpio_tilde_perform, 3, x,
+          sp[0]->s_vec, sp[0]->s_n);
+}
+
+/**
+ * this is the "destructor" of the class;
+ * it allows us to free dynamically allocated ressources
+ */
+void arbhar_gpio_tilde_free(t_arbhar_gpio_tilde *x)
+{
+	bcm2835_spi_end();
+	bcm2835_close();
+	
+  if ( x->share_memory ){
+    if ( shmdt (x->share_memory) == -1) error("shmdt failed at %x", x->share_memory);
+  }
+  x->share_memory=NULL;
+
+  int shm_id = x->segment_id;
+  struct shmid_ds shm_desc;
+  if(shm_id>0){
+    if (shmctl(shm_id,IPC_STAT, &shm_desc) != -1){
+      if(shm_desc.shm_nattch<=0){
+        if (shmctl(shm_id,IPC_RMID, &shm_desc) == -1) error("shmctl remove failed for %d", shm_id);
+      }
+    }
+  }
+  shm_id=0;
+
+  /* free any ressources associated with the given outlet */
+  outlet_free(x->x_out);
+  outlet_free(x->g_info_out);
+  outlet_free(x->layerBufOp);
+  outlet_free(x->toSerial);
+  outlet_free(x->eeprom_out);
+  outlet_free(x->config_out);
+  outlet_free(x->calibrated_out);
+  
+  if (x->x_getFromGpio) clock_free(x->x_getFromGpio);
+  if (x->x_getStrike) clock_free(x->x_getStrike);
+  if (x->x_setOnGpio) clock_free(x->x_setOnGpio);
+  if (x->x_playPosLedOff) clock_free(x->x_playPosLedOff);
+  if (x->x_layerLedControl) clock_free(x->x_layerLedControl);
+  if (x->x_strikeLed) clock_free(x->x_strikeLed);
+  if (x->x_strikeCvLed) clock_free(x->x_strikeCvLed);
+  if (x->x_strikeTrigger) clock_free(x->x_strikeTrigger);
+  if (x->x_captureCvLed) clock_free(x->x_captureCvLed);
+  if (x->x_buttonDown) clock_free(x->x_buttonDown);
+  if (x->x_buttonUp) clock_free(x->x_buttonUp);
+  if (x->x_scheduleRecordingStart) clock_free(x->x_scheduleRecordingStart);
+  if (x->x_clockTriggeringGrains) clock_free(x->x_clockTriggeringGrains);
+  if (x->x_bpmClock) clock_free(x->x_bpmClock);
+
+}
+
+
+void _setPresetValues(t_arbhar_gpio_tilde* x, t_symbol *s, t_int argc, t_atom *argv){
+	char presetName[50];
+	int n = 0;
+	atom_string(argv+n,presetName,50);
+	if(argc != 0 && argc % 2 == 0) {
+		//post("valid preset");
+		x->x_showOnsetMode = 1;
+		//post("%d values given in %s = ",argc-1, presetName);
+		for(int i = 0; i<argc/2;i++) {
+			// char presetName[50];
+			// atom_string(argv+n,presetName,50);
+			t_float value = atom_getfloat(argv+(n+1));
+			//post("set preset %s",presetName);
+			//post("set value %f",value);
+			n = n + 2;
+			if(strcmp(presetName, "LoadConfiguration:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_LOAD_CONF,(int)value);
+			}
+			else if(strcmp(presetName, "ModCV:") == 0){
+				post("set %s = %f",presetName, value);
+				post("value = %f", value);
+				_setModCVMode(x,value);
+			} 
+			else if(strcmp(presetName, "AdcSpeed:") == 0){
+				post("set %s = %f",presetName, value);
+				post("value = %f", value);
+				x->main_adc_samp_rate = value;
+				x->adc_samp_rate = value;
+			} 
+			else if(strcmp(presetName, "PanningDefaultValue:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_PANNING,(-409.6 * value) + 2048); // (-409.6 * value) + 2048 is to convert Volt value into the 12bit
+			}
+			else if(strcmp(presetName, "PanningDefaultValueInPerCent:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_PANNING,(-20.48 * value) + 2048); // (-20.48 * value) + 2048 is to convert % value into the 12bit
+			}
+			else if(strcmp(presetName, "HoldDefaultValue:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_HOLD,(-409.6 * value) + 2048); // (-409.6 * value) + 2048 is to convert Volt value into the 12bit
+			}
+			else if(strcmp(presetName, "ReverbDefaultValue:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_REVERB,(-409.6 * value) + 2048); // (-409.6 * value) + 2048 is to convert Volt value into the 12bit
+			}
+			else if(strcmp(presetName, "ReverbDefaultValueInPerCent:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_REVERB,(-20.48 * value) + 2048); // (-20.48 * value) + 2048 is to convert % value into the 12bit
+			}
+			else if(strcmp(presetName, "ReverbReset:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_RESET_REV,(int)value);
+			}
+			else if(strcmp(presetName, "EffectOrder:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_EFFECT_ORDER,(int)value);
+			}
+			else if(strcmp(presetName, "DelayDefaultValue:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_DELAY,(-409.6 * value) + 2048); // (-409.6 * value) + 2048 is to convert Volt value into the 12bit
+			}
+			else if(strcmp(presetName, "DelayDefaultValueInPerCent:") == 0){
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_MOD_DELAY,(-20.48 * value) + 2048); // (-20.48 * value) + 2048 is to convert % value into the 12bit
+			}
+			else if(strcmp(presetName, "InputMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_stereo = (uint8_t)value;
+				writeToSharedMem(x,SHM_STEREO_INPUT,x->x_stereo);
+			}
+			else if(strcmp(presetName, "OutputPhaseSwitch:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_PHASE_SHIFT,(int)value);
+			}
+			else if(strcmp(presetName, "PhaseSwitch:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_PHASE_SHIFT,(int)value);
+			}
+			else if(strcmp(presetName, "CaptureCvMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_captureCvAsGate = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "CaptureCVMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_captureCvAsGate = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "OnsetMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_currentOnsetMode = &x->x_onsetModes[(uint8_t)value]; 
+				_setPlusLed(x->x_currentOnsetMode->plusLedColour); //causes segmentation fault in arbhar_gpio_tilde_new!!
+			}
+			else if(strcmp(presetName, "StrikeButtonToTrigger:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_strikeToTrigger = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "WavetableCentreFrequency:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeFloatToSharedMem(x,SHM_WT_CENTRE_FREQ,value);
+			}
+			else if(strcmp(presetName, "StrikeCvDelay:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_strikeCvDelay = value;
+				writeFloatToSharedMem(x,SHM_STR_CV_DELAY,value);
+			}
+			else if(strcmp(presetName, "StrikeCVDelay:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_strikeCvDelay = value;
+				writeFloatToSharedMem(x,SHM_STR_CV_DELAY,value);
+			}
+			else if(strcmp(presetName, "RandomAmpWithRandomIntensity:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_AMP_RAND,value);
+			}
+			else if(strcmp(presetName, "RandomTimingWithRandomIntensity:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_TIME_RAND,value);
+			}
+			else if(strcmp(presetName, "RandomDistance:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_DISTANCE_RAND,value);
+			}
+			else if(strcmp(presetName, "FollowMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followMode = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_MODE,(int)x->x_followMode);
+				if(value < 1) {
+					clock_delay(x->x_strikeLed,0);
+				}
+				x->x_followPosition = 0;
+			}
+			//FollowSpeedBiDirectional
+			else if(strcmp(presetName, "FollowSpeedBiDirectional:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followBiDirectional = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_DIRECT,x->x_followBiDirectional);
+			}
+			else if(strcmp(presetName, "FollowSpeedDirection:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followBiDirectional = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_DIRECT,x->x_followBiDirectional);
+			}
+			//FollowPositionOffset
+			else if(strcmp(presetName, "FollowPositionOffset:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followPosOffset = value;
+			}
+			else if(strcmp(presetName, "FollowScanOffset:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followPosOffset = value;
+			}
+			else if(strcmp(presetName, "FollowPositionOffsetWithScanCV:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followPosOffsetByScanCV = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_SCAN_OFFSET,(uint8_t)x->x_followPosOffsetByScanCV);
+			}
+			else if(strcmp(presetName, "FollowScanOffsetWithScanCV:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followPosOffsetByScanCV = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_SCAN_OFFSET,(uint8_t)x->x_followPosOffsetByScanCV);
+			}
+			//FollowLoop
+			else if(strcmp(presetName, "FollowLoop:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followLoop = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_LOOP,x->x_followLoop);
+			}
+			//FollowSetLoopLengthWithHold
+			else if(strcmp(presetName, "FollowSetLoopLengthWithHold:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_followLengthAsHold = (uint8_t)value;
+				writeToSharedMem(x,SHM_FOLLOW_LOOP_WITH_HOLD,x->x_followLengthAsHold);
+			}
+			else if(strcmp(presetName, "FollowFadeInTime:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "FollowModeScanCv:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "PlayRecCoupled:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "MidiEnable:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "GrainNoUsedByMidi:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "AccumulateRecordingsInLayer:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_accumRecording = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "AccumulativeCaptureMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				//_toggleAccumRecording(x,0);
+				x->x_accumRecording = (uint8_t)value;
+				if(x->x_accumRecording > 0) {
+					//_toggleAccumRecording(x,-1);
+					_setCaptureLed(x,AMBER_FLASHING);
+				} else {
+					
+					_setCaptureLed(x,WHITE_AMBER_OFF);
+				}
+				writeToSharedMem(x, SHM_ACCUM_REC, x->x_accumRecording);
+			}
+			else if(strcmp(presetName, "LoopPlaybackInFollowMode:") == 0)
+				post("set %s = %f",presetName, value);
+			//else if(strcmp(presetName, "BidirectionalSpeedInFollowMode:") == 0)
+				//post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "AnalogEmulationOfOnsetInput:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_EMULATE_ANALOG,(int)value);
+			}
+			else if(strcmp(presetName, "AnalogEmulation:") == 0) {
+				post("set %s = %f",presetName, value);
+				writeToSharedMem(x,SHM_EMULATE_ANALOG,(int)value);
+			}
+			else if(strcmp(presetName, "GrainPanningInReverbMode:") == 0)
+				post("set %s = %f",presetName, value);
+			else if(strcmp(presetName, "ActivateCaptureOnButtonUp:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_recOnButtonUp = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "CaptureButtonAsGate:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_captureButtonMode = (uint8_t)value;
+				if(x->x_captureButtonMode)
+					x->x_recOnButtonUp = 0;
+			}
+			else if(strcmp(presetName, "CaptureButtonMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_captureButtonMode = (uint8_t)value;
+				if(x->x_captureButtonMode)
+					x->x_recOnButtonUp = 0;
+			}
+			else if(strcmp(presetName, "LinkAccumulativeRecordingCaptureAsGate:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_linkAccumCaptureAsGate = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "LinkAccumlativeCaptureModeToCaptureButtonMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_linkAccumCaptureAsGate = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "EnableClockedModeSwitch:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_enableClockedModeSwitch = (uint8_t)value;
+			}
+			else if(strcmp(presetName, "ClockedMode:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_internalBpmClock = (t_int)value;
+				if(x->x_internalBpmClock > 0){
+					clock_delay(x->x_bpmClock, 2000.f);
+				}
+				writeToSharedMem(x,140,x->x_internalBpmClock);
+			}
+			else if(strcmp(presetName, "ClockBPM:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_bpm = value;
+			}
+			else if(strcmp(presetName, "InputClockDivision:") == 0) {
+				post("set %s = %f",presetName, value);
+				x->x_inputClockDivision = value;
+			}
+			else if(strcmp(presetName, "ClockSetsGrainLength:") == 0) {
+				// clock_sets_length
+				post("set %s = %f",presetName, value);
+				x->clock_sets_length = value;
+			}
+			if(strcmp(presetName, "ClockDivisions:") == 0) {
+				x->clockDivLength = argc-1;
+				//post("%d clock divisions given in %s",x->clockDivLength, presetName);
+				for(int i=0; i< argc-1; ++i) {
+					x->clockDiv[i] = atom_getfloat(argv+(i+1));
+				}
+			}
+			else if(strcmp(presetName, "ClockMultiplications:") == 0) {
+				x->clockMultLength = argc-1;
+				//post("%d clock multiples given in %s ",x->clockMultLength, presetName);
+				for(int i=0; i< argc-1; ++i) {
+					x->clockMult[i] = atom_getfloat(argv+(i+1));
+				}
+			}
+		}
+	} else {
+		//post("no valid preset command");
+		if(argc > 1) {
+
+			t_float pitches[argc];
+			
+			 if(strcmp(presetName, "SetQuantiseTable:") == 0) {
+				//post("set %s = ",presetName);
+				writeToSharedMem(x,SHM_NO_OF_TRANSPOSITIONS,argc-1);
+				writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_0,0);
+				writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_1,0);
+				for(int i=0; i< (argc-1) / 2; ++i) {
+					pitches[i*2] = atom_getfloat(argv+((i*2)+1));
+					//post("%d pitch up: %f ",162+(i*2),pitches[i*2]);
+					writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_2+(i*2),pitches[i*2]);
+					pitches[(i*2)+1] = atom_getfloat(argv+((i*2)+2));
+					//post("%d pitch up: %f, %d pitch down: %f ",162+(i*2), pitches[i*2], 162+(i*2)+1, pitches[(i*2)+1]);
+					post("setting pitch deviation up %f and down: %f ",pitches[i*2], pitches[(i*2)+1]);
+					writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_2+(i*2)+1,pitches[(i*2)+1]);
+				}
+				//post("total of %d pitches", argc-1);
+			} 
+			else if(strcmp(presetName, "QuantiseTable:") == 0) {
+				//post("set %s = ",presetName);
+				writeToSharedMem(x,SHM_NO_OF_TRANSPOSITIONS,argc-1);
+				writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_0,0);
+				writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_1,0);
+				for(int i=0; i< (argc-1) / 2; ++i) {
+					pitches[i*2] = atom_getfloat(argv+((i*2)+1));
+					//post("%d pitch up: %f ",162+(i*2),pitches[i*2]);
+					writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_2+(i*2),pitches[i*2]);
+					pitches[(i*2)+1] = atom_getfloat(argv+((i*2)+2));
+					//post("%d pitch up: %f, %d pitch down: %f ",162+(i*2), pitches[i*2], 162+(i*2)+1, pitches[(i*2)+1]);
+					post("setting pitch deviation up %f and down: %f ",pitches[i*2], pitches[(i*2)+1]);
+					writeFloatToSharedMem(x,SHM_DEVIATION_PITCH_2+(i*2)+1,pitches[(i*2)+1]);
+				}
+				//post("total of %d pitches", argc-1);
+			}
+		}
+	}
+}
+
+t_int _checkForCalibrationFileOnBoot(t_arbhar_gpio_tilde *x)
+{
+	FILE *fp = fopen("/boot/calibrated","r+");
+		if (fp == NULL) {
+			post("no 'calibrated' confirmation on /boot");
+			return 1;
+		} else {
+			post("'calibrated' file found");
+			return 0;
+		}
+}
+
+
+/**
+ * this is the "constructor" of the class
+ * the argument is the initial mixing-factor
+ */
+void *arbhar_gpio_tilde_new(t_floatarg memId, t_floatarg memSize)
+{
+  t_arbhar_gpio_tilde *x = (t_arbhar_gpio_tilde *)pd_new(arbhar_gpio_tilde_class);
+  
+	x->x_followLoop = 1;
+	x->x_followLengthAsHold = 1;
+	x->x_followPosOffsetByScanCV = 1;
+	
+	x->x_useHoldToSwitch = 0;
+	
+	x->x_enableClockedModeSwitch = ENABLE_CLOCKED_MODE_SWITCH;
+	x->x_internalBpmClock = USE_BPM_CLOCK;
+	x->clock_sets_length = CLOCK_SETS_LENGTH;
+	
+	x->x_bpm = 120;
+	x->x_bpm_suggestedFromManual = -1;
+	x->x_bpm_suggestedFromCV = -1;
+  
+  x->x_blockAllButtons = 1;
+  
+  x->x_modToPanning = 0;
+  x->x_modToHold = 0;
+  x->x_modToReverb = 1;
+  x->x_modToDelay = 0;
+  
+  x->x_previewEnable = 0;
+  
+  //_checkForCalibrationFileOnBoot(x);
+	_setCalibrationMode(x);
+	
+  post("paramModeStruct: %d",x->x_paramModeInfo.current_param_mode);
+  
+  x->x_lastParamPage = 255;
+  
+  x->x_recOnButtonUp = REC_ON_BUTTON_UP;
+  x->x_captureButtonMode = CAPTURE_BUTTON_AS_GATE;
+  x->x_captureCvAsGate = CAPTURE_CV_AS_GATE;
+  x->x_strikeCvDelay = STRIKE_CV_DELAY;
+  x->x_accumRecording = ACCUMULATE_RECORDINGS_IN_LAYER;
+  x->x_linkAccumCaptureAsGate = LINK_ACCUM_CAPTURE_AS_GATE;
+  x->x_followBiDirectional = FOLLOW_SPEED_BIDIRECTIONAL;
+  
+  x->x_strikeToTrigger = 0;
+ 
+  
+  if(x->x_captureButtonMode)
+	x->x_recOnButtonUp = 0;
+	
+  x->x_buttons.buttonPointers[0] = &x->x_buttons.shift;
+  x->x_buttons.buttonPointers[1] = &x->x_buttons.capture;
+  x->x_buttons.buttonPointers[2] = &x->x_buttons.strike;
+
+	x->lyr_rgb[0] = 0;
+	x->lyr_rgb[1] = 76;
+	x->lyr_rgb[2] = 111;
+	x->lyr_rgb[3] = 8;
+	x->lyr_rgb[4] = 18;
+	x->lyr_rgb[5] = 56;
+	x->lyr_rgb[6] = 90;
+	x->lyr_rgb[7] = 111;
+	x->lyr_rgb[8] = 25;
+	x->lyr_rgb[9] = 0;
+	
+	x->x_onsetModes[ALPHA].name = ALPHA;
+	x->x_onsetModes[ALPHA].captureCtrl = 1;
+	x->x_onsetModes[ALPHA].strikeCtrl = 0;
+	x->x_onsetModes[ALPHA].triggerOnset = 0;
+	x->x_onsetModes[ALPHA].triggerGrain = 1;
+	x->x_onsetModes[ALPHA].triggerHold = 0;
+	x->x_onsetModes[ALPHA].followModeEOC = 0;
+	x->x_onsetModes[ALPHA].plusLedColour = 2;
+	
+	x->x_onsetModes[BETA].name = BETA;
+	x->x_onsetModes[BETA].captureCtrl = 1;
+	x->x_onsetModes[BETA].strikeCtrl = 0;
+	x->x_onsetModes[BETA].triggerOnset = 1;
+	x->x_onsetModes[BETA].triggerGrain = 0;
+	x->x_onsetModes[BETA].triggerHold = 1;
+	x->x_onsetModes[BETA].followModeEOC = 0;
+	x->x_onsetModes[BETA].plusLedColour = 2;
+	
+	x->x_onsetModes[GAMMA].name = GAMMA;
+	x->x_onsetModes[GAMMA].captureCtrl = 0;
+	x->x_onsetModes[GAMMA].strikeCtrl = 0;
+	x->x_onsetModes[GAMMA].triggerOnset = 1;
+	x->x_onsetModes[GAMMA].triggerGrain = 1;
+	x->x_onsetModes[GAMMA].triggerHold = 0;
+	x->x_onsetModes[GAMMA].followModeEOC = 0;
+	x->x_onsetModes[GAMMA].plusLedColour = 1;
+	
+	x->x_onsetModes[DELTA].name = DELTA;
+	x->x_onsetModes[DELTA].captureCtrl = 0;
+	x->x_onsetModes[DELTA].strikeCtrl = 0;
+	x->x_onsetModes[DELTA].triggerOnset = 1;
+	x->x_onsetModes[DELTA].triggerGrain = 0;
+	x->x_onsetModes[DELTA].triggerHold = 1;
+	x->x_onsetModes[DELTA].followModeEOC = 0;
+	x->x_onsetModes[DELTA].plusLedColour = 1;
+	
+	x->x_onsetModes[EPSILON].name = EPSILON;
+	x->x_onsetModes[EPSILON].captureCtrl = 0;
+	x->x_onsetModes[EPSILON].strikeCtrl = 1;
+	x->x_onsetModes[EPSILON].triggerOnset = 1;
+	x->x_onsetModes[EPSILON].triggerGrain = 0;
+	x->x_onsetModes[EPSILON].triggerHold = 0;
+	x->x_onsetModes[EPSILON].followModeEOC = 1;
+	x->x_onsetModes[EPSILON].plusLedColour = 1;
+	
+	x->x_onsetModes[ZETA].name = ZETA;
+	x->x_onsetModes[ZETA].captureCtrl = 0;
+	x->x_onsetModes[ZETA].strikeCtrl = 0;
+	x->x_onsetModes[ZETA].triggerOnset = 0;
+	x->x_onsetModes[ZETA].triggerGrain = 0;
+	x->x_onsetModes[ZETA].triggerHold = 0;
+	x->x_onsetModes[ZETA].followModeEOC = 1;
+	x->x_onsetModes[ZETA].plusLedColour = 1;
+
+	x->x_allowOnsetModeChange = 0;
+
+	x->x_playRecCoupled = 1;
+	
+	x->x_protectPlayLayerValue = 0;
+  
+  x->main_adc_samp_rate = ADC_SAMP_RATE;
+  x->adc_samp_rate = ADC_SAMP_RATE;
+  x->strike_samp_rate = STRIKE_SAMP_RATE;
+  
+  x->printMcpChValue = -1;
+
+  x->x_getFromGpio = clock_new(x, (t_method)tick_getBCM2835);
+  x->x_getStrike = clock_new(x, (t_method)_getStrikeCvToShMem);
+  x->x_setOnGpio = clock_new(x, (t_method)tick_setBCM2835);
+  x->x_playPosLedOff = clock_new(x, (t_method)led_PlayPosOff);
+  x->x_layerLedControl = clock_new(x, (t_method)tick_layerLedControl);
+  x->x_strikeLed = clock_new(x, (t_method)tick_strikeLed);
+  x->x_strikeCvLed = clock_new(x, (t_method)tick_strikeCvLed);
+  x->x_strikeTrigger = clock_new(x, (t_method)tick_strikeTrigger);
+  x->x_captureCvLed = clock_new(x, (t_method)tick_captureCvLed);
+  x->x_buttonDown = clock_new(x, (t_method)tick_processButtonDown);
+  x->x_buttonUp = clock_new(x, (t_method)tick_processButtonUp);
+  x->x_scheduleRecordingStart = clock_new(x, (t_method)tick_scheduleRecordingStart);
+  x->x_clockTriggeringGrains = clock_new(x, (t_method)tick_clockedGrains);
+  x->x_bpmClock = clock_new(x,(t_method)tick_bpmClock);
+
+  x->x_followMode = 0;
+  x->x_followSpeed = 1;
+  x->x_followPosition = 0;
+
+  clock_set(x->x_layerLedControl,1000);
+  /* create a new signal-outlet */
+  x->x_out = outlet_new(&x->x_obj, &s_signal);
+ /* 
+  	0 VPO = 2, //V/Oct
+	1 LYC = 4, //Layer CV
+	2 SCC = 7, //Scan CV
+	3 TEX = 14, //texture
+	4 DIR = 10, //Direction
+	5 LEN = 1, //Length
+	6 MOD = 13, // Mod
+	7 SCP = 0, // Scan Pot
+	8 DW = 6, // Dry/Wet
+	9 PI = 3, //Pitch
+	10 INT = 12, //Intensity
+	11 LYP = 5, //Layer Pot
+	12 SPR = 9, //Spray
+	13 HOL = 8, //Hold
+	14 DUB = 11, //Overdub
+	15 DEV = 15 //Deviation
+	*/
+	
+  for(int i=0;i<16;i++){
+	 x->x_ch[i].raw = 0;
+	 x->x_ch[i].val = 0;
+	 x->x_ch[i].last = 0;
+	 x->x_ch[i].highest = POT_HIGHEST;
+	 x->x_ch[i].lowest = POT_LOWEST;
+	 setBufCountMax(&x->x_ch[i],15);
+	 setNotch(&x->x_ch[i], 40);
+	 setFreezeThresh(&x->x_ch[i],2);
+	 setFreezeCountMax(&x->x_ch[i],2500);
+ }
+ 
+  x->x_ch[0].name = gensym("vpo"); x->x_ch[0].ch = _VPO; 
+  setMid(&x->x_ch[0],2063); // x->x_ch[0].mid = 2063;
+  setNotch(&x->x_ch[0],0);
+  setBufCountMax(&x->x_ch[0],2);
+  setFreezeThresh(&x->x_ch[0],2);
+  setFreezeCountMax(&x->x_ch[0],5);
+  x->x_ch[1].name = gensym("lyc"); x->x_ch[1].ch = _LYC; 
+  setMid(&x->x_ch[1],2055);
+  setNotch(&x->x_ch[1],0);
+  setFreezeCountMax(&x->x_ch[1],250);
+  x->x_ch[2].name = gensym("scc"); x->x_ch[2].ch = _SCC;// x->x_ch[2].mid = 2077;
+  setMid(&x->x_ch[2],2061);
+  setNotch(&x->x_ch[2],0);
+  setFreezeCountMax(&x->x_ch[2],2500);
+  setFreezeThresh(&x->x_ch[2],7);
+  x->x_ch[3].name = gensym("tex"); x->x_ch[3].ch = _TEX; //x->x_ch[3].mid = 1577;
+  setMid(&x->x_ch[3],1577);
+  setNotch(&x->x_ch[3],100);
+  setFreezeCountMax(&x->x_ch[3],250);
+  x->x_ch[4].name = gensym("dir"); x->x_ch[4].ch = _DIR; //x->x_ch[4].mid = 1668;
+  setMid(&x->x_ch[4],1668);
+  setFreezeCountMax(&x->x_ch[4],250);
+  x->x_ch[5].name = gensym("len"); x->x_ch[5].ch = _LEN; //x->x_ch[5].mid = 1705;
+  setMid(&x->x_ch[5],1705);
+  setFreezeCountMax(&x->x_ch[5],250);
+  setNotch(&x->x_ch[5],0);
+  x->x_ch[6].name = gensym("mod"); x->x_ch[6].ch = _MOD; //x->x_ch[6].mid = 2077;
+  setMid(&x->x_ch[6],2077);
+  x->x_ch[7].name = gensym("scp"); x->x_ch[7].ch = _SCP; 
+  setMid(&x->x_ch[7],1611);
+  setNotch(&x->x_ch[7],0);
+  setBufCountMax(&x->x_ch[7],15); //25  //45
+  setFreezeThresh(&x->x_ch[7],15); //33  //15
+  setFreezeCountMax(&x->x_ch[7],50); //50   //25
+  x->x_ch[8].name = gensym("dw"); x->x_ch[8].ch = _DW; //x->x_ch[8].mid = 1686;
+  setMid(&x->x_ch[8],1686);
+  x->x_ch[8].highest = 4070;
+  x->x_ch[8].lowest = 30;
+  x->x_ch[9].name = gensym("pi"); x->x_ch[9].ch = _PI; //x->x_ch[9].mid = 1667;
+  setMid(&x->x_ch[9],1667);
+  setNotch(&x->x_ch[9], 160);
+  x->x_ch[10].name = gensym("int"); x->x_ch[10].ch = _INT; //x->x_ch[10].mid = 1631;
+  setMid(&x->x_ch[10],1631);
+  x->x_ch[11].name = gensym("lyp"); x->x_ch[11].ch = _LYP; //x->x_ch[11].mid = 1746;
+  setMid(&x->x_ch[11],1746);
+  setBufCountMax(&x->x_ch[11],25);  //50
+  setFreezeThresh(&x->x_ch[11],33); //33
+  setFreezeCountMax(&x->x_ch[11],250); //50
+  x->x_ch[12].name = gensym("spr"); x->x_ch[12].ch = _SPR; //x->x_ch[12].mid = 1694;
+  setMid(&x->x_ch[12],1694);
+  x->x_ch[13].name = gensym("hol"); x->x_ch[13].ch = _HOL; //x->x_ch[13].mid = 1673;
+  setMid(&x->x_ch[13],1673);
+  setNotch(&x->x_ch[13],0);
+  x->x_ch[14].name = gensym("dub"); x->x_ch[14].ch = _DUB; //x->x_ch[14].mid = 1632;
+  setMid(&x->x_ch[14],1632);
+  setNotch(&x->x_ch[14],0);
+  x->x_ch[15].name = gensym("dev"); x->x_ch[15].ch = _DEV; //x->x_ch[15].mid = 1602;
+  setMid(&x->x_ch[15],1602);
+
+  for (int i=0;i<16;i++){
+	post("mch_ch no and order: %d -> %d",x->x_ch[i].ch, i);
+  }
+
+	x->x_currentOnsetMode = &x->x_onsetModes[DEFAULT_ONSET_MODE];
+	post("x->x_currentOnsetMode.name = %d", x->x_currentOnsetMode->name);
+  
+  x->share_memory = NULL;
+
+  x->g_info_out = outlet_new(&x->x_obj, gensym("list"));
+  x->layerBufOp = outlet_new(&x->x_obj, gensym("list"));
+  x->toSerial = outlet_new(&x->x_obj, gensym("list"));
+  x->eeprom_out = outlet_new(&x->x_obj, gensym("list"));
+  x->config_out = outlet_new(&x->x_obj, gensym("list"));
+  x->calibrated_out = outlet_new(&x->x_obj, gensym("list"));
+  _shmem_allocate(x, memId, memSize);
+  
+  x->whiteLayerValue=0;
+  x->orangeLayerValue=0;
+ 
+   //set phase switch:
+  writeToSharedMem(x,SHM_PHASE_SHIFT,OUTPUT_PHASE_SWITCH);
+  
+	//_setStereoSwitch(x, ENABLE_STEREO);
+	writeToSharedMem(x,SHM_STEREO_INPUT,ENABLE_STEREO);
+	x->x_stereo = ENABLE_STEREO;
+	
+	_setModCvProcessesToMidValues(x,2048);
+	
+	writeToSharedMem(x,SHM_USING_QUENTISED_PITCH,0);
+
+	checkInternalClock(x);
+
+	t_float clockMultDefault[11] = {1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32};
+	t_float clockDivDefault[5] = {1, 1.5, 2, 3, 4};
+	x->clockMultLength = 11;
+	x->clockDivLength = 5;
+	x->x_inputClockDivision = INPUT_CLOCK_DIVISION;
+	for(int i=0; i < x->clockMultLength; i++){
+		x->clockMult[i] = clockMultDefault[i];
+	}
+	for(int i=0; i < x->clockDivLength; i++){
+		x->clockDiv[i] = clockDivDefault[i];
+	}
+  
+  return (void *)x;
+}
+
+void _setup_gpio(t_arbhar_gpio_tilde *x)
+{
+	x->x_dspSynced = 0;
+	
+	
+	if(bcm2835_init()){
+		post("gpio setup: %d",bcm2835_version());
+		//bcm2835_spi_begin();
+		//bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_128);
+		uint8_t shiftB = !bcm2835_gpio_lev(SHIFT);
+		uint8_t captureB = !bcm2835_gpio_lev(CAPTURE_BUTTON);
+		uint8_t strikeB = !bcm2835_gpio_lev(STRIKE_BUTTON);
+		uint8_t calibrationMode = shiftB * captureB * strikeB;
+
+		//post("calibration mode: %d ", calibrationMode);
+
+		if(calibrationMode){
+			x->x_arbharMode = CALIBRATION_MODE;
+			t_atom ctlInfo[2];
+			SETFLOAT(ctlInfo, 255);
+			SETFLOAT(ctlInfo+1, 255);
+			outlet_list(x->eeprom_out, gensym("list"),2,ctlInfo);
+		}	else 
+		{
+			x->x_arbharMode = GRANULAR_MODE;
+			t_atom ctlInfo[1];
+			SETFLOAT(ctlInfo, 254);
+		//	if(x->x_arbharMode < CALIBRATION_MODE)
+			outlet_list(x->eeprom_out, gensym("list"),1,ctlInfo);
+		}
+		post("calibration mode (enum): %d ", x->x_arbharMode);
+	}
+	else
+		post("bcm error");
+		
+
+    
+    bcm2835_gpio_fsel(CAPTURE_BUTTON, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(CAPTURE_CV, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(STRIKE_BUTTON, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(STRIKE_CV, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(SHIFT, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(SWITCH_AB, BCM2835_GPIO_FSEL_INPT);
+	bcm2835_gpio_fsel(SWITCH_XY, BCM2835_GPIO_FSEL_INPT);
+	
+	bcm2835_gpio_set_pud(CAPTURE_BUTTON, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(CAPTURE_CV, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(STRIKE_BUTTON, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(STRIKE_CV, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(SHIFT, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(SWITCH_AB, BCM2835_GPIO_PUD_UP);
+	bcm2835_gpio_set_pud(SWITCH_XY, BCM2835_GPIO_PUD_UP);
+
+    bcm2835_gpio_fsel(FWD_W, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(FWD_Y, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(REV_W, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(REV_Y, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(PLUS_W, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(PLUS_Y, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_fsel(TRIGGER_OUT, BCM2835_GPIO_FSEL_OUTP);
+
+
+}
+
+
+/**
+ * define the function-space of the class
+ * within a single-object external the name of this function is very special
+ */
+void arbhar_gpio_tilde_setup(void) {
+  arbhar_gpio_tilde_class = class_new(gensym("arbhar_gpio~"),
+        (t_newmethod)arbhar_gpio_tilde_new,
+        (t_method)arbhar_gpio_tilde_free,
+	sizeof(t_arbhar_gpio_tilde),
+        CLASS_DEFAULT,
+        A_DEFFLOAT, A_DEFFLOAT, 0);
+
+  class_addmethod(arbhar_gpio_tilde_class,
+        (t_method)arbhar_gpio_tilde_dsp, gensym("dsp"), 0);
+  class_addbang(arbhar_gpio_tilde_class, arbhar_gpio_tilde_bang);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setCurrentParamMode,
+	 gensym("setParamMode"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setTriggerOut,
+	 gensym("setTrigger"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setFwdLed,
+	 gensym("setFwdLed"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setRevLed,
+	 gensym("setRevLed"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setPlusLed,
+	 gensym("setPlusLed"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setDspSynced,
+	 gensym("dspSynced"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setAdcSampRate,
+	 gensym("setAdcSampRate"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)_setStrikeSampRate,
+	 gensym("setStrikeSampRate"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)led_menuPagesIndicator,
+	 gensym("testMenu"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class,  (t_method)printMcpChValues,
+	 gensym("printMcpChValues"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setup_gpio, gensym("setup_gpio"), 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setMidValue,
+             gensym("setMid"), A_GIMME, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_learnMid,
+             gensym("learnMid"), 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setFreezeThresh,
+             gensym("setFreezeThresh"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setFreezeCount,
+             gensym("setFreezeCount"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setWhiteLayerLeds,
+             gensym("setWhiteLeds"), A_FLOAT, A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_takeCalibrationValues,
+             gensym("takeCalibrationValues"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setVpo3VoltValue,
+             gensym("setVpo3VoltValue"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setCalibrationMode,
+             gensym("setCalibrationMode"), 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setMidValueByCh,
+             gensym("setMidValueByCh"), A_GIMME, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setFollowMode,
+             gensym("setFollowMode"), A_FLOAT, 0);
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setPresetValues,
+             gensym("setPresetValues"), A_GIMME, 0);  
+  class_addmethod(arbhar_gpio_tilde_class, (t_method)_setModCVMode,
+             gensym("setModCvMode"), A_FLOAT, 0);        
+
+  CLASS_MAINSIGNALIN(arbhar_gpio_tilde_class, t_arbhar_gpio_tilde, f);
+}

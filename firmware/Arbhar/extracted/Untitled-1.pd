@@ -1,0 +1,19 @@
+#N canvas 122 269 1085 300 12;
+#X obj 58 80 shmem 123456 1.28e+07;
+#X obj 56 106 shmem 123457 1.28e+07;
+#X obj 53 133 shmem 123458 1.28e+07;
+#X obj 242 148 shmem 123459 1.28e+07;
+#X text 40 213 sudo sysctl -w kern.sysv.shmmax=12582912 sudo sysctl
+-w kern.sysv.shmall=12582912;
+#X floatatom 242 172 5 0 0 0 - - - 0;
+#X floatatom 265 96 5 0 0 0 - - - 0;
+#X msg 265 119 memread \$1;
+#X msg 242 60 memset 0 10 9 11 21 41;
+#X text 35 253 sudo sysctl -w kern.sysv.shmmax=268435456 sudo sysctl
+-w kern.sysv.shmall=268435456;
+#X text 510 124 sudo sysctl -w kern.sysv.shmmax=268435456 sudo sysctl
+-w kern.sysv.shmall=268435456;
+#X connect 3 0 5 0;
+#X connect 6 0 7 0;
+#X connect 7 0 3 0;
+#X connect 8 0 3 0;

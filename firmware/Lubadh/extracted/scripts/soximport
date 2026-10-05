@@ -1,0 +1,28 @@
+#copy sample to usb
+cp "/media/usb/samples/$1/$2" "/root/samples/load/$2"
+if [ $3 -ne 0 ]
+then
+    #check for mono/stereo and convert
+    if(soxi "/root/samples/load/$2" | grep Channels | grep 1 > /dev/null)
+    then
+        echo "this file is mono"
+        sox -G "/root/samples/load/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Left
+        cp /root/samples/load/Left /root/samples/load/Right
+    else
+        echo "this file is stereo"
+        sox -G "/root/samples/load/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Left remix 1
+        sox -G "/root/samples/load/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Right remix 2
+    fi
+else
+    #check for mono/stereo and convert
+    if(soxi "/root/samples/load/$2" | grep Channels | grep 1 > /dev/null)
+    then
+        echo "this file is mono"
+        sox -G "/root/samples/load/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Left
+        cp /root/samples/load/Left /root/samples/load/Right
+    else
+        echo "this file is stereo"
+        sox -G "/root/samples/load/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Left remix 1,2
+        cp /root/samples/load/Left /root/samples/load/Right
+    fi
+fi
