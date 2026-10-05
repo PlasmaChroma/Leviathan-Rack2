@@ -390,3 +390,335 @@ contact feedback. Fixed-rate quality comparisons and exact modal/filter tail
 composition remain better candidates; they have their own convergence and
 transition requirements. This screen does not authorize selecting an approximate
 path as the production default.
+
+
+## Composed passive-tail prototype (2026-10-05)
+
+**Historical prototype result: pursue integration.** The production integration
+and its validation are recorded in the following section. Combining
+unforced modal steps and evaluating the equivalent filtered pickup removes most
+eligible-tail DSP cost without lowering the internal model's quality setting.
+This preserves independent bowl dynamics and the existing FIR response, unlike
+the rejected shared-force resonator.
+
+### Architecture
+
+`tools/vessel/experiments/ComposedTailHost.hpp` wraps an unchanged host adapter in
+an isolated source copy. For each mode it caches the original internal-step 2×2
+matrix, its power over one host interval, and the FIR cascade's matrix-polynomial
+response. The final pickup is evaluated from the current modal state using that
+response. Each cascade stage uses the appropriate dilated backward transition;
+the composition preserves the original filter phase and latency. Modes above
+host Nyquist remain represented internally and receive the original filter
+attenuation. No mode removal, coefficient retuning, sample-rate switch, new
+contact law or reduced-precision state is involved.
+
+Entry runs the normal path until all filter history comes from homogeneous
+motion: 65/97/113 host frames for factors 2/4/8 after full tail eligibility.
+There is no transition fade because the two paths describe the same filtered
+trajectory. Exit now uses a streaming history handoff, replacing the original
+synchronous reconstruction (whose largest sampled whole re-entry call was
+18.7 µs). Contact is processed on the current sample. The actual stream enters
+an empty ordinary FIR; a frozen-coefficient, fictitious continuation of the old
+homogeneous tail enters a second empty FIR. Output is:
+
+`FIR_zero(actual) + analytic_filtered(old_tail) - FIR_zero(old_tail)`
+
+The correction supplies the old history contribution until the FIR's finite
+support has drained. This is a linear-filter identity; the actual contact solver
+still uses the full current physical state. There is no contact deferral or
+crossfade. The fictitious tail and its filter are retired after 65/97/113 host
+frames for factors 2/4/8 (about 1.35/2.02 ms for 96/192 kHz at a 48 kHz host).
+The handoff copies fixed-size state/cache arrays and clears two filter histories;
+it no longer evaluates every mode for every old history position at once.
+
+Same-rate pitch/width/material changes preserve the old baseline snapshot while
+preparing the new modal observer. Rate/factor changes discard the correction,
+matching the ordinary adapter's existing history-reset and output-transition
+policy. Subsequent strikes and rubbing use the current actual state during the
+handoff; failed configuration leaves the prototype and future stream untouched.
+
+Eligibility requires no active striker, no rotation or engagement, auditing off,
+and zero additional high-energy damping. High-energy tails stay on the existing
+path until the extra damping vanishes; those coefficient changes are not treated
+as fixed linear motion. Controls retain their ordinary internal smoothing even
+when modal steps are composed. Factor-one processing retains the ordinary path.
+
+Coefficient preparation initially expanded an equivalent 897-tap cascade kernel.
+Evaluating each FIR stage directly as a matrix polynomial reduced setup cost:
+the quick screen's maximum dropped from 116.7 to 35.1 µs. The final full screen's
+maxima ranged from 19.0 to 25.6 µs over two full screens; these unpinned
+maxima are not guaranteed bounds. Preparation
+is outside steady-tail timing. Production integration must avoid rebuilding this
+cache on every modulation tick: use settled-control eligibility or an appropriate
+immutable-preparation handoff. The measured saving does not justify moving this
+setup work indiscriminately into the audio callback.
+
+### Accuracy and lifecycle screen
+
+`tools/vessel/probe_composed_tail.py` grants private access only in a temporary
+core copy; production files are unchanged. The final normal run passes 214 cases:
+
+- Both seed bowls, seven host rates and three quality policies at four pitches
+  (20 Hz, C4, 880 Hz and 2 kHz), including automatic factor fallback.
+- Eight 60-second tails at 32/48 kHz hosts, plus synthetic top modes placed at
+  0.399 of the selected internal rate to test near-guard filtering.
+- Strike/rub entry and re-entry, reversal/high pressure, pitch and width changes,
+  material changes, host/quality changes, reset, high-energy fallback and
+  transactional rejection. Both filtered samples and modal states are compared.
+- Four fixed-33-Hz binaural trajectories with two prototype wrappers, compared
+  against the current `DualBowlAdapter` and its **shared** decimator. This verifies
+  independence and linear-filter equivalence at fixed separation; it does not yet
+  validate composition through the shared adapter's fold/wake fade.
+- Eight additional handoff stress cases, each with twelve interruptions:
+  consecutive strikes, re-strikes in the middle and at the end of the handoff,
+  overlapping rubbing, pitch/width/material changes during the correction,
+  rate changes and transactional rejection while handing off.
+- Four twelve-second strike/rub/lift auditions at Balanced and Reference, and
+  alternating-order timing fixtures. A separate re-entry benchmark measures
+  single and simultaneous 8/32-bowl onset and continuation.
+
+Maximum relative stereo error RMS was 2.36e-11 (about **−212.6 dB**), maximum
+pickup sample error 1.96e-11 m/s, maximum modal-state error 5.17e-12 and maximum
+energy discrepancy 3.85e-13 J. The gates were relative RMS below 1e-5 (−100 dB),
+or absolute RMS below 1e-12 m/s for quiet signals; peak error below 1e-9 m/s;
+state/energy discrepancy below 1e-8. These are equivalence checks against the
+existing algorithm, not a claim that the physical model itself is calibrated.
+No observed faults or trapped C++ allocations occurred in the exercised process,
+configuration and streaming-handoff paths. Fixed unforced cases additionally
+require non-increasing energy with a 1e-14 J roundoff allowance.
+
+The quick matrix also passes AddressSanitizer and UndefinedBehaviorSanitizer.
+Quick mode shortens fixed/long tails, but retains the full transition, paired and
+audition trajectories. Leak detection is disabled because LeakSanitizer cannot
+run under this environment's process tracer. Sanitized timing is not used for
+performance claims.
+
+### Tail timing
+
+48 kHz host, Metal/Suede, Linux GCC 12.3, O3/nehalem and strict math. Single-bowl
+benchmarks begin from seeded low-energy modal states; paired benchmarks begin
+from a settled actual strike/rub trajectory. Five two-second continuations per
+variant alternate order; auditing, setup, file writes and comparisons are outside
+timing. Both variants include 1 kHz high-energy-damping updates. Times exclude
+Rack module/control/UI overhead and are unpinned.
+
+| Eligible tail | Internal rate | Reference µs/frame | Prototype µs/frame | Saving |
+| :--- | ---: | ---: | ---: | ---: |
+| Single bowl | 96 kHz | 0.1362 | 0.0382 | 71.9% |
+| Single bowl | 192 kHz | 0.2956 | 0.0390 | 86.8% |
+| Two bowls, shared-FIR reference | 96 kHz | 0.2277 | 0.0758 | 66.7% |
+| Two bowls, shared-FIR reference | 192 kHz | 0.4931 | 0.0809 | 83.6% |
+
+Crystal results were similar: 71.9% / 86.6% single and 66.8% / 83.5% paired.
+Factor one has no meaningful saving. These figures apply only during eligible
+passive tails; they do not reduce continuous rubbing or active impacts.
+
+### Streaming-handoff timing
+
+A dedicated benchmark starts from composed, seeded Metal/Suede tails and repeats
+strike or rub onset 200 times at a 48 kHz host. It measures setup alone, the whole
+onset call (including setup and contact), and each subsequent handoff call.
+Reference and candidate order alternate. Copies, sample collection, allocation
+checks outside processing, and quantile calculations are outside the timed
+regions. The ordinary single-bowl adapter is the reference here; simultaneous
+instances are independent bowls, not a shared-FIR binaural adapter. The separate
+setup-only test uses a copy and cannot simply be subtracted from the onset time
+because cache conditions differ. All durations include clock overhead.
+
+| One bowl, median µs/call | 96 kHz | 192 kHz |
+| :--- | ---: | ---: |
+| Handoff setup only | 0.15 | 0.16 |
+| Strike onset, reference → candidate | 0.64 → 0.98 | 1.06 → 1.52 |
+| Rub onset, reference → candidate | 0.38 → 0.70 | 0.75 → 1.18 |
+| Strike continuation, reference → candidate | 0.41 → 0.48 | 0.82 → 1.00 |
+| Rub continuation, reference → candidate | 0.35 → 0.42 | 0.71 → 0.89 |
+
+One-bowl candidate onset p99 was 1.11/1.64 µs for strike and 0.93/1.60 µs
+for rub at 96/192 kHz. The extra continuation work ends after the handoff.
+The original full history reconstruction is absent; steady-tail savings remain
+substantial despite a small added eligibility-dispatch cost.
+
+Memory/cache effects matter with simultaneous re-entry. For 32 bowls, median
+whole strike onset was 21.13 → 41.86 µs at 96 kHz and 36.07 → 61.05 µs at
+192 kHz. Candidate p99 was 45.03/73.76 µs; setup alone had medians of
+15.58/16.23 µs for the whole group. Rub onset medians were 12.88 → 33.85 µs
+and 26.15 → 50.54 µs. These bursts are much smaller per bowl than reconstructing
+all histories, but are not zero. The extra fixed filter storage/clearing and
+cache behavior need evaluation in the shared adapter architecture.
+
+The full trajectory screen's largest sampled whole contact-exit call was
+8.8 µs, compared with 18.7 µs in the original reconstruction run; this is not a
+controlled worst-case comparison. In the dedicated benchmark, scheduling
+outliers also affected ordinary reference processing and later continuation
+calls. All timings are unpinned and are **not certified bounds**. Native/live
+Rack callback distributions remain open. Synchronous coefficient preparation
+is a separate unresolved cost (largest sampled configuration: 21.9 µs in this
+screen), not fixed by streaming the FIR handoff.
+
+### Reproduction and artifacts
+
+```sh
+python3 tools/vessel/probe_composed_tail.py --output build/vessel-composed-tail-streaming
+ASAN_OPTIONS=detect_leaks=0 python3 tools/vessel/probe_composed_tail.py --quick --sanitize --output build/vessel-composed-tail-streaming-sanitized
+```
+
+Normal outputs: `build/vessel-composed-tail-streaming/{environment,summary}.json`,
+`metrics.csv`, `reentry_timing.csv` (median/p99/max and sample counts), full stereo float64 reference/candidate/difference captures, and
+PCM16 audition WAVs using a single common playback gain. All four PCM16 pairs
+are byte-identical; float64 differences are retained for numerical inspection.
+
+- [Metal, 96 kHz reference](../../build/vessel-composed-tail-streaming/bowl0_quality1_reference.wav)
+  and [prototype](../../build/vessel-composed-tail-streaming/bowl0_quality1_candidate.wav).
+- [Crystal, 96 kHz reference](../../build/vessel-composed-tail-streaming/bowl1_quality1_reference.wav)
+  and [prototype](../../build/vessel-composed-tail-streaming/bowl1_quality1_candidate.wav).
+
+Remaining integration work: move the reusable tail/cache helpers into the shared
+adapter architecture, preserve both independent engines, validate zero-separation
+fold/wake and interrupted fades, avoid cache-preparation overhead during ongoing
+modulation, preserve audit/fault accounting, and profile real Rack callback
+spikes/many-instance behavior. Native Windows and live listening/window checks
+remain open. No production path or quality default was changed by this screen.
+
+## Integrated passive tails (2026-10-05)
+
+**Enabled in the production `DualBowlAdapter`.** The integrated path preserves
+both independent physical engines and the single shared stereo decimator. No
+quality-default, control-ID, patch-schema or output-latency change is involved.
+`HostRateAdapter` remains an ordinary internal-rate reference. The adapter has
+an explicit `setComposedTailEnabled(false)` oracle switch for offline A/B work;
+no new user control or serialized setting was added.
+
+### Bounded cache preparation and immediate contact
+
+`PassiveTail` caches the original internal recurrence, its host-interval power,
+and the FIR cascade's equivalent observer. Preparation starts only during
+eligible, settled passive motion after a complete homogeneous-history interval.
+It evaluates **at most 16 polynomial terms per host call across both bowls**,
+with fixed-size matrix initialization at mode/stage boundaries. There are no
+new transcendental calls, allocations, locks or worker handoffs. Configuration
+invalidates the cache with constant work; ordinary processing continues while
+it is rebuilt. The existing modal/contact configuration remains synchronous,
+but the prototype's extra all-at-once FIR cache preparation is gone.
+
+For the 14-mode seed bowls at a 48 kHz host, initial binaural composition starts
+after approximately 6.1 ms at 96 kHz or 11.4 ms at 192 kHz of eligible, stable
+motion. Subsequent contact exits can reuse the cache after filter warm-up.
+Continuous tuning prevents adoption of incomplete/stale cache data. Auditing,
+active contact, extra high-energy damping, factor one and changing binaural
+mixes use ordinary processing.
+
+Strikes and rubbing are delivered on the current sample. The shared filter
+rebuilds naturally using the streaming correction described above. Its frozen
+baseline retains the old coefficients, observer and single/dual routing through
+pitch/material/width changes and fold/wake reversals. Rate changes discard the
+correction under the existing filter reset policy. The 50 ms binaural fade
+continues at internal rate and can reverse while the correction is active.
+
+Storage is fixed: `sizeof(DualBowlAdapter)` is 54,304 bytes in this Linux build,
+including the extra baseline filter and four model/snapshot caches. Snapshot
+copies and filter clears still cost time on contact entry; the optimization
+removes the nested history-reconstruction work, not every entry cost.
+
+### Integrated accuracy and lifecycle checks
+
+`vessel_passive_tail_spec` is part of `test-vessel` and `test-fast`. It compares
+the same shared adapter with composition enabled and disabled:
+
+- 504 bowl/rate/quality/pitch/separation combinations, followed by immediate and
+  repeated contact events; relative RMS error 2.07e-14, peak sample error
+  2.94e-14 m/s and maximum modal-state discrepancy 8.26e-15.
+- Four 60-second binaural tails; combined relative RMS error 1.17e-11
+  (about −218.6 dB), with all sample/state/energy gates passing.
+- Single/dual fold and wake, interrupted fades, strikes during the history
+  handoff, mid-handoff tuning/material/width/rate changes, transactional rejection,
+  audit and optimization toggles, high-energy fallback and reset.
+- Continuous 1 kHz retuning never adopts a cache; composition resumes after
+  tuning settles. Injected nonfinite state preserves recovery/fault counting.
+- No trapped C++ allocations during the exercised processing/configuration.
+
+Gates retain the prototype's relative RMS <1e-5 or quiet absolute RMS <1e-12 m/s,
+peak <1e-9 m/s and state/energy discrepancy <1e-8. Existing fold tests retain
+bit-identical rubbing checks and allow <1e-10 m/s roundoff for composed tails.
+The complete Vessel suite, including its Rack-linked module tests, passes.
+The focused integrated suite also passes ASan/UBSan (leak detection disabled).
+The full native Linux `plugin.so` links with no compiler diagnostics.
+
+The broader `test-fast` run is **not fully green**: the unchanged
+`theme_service_spec` reports 12 assertions. An Octavia recording assertion
+passed when rerun in isolation; all checks after the theme test were then run
+to completion and passed. The initial sandbox localhost bind failure was
+resolved by running socket tests outside the sandbox. These results do not
+constitute native Windows or live audio-driver validation.
+
+### Integrated timing
+
+Metal/Suede, 48 kHz host, Linux GCC 12.3, O3/nehalem and strict math. Reference
+and candidate use the same adapter with the composed path disabled/enabled.
+Auditing is off. Timing runs execute without concurrent build/test jobs.
+
+Core DSP, arithmetic mean of seven two-second continuations, including 1 kHz
+high-energy-damping updates:
+
+| Route | Internal rate | Reference µs/frame | Composed µs/frame | Saving |
+| :--- | ---: | ---: | ---: | ---: |
+| Single bowl | 96 kHz | 0.1400 | 0.0466 | 66.7% |
+| Binaural, 33 Hz | 96 kHz | 0.2287 | 0.0820 | 64.2% |
+| Single bowl | 192 kHz | 0.2999 | 0.0457 | 84.8% |
+| Binaural, 33 Hz | 192 kHz | 0.4716 | 0.0842 | 82.1% |
+
+Rack-linked **whole `Vessel::process()`**, arithmetic mean of seven one-second
+continuations from actual strikes, including control and visual publication
+work with debug timing disabled:
+
+| Route | Internal rate | Reference µs/frame | Composed µs/frame | Saving |
+| :--- | ---: | ---: | ---: | ---: |
+| Single bowl | 96 kHz | 0.1633 | 0.0686 | 58.0% |
+| Binaural, 33 Hz | 96 kHz | 0.2644 | 0.1059 | 59.9% |
+| Single bowl | 192 kHz | 0.3329 | 0.0720 | 78.4% |
+| Binaural, 33 Hz | 192 kHz | 0.5278 | 0.1171 | 77.8% |
+
+Steady rubbing measurements ranged from a 2.1% slowdown to a 1.3% speedup across
+the whole-module fixtures; this run provides no evidence of a material rubbing
+speedup. The tail savings apply only while passive composition is eligible.
+
+Whole-module binaural re-entry (one instance, median / p99, µs per call):
+
+| Event | Internal rate | Ordinary | Composed handoff |
+| :--- | ---: | ---: | ---: |
+| Strike onset | 96 kHz | 1.37 / 2.15 | 1.77 / 2.62 |
+| Strike onset | 192 kHz | 2.24 / 2.73 | 2.76 / 3.23 |
+| Rub onset | 96 kHz | 0.80 / 1.06 | 1.17 / 1.34 |
+| Rub onset | 192 kHz | 1.47 / 2.03 | 1.99 / 2.12 |
+| Strike continuation | 96 kHz | 0.79 / 1.34 | 0.91 / 1.51 |
+| Strike continuation | 192 kHz | 1.60 / 1.77 | 1.85 / 2.06 |
+
+The added median strike-continuation cost is about 0.12/0.25 µs during the short
+96/192 kHz handoff. Incremental cache preparation for binaural tails measured
+0.28/0.52 µs median for the **whole core call**, versus 0.23/0.47 µs ordinary;
+p99 candidate preparation calls were 0.48/0.58 µs. Cache preparation is no longer
+a ~22 µs synchronous addition to configuration.
+
+For 32 simultaneous binaural modules, whole-module strike-onset medians were
+50.29 → 77.72 µs at 96 kHz and 75.58 → 105.66 µs at 192 kHz. Candidate p99
+was 95.85/137.08 µs. The fixed snapshots/clears and cache footprint still matter
+at this scale. These are measurements, **not guaranteed callback bounds**;
+unpinned scheduling outliers occur in both variants. Headless module timing
+excludes Rack's scheduler, GUI contention and the audio driver. Live listening,
+underrun monitoring and native Windows timing remain unverified.
+
+### Reproduction
+
+```sh
+make -j4 test-vessel
+make -j4 all
+make -j4 build/tools/vessel_benchmark_passive_tail build/tools/vessel_benchmark_passive_module
+mkdir -p build/vessel-passive-tail-integrated
+build/tools/vessel_benchmark_passive_tail > build/vessel-passive-tail-integrated/timing.csv
+build/tools/vessel_benchmark_passive_module > build/vessel-passive-tail-integrated/module_timing.csv
+```
+
+`build/vessel-passive-tail-integrated/` contains both CSVs (mean/median/p99/max),
+environment/source hashes, sanitizer output and the complete validation logs.
+The earlier offline prototype remains available for historical comparison;
+its paired reference explicitly disables the now-integrated composition path.

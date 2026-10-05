@@ -92,6 +92,7 @@ public:
     double maxFrictionUniqueness() const noexcept { return frictionCertificate_; }
 
 private:
+    friend class PassiveTail;
     friend class HostRateAdapter;
     friend class DualBowlAdapter;
     // Synchronous preparation on the audio owner. The small modal bank carries

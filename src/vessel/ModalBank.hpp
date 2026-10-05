@@ -40,6 +40,7 @@ public:
     ModalVector observer(double angle) const noexcept;
 
 private:
+    friend class PassiveTail;
     std::array<ModeCoefficients, maxModes> coefficients_ {};
     std::array<ModalState, maxModes> states_ {};
     std::array<ModePairDescriptor, maxPairs> pairs_ {};

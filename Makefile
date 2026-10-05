@@ -81,6 +81,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/vessel_fast_paths_spec \
 	build/tests/vessel_host_rate_spec \
 	build/tests/vessel_dual_bowl_spec \
+	build/tests/vessel_passive_tail_spec \
 	build/tests/vessel_module_spec \
 	build/tests/debug_terminal_timing_spec \
 	build/tests/review_state_handoff_spec \
@@ -508,6 +509,8 @@ build/tests/vessel_host_rate_spec: tests/vessel_host_rate_spec.cpp $(VESSEL_SOUR
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_dual_bowl_spec: tests/vessel_dual_bowl_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tests/vessel_passive_tail_spec: tests/vessel_passive_tail_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/src/VTune.cpp.o build/src/VTuneBodyMapModule.cpp.o build/src/VTuneBodyMapWidget.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/tests/vtune_body_map_core_spec: tests/vtune_body_map_core_spec.cpp $(wildcard src/vtune/*.hpp) src/vessel/PitchColorMap.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Werror -pedantic -Isrc $< -o $@
@@ -517,11 +520,12 @@ test-vtune-body-map: build/tests/vtune_body_map_core_spec
 	$(call run_test_bin,build/tests/vtune_body_map_core_spec)
 build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-test-vessel: check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
+test-vessel: build/tests/vessel_passive_tail_spec check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
 	$(call run_test_bin,build/tests/vessel_engine_spec)
 	$(call run_test_bin,build/tests/vessel_fast_paths_spec)
 	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 	$(call run_test_bin,build/tests/vessel_dual_bowl_spec)
+	$(call run_test_bin,build/tests/vessel_passive_tail_spec)
 	$(call run_rack_test_bin,build/tests/vessel_module_spec)
 build/tools/vessel_render: tools/vessel/render.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
@@ -544,6 +548,12 @@ VESSEL_BENCH_OPT_FLAGS ?= -O3 $(if $(ARCH_X64),-march=nehalem,)
 build/tools/vessel_benchmark_dual: tools/vessel/benchmark_dual.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tools/vessel_benchmark_passive_tail: tools/vessel/benchmark_passive_tail.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tools/vessel_benchmark_passive_module: tools/vessel/benchmark_passive_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_characterize: tools/vessel/characterize.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
@@ -744,6 +754,7 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/vessel_fast_paths_spec)
 	$(call run_test_bin,build/tests/vessel_host_rate_spec)
 	$(call run_test_bin,build/tests/vessel_dual_bowl_spec)
+	$(call run_test_bin,build/tests/vessel_passive_tail_spec)
 	$(call run_rack_test_bin,build/tests/vessel_module_spec)
 	$(call run_test_bin,build/tests/octavia_presence_spec)
 	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)

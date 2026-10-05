@@ -1,5 +1,5 @@
 #pragma once
-#include "HostRateAdapter.hpp"
+#include "PassiveTail.hpp"
 
 namespace vessel {
 struct DualBowlFrame : HostFrame {
@@ -17,6 +17,12 @@ public:
         ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
     void reset() noexcept;
     void setAuditEnabled(bool enabled) noexcept;
+    // Reference switch for offline equivalence/timing. Disabling a live tail
+    // uses the same immediate-contact handoff as a new strike.
+    void setComposedTailEnabled(bool enabled) noexcept;
+    bool composedTailActive() const noexcept { return tailRunning_; }
+    bool tailHandoffActive() const noexcept { return handoffRemaining_!=0; }
+    bool tailCacheReady() const noexcept { return tailLeft_.ready() && (!rightActive_ || tailRight_.ready()); }
     void updateHighEnergyDamping() noexcept;
     DualBowlFrame process(const HostControls& controls) noexcept;
     const VesselEngine& engine() const noexcept { return left_; }
@@ -34,7 +40,14 @@ public:
     bool secondBowlActive() const noexcept { return rightActive_; }
     double dualMix() const noexcept { return dualMix_; }
 private:
+    void beginTailHandoff() noexcept;
+    void invalidateTailCache() noexcept;
+    unsigned tailHistoryFrames() const noexcept;
     VesselEngine left_, right_;
+    PassiveTail tailLeft_, tailRight_, baselineLeft_, baselineRight_;
+    StereoDecimator baselineFilter_;
+    unsigned tailWarm_=0, handoffRemaining_=0, tailHistoryFrames_=1;
+    bool tailEnabled_=true, tailRunning_=false, baselineDual_=false;
     StereoDecimator decimator_;
     double hostRate_ = 0.0;
     double transitionGain_ = 1.0, transitionIncrement_ = 1.0;

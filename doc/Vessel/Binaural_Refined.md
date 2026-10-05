@@ -1,7 +1,8 @@
 # Vessel — Refined Binaural Engine Specification & Implementation Plan
 
 **Module:** Vessel (VCV Rack)  
-**Document Status:** Shared-decimator implementation accepted; original shared-force proposal below is superseded  
+**Document Status:** Shared decimator and composed passive tails integrated; original shared-force proposal below is superseded
+
 **Authors:** Nexora Lumineth & Dragon King Leviathan  
 **Target File:** `doc/Vessel/Binaural_Refined.md`  
 
@@ -23,7 +24,7 @@ reverse the fade. Interrupted fades continue from the current mix. Positive-to-
 positive separation changes do not restart the fade. Initial dual configuration
 starts fully dual, as before.
 
-The steady routes retain reference audio exactly. Moving the fade before filtering
+The shared-decimator change alone retains steady reference audio exactly. Moving the fade before filtering
 intentionally changes transition samples relative to the old post-filter fade;
 phase-dependent level dips remain possible. Host/internal-rate changes retain the
 existing filter-reset and 5 ms output recovery policy. Configuration rejection is
@@ -35,6 +36,26 @@ Validation retains independent `HostRateAdapter` references for steady audio and
 mechanics, adds an internal-rate mix/filter oracle for interrupted transitions,
 and checks 50 ms fold/wake timing and eventual single-bowl filter equivalence.
 See `vessel-performance.md` for measured costs and validation results.
+
+### Composed passive tails (2026-10-05)
+
+`DualBowlAdapter` now also composes eligible unforced modal steps and evaluates
+an equivalent filtered observer at host rate. Both independent bowl states,
+internal-rate coefficients, FIR response and latency are retained. Audio agrees
+to numerical roundoff rather than bit-for-bit operation order.
+
+Eligibility requires fully lifted contact, no active striker, zero additional
+high-energy damping, auditing off and a settled single/dual mix. Cache preparation
+is limited to sixteen FIR-polynomial terms per host call across both bowls;
+retuning invalidates the cache and keeps ordinary processing active. Fold/wake
+fades use the ordinary internal-rate path.
+
+A strike, rubbing, retune or fold/wake change leaves composition immediately.
+A streaming correction supplies the old filter-history contribution while the
+shared filter fills with actual new samples. There is no deferred contact or
+all-at-once history reconstruction. See the
+[integration results](vessel-performance.md#integrated-passive-tails-2026-10-05)
+for numerical gates, callback measurements and validation limits.
 
 **Historical proposal follows.** Its shared-force architecture, performance
 forecast, and unconditional physical/perceptual guarantees are not adopted.

@@ -198,11 +198,14 @@ void fadeTimingAndSettling() {
         const int duration=int(std::lround(.05*rate));
         for(int i=0;i<duration+256;++i) {
             const auto actual=d.process(c); const auto expected=survivor.process(c);
-            require(!actual.fault && actual.audio.left==expected.audio.left, "fold alters left output");
+            // Composed tails reorder arithmetic; rubbing remains bit-identical.
+            require(!actual.fault && (rubbing ? actual.audio.left==expected.audio.left
+                : std::abs(actual.audio.left-expected.audio.left)<1e-10), "fold alters left output");
             require(d.secondBowlActive()==(i+1<duration), "fold sleep is not exactly 50 ms");
             require(std::abs(d.dualMix()-std::max(0.0,1.0-double(i+1)/duration))<2e-12,
                 "fold duration depends on oversampling");
-            if(i>=duration+128) require(actual.audio.right==expected.audio.right, "shared FIR fails to settle to single reference");
+            if(i>=duration+128) require(rubbing ? actual.audio.right==expected.audio.right
+                : std::abs(actual.audio.right-expected.audio.right)<1e-10, "shared FIR fails to settle to single reference");
         }
         require(d.configure(seedBowls[0],seedMallets[1],s,10,rate,quality), "wake configure");
         for(int i=0;i<duration;++i) {
