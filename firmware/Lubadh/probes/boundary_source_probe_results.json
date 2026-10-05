@@ -1,0 +1,2831 @@
+{
+  "status": "PASS",
+  "cases": 54,
+  "region_callback_comparisons": 2160,
+  "reset_assertions_per_case": 12,
+  "link_pointer_assertions": 7,
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "inline_offset": 36,
+  "reset": {
+    "0x38": 1,
+    "0x3c": 1,
+    "0x40": 29501997,
+    "0x44": 29501997,
+    "0x48": 2459,
+    "0x4c": 29501998,
+    "0x50": 29501998,
+    "0x80": 1,
+    "0x84": 12292,
+    "0x88": 1
+  },
+  "fixtures": [
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1921,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 641
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 641
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 129,
+          "reverse_end": 24719,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 129,
+          "reverse_end": 24719,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 129,
+          "reverse_end": 24719,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 129,
+          "reverse_end": 36883,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 12293,
+          "reverse_end": 36883,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 24591,
+          "reverse_start": 12293,
+          "reverse_end": 36883,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 129,
+          "reverse_end": 49298,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 129,
+          "reverse_end": 49298,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 129,
+          "reverse_end": 49298,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 129,
+          "reverse_end": 61462,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 12293,
+          "reverse_end": 61462,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 49170,
+          "reverse_start": 12293,
+          "reverse_end": 61462,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 24719,
+          "reverse_end": 25999,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 24719,
+          "reverse_end": 25999,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 24719,
+          "reverse_end": 25999,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 24719,
+          "reverse_end": 26511,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 25231,
+          "reverse_end": 26511,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 25231
+        },
+        {
+          "start": 24591,
+          "end": 25871,
+          "reverse_start": 25231,
+          "reverse_end": 26511,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 25231
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 24719,
+          "reverse_end": 49309,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 24719,
+          "reverse_end": 49309,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 24719,
+          "reverse_end": 49309,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 24719,
+          "reverse_end": 61473,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 36883,
+          "reverse_end": 61473,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 36883
+        },
+        {
+          "start": 24591,
+          "end": 49181,
+          "reverse_start": 36883,
+          "reverse_end": 61473,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 36883
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 24719,
+          "reverse_end": 24718,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 24719,
+          "reverse_end": 24718,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 24719,
+          "reverse_end": 24718,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 24591,
+          "end": 24592,
+          "reverse_start": 24592,
+          "reverse_end": 24720,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24592
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 24719,
+          "reverse_end": 36882,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 24719
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 36883,
+          "reverse_end": 36882,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 36883
+        },
+        {
+          "start": 24591,
+          "end": 24590,
+          "reverse_start": 36883,
+          "reverse_end": 36882,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 36883
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49296,
+          "reverse_end": 50576,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49296,
+          "reverse_end": 50576,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49296,
+          "reverse_end": 50576,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49296,
+          "reverse_end": 51088,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49808,
+          "reverse_end": 51088,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49808
+        },
+        {
+          "start": 49168,
+          "end": 50448,
+          "reverse_start": 49808,
+          "reverse_end": 51088,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49808
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 49296,
+          "reverse_end": 24716,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 49296,
+          "reverse_end": 24716,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 49296,
+          "reverse_end": 24716,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 49296,
+          "reverse_end": 36880,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 61460,
+          "reverse_end": 36880,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 49168,
+          "end": 24588,
+          "reverse_start": 61460,
+          "reverse_end": 36880,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 49296,
+          "reverse_end": 49295,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 49296,
+          "reverse_end": 49295,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 49296,
+          "reverse_end": 49295,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        }
+      ]
+    },
+    {
+      "period": 49170,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 49168,
+          "end": 49169,
+          "reverse_start": 49169,
+          "reverse_end": 49297,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49169
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 49296,
+          "reverse_end": 61459,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 49296
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 61460,
+          "reverse_end": 61459,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 49168,
+          "end": 49167,
+          "reverse_start": 61460,
+          "reverse_end": 61459,
+          "period": 49170,
+          "physical_reverse": 2459,
+          "physical_destination": 51628,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1921,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 641
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 641
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 129,
+          "reverse_end": 8390787,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 129,
+          "reverse_end": 8390787,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 129,
+          "reverse_end": 8390787,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 129,
+          "reverse_end": 8402951,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 12293,
+          "reverse_end": 8402951,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 8390659,
+          "reverse_start": 12293,
+          "reverse_end": 8402951,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 129,
+          "reverse_end": 16777347,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 129,
+          "reverse_end": 16777347,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 129,
+          "reverse_end": 16777347,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 129,
+          "reverse_end": 16789511,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 12293,
+          "reverse_end": 16789511,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 16777219,
+          "reverse_start": 12293,
+          "reverse_end": 16789511,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8390787,
+          "reverse_end": 8392067,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8390787,
+          "reverse_end": 8392067,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8390787,
+          "reverse_end": 8392067,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8390787,
+          "reverse_end": 8392579,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8391299,
+          "reverse_end": 8392579,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8391299
+        },
+        {
+          "start": 8390659,
+          "end": 8391939,
+          "reverse_start": 8391299,
+          "reverse_end": 8392579,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8391299
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8390787,
+          "reverse_end": 4226,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8390787,
+          "reverse_end": 4226,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8390787,
+          "reverse_end": 4226,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8390787,
+          "reverse_end": 16390,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8402951,
+          "reverse_end": 16390,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8402951
+        },
+        {
+          "start": 8390659,
+          "end": 4098,
+          "reverse_start": 8402951,
+          "reverse_end": 16390,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8402951
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8390787,
+          "reverse_end": 8390786,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8390787,
+          "reverse_end": 8390786,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8390787,
+          "reverse_end": 8390786,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 8390659,
+          "end": 8390660,
+          "reverse_start": 8390660,
+          "reverse_end": 8390788,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390660
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8390787,
+          "reverse_end": 8402950,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8390787
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8402951,
+          "reverse_end": 8402950,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8402951
+        },
+        {
+          "start": 8390659,
+          "end": 8390658,
+          "reverse_start": 8402951,
+          "reverse_end": 8402950,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 8402951
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777345,
+          "reverse_end": 16778625,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777345,
+          "reverse_end": 16778625,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777345,
+          "reverse_end": 16778625,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777345,
+          "reverse_end": 16779137,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777857,
+          "reverse_end": 16779137,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777857
+        },
+        {
+          "start": 16777217,
+          "end": 16778497,
+          "reverse_start": 16777857,
+          "reverse_end": 16779137,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777857
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16777345,
+          "reverse_end": 8390784,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16777345,
+          "reverse_end": 8390784,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16777345,
+          "reverse_end": 8390784,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16777345,
+          "reverse_end": 8402948,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16789509,
+          "reverse_end": 8402948,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 16777217,
+          "end": 8390656,
+          "reverse_start": 16789509,
+          "reverse_end": 8402948,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16777345,
+          "reverse_end": 16777344,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16777345,
+          "reverse_end": 16777344,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16777345,
+          "reverse_end": 16777344,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        }
+      ]
+    },
+    {
+      "period": 16777219,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 16777217,
+          "end": 16777218,
+          "reverse_start": 16777218,
+          "reverse_end": 16777346,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777218
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16777345,
+          "reverse_end": 16789508,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 16777345
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16789509,
+          "reverse_end": 16789508,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 16777217,
+          "end": 16777216,
+          "reverse_start": 16789509,
+          "reverse_end": 16789508,
+          "period": 16777219,
+          "physical_reverse": 2459,
+          "physical_destination": 16779677,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1409,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 129,
+          "reverse_end": 1921,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 641
+        },
+        {
+          "start": 1,
+          "end": 1281,
+          "reverse_start": 641,
+          "reverse_end": 1921,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 641
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 129,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 129,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 129,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 129,
+          "reverse_end": 14765896,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 12293,
+          "reverse_end": 14765896,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 14753604,
+          "reverse_start": 12293,
+          "reverse_end": 14765896,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 129,
+          "reverse_end": 29500128,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 129,
+          "reverse_end": 29500128,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 129,
+          "reverse_end": 29500128,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 0,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 1,
+          "end": 2,
+          "reverse_start": 2,
+          "reverse_end": 130,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 2
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 129,
+          "reverse_end": 29512292,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 129
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 12293,
+          "reverse_end": 29512292,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12293
+        },
+        {
+          "start": 1,
+          "end": 29500000,
+          "reverse_start": 12293,
+          "reverse_end": 29512292,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12293
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14753731,
+          "reverse_end": 14755011,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14753731,
+          "reverse_end": 14755011,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14753731,
+          "reverse_end": 14755011,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14753731,
+          "reverse_end": 14755523,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14754243,
+          "reverse_end": 14755523,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14754243
+        },
+        {
+          "start": 14753603,
+          "end": 14754883,
+          "reverse_start": 14754243,
+          "reverse_end": 14755523,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14754243
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14753731,
+          "reverse_end": 7334,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14753731,
+          "reverse_end": 7334,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14753731,
+          "reverse_end": 7334,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14753731,
+          "reverse_end": 19498,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14765895,
+          "reverse_end": 19498,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14765895
+        },
+        {
+          "start": 14753603,
+          "end": 7206,
+          "reverse_start": 14765895,
+          "reverse_end": 19498,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14765895
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14753731,
+          "reverse_end": 14753730,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14753731,
+          "reverse_end": 14753730,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14753731,
+          "reverse_end": 14753730,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 2048,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 14753603,
+          "end": 14753604,
+          "reverse_start": 14753604,
+          "reverse_end": 14753732,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753604
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14753731,
+          "reverse_end": 14765894,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14753731
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14765895,
+          "reverse_end": 14765894,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14765895
+        },
+        {
+          "start": 14753603,
+          "end": 14753602,
+          "reverse_start": 14765895,
+          "reverse_end": 14765894,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 14765895
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500126,
+          "reverse_end": 29501406,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500126,
+          "reverse_end": 29501406,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500126,
+          "reverse_end": 29501406,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 0,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500126,
+          "reverse_end": 29501918,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500638,
+          "reverse_end": 29501918,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500638
+        },
+        {
+          "start": 29499998,
+          "end": 29501278,
+          "reverse_start": 29500638,
+          "reverse_end": 29501918,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500638
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29500126,
+          "reverse_end": 14753729,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29500126,
+          "reverse_end": 14753729,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29500126,
+          "reverse_end": 14753729,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 2048,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29500126,
+          "reverse_end": 14765893,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29512290,
+          "reverse_end": 14765893,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 29499998,
+          "end": 14753601,
+          "reverse_start": 29512290,
+          "reverse_end": 14765893,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 0,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29500126,
+          "reverse_end": 29500125,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29500126,
+          "reverse_end": 29500125,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29500126,
+          "reverse_end": 29500125,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        }
+      ]
+    },
+    {
+      "period": 29500000,
+      "start_control": 4095,
+      "length_control": 4095,
+      "fade_control": 4095,
+      "callback_loads": [
+        {
+          "start": 29499998,
+          "end": 29499999,
+          "reverse_start": 29499999,
+          "reverse_end": 29500127,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29499999
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29500126,
+          "reverse_end": 29512289,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 29500126
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29512290,
+          "reverse_end": 29512289,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12290
+        },
+        {
+          "start": 29499998,
+          "end": 29499997,
+          "reverse_start": 29512290,
+          "reverse_end": 29512289,
+          "period": 29500000,
+          "physical_reverse": 2459,
+          "physical_destination": 29502458,
+          "reduced_reverse_start": 12290
+        }
+      ]
+    }
+  ],
+  "link_fixture": {
+    "own": {
+      "start": 256,
+      "end": 264,
+      "reverse_start": 260,
+      "reverse_end": 268,
+      "period": 49170,
+      "physical_reverse": 272,
+      "physical_destination": 51628,
+      "reduced_reverse_start": 260
+    },
+    "linked": {
+      "start": 156,
+      "end": 164,
+      "reverse_start": 160,
+      "reverse_end": 168,
+      "period": 49170,
+      "physical_reverse": 172,
+      "physical_destination": 51628,
+      "reduced_reverse_start": 160
+    }
+  },
+  "distinct_instruction_addresses": 184,
+  "coverage_addresses": [
+    "0x27dac",
+    "0x27e10",
+    "0x27e14",
+    "0x27e18",
+    "0x27e1c",
+    "0x27e20",
+    "0x376ac",
+    "0x376b0",
+    "0x376b4",
+    "0x376b8",
+    "0x376bc",
+    "0x376c0",
+    "0x376c4",
+    "0x376c8",
+    "0x376cc",
+    "0x376d0",
+    "0x376d4",
+    "0x376d8",
+    "0x376dc",
+    "0x376e0",
+    "0x376e4",
+    "0x376e8",
+    "0x376ec",
+    "0x376f0",
+    "0x376f4",
+    "0x376f8",
+    "0x376fc",
+    "0x37700",
+    "0x37704",
+    "0x37708",
+    "0x3770c",
+    "0x37710",
+    "0x37714",
+    "0x37718",
+    "0x3771c",
+    "0x37720",
+    "0x37724",
+    "0x37728",
+    "0x3772c",
+    "0x37730",
+    "0x37734",
+    "0x37738",
+    "0x3773c",
+    "0x37740",
+    "0x37744",
+    "0x37748",
+    "0x3774c",
+    "0x37750",
+    "0x37754",
+    "0x377b4",
+    "0x377b8",
+    "0x377bc",
+    "0x377c0",
+    "0x377c4",
+    "0x377c8",
+    "0x377cc",
+    "0x377d0",
+    "0x377d4",
+    "0x377d8",
+    "0x377dc",
+    "0x377e0",
+    "0x377e4",
+    "0x377e8",
+    "0x377ec",
+    "0x377f0",
+    "0x377f4",
+    "0x377f8",
+    "0x377fc",
+    "0x37800",
+    "0x37804",
+    "0x37808",
+    "0x3780c",
+    "0x37810",
+    "0x37814",
+    "0x37818",
+    "0x3781c",
+    "0x37820",
+    "0x37824",
+    "0x37828",
+    "0x3782c",
+    "0x37830",
+    "0x37834",
+    "0x37838",
+    "0x3783c",
+    "0x37840",
+    "0x37844",
+    "0x37848",
+    "0x3784c",
+    "0x37850",
+    "0x37854",
+    "0x37858",
+    "0x3785c",
+    "0x37860",
+    "0x37864",
+    "0x37868",
+    "0x3786c",
+    "0x37870",
+    "0x37874",
+    "0x37878",
+    "0x3787c",
+    "0x37880",
+    "0x37884",
+    "0x37888",
+    "0x3788c",
+    "0x37890",
+    "0x37894",
+    "0x37898",
+    "0x3789c",
+    "0x378a0",
+    "0x378a4",
+    "0x378a8",
+    "0x378ac",
+    "0x378b0",
+    "0x378b4",
+    "0x378b8",
+    "0x378f4",
+    "0x378f8",
+    "0x378fc",
+    "0x37930",
+    "0x37934",
+    "0x37938",
+    "0x3793c",
+    "0x37940",
+    "0x37944",
+    "0x386a4",
+    "0x386a8",
+    "0x386ac",
+    "0x386b0",
+    "0x386b4",
+    "0x386b8",
+    "0x386bc",
+    "0x386c0",
+    "0x386c4",
+    "0x386c8",
+    "0x386cc",
+    "0x386d0",
+    "0x386d4",
+    "0x386d8",
+    "0x386dc",
+    "0x386e0",
+    "0x386e4",
+    "0x386e8",
+    "0x386ec",
+    "0x386f0",
+    "0x3cda0",
+    "0x3cda4",
+    "0x47c3c",
+    "0x47c40",
+    "0x47c44",
+    "0x47c48",
+    "0x47c4c",
+    "0x47c50",
+    "0x47c54",
+    "0x47c58",
+    "0x47c5c",
+    "0x47c60",
+    "0x47c64",
+    "0x47c68",
+    "0x47c6c",
+    "0x47c70",
+    "0x47c74",
+    "0x47c78",
+    "0x47c7c",
+    "0x47c80",
+    "0x47c84",
+    "0x47c88",
+    "0x47c8c",
+    "0x47c90",
+    "0x47c94",
+    "0x47c98",
+    "0x47c9c",
+    "0x47ca0",
+    "0x47ca4",
+    "0x47ca8",
+    "0x6c13c",
+    "0x6c140",
+    "0x6c144",
+    "0x6c148",
+    "0x6c14c",
+    "0x6c150",
+    "0x6c154",
+    "0x6c158",
+    "0x6c15c",
+    "0x6c160"
+  ],
+  "limitations": [
+    "Constructor pointer-store slice only; no complete construction.",
+    "Link pointer stores only; hardware eligibility and state synchronization remain open.",
+    "Recorded-loop extent fields are supplied fixtures, not an executed recording session.",
+    "Callback boundary-load slice only; no movement, head iteration or rendering.",
+    "No scheduling/concurrency proof between IO and audio callbacks."
+  ]
+}

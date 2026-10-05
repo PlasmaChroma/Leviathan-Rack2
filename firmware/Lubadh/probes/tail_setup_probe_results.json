@@ -1,0 +1,109 @@
+{
+  "status": "PASS",
+  "method": "Original-byte first-record completion slice with explicit fixtures",
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "slice_start": "0x3a8a4",
+  "stop_before": "0x3a8e4",
+  "cases": [
+    {
+      "first_record_counter": 128,
+      "logical_length": 128,
+      "end_marker": 2586,
+      "maximum_fade_span": 127,
+      "stored_length": 12420
+    },
+    {
+      "first_record_counter": 1024,
+      "logical_length": 1024,
+      "end_marker": 3482,
+      "maximum_fade_span": 1023,
+      "stored_length": 13316
+    },
+    {
+      "first_record_counter": 2458,
+      "logical_length": 2458,
+      "end_marker": 4916,
+      "maximum_fade_span": 2457,
+      "stored_length": 14750
+    },
+    {
+      "first_record_counter": 12292,
+      "logical_length": 12292,
+      "end_marker": 14750,
+      "maximum_fade_span": 12291,
+      "stored_length": 24584
+    },
+    {
+      "first_record_counter": 12293,
+      "logical_length": 12293,
+      "end_marker": 14751,
+      "maximum_fade_span": 12292,
+      "stored_length": 24585
+    },
+    {
+      "first_record_counter": 48000,
+      "logical_length": 48000,
+      "end_marker": 50458,
+      "maximum_fade_span": 12292,
+      "stored_length": 60292
+    },
+    {
+      "first_record_counter": 49170,
+      "logical_length": 49170,
+      "end_marker": 51628,
+      "maximum_fade_span": 12292,
+      "stored_length": 61462
+    },
+    {
+      "first_record_counter": 29501900,
+      "logical_length": 29501900,
+      "end_marker": 29504358,
+      "maximum_fade_span": 12292,
+      "stored_length": 29514192
+    }
+  ],
+  "assertions": 32,
+  "distinct_instruction_addresses": 16,
+  "coverage_addresses": [
+    "0x3a8a4",
+    "0x3a8a8",
+    "0x3a8ac",
+    "0x3a8b0",
+    "0x3a8b4",
+    "0x3a8b8",
+    "0x3a8bc",
+    "0x3a8c0",
+    "0x3a8c4",
+    "0x3a8c8",
+    "0x3a8cc",
+    "0x3a8d0",
+    "0x3a8d4",
+    "0x3a8d8",
+    "0x3a8dc",
+    "0x3a8e0"
+  ],
+  "literals": {
+    "added_storage_samples": 12292,
+    "added_end_marker_samples": 2458
+  },
+  "duration_at_rates": {
+    "48000.0": {
+      "tail_seconds": 0.25608333333333333,
+      "end_marker_seconds": 0.051208333333333335
+    },
+    "49148.0": {
+      "tail_seconds": 0.2501017335395133,
+      "end_marker_seconds": 0.0500122080247416
+    },
+    "49170.25390625": {
+      "tail_seconds": 0.24998854029585502,
+      "end_marker_seconds": 0.049989573059486786
+    }
+  },
+  "limitations": [
+    "Completion eligibility and actual trailing write scheduling are not exercised.",
+    "The semantic purpose of the separate end-marker offset remains to be traced.",
+    "Test counters are explicit fixtures, not evidence that all are UI-reachable.",
+    "Does not establish imported-file tail policies or capacity exhaustion behavior."
+  ]
+}
