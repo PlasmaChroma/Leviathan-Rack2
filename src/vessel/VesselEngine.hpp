@@ -93,6 +93,7 @@ public:
 
 private:
     friend class HostRateAdapter;
+    friend class DualBowlAdapter;
     // Synchronous preparation on the audio owner. The small modal bank carries
     // its current state; contact state, ledgers and filter histories stay live.
     struct PreparedConfiguration {

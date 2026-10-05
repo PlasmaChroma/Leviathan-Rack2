@@ -31,10 +31,10 @@
       "speed_m_per_s": 0.19100883333825944,
       "sliding_force_slope_Ns_per_m": -1.0528011313604266,
       "frozen_angle_max_growth_rate_range_per_s": [
-        0.4431421422645485,
-        1.1740911928405353
+        0.3312015420013381,
+        1.0621579041350486
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 0.9939305259044091
+      "Ytt_times_zero_slip_slope_at_15N": 0.9939290547596727
     },
     {
       "bowl": "metal_bowl2_seed_v1",
@@ -42,21 +42,21 @@
       "speed_m_per_s": 0.19100883333825944,
       "sliding_force_slope_Ns_per_m": -3.356660726209655,
       "frozen_angle_max_growth_rate_range_per_s": [
-        2.0402424385135305,
-        4.366604777828627
+        1.9282260997456433,
+        4.254671214318705
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 1.606608501545723
+      "Ytt_times_zero_slip_slope_at_15N": 1.6066061354093555
     },
     {
       "bowl": "metal_bowl2_seed_v1",
       "mallet": "silicone_prototype_v1",
       "speed_m_per_s": 0.19100883333825944,
-      "sliding_force_slope_Ns_per_m": -4.779763389707742,
+      "sliding_force_slope_Ns_per_m": -4.779763389707741,
       "frozen_angle_max_growth_rate_range_per_s": [
-        3.023534674677137,
-        6.328673767976511
+        2.9114036730464363,
+        6.216739870143954
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 2.2105858063954154
+      "Ytt_times_zero_slip_slope_at_15N": 2.210582570079211
     },
     {
       "bowl": "metal_bowl2_seed_v1",
@@ -64,10 +64,10 @@
       "speed_m_per_s": 0.19100883333825944,
       "sliding_force_slope_Ns_per_m": -0.9590459217741869,
       "frozen_angle_max_growth_rate_range_per_s": [
-        0.37251861587191115,
-        1.0328523748154907
+        0.2605793777432268,
+        0.9209190920328183
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 0.8434363015399023
+      "Ytt_times_zero_slip_slope_at_15N": 0.8434350889813625
     },
     {
       "bowl": "crystal_ring_seed_v1",
@@ -75,10 +75,10 @@
       "speed_m_per_s": 0.25132741228718347,
       "sliding_force_slope_Ns_per_m": -0.2171943876104117,
       "frozen_angle_max_growth_rate_range_per_s": [
-        0.028830504929970857,
-        0.2550260051272062
+        -0.0479211500613701,
+        0.1782717620625931
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 1.5187352989642
+      "Ytt_times_zero_slip_slope_at_15N": 1.5187331512869946
     },
     {
       "bowl": "crystal_ring_seed_v1",
@@ -86,10 +86,10 @@
       "speed_m_per_s": 0.25132741228718347,
       "sliding_force_slope_Ns_per_m": -2.2667705428015745,
       "frozen_angle_max_growth_rate_range_per_s": [
-        4.317681971707537,
-        4.517375091936742
+        4.240927545473641,
+        4.4406206665637455
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 2.4546262350817307
+      "Ytt_times_zero_slip_slope_at_15N": 2.4546227863685113
     },
     {
       "bowl": "crystal_ring_seed_v1",
@@ -97,10 +97,10 @@
       "speed_m_per_s": 0.25132741228718347,
       "sliding_force_slope_Ns_per_m": -2.76029440622992,
       "frozen_angle_max_growth_rate_range_per_s": [
-        5.372242087533255,
-        5.534125193339548
+        5.29548757503647,
+        5.45737067904696
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 3.376932554715164
+      "Ytt_times_zero_slip_slope_at_15N": 3.3769278467390196
     },
     {
       "bowl": "crystal_ring_seed_v1",
@@ -108,19 +108,19 @@
       "speed_m_per_s": 0.25132741228718347,
       "sliding_force_slope_Ns_per_m": -0.6476487265147353,
       "frozen_angle_max_growth_rate_range_per_s": [
-        0.47163162217751164,
-        1.14042586648128
+        0.3948463760590073,
+        1.0636716104798438
       ],
-      "Ytt_times_zero_slip_slope_at_15N": 1.2879069867162938
+      "Ytt_times_zero_slip_slope_at_15N": 1.2879052331868284
     }
   ],
   "max_pair_rotation_port_error_1000_cases": 1.7763568394002505e-15,
   "stationary_contact_8192_steps": {
     "duration_s": 0.042666666666666665,
     "initial_energy_J": 0.001246889315751024,
-    "final_energy_J": 0.0004788856702667041,
-    "largest_energy_increment_J": -8.519460273966745e-10,
-    "max_ledger_error_J": 6.410980619530986e-19
+    "final_energy_J": 0.00045225726569432013,
+    "largest_energy_increment_J": -1.2787773237240077e-09,
+    "max_ledger_error_J": 7.485124275767845e-19
   },
   "unaccounted_spring_energy_if_suede_changes_to_wood_J": 0.04299209229614209,
   "status": "PASS"

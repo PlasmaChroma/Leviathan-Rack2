@@ -67,7 +67,6 @@ public:
     double latencySeconds() const noexcept { return hostRate_ > 0 ? decimator_.latencyHostSamples()/hostRate_ : 0.0; }
     static unsigned factorForRate(double hostRate, ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
 private:
-    friend class DualBowlAdapter;
     struct PreparedConfiguration {
         VesselEngine::PreparedConfiguration engine;
         unsigned factor = 0;

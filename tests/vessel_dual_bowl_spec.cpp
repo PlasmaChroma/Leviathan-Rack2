@@ -9,13 +9,14 @@ using namespace vessel;
 void require(bool okay, const char* message) { if (!okay) throw std::runtime_error(message); }
 void referenceEquivalence() {
     for (double rate : {32000., 44100., 48000., 88200., 96000., 176400., 192000.})
-    for (double delta : {0., 1., 10., 33.}) {
+    for (double delta : {0., 1., 10., 33.})
+    for (auto quality : {ProcessingQuality::Economy, ProcessingQuality::Balanced, ProcessingQuality::Reference}) {
         EngineSettings s; s.observerSeparation = .3;
         DualBowlAdapter dual(false); HostRateAdapter left, right;
-        require(dual.configure(seedBowls[0], seedMallets[1], s, delta, rate), "dual setup");
+        require(dual.configure(seedBowls[0], seedMallets[1], s, delta, rate, quality), "dual setup");
         auto ls=s, rs=s; ls.frequency-=delta/2; rs.frequency+=delta/2;
-        require(left.configure(seedBowls[0], seedMallets[1], ls, rate)
-            && right.configure(seedBowls[0], seedMallets[1], rs, rate), "independent reference setup");
+        require(left.configure(seedBowls[0], seedMallets[1], ls, rate, quality)
+            && right.configure(seedBowls[0], seedMallets[1], rs, rate, quality), "independent reference setup");
         HostControls c; c.rotate=true;
         for (int i=0; i<1000; ++i) {
             c.strikeEvent=i==0 || i==500;
@@ -28,7 +29,7 @@ void referenceEquivalence() {
         }
         require(dual.engine().ledger().strikes==2 && dual.rightEngine().ledger().strikes==2, "shared events not delivered once per bowl");
     }
-    std::cout<<"[PASS] Seven rates and four separations match two independent references bit-for-bit; shared events and zero-difference energy\n";
+    std::cout<<"[PASS] Seven rates, three qualities and four separations match two independent references bit-for-bit; shared events and zero-difference energy\n";
 }
 void transactionalTuning() {
     EngineSettings s; DualBowlAdapter d;
@@ -108,6 +109,13 @@ void singlePathTransitions() {
     double rate=48000, delta=0; const BowlDescriptor* bowl=&seedBowls[0];
     require(d.configure(*bowl,seedMallets[1],s,0,rate) && left.configure(*bowl,seedMallets[1],s,rate), "single setup");
     require(!d.secondBowlActive(), "startup zero runs second bowl");
+    VesselEngine rawLeft, rawRight;
+    StereoDecimator filter;
+    unsigned factor = HostRateAdapter::factorForRate(rate);
+    require(rawLeft.configure(*bowl,seedMallets[1],s,rate*factor), "raw setup");
+    filter.configure(factor);
+    double filterRate = rate;
+    double gain = 1.0, gainIncrement = 1.0, previousExpected = 0.0, held = 0.0;
     HostControls c; c.rotate=true;
     bool sawFade=false, sawSingle=false, sawWake=false;
     for(int i=0;i<16000;++i) {
@@ -123,19 +131,48 @@ void singlePathTransitions() {
             const double energy=d.engine().totalEnergy();
             const double compression=d.engine().compression(), velocity=d.engine().strikerVelocity();
             if(i==8) require(d.engine().strikerActive() && compression>0, "active-impact wake not exercised");
-            if(wake) { right=left; sawWake=true; }
+            if(wake) { right=left; rawRight=rawLeft; sawWake=true; }
             auto ls=s,rs=s;ls.frequency-=delta/2;rs.frequency+=delta/2;
             require(d.configure(*bowl,seedMallets[1],s,delta,rate) && left.configure(*bowl,seedMallets[1],ls,rate), "transition configure");
             if(d.secondBowlActive()) require(right.configure(*bowl,seedMallets[1],rs,rate), "right oracle configure");
+            const unsigned nextFactor = HostRateAdapter::factorForRate(rate);
+            if (filterRate != rate || factor != nextFactor) {
+                filter.configure(nextFactor); gain = 0; held = previousExpected;
+                gainIncrement = 1.0/(.005*rate);
+            }
+            factor = nextFactor; filterRate = rate;
+            require(rawLeft.configure(*bowl,seedMallets[1],ls,rate*factor), "raw left retune");
+            if(d.secondBowlActive()) require(rawRight.configure(*bowl,seedMallets[1],rs,rate*factor), "raw right retune");
             if(wake) require(d.rightEngine().totalEnergy()==energy && d.rightEngine().compression()==compression
                 && d.rightEngine().strikerVelocity()==velocity, "wake loses active contact/tail state");
         }
         c.strikeEvent=i==0 || i==6000 || i==13000;
         const bool active=d.secondBowlActive();
-        const auto l=left.process(c); const auto r=active?right.process(c):l;
+        const auto l=left.process(c); if(active) right.process(c);
+        rawLeft.setRotation(c.rotate,c.speed,c.pressure);
+        if(c.strikeEvent) rawLeft.strike(c.velocity,c.strikeVelocityScale);
+        if(active) {
+            rawRight.setRotation(c.rotate,c.speed,c.pressure);
+            if(c.strikeEvent) rawRight.strike(c.velocity,c.strikeVelocityScale);
+        }
+        const double startMix = d.dualMix();
+        StereoSample filtered;
+        for(unsigned k=0;k<factor;++k) {
+            const auto a=rawLeft.step();
+            const auto b=active?rawRight.step():a;
+            const double direction = delta==0 ? -1.0 : 1.0;
+            const double weight=std::max(0.0,std::min(1.0,startMix+direction*(k+1)/(.05*rate*factor)));
+            StereoSample input; input.left=a.leftVelocity;
+            input.right=a.rightVelocity+weight*(b.rightVelocity-a.rightVelocity);
+            filter.push(input,filtered);
+        }
+        gain=std::min(1.0,gain+gainIncrement);
+        const double expected=held*(1-gain)+filtered.right*gain;
+        previousExpected=expected;
         const auto f=d.process(c);const double mix=d.dualMix();
-        const double expected=mix==1?r.audio.right:mix==0?l.audio.right:l.audio.right+mix*(r.audio.right-l.audio.right);
-        require(!f.fault && f.audio.left==l.audio.left && f.audio.right==expected, "fade differs from independent filtered-history oracle");
+        require(!f.fault && f.audio.left==l.audio.left && std::abs(f.audio.right-expected)<1e-12,
+            "fade differs from independent internal-rate mix/filter oracle");
+        require(delta==0 ? mix<=startMix : mix>=startMix, "fade reverses direction");
         require(d.engine().totalEnergy()==left.engine().totalEnergy(), "fold/wake changes surviving mechanics");
         if(d.secondBowlActive()) require(d.rightEngine().totalEnergy()==right.engine().totalEnergy(), "cloned branch differs from independent oracle");
         require(f.bowlEnergy>=std::min(f.leftEnergy,f.rightEnergy)-1e-15
@@ -143,10 +180,44 @@ void singlePathTransitions() {
         sawFade=sawFade || (mix>0 && mix<1);sawSingle=sawSingle || (!d.secondBowlActive() && i>64);
     }
     require(sawFade && sawSingle && sawWake && !d.secondBowlActive(), "transition scenarios not reached");
-    std::cout<<"[PASS] Single startup/fold, cloned contact/filter wake, interrupted fades, shared strikes, width/material/rate changes match independent oracle\n";
+    std::cout<<"[PASS] Single startup/fold, cloned contact wake, interrupted fades, shared strikes, width/material/rate changes match pre-filter fade oracle\n";
 }
+void fadeTimingAndSettling() {
+    for (double rate : {32000.,44100.,48000.,88200.,96000.,176400.,192000.})
+    for (auto quality : {ProcessingQuality::Economy,ProcessingQuality::Balanced,ProcessingQuality::Reference})
+    for (bool rubbing : {false,true}) {
+        DualBowlAdapter d; HostRateAdapter survivor; EngineSettings s;
+        auto low=s; low.frequency-=16.5;
+        require(d.configure(seedBowls[0],seedMallets[1],s,33,rate,quality)
+            && survivor.configure(seedBowls[0],seedMallets[1],low,rate,quality), "fade timing setup");
+        HostControls c; c.rotate=rubbing; c.strikeEvent=true;
+        d.process(c); survivor.process(c); c.strikeEvent=false;
+        for(int i=0;i<512;++i) { d.process(c); survivor.process(c); }
+        require(d.configure(seedBowls[0],seedMallets[1],s,0,rate,quality)
+            && survivor.configure(seedBowls[0],seedMallets[1],s,rate,quality), "fold configure");
+        const int duration=int(std::lround(.05*rate));
+        for(int i=0;i<duration+256;++i) {
+            const auto actual=d.process(c); const auto expected=survivor.process(c);
+            require(!actual.fault && actual.audio.left==expected.audio.left, "fold alters left output");
+            require(d.secondBowlActive()==(i+1<duration), "fold sleep is not exactly 50 ms");
+            require(std::abs(d.dualMix()-std::max(0.0,1.0-double(i+1)/duration))<2e-12,
+                "fold duration depends on oversampling");
+            if(i>=duration+128) require(actual.audio.right==expected.audio.right, "shared FIR fails to settle to single reference");
+        }
+        require(d.configure(seedBowls[0],seedMallets[1],s,10,rate,quality), "wake configure");
+        for(int i=0;i<duration;++i) {
+            require(!d.process(c).fault && d.secondBowlActive(), "wake fault or premature sleep");
+            require(std::abs(d.dualMix()-double(i+1)/duration)<2e-12, "wake duration depends on oversampling");
+        }
+        require(d.dualMix()==1, "wake fails to reach exact endpoint");
+        require(d.configure(seedBowls[0],seedMallets[1],s,33,rate,quality), "positive retune");
+        d.process(c); require(d.dualMix()==1, "positive retune restarts fade");
+    }
+    std::cout<<"[PASS] 50 ms fold/wake at seven rates and three qualities, tails/rubbing, FIR settling and positive retunes\n";
+}
+
 }
 int main() {
-    try { referenceEquivalence(); transactionalTuning(); sustainedEnergy(); singlePathTransitions(); std::cout<<"Vessel dual-bowl reference: 4 groups PASS\n"; }
+    try { referenceEquivalence(); transactionalTuning(); sustainedEnergy(); singlePathTransitions(); fadeTimingAndSettling(); std::cout<<"Vessel dual-bowl reference: 5 groups PASS\n"; }
     catch (const std::exception& e) { std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1; }
 }

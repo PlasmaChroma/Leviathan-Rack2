@@ -232,3 +232,45 @@ The rate selector remains a development control. Further tail savings may come f
 Build an offline comparison tool for Reference versus the eligible 88.2/96 kHz variant, with identical input events and separately measured aliasing, contact behavior and CPU. Produce a small audition set: metal/suede sustained rotation, wood impact, crystal rotation, a high-pressure reversal, and 33 Hz binaural rotation. Include a high-pitch case that exercises fallback.
 
 Use that evidence to decide whether lower rate is a viable quality option. The first fused free-tail stage is now adopted, as recorded above. Host-interval composition remains a possible later tail experiment. The friction-function and tolerance screens do not justify a production change; use a new measured profile to choose the next continuous-rotation optimization.
+
+
+## Shared binaural decimator (2026-10-05)
+
+Implemented one stereo FIR cascade in `DualBowlAdapter`, retaining two independent
+`VesselEngine` contact solvers and modal states. In settled binaural operation,
+only left-bowl L and right-bowl R are filtered. Single mode filters both left-bowl
+pickups. A 50 ms internal-rate linear fade switches the right input across zero
+separation, with uninterrupted FIR history and sleep after fade-out. Wake clones
+pre-retune mechanics; interrupted fades reverse from their current mix. No change
+to modal precision, SIMD instruction requirements, quality defaults or contact
+physics. The shared-force proposal in `doc/Vessel/Binaural_Refined.md` is not adopted.
+
+`make -j6 test-vessel plugin.so` passed on native Linux. After adding the final
+transition-duration group, the focused dual suite passed all five groups. Steady
+output and energy remain bit-for-bit equal to two independent host adapters at
+seven host rates, three quality policies and four separations. Transition tests
+cover an active-strike wake, interrupted fades, width/material/rate changes,
+transactional rejection, exact 50 ms timing for tails and rubbing, FIR settling
+to the single reference, and positive-to-positive retuning without a new fade.
+The Rack allocation trap passed. All five dual groups also passed AddressSanitizer
+and UndefinedBehaviorSanitizer (`ASAN_OPTIONS=detect_leaks=0`; LeakSanitizer cannot
+run under this environment's process tracer). These are automated checks, not a listening
+certification; native Windows and live Rack audition remain unverified.
+
+The existing `vessel_benchmark_dual` was built before and after with the same
+Linux GCC O3/nehalem strict-math flags, then run before/after/after/before without
+concurrent builds or tests. Each invocation internally averages three alternating
+fixture orders. At 48 kHz host, Reference quality (192 kHz internal), Metal/Suede,
+33 Hz separation, averages across the two invocations were:
+
+| Workload | Before µs/host frame | Shared FIR µs/host frame | Reduction |
+| :--- | ---: | ---: | ---: |
+| Passive tail | 0.6160 | 0.4961 | 19.5% |
+| Coupled rubbing | 1.4355 | 1.3253 | 7.7% |
+
+Timings are unpinned and exclude Rack/UI work. Tail timings varied appreciably;
+these are indicative fixture results, not universal savings. Factor-one processing
+has no FIR work to remove. Raw results: `build/vessel-shared-before.csv`,
+`build/vessel-shared-after.csv`, and their `-repeat.csv` counterparts. Existing
+benchmark column `folded_savings_percent` compares zero-separation sleep with
+always-dual processing; it is not the shared-filter saving in the table above.

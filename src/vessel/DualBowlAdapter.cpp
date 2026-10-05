@@ -13,10 +13,11 @@ bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescript
     rightSettings.frequency = center+.5*separation;
     const bool wantsDual = !allowSingle_ || separation > 0;
     const bool wakeRight = wantsDual && !rightActive_;
-    const bool initial = left_.hostRate() == 0;
+    const bool initial = hostRate_ == 0;
     // Validate both modal configurations before mutating either live adapter.
     // Ordinary retuning leaves filter histories and contact ledgers in place.
-    HostRateAdapter::PreparedConfiguration nextLeft, nextRight;
+    VesselEngine::PreparedConfiguration nextLeft, nextRight;
+    unsigned nextFactor = 0;
     const auto& rightSource = wakeRight ? left_ : right_;
     const unsigned maximum = HostRateAdapter::factorForRate(rate);
     bool prepared = false;
@@ -24,24 +25,36 @@ bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescript
     // unsupported descriptors still reject transactionally.
     for (unsigned factor = HostRateAdapter::factorForRate(rate, quality);
         factor && factor <= maximum; factor *= 2) {
-        if (!left_.prepareConfiguration(bowl, mallet, leftSettings, rate, nextLeft, factor)) continue;
+        if (!left_.prepareConfiguration(bowl, mallet, leftSettings, rate*factor, nextLeft)) continue;
         if ((rightActive_ || wantsDual)
-            && !rightSource.prepareConfiguration(bowl, mallet, rightSettings, rate, nextRight, factor)) continue;
+            && !rightSource.prepareConfiguration(bowl, mallet, rightSettings, rate*factor, nextRight)) continue;
+        nextFactor = factor;
         prepared = true;
         break;
     }
     if (!prepared) return false;
-    // Waking still clones the complete pre-retune history, including a latched
-    // strike and both FIR channels. Preparation above must use that same source.
+    // Clone pre-retune mechanics, including an active striker. The shared FIR
+    // retains its history across wake/fold; it never belongs to either bowl.
     if (wakeRight) right_ = left_;
-    left_.applyConfiguration(bowl, mallet, leftSettings, rate, nextLeft);
-    if (rightActive_ || wantsDual) right_.applyConfiguration(bowl, mallet, rightSettings, rate, nextRight);
+    left_.applyConfiguration(bowl, mallet, leftSettings, nextLeft);
+    if (rightActive_ || wantsDual) right_.applyConfiguration(bowl, mallet, rightSettings, nextRight);
+    if (rate != hostRate_ || nextFactor != decimator_.factor()) {
+        decimator_.configure(nextFactor);
+        transitionGain_ = initial ? 1.0 : 0.0;
+        transitionFrom_ = lastOutput_;
+        transitionIncrement_ = 1.0/(0.005*rate);
+        hostRate_ = rate;
+    }
+    dualMixIncrement_ = 1.0/(.05*rate*nextFactor);
     if (wakeRight) { rightActive_ = true; if (initial) dualMix_ = 1.0; }
     centerFrequency_ = center; separationHz_ = separation;
     return true;
 }
 void DualBowlAdapter::reset() noexcept {
     left_.reset(); right_.reset();
+    decimator_.reset();
+    transitionGain_ = 1.0;
+    lastOutput_ = {}; transitionFrom_ = {};
     rightActive_ = !allowSingle_ || separationHz_ > 0;
     dualMix_ = rightActive_ ? 1.0 : 0.0;
 }
@@ -49,34 +62,55 @@ void DualBowlAdapter::setAuditEnabled(bool enabled) noexcept {
     left_.setAuditEnabled(enabled); right_.setAuditEnabled(enabled);
 }
 void DualBowlAdapter::updateHighEnergyDamping() noexcept {
-    left_.engine_.updateHighEnergyDamping();
-    if (rightActive_) right_.engine_.updateHighEnergyDamping();
+    left_.updateHighEnergyDamping();
+    if (rightActive_) right_.updateHighEnergyDamping();
 }
 DualBowlFrame DualBowlAdapter::process(const HostControls& controls) noexcept {
-    const auto left = left_.process(controls);
-    const auto right = rightActive_ ? right_.process(controls) : left;
-    if (rightActive_) {
-        const double increment = 1.0/(.05*hostRate());
-        if (allowSingle_ && separationHz_ == 0) {
-            dualMix_ = std::max(0.0, dualMix_-increment);
-            if (dualMix_ < 1e-12) { dualMix_ = 0; rightActive_ = false; }
-        } else {
-            dualMix_ = std::min(1.0, dualMix_+increment);
-            if (1-dualMix_ < 1e-12) dualMix_ = 1;
-        }
-    }
     DualBowlFrame frame;
-    frame.fault = left.fault || right.fault;
-    frame.leftEnergy = left.bowlEnergy;
-    frame.rightEnergy = rightActive_ ? right.bowlEnergy : left.bowlEnergy;
-    frame.bowlEnergy = dualMix_ == 1 ? .5*(left.bowlEnergy+right.bowlEnergy)
-        : left.bowlEnergy+.5*dualMix_*(right.bowlEnergy-left.bowlEnergy);
-    if (!frame.fault) {
-        frame.audio.left = left.audio.left;
-        // Linear fade avoids an equal-power boost when the paths coincide.
-        frame.audio.right = dualMix_ == 1 ? right.audio.right : dualMix_ == 0 ? left.audio.right
-            : left.audio.right+dualMix_*(right.audio.right-left.audio.right);
+    if (hostRate_ == 0.0) { frame.fault = true; return frame; }
+    const double speed = std::isfinite(controls.speed) ? std::max(-2.0, std::min(2.0, controls.speed)) : 0.0;
+    const double pressure = std::isfinite(controls.pressure) ? std::max(0.0, std::min(15.0, controls.pressure)) : 0.0;
+    left_.setRotation(controls.rotate, speed, pressure);
+    if (controls.strikeEvent) left_.strike(controls.velocity, controls.strikeVelocityScale);
+    if (rightActive_) {
+        right_.setRotation(controls.rotate, speed, pressure);
+        if (controls.strikeEvent) right_.strike(controls.velocity, controls.strikeVelocityScale);
     }
+    for (unsigned i = 0; i < decimator_.factor(); ++i) {
+        const auto left = left_.step();
+        const auto right = rightActive_ ? right_.step() : left;
+        frame.fault = frame.fault || left.fault || right.fault;
+        if (rightActive_) {
+            if (allowSingle_ && separationHz_ == 0) {
+                dualMix_ = std::max(0.0, dualMix_-dualMixIncrement_);
+                if (dualMix_ < 1e-12) { dualMix_ = 0; rightActive_ = false; }
+            } else {
+                dualMix_ = std::min(1.0, dualMix_+dualMixIncrement_);
+                if (1-dualMix_ < 1e-12) dualMix_ = 1;
+            }
+        }
+        StereoSample sample;
+        sample.left = left.leftVelocity;
+        // Fade before filtering so no filter history is replaced at zero.
+        // Linear gains preserve level when the two pickups coincide.
+        sample.right = dualMix_ == 1 ? right.rightVelocity : dualMix_ == 0 ? left.rightVelocity
+            : left.rightVelocity+dualMix_*(right.rightVelocity-left.rightVelocity);
+        decimator_.push(sample, frame.audio);
+    }
+    frame.leftEnergy = left_.bowl().energy();
+    frame.rightEnergy = rightActive_ ? right_.bowl().energy() : frame.leftEnergy;
+    frame.bowlEnergy = dualMix_ == 1 ? .5*(frame.leftEnergy+frame.rightEnergy)
+        : frame.leftEnergy+.5*dualMix_*(frame.rightEnergy-frame.leftEnergy);
+    if (frame.fault || !std::isfinite(frame.audio.left) || !std::isfinite(frame.audio.right)) {
+        decimator_.reset(); frame.audio = {}; frame.fault = true;
+        transitionGain_ = 0.0;
+        transitionFrom_ = {};
+    } else {
+        transitionGain_ = std::min(1.0, transitionGain_+transitionIncrement_);
+        frame.audio.left = transitionFrom_.left*(1.0-transitionGain_)+frame.audio.left*transitionGain_;
+        frame.audio.right = transitionFrom_.right*(1.0-transitionGain_)+frame.audio.right*transitionGain_;
+    }
+    lastOutput_ = frame.audio;
     return frame;
 }
 } // namespace vessel

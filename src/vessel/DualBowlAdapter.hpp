@@ -7,7 +7,7 @@ struct DualBowlFrame : HostFrame {
 };
 
 // Two independent states with an optional zero-separation single-bowl path.
-// Pass false to retain the always-dual scalar reference for comparisons.
+// Both independent engines feed one stereo filter. Pass false to disable sleep.
 class DualBowlAdapter {
 public:
     explicit DualBowlAdapter(bool allowSingle = true) noexcept
@@ -19,11 +19,11 @@ public:
     void setAuditEnabled(bool enabled) noexcept;
     void updateHighEnergyDamping() noexcept;
     DualBowlFrame process(const HostControls& controls) noexcept;
-    const VesselEngine& engine() const noexcept { return left_.engine(); }
-    const VesselEngine& rightEngine() const noexcept { return rightActive_ ? right_.engine() : left_.engine(); }
-    double hostRate() const noexcept { return left_.hostRate(); }
-    double internalRate() const noexcept { return left_.internalRate(); }
-    double latencySeconds() const noexcept { return left_.latencySeconds(); }
+    const VesselEngine& engine() const noexcept { return left_; }
+    const VesselEngine& rightEngine() const noexcept { return rightActive_ ? right_ : left_; }
+    double hostRate() const noexcept { return hostRate_; }
+    double internalRate() const noexcept { return hostRate_*decimator_.factor(); }
+    double latencySeconds() const noexcept { return hostRate_ > 0 ? decimator_.latencyHostSamples()/hostRate_ : 0.0; }
     double centerFrequency() const noexcept { return centerFrequency_; }
     double separationHz() const noexcept { return separationHz_; }
     double meanEnergy() const noexcept {
@@ -34,9 +34,14 @@ public:
     bool secondBowlActive() const noexcept { return rightActive_; }
     double dualMix() const noexcept { return dualMix_; }
 private:
-    HostRateAdapter left_, right_;
+    VesselEngine left_, right_;
+    StereoDecimator decimator_;
+    double hostRate_ = 0.0;
+    double transitionGain_ = 1.0, transitionIncrement_ = 1.0;
+    StereoSample lastOutput_, transitionFrom_;
     double centerFrequency_ = 261.625565, separationHz_ = 0.0;
     bool allowSingle_, rightActive_;
     double dualMix_;
+    double dualMixIncrement_ = 0.0;
 };
 } // namespace vessel
