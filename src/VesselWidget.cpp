@@ -2,6 +2,7 @@
 #include "vessel/PitchColorMap.hpp"
 #include "NvgOwnedImage.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/VisualAssets.hpp"
 #include <algorithm>
@@ -638,6 +639,8 @@ struct VesselWidget final : ModuleWidget {
         panel.addThemedLabels("res/Vessel.labels.svg", "res/Vessel.theme-text-input.svg", "res/Vessel.theme-text-output.svg");
         panel.addCompactLeviathanLogoBranding();
         panel.addPerfectWaveBranding();
+        visual_assets::addFractalGlassOverlay(
+            this, panel.panelPath(), panel.panelSurfaceEffectWidget());
         addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
         addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
         addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));

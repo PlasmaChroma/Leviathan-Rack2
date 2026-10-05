@@ -1,5 +1,6 @@
 #include "VTune.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 #include "vtune/BodyMapWidget.hpp"
 struct VTuneWidget final : ModuleWidget {
@@ -8,6 +9,8 @@ struct VTuneWidget final : ModuleWidget {
         visual_assets::SplitPanelRenderer panel(this, "res/VTune.panel.svg");
         panel.addThemedLabels("res/VTune.labels.svg", "res/VTune.theme-text-input.svg", "res/VTune.theme-text-output.svg");
         panel.addCompactLeviathanLogoBranding();
+        visual_assets::addFractalGlassOverlay(
+            this, panel.panelPath(), panel.panelSurfaceEffectWidget());
         math::Rect outlineRect(Vec(1.f, 62.f), Vec(38.64f, 56.4f));
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "VF_OUTLINE_RASTER", &outlineRect);
         auto* body = new vtune_body::BodyMapWidget(module);
