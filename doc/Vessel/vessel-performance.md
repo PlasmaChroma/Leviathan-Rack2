@@ -274,3 +274,119 @@ has no FIR work to remove. Raw results: `build/vessel-shared-before.csv`,
 `build/vessel-shared-after.csv`, and their `-repeat.csv` counterparts. Existing
 benchmark column `folded_savings_percent` compares zero-separation sleep with
 always-dual processing; it is not the shared-filter saving in the table above.
+
+
+## Shared-force resonator screen (2026-10-05)
+
+**Decision: retain two independent contact solvers.** Sharing the lower bowl's
+committed generalized forces with a differently tuned linear upper resonator
+saves CPU, but changes sustained channel balance and can lose the intended
+second driven pitch. This is a possible alternative sound model, not a
+transparent binaural optimization. No production DSP or defaults changed.
+
+Added `tools/vessel/probe_shared_force.py` and its C++ harness. The runner copies
+`src/vessel` to a temporary directory, injects guarded extraction of the actual
+committed force vector, and adds a fused forced recurrence only to that copy.
+Zero force is explicit on unforced steps. The candidate retains independent
+modal coefficients, states, observer projection and energy-dependent damping,
+plus the same shared stereo FIR as the current reference. Both sides receive
+identical controls; the second resonator has no contact feedback. The reference
+is the existing always-dual adapter, including at zero separation for the control
+case. The prototype preserves full per-internal-sample forcing; it does not
+collapse forces to one host sample.
+
+Ten fixtures ran for 60 seconds each at 48 kHz host, Reference quality / 192 kHz
+internal, fixed descriptors, 0.4 rev/s and 2.5 N. Rubbing starts at time zero
+without a strike and lifts at 55 seconds. Impact cases strike once at 50 ms with
+normalized velocity 0.5 and never rotate. The table uses seconds 45–55 for rubbing
+level/spectral comparison. Peak estimates use a 10-second Hann window with
+log-magnitude parabolic interpolation, searching 0.6–1.4 times center pitch;
+they are dominant fundamental-region peaks, not exact modal-frequency estimates
+or a comprehensive modal tracker.
+
+| Fixture | CPU saving | Right RMS change vs independent reference | Reference right peak | Shared-force right peak |
+| :--- | ---: | ---: | ---: | ---: |
+| Metal/Suede, 1 Hz | 34.7% | −10.8 dB | 262.92 Hz | 263.52 Hz |
+| Metal/Suede, 10 Hz | 35.1% | −23.0 dB | 267.42 Hz | 267.02 Hz |
+| Metal/Suede, 33 Hz | 34.7% | −18.8 dB | 278.92 Hz | 277.24 Hz |
+| Crystal/Suede, 33 Hz | 35.6% | −42.8 dB | 278.19 Hz | 246.77 Hz |
+| Metal/Felt, 33 Hz | 33.6% | −38.3 dB | 278.99 Hz | 277.31 Hz |
+| Crystal/Wood, 33 Hz | 31.8% | −7.1 dB | 278.29 Hz | 245.27 Hz |
+| Metal/Suede, 55 Hz center / 33 Hz separation | 35.2% | −10.8 dB | 71.65 Hz | 71.38 Hz |
+
+The left waveform is exactly unchanged in every captured fixture. At zero
+separation the right waveform also matches exactly. Crystal/Suede's dominant
+interaural peak difference falls from about 33.02 Hz to 1.60 Hz during late
+rubbing. After lift its weak right tail returns near its own natural frequency:
+this supports the distinction between preserving resonator poles and preserving
+the driven sound. Metal's right pitch does not collapse in the same way, but its
+level, sidebands and dominant split-mode selection change. No automatic gain
+normalization was used in the experiment; boosting a channel would not repair
+the altered excitation spectrum or replace missing independent feedback.
+
+For isolated Wood and Silicone impacts at 33 Hz separation, seconds 0.04–0.30
+show right RMS changes of −0.41 / −0.20 dB and relative right waveform-error RMS
+of 7.46% / 7.46%. Late peaks match at about 278.98 Hz. These results are more
+promising than rubbing but are not a perceptual equivalence certificate. Timed
+impact cases measure late passive tails: their 11.4% / 11.1% savings do **not**
+measure savings during the brief strike/contact solve. A strike-only production
+policy would additionally need to handle strikes during rubbing and accumulated
+state differences on contact re-entry.
+
+No observed faults occurred. Maximum sampled reference cumulative energy
+residual was 5.28e-11 J; maximum slave force-port residual was 3.20e-12 J. The
+slave audit includes its own input work: `E_slave + damping_loss − input_work`.
+It does not incorrectly reuse the master's hand/striker work or claim combined
+physical energy conservation. Stability alone does not establish audio quality.
+Separate audited-versus-fused checks match output and slave energy exactly over
+4,096 host frames per fixture, including repeated strikes, direction reversal
+and a 15 N pressure change. Those short checks validate implementation arithmetic;
+they do not establish long-run sound quality under reversal/high pressure.
+
+Timing uses three repetitions of a three-second continuation from established
+state at 50 seconds, alternating reference/candidate order. Auditing, file I/O
+and state-copy setup are outside timing. Both paths include the same 1 kHz damping
+updates; candidate telemetry includes both modal energies. Linux GCC 12.3,
+O3/nehalem, strict math, unpinned timing. The force-extraction instrumentation
+branch remains in the copied reference core. These are approximate offline costs,
+not Windows/Rack callback results. Full fade/wake, live tuning, wider controls,
+aliasing/convergence and listening certification are outside this screen.
+
+Reproduce:
+
+```sh
+python3 tools/vessel/probe_shared_force.py --seconds 60 --repeats 3
+python3 tools/vessel/probe_shared_force.py --verify-only
+```
+
+Artifacts are under `build/vessel-shared-force`: full stereo `.f64` captures,
+`metrics.csv`, `comparison.json`, build/source hashes in `environment.json`, and
+separate verification records. The original long capture predates the additional
+verification-only option; its recorded harness/runner hashes identify that
+version. The current runner also checks a settled-state audited/fused continuation
+before timing. No DSP equations changed between these harness versions.
+The final runner passed a separate 20-second, one-repeat end-to-end screen in
+`build/vessel-shared-force-smoke`, including both startup and settled-state
+audited/fused checks. Rubbing savings remained about 33–35% and the substantial
+level changes persisted. Wood passive-tail timing regressed by 14% in that short
+run while Silicone saved 9%; this further limits any general tail-speed claim
+from unpinned timings. The table above uses the longer, three-repeat screen.
+
+For audition, `_raw.wav` pairs use one common gain for headroom, preserving the
+reference/candidate level difference. `_matched.wav` pairs match **whole-stereo**
+RMS and use a common safety gain; they preserve channel imbalance. These PCM16
+previews are physical pickup velocities scaled for playback, not Rack output
+volts. Eight-second impact clips include attack; ten-second rub clips use seconds
+45–55. Examples:
+
+- [Metal/Suede reference](../../build/vessel-shared-force/metal_suede_33_reference_raw.wav)
+  and [shared-force candidate](../../build/vessel-shared-force/metal_suede_33_shared_raw.wav).
+- [Crystal/Suede reference](../../build/vessel-shared-force/crystal_suede_33_reference_raw.wav)
+  and [shared-force candidate](../../build/vessel-shared-force/crystal_suede_33_shared_raw.wav).
+- [Spectral comparison](../../build/vessel-shared-force/shared-force-spectra.png).
+
+The next quality-preserving optimization investigation should retain independent
+contact feedback. Fixed-rate quality comparisons and exact modal/filter tail
+composition remain better candidates; they have their own convergence and
+transition requirements. This screen does not authorize selecting an approximate
+path as the production default.

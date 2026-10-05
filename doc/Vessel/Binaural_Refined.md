@@ -39,6 +39,26 @@ See `vessel-performance.md` for measured costs and validation results.
 **Historical proposal follows.** Its shared-force architecture, performance
 forecast, and unconditional physical/perceptual guarantees are not adopted.
 
+### Shared-force screening result (2026-10-05)
+
+An offline prototype now tests the historical proposal without changing the live
+engine. Ten 60-second fixtures at 48 kHz host / 192 kHz internal rate show roughly
+32–36% active-rubbing CPU savings relative to the independent engines with their
+already-shared decimator. However, sustained right-channel levels and spectra
+change substantially: Metal/Suede is 23 dB quieter at 10 Hz separation, and
+Crystal/Suede is 43 dB quieter at 33 Hz. In the latter case the dominant
+fundamental-region right peak moves from about 278.2 Hz to 246.8 Hz, close to the
+245.2 Hz left peak. Independently configured modal poles do not guarantee an
+independently sustained pitch under copied contact forces.
+
+Zero-separation audio matches exactly; force-port energy residuals remain small.
+Numerical stability therefore does not rescue the quality claim. Isolated
+Wood/Silicone strikes retain their late pitches with smaller level changes, but
+their attacks differ and no listening approval is claimed. **Do not promote
+shared-force rubbing as a transparent optimization.** See the detailed
+[screening results](vessel-performance.md#shared-force-resonator-screen-2026-10-05)
+and `tools/vessel/probe_shared_force.py` for reproducible evidence and auditions.
+
 ---
 
 ## 1. Executive Summary
