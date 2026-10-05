@@ -13,6 +13,16 @@
   </defs>
   <g id="panel_art">
     <rect x="50" y="50" width="8028" height="12750" rx="90" fill="none" stroke="url(#vessel-edge)" stroke-width="24" opacity="0.65" id="rect3" />
+    <g id="vessel_section_fields" style="display:inline">
+      <g id="glass">
+        <g id="glass_input" data-theme-runtime-substrate="neutral">
+          <path id="vessel_input_field" d="M 430,7550 H 5520 Q 5700,7550 5700,7730 V 10520 Q 5700,10700 5520,10700 H 3120 Q 3000,10700 3000,10820 V 11920 Q 3000,12100 2820,12100 H 430 Q 250,12100 250,11920 V 7730 Q 250,7550 430,7550 Z" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" />
+        </g>
+        <g id="glass_output" data-theme-runtime-substrate="neutral">
+          <rect id="vessel_output_field" x="3100" y="10800" width="2600" height="1300" rx="118" ry="126" style="display:inline;opacity:0.35;fill:#000000;fill-opacity:0.58;stroke:none" />
+        </g>
+      </g>
+    </g>
     <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1">
       <path id="strike_velocity_conduit" d="M 900,9920 H 2200" />
       <path id="speed_rub_conduit" d="m 3790.0002,9920 h 1300" />

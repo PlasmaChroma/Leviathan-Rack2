@@ -463,7 +463,7 @@ struct VesselMalletSelector final : app::ParamWidget {
                 nvgFontFaceId(args.vg, APP->window->uiFont->handle);
                 nvgFontSize(args.vg, mm2px(1.8f));
                 nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-                nvgFillColor(args.vg, active ? nvgRGB(194, 247, 243) : nvgRGB(191, 191, 210));
+                nvgFillColor(args.vg, nvgRGB(255, 255, 255));
                 nvgText(args.vg, r.pos.x + .5f * r.size.x,
                     r.pos.y + r.size.y - mm2px(1.6f), vesselMalletNames[i], nullptr);
             }
@@ -583,7 +583,7 @@ struct BinauralBandLabel final : TransparentWidget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFontSize(args.vg, 9.f);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg, nvgRGB(181, 213, 220));
+        nvgFillColor(args.vg, nvgRGB(255, 255, 255));
         nvgText(args.vg, box.size.x * .5f, box.size.y * .5f, band, nullptr);
     }
 };
@@ -681,7 +681,7 @@ struct VesselWidget final : ModuleWidget {
         bandLabel->vessel = module;
         bandLabel->box.size = Vec(mm2px(16.f), mm2px(3.f));
         bandLabel->box.pos = Vec(binauralKnob->box.pos.x + .5f * binauralKnob->box.size.x - .5f * bandLabel->box.size.x,
-            binauralKnob->box.pos.y - mm2px(4.f));
+            binauralKnob->box.pos.y - mm2px(3.f));
         addChild(bandLabel);
         auto* bowlSwitch = createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM);
         bowlSwitch->invertDisplay = true;

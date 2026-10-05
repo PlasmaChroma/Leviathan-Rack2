@@ -13,6 +13,13 @@
   </defs>
   <g id="panel_art">
     <rect x="50" y="50" width="3964" height="12750" rx="90" fill="none" stroke="url(#vtune-edge)" stroke-width="24" opacity="0.65" id="rect3" />
+    <g id="vtune_section_fields" style="display:inline">
+      <g id="glass">
+        <g id="glass_input" data-theme-runtime-substrate="neutral">
+          <rect id="vtune_input_field" x="250" y="1050" width="3564" height="5100" rx="180" ry="180" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" />
+        </g>
+      </g>
+    </g>
     <g id="component_anchors" style="display:none;fill:#2a1430;fill-opacity:1">
       <rect id="VF_OUTLINE_RASTER" x="100" y="6200" width="3864" height="5640" style="stroke:#55dfff;stroke-width:20" />
       <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="396.1" y="11943.102" width="3271.933" height="1224.054" />

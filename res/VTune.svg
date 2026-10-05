@@ -88,6 +88,17 @@
        stroke-width="24"
        opacity="0.65"
        id="rect3" />
+    <g id="vtune_section_fields" style="display:inline">
+      <g id="glass">
+        <g id="glass_input">
+          <rect
+             id="vtune_input_field"
+             x="250" y="1050" width="3564" height="5100"
+             rx="180" ry="180"
+             style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+        </g>
+      </g>
+    </g>
     <g
        id="component_anchors"
        style="display:inline;fill:#2a1430;fill-opacity:1">
