@@ -1,5 +1,15 @@
 # Vessel implementation status
 
+## Base sustain adjustment — 2026-10-04
+
+Both prototype bowl profiles now use 90% of their previous modal T60 values,
+preserving the relative decay times across all mode pairs. The fundamental T60
+is now 17.28 seconds for Metal and 25.2 seconds for Crystal at Sustain 1x.
+This is a global voicing change and also shortens existing patches at their
+saved Sustain settings. Intensity feedback, the high-energy damping policy,
+and the Sustain control mapping are unchanged. Earlier characterization
+records describe the profiles used at the time of those measurements.
+
 Current milestone, 2026-09-30: the standalone C++11 engine includes moving tangential friction, simultaneous strike/rub solving, control transitions, whole-run energy accounting, and the optional prescribed radial-load sensitivity experiment. The first Phase 4 foundation now adapts that engine to host rates through a causal stereo decimator. Default Metal/Suede develops a bounded several-rotation response from rest, and the user has auditioned the earlier rubbing/coupled previews with positive feedback. Vessel is now registered as a selectable, monophonic Rack prototype with a 16 HP panel, controls/CV, mechanical-energy display and versioned settings serialization. The user has also approved the causal host-rate auditions. The scalar dual-bowl reference and zero-separation single-path optimization now add a 0–33 Hz structural tuning difference, shared performance controls, independent contact states and mean-energy reporting. The broader physical, calibration, and convergence gates remain open.
 
 ## First milestone: modal mechanics and strikes
