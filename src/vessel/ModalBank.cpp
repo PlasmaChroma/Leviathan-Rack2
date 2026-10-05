@@ -67,6 +67,21 @@ bool ModalBank::configure(const BowlDescriptor& bowl, double frequency, double d
     pairs_ = bowl.pairs;
     count_ = 2*bowl.pairCount;
     h_ = h;
+    setAdditionalDamping(additionalSigma_);
+    return true;
+}
+
+bool ModalBank::setAdditionalDamping(double sigma) noexcept {
+    if (!std::isfinite(sigma) || sigma < 0.0 || sigma > 0.5) return false;
+    additionalSigma_ = sigma;
+    for (std::size_t j = 0; j < count_; ++j) {
+        const auto& c = coefficients_[j];
+        hotSigma_[j] = c.sigma + sigma;
+        // Restore the exact original arithmetic below the knee.
+        hotInverseD_[j] = sigma == 0.0 ? c.inverseD
+            : 1.0/(1.0 + h_*hotSigma_[j] + c.a*c.a);
+        hotWeight_[j] = sigma == 0.0 ? c.admittanceWeight : 0.5*h_*hotInverseD_[j];
+    }
     return true;
 }
 

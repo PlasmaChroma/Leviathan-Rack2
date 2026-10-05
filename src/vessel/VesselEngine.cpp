@@ -59,6 +59,7 @@ void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDe
 }
 void VesselEngine::reset() noexcept {
     bank_.clear();
+    bank_.setAdditionalDamping(0.0);
     active_ = false;
     compression_ = 0.0;
     strikerVelocity_ = 0.0;
@@ -70,6 +71,14 @@ void VesselEngine::reset() noexcept {
     pressure_ = targetPressure_;
     previousFriction_ = 0.0;
     orbit_.configure(descriptor_, bank_, mallet_.patchWidth, rotationAngle_);
+}
+void VesselEngine::updateHighEnergyDamping() noexcept {
+    // Leave ordinary tails untouched. Smooth onset above 40 mJ, half of the
+    // maximum additional loss at 80 mJ; asymptotic amplitude rate 0.5 / s.
+    // Bound the argument before squaring; no expensive coefficient rebuild.
+    const double excess = std::min(1e6, std::max(0.0, (bank_.energy()-0.04)/0.04));
+    const double squared = excess*excess;
+    bank_.setAdditionalDamping(0.5*squared/(1.0+squared));
 }
 bool VesselEngine::setRotation(bool engaged, double speed, double pressure) noexcept {
     if (!std::isfinite(speed) || speed < -2.0 || speed > 2.0

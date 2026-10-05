@@ -17,6 +17,7 @@ public:
         ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
     void reset() noexcept;
     void setAuditEnabled(bool enabled) noexcept;
+    void updateHighEnergyDamping() noexcept;
     DualBowlFrame process(const HostControls& controls) noexcept;
     const VesselEngine& engine() const noexcept { return left_.engine(); }
     const VesselEngine& rightEngine() const noexcept { return rightActive_ ? right_.engine() : left_.engine(); }

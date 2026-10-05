@@ -537,9 +537,81 @@ void movingRuns() {
     pass("Several-rotation startup/saturation, radial-load comparison, coupled strikes, and seed/rate/control transitions");
 }
 
+void highEnergyDamping() {
+    for (double rate : {96000.0, 192000.0}) {
+        ModalBank bank;
+        require(bank.configure(seedBowls[1], 261.625565, 4, 1, rate), "extra damping setup");
+        bank.setState(0, .4, 0); // 80 mJ, without a contact transient.
+        const auto baseline = bank;
+        const auto port = bank.radialPort(.2, .05);
+        const double initial = bank.energy();
+        require(bank.setAdditionalDamping(.25), "extra damping accepted");
+        require(bank.energy() == initial, "damping update changes energy");
+        require(bank.admittance(port, port) <= baseline.admittance(port, port), "damping increases contact admittance");
+        require(!bank.setAdditionalDamping(-1) && !bank.setAdditionalDamping(.6)
+            && !bank.setAdditionalDamping(std::numeric_limits<double>::quiet_NaN()), "invalid damping accepted");
+        auto retuned = bank;
+        require(retuned.configure(seedBowls[1], 261.625565, 4, 1, rate), "damping retune");
+        auto fast = bank;
+        double loss = 0;
+        for (int i = 0; i < int(rate); ++i) {
+            const auto audit = bank.commit(bank.freeMidpoint(), ModalVector{}, true);
+            loss += audit.dampingLoss;
+            require(std::abs(audit.residual) < 1e-14, "extra damping step ledger");
+            double left = 0, right = 0;
+            require(fast.advanceFree(port, port, left, right), "extra damping fast tail");
+            retuned.commit(retuned.freeMidpoint(), ModalVector{});
+        }
+        require(close(initial-bank.energy(), loss, 1e-9, 1e-10), "extra damping cumulative ledger");
+        require(bank.energy() == fast.energy() && bank.energy() == retuned.energy(), "extra damping path/retune mismatch");
+        require(bank.energy() < .045 && bank.energy() > .04, "extra damping decay magnitude");
+        auto restored = baseline;
+        require(restored.setAdditionalDamping(.25) && restored.setAdditionalDamping(0), "damping restore");
+        auto original = baseline;
+        restored.commit(restored.freeMidpoint(), ModalVector{});
+        original.commit(original.freeMidpoint(), ModalVector{});
+        require(restored.energy() == original.energy(), "zero damping changed linear tail");
+
+        VesselEngine governed, reference;
+        EngineSettings settings; settings.decayMultiplier = 4;
+        require(governed.configure(seedBowls[1], seedMallets[1], settings, rate)
+            && reference.configure(seedBowls[1], seedMallets[1], settings, rate), "governor engines");
+        governed.setAuditEnabled(true); reference.setAuditEnabled(true);
+        bool crossedKnee = false;
+        for (int i = 0; i < int(2*rate); ++i) {
+            if (i % int(rate*.005) == 0) { governed.strike(1, 2); reference.strike(1, 2); }
+            if (i % int(rate*.001) == 0) {
+                crossedKnee = crossedKnee || governed.bowl().energy() > .04;
+                governed.updateHighEnergyDamping();
+            }
+            require(!governed.step().fault && !reference.step().fault, "governed strike trajectory fault");
+            if (!crossedKnee) require(governed.totalEnergy() == reference.totalEnergy(), "governor affects sub-knee trajectory");
+        }
+        require(crossedKnee, "governor fixture never reached knee");
+        require(std::abs(completeLedgerResidual(governed)) < 1e-8, "governed contact energy ledger");
+        governed.setRotation(false, 0, 0);
+        for (int i = 0; i < int(rate*.02); ++i) governed.step();
+        require(!governed.strikerActive(), "governor fixture striker did not separate");
+        const double before = governed.bowl().energy();
+        for (int i = 0; i < int(rate); ++i) {
+            if (i % int(rate*.001) == 0) governed.updateHighEnergyDamping();
+            require(!governed.step().fault, "governed tail fault");
+        }
+        require(governed.bowl().energy() < before, "governed tail grew");
+        require(std::abs(completeLedgerResidual(governed)) < 1e-8, "governed tail ledger");
+        governed.reset(); reference.reset();
+        governed.strike(.3); reference.strike(.3);
+        for (int i = 0; i < int(rate*.02); ++i) {
+            governed.step(); reference.step();
+            require(governed.totalEnergy() == reference.totalEnergy(), "reset retained extra damping");
+        }
+    }
+    pass("High-energy damping preserves quiet trajectories, passive contact accounting, retuning and fast tails");
+}
+
 int main() {
     try {
-        polesAndConfiguration(); modalEnergyAndPorts(); staticCompliance(); elasticGroundImpact();
+        polesAndConfiguration(); modalEnergyAndPorts(); staticCompliance(); elasticGroundImpact(); highEnergyDamping();
         fullCollisions(); transitionsAndRetriggers(); collisionRateConvergence(); observersAndLongTail();
         frictionLawAndOrbit(); simultaneousContactOracle(); rotationControlsAndPassivity(); basicFrequencyTuning(); movingRuns();
         std::cout << "Vessel mechanics: " << passed << " groups PASS\n"; return 0;

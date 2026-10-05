@@ -18,6 +18,9 @@ public:
     bool setState(std::size_t i, double x, double y) noexcept;
     double energy() const noexcept;
     bool finite() const noexcept;
+    // Control-rate extra viscous loss. Base coefficients remain the linear
+    // specimen; only hot damping/admittance change, never state or stiffness.
+    bool setAdditionalDamping(double sigma) noexcept;
 
     // Fixed unforced step, with unchanged scalar arithmetic and pickup order.
     // Filtering remains in the host adapter at the original internal cadence.
@@ -44,6 +47,7 @@ private:
     ModalVector hotA_ {}, hotInverseD_ {}, hotWeight_ {}, hotOmega_ {}, hotSigma_ {};
     std::size_t count_ = 0;
     double h_ = 1.0 / 192000.0;
+    double additionalSigma_ = 0.0;
 };
 
 // Small numerical loops are visible to the audio compiler; finite-state

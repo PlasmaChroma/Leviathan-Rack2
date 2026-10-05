@@ -67,6 +67,9 @@ public:
     bool configure(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
                    const EngineSettings& settings, double internalRate) noexcept;
     void reset() noexcept;
+    // Optional performance policy, called by Vessel at its existing 1 kHz
+    // control boundary. This is not a calibrated material law or energy cap.
+    void updateHighEnergyDamping() noexcept;
     // Enable before launch/reset for a complete cumulative ledger. Turning
     // auditing on halfway through an existing tail omits earlier losses.
     void setAuditEnabled(bool enabled) noexcept { audit_ = enabled; }

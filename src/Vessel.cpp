@@ -127,6 +127,7 @@ vessel_expander::TuneMessage Vessel::tuneControls() {
 }
 
 void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune) {
+    audio.updateHighEnergyDamping();
     const int bowl = choice(params[BOWL_PARAM].getValue(), 1), mallet = choice(params[MALLET_PARAM].getValue(), 3);
     if (bowl != selectedBowl) { startBowl = currentBowl; selectedBowl = bowl; bowlBlend = 0; }
     if (mallet != selectedMallet) {

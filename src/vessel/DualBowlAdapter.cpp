@@ -48,6 +48,10 @@ void DualBowlAdapter::reset() noexcept {
 void DualBowlAdapter::setAuditEnabled(bool enabled) noexcept {
     left_.setAuditEnabled(enabled); right_.setAuditEnabled(enabled);
 }
+void DualBowlAdapter::updateHighEnergyDamping() noexcept {
+    left_.engine_.updateHighEnergyDamping();
+    if (rightActive_) right_.engine_.updateHighEnergyDamping();
+}
 DualBowlFrame DualBowlAdapter::process(const HostControls& controls) noexcept {
     const auto left = left_.process(controls);
     const auto right = rightActive_ ? right_.process(controls) : left;
