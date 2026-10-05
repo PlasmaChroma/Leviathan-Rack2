@@ -7,12 +7,22 @@ The current DSP definition is `docs/RACK_RECONSTRUCTION.md`. New files:
 * `reference/sp67_extended.py`: float32/FMA translations for Noise, Chaos,
   phase/cross-FM, interaction modes, planar Array deltas and auxiliary outputs.
 * `reference/sp67_arm.py`: hash-checked, bounded original-instruction execution.
+* `reference/sp67_ui.py`: immutable Array/shared-button action states and
+  instruction-checked transitions; call after Shift/clock/release processing.
+  It also composes the normal Shift/clock stage through button dispatch.
+  Reset-return continuation accepts explicit post-I/O state; active calibration
+  and actual persistence remain separate.
 * `reference/sp67_file_fixture.py`: explicit in-memory file-operation substitutions
   for connected original parser/loader/save tests; substituted functions are
   excluded from instruction coverage. This does not emulate FatFs or media.
 * `tests/test_arm_differential.py`: original-instruction test groups, exact state
   comparisons except explicitly tolerance-based standard-synthesis comparisons.
-  The current group count is recorded in `analysis/continuation_tests.json`.
+  The most recent full-run group count is recorded in `analysis/continuation_tests.json`.
+* `tests/test_ui_actions.py`: focused individual/composed UI action oracle using
+  eighteen groups from the differential suite, including calibration decisions and the composed normal Shift stage, release completion, press/idle effects, unified Shift dispatch and consumed-gesture re-arm, release decisions, long holds, Array selection, admitted clocks, timer prefix
+  and edge sampling. Run with
+  `--report analysis/ui_action_tests.json` for explicitly scoped results without
+  overwriting the full DSP/integration report.
 * `analysis/continuation_tests.json`: counts, error and executed addresses.
 * `analysis/continuation_status.json`: resolved contracts and remaining work.
 * `docs/CODEX_HANDOFF.md`: current subsystem-to-definition/test map, runtime and

@@ -16,8 +16,8 @@ Bounded original-instruction execution checks
 these against the preserved firmware. Standard synthesis is also independently
 checked against its mathematical reconstruction. See
 `analysis/continuation_status.json` for remaining gaps and
-`analysis/continuation_tests.json` for measured coverage (9,577 instruction
-addresses; 88 differential test groups, including complete SAM, SAO and Noise/Chaos
+`analysis/continuation_tests.json` for measured coverage (9,584 instruction
+addresses; 90 differential test groups, including complete SAM, SAO and Noise/Chaos
 callbacks, a 12,800-sample cold Noise trajectory, clock scan sequences and
 clock-to-planar bounds checks, mode/LF/CV gestures and an integrated capture
 sequence, Array selection/factory reset, settings pack/restore, save-time
@@ -53,7 +53,16 @@ and original receive registration, successful software DMA start and dispatch pr
 registers through the two audio half-buffer entries, plus simultaneous Shift
 release/Array/shared-edge ordering, shared targeting and held-input suppression,
 and persistent button-only capture-stop underflow, plus consumed-gesture
-clearing and shared-button re-arming across all 32 panel input snapshots).
+clearing and shared-button re-arming across all 32 panel input snapshots,
+including consumed clock edges and subsequent asymmetric clock recovery).
+`reference/sp67_ui.py` now provides reusable Array/shared action-state models,
+checked against original instruction tails including raw/cached mode mismatches
+and exact settings-mirror updates. The enclosing GPIO/clock/Shift state machine
+remains defined by the guide and integration fixtures.
+`button_actions` composes those actions in firmware order; `button_inputs` connects
+the checked Array/shared edge sampler to dispatch and event clearing. The newer focused
+UI checks are recorded separately in `analysis/ui_action_tests.json`; they
+preserve the full-suite baseline above rather than claiming another full run.
 All original 31 host tests also pass.
 
 This bundle contains a read-only analysis of the uploaded Make Noise Spectraphon `sp67.dat`: exact binary preservation, a synthetic mapped ARM ELF, disassembly, table exports, instruction-derived DSP equations, a bounded Array/WAV inspection tool, and a staged Codex implementation handoff.

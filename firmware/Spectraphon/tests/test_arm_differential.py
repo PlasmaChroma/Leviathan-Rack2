@@ -13,6 +13,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'reference'))
 from sp67_arm import SliceMachine
+from sp67_ui import ArrayButtonState, array_button_action
+from sp67_ui import SharedButtonState, shared_button_action
+from sp67_ui import button_actions
+from sp67_ui import ButtonEdgeState, sample_button_edges
+from sp67_ui import button_inputs
+from sp67_ui import ClockTimerState, clock_timer_tick
+from sp67_ui import AdmittedClockState, admitted_clock_action
+from sp67_ui import ArraySelectionState, array_selection_action
+from sp67_ui import calibration_release_action, calibration_save_return
+from sp67_ui import ShiftSideState, ShiftStageState, ShiftStageResult, normal_shift_stage, resume_shift_after_reset
+from sp67_ui import PassiveShiftState, shift_press_action, shift_idle_action, shift_release_finish
+from sp67_ui import long_hold_step, shift_release_action, consumed_shift_route, ConsumedShiftRoute, shift_dispatch
 from sp67_file_fixture import MemoryReadFileFixture, MemoryWriteFileFixture
 from sp67_extended import chaos_step, noise_step, clip_a, clip_b, normal_phase_step, auxiliary_value
 from sp67_extended import even_increment, b_pitch_increment
@@ -31,7 +43,7 @@ from sp67_extended import calibration_pitch_tables
 from sp67_reference import f32, bits, polynomial_synthesis, active_terms, analysis_parameters, table, from_bits
 
 COVERAGE = set()
-COUNTS = {'chaos_samples': 0, 'noise_samples': 0, 'clip_pairs': 0, 'output_frames': 0, 'phase_samples': 0,
+COUNTS = {'normal_shift_stage_cases': 0, 'normal_shift_reset_resumptions': 0, 'normal_shift_button_tail_cases': 0, 'normal_shift_stage_reset_boundaries': 0, 'shift_release_finish_cases': 0, 'shift_passive_action_cases': 0, 'shift_dispatch_cases': 0, 'consumed_shift_route_cases': 0, 'shift_release_decision_cases': 0, 'chaos_samples': 0, 'noise_samples': 0, 'clip_pairs': 0, 'output_frames': 0, 'phase_samples': 0,
           'standard_samples': 0, 'capture_cases': 0, 'clock_callbacks': 0, 'auxiliary_cases': 0, 'mute_cases': 0,
           'even_rate_cases': 0, 'b_pitch_cases': 0, 'joined_samples': 0,
           'slow_control_cases': 0, 'cold_noise_cases': 0, 'planar_cases': 0,
@@ -92,7 +104,13 @@ COUNTS = {'chaos_samples': 0, 'noise_samples': 0, 'clip_pairs': 0, 'output_frame
           'dma_to_audio_entry_cases': 0, 'receive_start_success_cases': 0,
           'started_receive_audio_dispatches': 0, 'simultaneous_shift_release_cases': 0,
           'persistent_shift_release_capture_sequences': 0, 'shift_release_shared_edge_cases': 0,
-          'shift_release_shared_held_cases': 0, 'consumed_gesture_rearm_sequences': 0}
+          'shift_release_shared_held_cases': 0, 'consumed_gesture_rearm_sequences': 0,
+          'consumed_gesture_clock_sequences': 0, 'rearmed_clock_admissions': 0,
+          'array_button_action_model_cases': 0, 'shared_button_action_model_cases': 0,
+          'composed_button_action_cases': 0, 'button_edge_model_cases': 0,
+          'button_input_tail_cases': 0, 'clock_timer_model_cases': 0,
+          'admitted_clock_model_cases': 0, 'array_selection_model_cases': 0,
+          'long_hold_model_cases': 0}
 METRICS = {'mode_cycle_standard_max_absolute_error': 0., 'standard_max_absolute_error': 0., 'full_sam_audio_max_absolute_error': 0.,
            'cold_noise_first_finite_sample_a': 0, 'cold_noise_first_finite_sample_b': 0,
            'startup_noise_first_finite_sample_a': 0, 'startup_noise_first_finite_sample_b': 0,
@@ -107,6 +125,34 @@ class FirmwareDifferential(unittest.TestCase):
     def run_slice(self, machine, start, end):
         machine.run(start, end)
         COVERAGE.update(machine.last_trace)
+
+    def button_action_snapshot(self,m):
+        sides=[]
+        for side in range(2):
+            slot=m.word((0x20002430,0x20000b20)[side])
+            desc=(0x20000a20,0x20000920)[side]+16*slot
+            sides.append(ArrayButtonState(
+                raw_sao=m.uc.mem_read(0x20002f52+side,1)[0],
+                cached_sao=m.word((0x20002e94,0x20002e90)[side]),
+                engine=m.word((0x20002e8c,0x20002e88)[side]),
+                capture=m.word((0x20002e84,0x20002e80)[side]),
+                hold=m.word(0x20002f34+4*side),
+                gesture=m.uc.mem_read(0x20002f48+side,1)[0],
+                lf=m.word((0x200023d0,0x20000820)[side]),
+                descriptor=struct.unpack('<4I',m.uc.mem_read(desc,16)),
+                cursor=m.word((0x20002e7c,0x200011a0)[side]),
+                peak=m.floats((0x20002e9c,0x200011e0)[side])[0],
+                policy=m.word((0x20002ed8,0x20002ed4)[side]),
+                engine_mirror=m.word(0x2001349c+4*side),
+                lf_mirror=m.word(0x200134ac+4*side),dirty=m.word(0x20002eb8)))
+        shared=SharedButtonState(
+            holds=tuple(s.hold for s in sides),gestures=tuple(s.gesture for s in sides),
+            cached_sao=tuple(s.cached_sao for s in sides),
+            auxiliary=tuple(m.word(a) for a in (0x20002ef8,0x20002ef4)),
+            auxiliary_mirrors=tuple(m.word(a) for a in (0x20013494,0x20013498)),
+            interaction=m.uc.mem_read(0x20002f54,1)[0],
+            interaction_mirror=m.word(0x200134bc),dirty=m.word(0x20002eb8))
+        return sides[0],sides[1],shared
 
     def test_chaos_both_sides(self):
         rng = random.Random(6701)
@@ -985,6 +1031,154 @@ class FirmwareDifferential(unittest.TestCase):
                         self.assertEqual(m.word(0x200134ac+side*4),expected[2])
                         COUNTS['mode_button_cases']+=1
 
+    def test_array_selection_action_model(self):
+        import itertools
+        for side,slot,mirror_kind,scan,dirty in itertools.product(
+                range(2),range(16),range(3),(0,7),range(2)):
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
+            selection=(0x20002430,0x20000b20)[side]
+            scan_addr=(0x20002438,0x20002434)[side]
+            mirror=(slot,(slot+1)&15,37)[mirror_kind]
+            m.word(selection,slot);m.word(scan_addr,scan)
+            m.word(0x200134b4+4*side,mirror);m.word(0x20002eb8,dirty)
+            m.word(0x20002f04,1);m.word(0x20002f08,1)
+            m.word(0x58021810,64 if side==0 else 128)
+            m.word(0x20002f58,257)
+            m.word(0x20002f34,100);m.word(0x20002f38,100)
+            def snapshot():
+                return ArraySelectionState(m.word(selection),m.word(scan_addr),
+                    m.word(0x200134b4+4*side),m.word(0x20002f34+4*side),
+                    m.uc.mem_read(0x20002f48+side,1)[0],
+                    (m.word(0x20002f08),m.word(0x20002f04)),m.word(0x20002eb8))
+            start,end=(0x0802e4ec,0x0802da50) if side==0 else (0x0802dc50,0x0802dc96)
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,start)
+            expected=array_selection_action('AB'[side],snapshot())
+            self.run_slice(m,start,end)
+            self.assertEqual(snapshot(),expected,(side,slot,mirror,scan,dirty))
+            COUNTS['array_selection_model_cases']+=1
+
+    def test_clock_timer_prefix_model(self):
+        import itertools
+        elapsed_values=(0,5999,6000,6001,0xfffffffe,0xffffffff)
+        countdown_values=(0,1,2,0x7fffffff,0x80000000,0x80000001,0xffffffff)
+        for ei,ci,active,policy in itertools.product(range(6),range(7),range(4),
+                                                    ((0,1),(1,0),(7,7))):
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
+            state=ClockTimerState((elapsed_values[ei],elapsed_values[(ei+3)%6]),
+                                 (countdown_values[ci],countdown_values[6-ci]),policy)
+            capture=tuple((active>>i)&1 for i in range(2))
+            for side in range(2):
+                m.word(0x20002f0c+4*side,state.elapsed[side])
+                m.word((0x20002ed0,0x20002ecc)[side],state.countdown[side])
+                m.word((0x20002ed8,0x20002ed4)[side],state.policy[side])
+                m.word((0x20002e84,0x20002e80)[side],capture[side])
+            expected=clock_timer_tick(state,capture)
+            self.run_slice(m,0x0802d900,0x0802d99e)
+            actual=ClockTimerState(tuple(m.word(0x20002f0c+4*i) for i in range(2)),
+                                  tuple(m.word(a) for a in (0x20002ed0,0x20002ecc)),
+                                  tuple(m.word(a) for a in (0x20002ed8,0x20002ed4)))
+            self.assertEqual(actual,expected,(state,capture))
+            self.assertEqual(tuple(m.word(a) for a in (0x20002e84,0x20002e80)),capture)
+            COUNTS['clock_timer_model_cases']+=1
+
+    def test_button_edge_sampling_model(self):
+        import itertools
+        for previous,current,pending in itertools.product(range(8),repeat=3):
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
+            old=tuple((previous>>i)&1 for i in range(3))
+            now=tuple((current>>i)&1 for i in range(3))
+            events=tuple((pending>>i)&1 for i in range(3))
+            m.uc.mem_write(0x20002f5a,bytes(old))
+            m.word(0x58020c10,(128 if now[0] else 0)|(8 if now[2] else 0))
+            m.word(0x58020410,64 if now[1] else 0)
+            for i in range(3):
+                m.word(0x20002f28+4*i,events[i]);m.word(0x20002f3c+4*i,77+i)
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,0x0802dce4)
+            def snapshot():
+                return ButtonEdgeState(tuple(m.uc.mem_read(0x20002f5a,3)),
+                                       tuple(m.word(0x20002f28+4*i) for i in range(3)),
+                                       tuple(m.word(0x20002f3c+4*i) for i in range(3)))
+            before=snapshot();self.assertEqual(before,ButtonEdgeState(old,events,(77,78,79)))
+            expected=sample_button_edges(before,now)
+            tail=button_inputs(*self.button_action_snapshot(m),before,now)
+            self.run_slice(m,0x0802dce4,0x0802dd24)
+            self.assertEqual(snapshot(),expected,(previous,current,pending))
+            COUNTS['button_edge_model_cases']+=1
+            self.run_slice(m,0x0802dd24,0x08020000)
+            self.assertEqual((*self.button_action_snapshot(m),snapshot()),tail,
+                             (previous,current,pending))
+            COUNTS['button_input_tail_cases']+=1
+
+    def test_array_button_action_model(self):
+        import itertools
+        for side,raw,cached,engine,active,hold,lf,mirror,cursor in itertools.product(
+                range(2),range(2),range(2),range(3),range(2),(0,49,50),
+                range(2),range(2),(0,65536+17*64)):
+            case=(side,raw,cached,engine,active,hold,lf,mirror,cursor)
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
+            words={'cached_sao':(0x20002e94,0x20002e90)[side],
+                   'engine':(0x20002e8c,0x20002e88)[side],
+                   'capture':(0x20002e84,0x20002e80)[side],
+                   'hold':0x20002f34+4*side,'lf':(0x200023d0,0x20000820)[side],
+                   'cursor':(0x20002e7c,0x200011a0)[side],
+                   'policy':(0x20002ed8,0x20002ed4)[side],
+                   'engine_mirror':0x2001349c+4*side,'lf_mirror':0x200134ac+4*side,
+                   'dirty':0x20002eb8}
+            desc=(0x20000a20,0x20000920)[side];peak=(0x20002e9c,0x200011e0)[side]
+            seed=ArrayButtonState(raw_sao=raw,cached_sao=cached,engine=engine,
+                                  capture=active,hold=hold,lf=lf,cursor=cursor,
+                                  descriptor=(65536,65,8,7),peak=.75,policy=1,
+                                  engine_mirror=engine if mirror else 7,lf_mirror=lf if mirror else 7)
+            for key,addr in words.items():m.word(addr,getattr(seed,key))
+            m.uc.mem_write(0x20002f52+side,bytes([raw]))
+            m.uc.mem_write(desc,struct.pack('<4I',*seed.descriptor));m.floats(peak,[seed.peak])
+            m.word(0x58021810,64 if side==0 else 128)
+            m.word(0x20002f58,1 if side==0 else 256)
+            m.word(0x58020c10 if side==0 else 0x58020410,128 if side==0 else 64)
+            def snapshot():
+                values={key:m.word(addr) for key,addr in words.items()}
+                values.update(raw_sao=m.uc.mem_read(0x20002f52+side,1)[0],
+                              gesture=m.uc.mem_read(0x20002f48+side,1)[0],
+                              descriptor=struct.unpack('<4I',m.uc.mem_read(desc,16)),
+                              peak=m.floats(peak)[0])
+                return ArrayButtonState(**values)
+            start=0x0802dd60 if side==0 else 0x0802ddce
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,start)
+            before=snapshot();expected=array_button_action('AB'[side],before)
+            self.run_slice(m,start,0x08020000)
+            self.assertEqual(snapshot(),expected,case)
+            COUNTS['array_button_action_model_cases']+=1
+
+    def test_shared_button_action_model(self):
+        import itertools
+        for ha,hb,ca,cb,aux,interaction,mirrors in itertools.product(
+                (0,49,50,51),(0,49,50,51),range(2),range(2),
+                ((0,5),(1,4),(2,3),(3,2),(4,1),(5,0),(5,5)),range(3),range(3)):
+            case=(ha,hb,ca,cb,aux,interaction,mirrors)
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
+            m.word(0x58021810,192);m.word(0x20002f58,257);m.word(0x58020c10,8)
+            m.word(0x20002f34,ha);m.word(0x20002f38,hb)
+            m.word(0x20002e94,ca);m.word(0x20002e90,cb)
+            m.word(0x20002ef8,aux[0]);m.word(0x20002ef4,aux[1])
+            m.word(0x20013494,(7,0,1)[mirrors])
+            m.word(0x20013498,(7,0,1)[mirrors])
+            m.uc.mem_write(0x20002f54,bytes([interaction]))
+            m.word(0x200134bc,(7,0,1)[mirrors]);m.word(0x20002eb8,mirrors&1)
+            def snapshot():
+                return SharedButtonState(
+                    holds=tuple(m.word(a) for a in (0x20002f34,0x20002f38)),
+                    gestures=tuple(m.uc.mem_read(0x20002f48,2)),
+                    cached_sao=tuple(m.word(a) for a in (0x20002e94,0x20002e90)),
+                    auxiliary=tuple(m.word(a) for a in (0x20002ef8,0x20002ef4)),
+                    auxiliary_mirrors=tuple(m.word(a) for a in (0x20013494,0x20013498)),
+                    interaction=m.uc.mem_read(0x20002f54,1)[0],
+                    interaction_mirror=m.word(0x200134bc),dirty=m.word(0x20002eb8))
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,0x0802de3a)
+            expected=shared_button_action(snapshot())
+            self.run_slice(m,0x0802de3a,0x08020000)
+            self.assertEqual(snapshot(),expected,case)
+            COUNTS['shared_button_action_model_cases']+=1
+
     def test_concurrent_array_and_shared_button_edges(self):
         """Stable Shift levels, idle capture, no clocks or long-hold actions."""
         import itertools
@@ -1027,7 +1221,11 @@ class FirmwareDifferential(unittest.TestCase):
                     holds[target]=1601
                     value=(aux+1)%6
                     expected_aux[target]=1 if (a,b)[target][0] and value==0 else value
-            m.r(14,0x08020001);self.run_slice(m,0x0802d900,0x08020000)
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,0x0802dce4)
+            composed=button_actions(*self.button_action_snapshot(m),tuple(bool(edges&(1<<i)) for i in range(3)))
+            self.run_slice(m,0x0802dce4,0x08020000)
+            self.assertEqual(self.button_action_snapshot(m),composed,case)
+            COUNTS['composed_button_action_cases']+=1
             dispatch=[pc for pc in m.last_trace if pc in (0x0802dd60,0x0802ddce,0x0802de3a)]
             self.assertEqual(dispatch,[pc for bit,pc in enumerate((0x0802dd60,0x0802ddce,0x0802de3a))
                                        if edges&(1<<bit)],case)
@@ -1087,8 +1285,24 @@ class FirmwareDifferential(unittest.TestCase):
             elif ha>49:
                 if 51<=hb<=1499:selected[0]=1;holds[0]=1601
             elif hb<500:admit[1]=True
+            # Reusable decisions must reproduce the independent ordered oracle above.
+            model_selected=[0,0];model_admit=[False,False]
+            action=shift_release_action(ha,hb)
+            model_selected[1]=int(action=='select_other')
+            model_admit[0]=action=='clock_self'
+            if not model_selected[1]:
+                action=shift_release_action(hb,ha)
+                model_selected[0]=int(action=='select_other')
+                model_admit[1]=action=='clock_self'
+            self.assertEqual((model_selected,model_admit),(selected,admit),case)
             m.r(14,0x08020001);self.run_slice(m,0x0802d900,0x0802dce4)
             self.assertEqual([m.word(a) for a in (0x20002430,0x20000b20)],selected,case)
+            # Both-low entry clears displays; a subsequent selection restores its side.
+            displays=(selected[0],selected[1])
+            _,displays=shift_release_finish(0,(1,1),displays,4 if selected[1] else 2)
+            if not selected[1]:
+                _,displays=shift_release_finish(1,(0,1),displays,4 if selected[0] else 2)
+            self.assertEqual(tuple(m.word(a) for a in (0x20002f08,0x20002f04)),displays,case)
             self.assertEqual([m.word(a) for a in (0x20002f34,0x20002f38)],holds,case)
             for side in range(2):
                 count=(1 if active&(1<<side) else 2) if admit[side] else 0
@@ -1096,7 +1310,10 @@ class FirmwareDifferential(unittest.TestCase):
                 self.assertEqual(m.word((0x20002ed8,0x20002ed4)[side]),int(admit[side]),case)
                 self.assertEqual(m.word((0x20002438,0x20002434)[side]),
                                  0 if selected[side] else 7+int(admit[side]),case)
+            composed=button_actions(*self.button_action_snapshot(m),tuple(bool(edges&(1<<i)) for i in range(3)))
             self.run_slice(m,0x0802dce4,0x08020000)
+            self.assertEqual(self.button_action_snapshot(m),composed,case)
+            COUNTS['composed_button_action_cases']+=1
             for side in range(2):
                 was_active=(active>>side)&1;now_active=was_active;mode=0
                 desc=(0x20000a20,0x20000920)[side]+selected[side]*16
@@ -1169,7 +1386,8 @@ class FirmwareDifferential(unittest.TestCase):
 
     def test_consumed_gesture_release_and_rearm(self):
         """Reach both consumed gestures through real capture presses, then release."""
-        for remaining in range(32):
+        import itertools
+        for remaining,clocks in itertools.product(range(32),range(4)):
             m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
             for side in range(2):
                 desc=(0x20000a20,0x20000920)[side]
@@ -1185,9 +1403,28 @@ class FirmwareDifferential(unittest.TestCase):
             ui(15)
             self.assertEqual(bytes(m.uc.mem_read(0x20002f48,2)),b'\x04\x04')
             self.assertEqual([m.word(a) for a in (0x20002e84,0x20002e80)],[1,1])
+            def clock_edges(mask):
+                for side in range(2):
+                    if mask&(1<<side):
+                        m.r(0,64 if side==0 else 128);m.r(14,0x08020001)
+                        self.run_slice(m,0x08032688,0x08020000)
+            clock_edges(clocks)
+            routes=tuple(consumed_shift_route(side,tuple((remaining>>i)&1 for i in range(5)),
+                                             int(bool(clocks&(1<<side)))) for side in range(2))
             ui(remaining)
+            self.assertEqual(tuple(m.uc.mem_read(0x20002f48,2)),tuple(x.gesture for x in routes))
+            self.assertEqual(tuple(m.word(a) for a in (0x20002ee4,0x20002edc)),
+                             tuple(x.pending_clock for x in routes))
             self.assertEqual(bytes(m.uc.mem_read(0x20002f48,2)),
-                             b'\x04\x04' if remaining else b'\x00\x00',remaining)
+                             b'\x04\x04' if remaining else bytes((2 if clocks&1 else 0,0)),
+                             (remaining,clocks))
+            self.assertEqual([m.word(a) for a in (0x20002ee4,0x20002edc)],[0,0])
+            self.assertEqual([m.word(a) for a in (0x20002ee8,0x20002ee0)],
+                             [int(bool(clocks&1)),int(bool(clocks&2))])
+            self.assertEqual([m.word(a) for a in (0x20002ed8,0x20002ed4,
+                                                 0x20002ed0,0x20002ecc,
+                                                 0x20002438,0x20002434)],[0]*6,
+                             (remaining,clocks))
             expected_aux=[0 if remaining&16 else 5,5]
             self.assertEqual([m.word(a) for a in (0x20002ef8,0x20002ef4)],expected_aux,remaining)
             ui(remaining)
@@ -1207,7 +1444,27 @@ class FirmwareDifferential(unittest.TestCase):
             self.assertEqual(m.uc.mem_read(0x20002f54,1)[0],1,remaining)
             self.assertNotIn(0x0802de3a,m.last_trace)
             self.assertEqual([m.word(a) for a in (0x20002e84,0x20002e80)],[1,1],remaining)
-            COUNTS['consumed_gesture_rearm_sequences']+=1
+            self.assertEqual([m.word(a) for a in (0x20002ed8,0x20002ed4,
+                                                 0x20002ed0,0x20002ecc,
+                                                 0x20002438,0x20002434)],[0]*6,
+                             (remaining,clocks))
+            # Re-arming restores the ordinary asymmetric admission rules:
+            # stable-low A admits, stable-low B consumes without admission.
+            clock_edges(3);ui(0)
+            self.assertEqual([m.word(a) for a in (0x20002ee4,0x20002edc)],[0,0])
+            self.assertEqual([m.word(a) for a in (0x20002ed8,0x20002ed4,
+                                                 0x20002ed0,0x20002ecc,
+                                                 0x20002438,0x20002434)],[1,0,1,0,1,0],
+                             (remaining,clocks))
+            ui(2);clock_edges(2);ui(2)
+            self.assertEqual([m.word(a) for a in (0x20002ed8,0x20002ed4,
+                                                 0x20002ed0,0x20002ecc,
+                                                 0x20002438,0x20002434)],[1,1,0,1,1,1],
+                             (remaining,clocks))
+            self.assertEqual([m.word(a) for a in (0x20002ee8,0x20002ee0)],
+                             [int(bool(clocks&1))+1,int(bool(clocks&2))+2])
+            COUNTS['rearmed_clock_admissions']+=2
+            COUNTS['consumed_gesture_clock_sequences' if clocks else 'consumed_gesture_rearm_sequences']+=1
 
     def test_calibration_boot_button_dispatch(self):
         """Boot decision only: stop before ADC startup or defaults/reset path."""
@@ -1256,6 +1513,9 @@ class FirmwareDifferential(unittest.TestCase):
             self.run_slice(m,0x0802d900,(0x08020000,0x0802d330))
             expected=mode+1 if side==1 and hold>9 else 0
             saving=expected in (3,12)
+            modeled=calibration_release_action(mode,side,hold)
+            self.assertEqual((modeled.stage,modeled.clear_ui,modeled.save_pending),
+                             (expected,expected==0,saving))
             self.assertEqual(m.word(0x200144d4),expected,(mode,side,hold))
             self.assertEqual(m.uc.reg_read(arm.UC_ARM_REG_PC),0x0802d330 if saving else 0x08020000,
                              (mode,side,hold))
@@ -1289,7 +1549,10 @@ class FirmwareDifferential(unittest.TestCase):
             try:self.run_slice(m,resume,0x08020000)
             finally:m.uc.hook_del(hook)
             cleared=mode==11 or shortcut==1
-            self.assertEqual(m.word(0x200144d4),0 if cleared else 3,(mode,shortcut,status))
+            modeled=calibration_save_return(mode+1,shortcut)
+            self.assertEqual((modeled.stage,modeled.clear_ui,modeled.save_pending),
+                             (0 if cleared else 3,cleared,False))
+            self.assertEqual(m.word(0x200144d4),modeled.stage,(mode,shortcut,status))
             self.assertEqual(m.word(0x200144d0),shortcut)
             self.assertEqual(bytes(m.uc.mem_read(0x20002f50,5)),
                              bytes(5) if cleared else bytes((1,1,1,1,2)))
@@ -1612,16 +1875,17 @@ class FirmwareDifferential(unittest.TestCase):
     def test_clock_interrupt_through_ui_handler(self):
         for side in ('A','B'):
             is_b=side=='B'
-            for mode in (0,1,5):
-                for period in (0,1,1023,1024,5999,6000):
+            for mode in range(6):
+                for period in (0,1,1023,1024,5999,6000,6001,10000,
+                               0x5fffffff,0x60000000,0x60000100,0xffffffff):
                     for capturing in (0,1):
-                        for dimension in (0,8,65):
+                        for dimension,second in ((0,1),(8,1),(65,1),(8,8)):
                             m=SliceMachine();m.uc.mem_map(0x58020000,0x10000)
                             m.uc.mem_map(0x60000000,0x1000)
                             short_rates=[f32(.001+j*.000001) for j in range(1024)]
                             m.floats(0x60000000,short_rates)
                             descriptor=0x20000920 if is_b else 0x20000a20
-                            m.word(descriptor+4,dimension);m.word(descriptor+8,1)
+                            m.word(descriptor+4,dimension);m.word(descriptor+8,second)
                             m.word(0x20002e80 if is_b else 0x20002e84,capturing)
                             m.word(0x20002ef4 if is_b else 0x20002ef8,mode)
                             rate_addr=0x200023f4 if is_b else 0x200023f8
@@ -1634,23 +1898,235 @@ class FirmwareDifferential(unittest.TestCase):
                             m.r(0,128 if is_b else 64);m.r(14,0x08020001)
                             self.run_slice(m,0x08032688,0x08020000)
                             m.r(14,0x08020001)
-                            self.run_slice(m,0x0802d900,0x08020000)
+                            start=0x0802e37e if is_b else 0x0802e2ca
+                            self.run_slice(m,0x0802d900,start)
+                            def snapshot():
+                                return AdmittedClockState(dimension,second,m.word(offset_addr),capturing,mode,
+                                    m.word(0x20002f10 if is_b else 0x20002f0c),m.floats(rate_addr)[0],
+                                    m.word(0x2001348c+(28 if is_b else 24)),m.word(0x20002eb8),
+                                    m.word(0x20002ecc if is_b else 0x20002ed0),
+                                    m.word(0x20002ed4 if is_b else 0x20002ed8))
+                            expected=admitted_clock_action(snapshot(),short_rates)
+                            self.run_slice(m,start,0x08020000)
+                            self.assertEqual(snapshot(),expected,(side,mode,period,capturing,dimension,second))
+                            COUNTS['admitted_clock_model_cases']+=1
                             self.assertEqual(m.word(0x20002edc if is_b else 0x20002ee4),0)
                             self.assertEqual(m.word(0x20002ed4 if is_b else 0x20002ed8),1)
                             expected_count=1 if capturing else (dimension+63)//64
                             self.assertEqual(m.word(0x20002ecc if is_b else 0x20002ed0),expected_count)
                             if mode in (0,5):
-                                self.assertEqual(m.word(offset_addr),0)
+                                advanced=max(0,dimension-1)+1
+                                self.assertEqual(m.word(offset_addr),advanced if advanced<dimension*second else 0)
                                 expected_rate=.125
                             else:
                                 self.assertEqual(m.word(offset_addr),max(0,dimension-1))
                                 expected_rate=(short_rates[period] if 1<=period<=1023 else
                                                f32((1/64)/period) if 1024<=period<=5999 else .125)
-                                display_period=int(mul(f32(period),f32(1.333333254)))
+                                display_period=min(0x7fffffff,int(mul(f32(period),f32(1.333333254))))
                                 self.assertEqual(m.word(0x2001348c+(28 if is_b else 24)),display_period)
                             self.equal_floats([expected_rate],m.floats(rate_addr))
                             self.assertEqual(m.word(0x20002f10 if is_b else 0x20002f0c),0)
                             COUNTS['clock_ui_cases']+=1
+
+    def test_normal_shift_stage_model(self):
+        import random
+        from unicorn.arm_const import UC_ARM_REG_PC
+        rng=random.Random(67031)
+        words={'pending_clock':(0x20002ee4,0x20002edc),'hold':(0x20002f34,0x20002f38),
+            'linear_runtime':(0x20002ec4,0x20002ec0),'slot':(0x20002430,0x20000b20),
+            'slot_mirror':(0x200134b4,0x200134b8),'scan':(0x20002438,0x20002434),
+            'capture':(0x20002e84,0x20002e80),'auxiliary':(0x20002ef8,0x20002ef4),
+            'elapsed':(0x20002f0c,0x20002f10),'period_mirror':(0x200134a4,0x200134a8),
+            'countdown':(0x20002ed0,0x20002ecc),'policy':(0x20002ed8,0x20002ed4)}
+        floats={'phase':(0x20002418,0x20002414),'rate':(0x200023f8,0x200023f4)}
+        shorts=(0x20013490,0x20013492);descs=(0x20000a20,0x20000920)
+        rates=[0.]+[f32((1/64)/j) for j in range(1,1024)]
+        for case in range(1536):
+            mask=case%32;previous=(case//32)%4;clocks=(case//128)%4
+            current=tuple((mask>>i)&1 for i in range(5))
+            m=SliceMachine();m.uc.mem_map(0x58020000,0x10000);m.uc.mem_map(0x60000000,0x1000)
+            m.floats(0x60000000,rates)
+            m.word(0x58021810,(64 if mask&1 else 0)|(128 if mask&2 else 0))
+            m.word(0x58020c10,(128 if mask&4 else 0)|(8 if mask&16 else 0))
+            m.word(0x58020410,64 if mask&8 else 0)
+            for i in range(2):
+                state=ShiftSideState(previous=(previous>>i)&1,gesture=rng.choice((0,1,2,3,4)),
+                    pending_clock=(clocks>>i)&1,hold=rng.choice((0,9,10,49,50,51,499,500,1499,1500,1501,1600,1601)),
+                    linear_setting=rng.choice((0,1,0x8000,0xffff)),linear_runtime=7,
+                    slot=rng.randrange(16),slot_mirror=rng.randrange(16),scan=rng.choice((0,7,63,0xffffffff)),
+                    capture=rng.randrange(2),auxiliary=rng.randrange(6),phase=-0.25,
+                    elapsed=rng.choice((0,1,1022,1023,5998,5999,6000,0xffffffff)),rate=f32(.123),
+                    period_mirror=rng.choice((0,1,8000)),countdown=rng.choice((0,1,2,8,0x80000000)),policy=rng.randrange(2),
+                    dimensions=tuple(rng.choice(((0,1),(8,8),(65,1),(0x80000000,1))) for _ in range(16)))
+                for name,addresses in words.items():m.word(addresses[i],getattr(state,name))
+                for name,addresses in floats.items():m.floats(addresses[i],[getattr(state,name)])
+                m.uc.mem_write(shorts[i],struct.pack('<H',state.linear_setting))
+                m.uc.mem_write(0x20002f58+i,bytes((state.previous,)))
+                m.uc.mem_write(0x20002f48+i,bytes((state.gesture,)))
+                for slot,dimensions in enumerate(state.dimensions):
+                    m.word(descs[i]+16*slot+4,dimensions[0]);m.word(descs[i]+16*slot+8,dimensions[1])
+            m.word(0x20002f08,7);m.word(0x20002f04,19);m.word(0x20002eb8,case&1)
+            def snapshot():
+                sides=[]
+                for i in range(2):
+                    values={name:m.word(addresses[i]) for name,addresses in words.items()}
+                    values.update({name:m.floats(addresses[i])[0] for name,addresses in floats.items()})
+                    values.update(previous=m.uc.mem_read(0x20002f58+i,1)[0],gesture=m.uc.mem_read(0x20002f48+i,1)[0],
+                        linear_setting=struct.unpack('<H',m.uc.mem_read(shorts[i],2))[0],
+                        dimensions=tuple((m.word(descs[i]+16*j+4),m.word(descs[i]+16*j+8)) for j in range(16)))
+                    sides.append(ShiftSideState(**values))
+                return ShiftStageState(tuple(sides),tuple(m.word(a) for a in (0x20002f08,0x20002f04)),m.word(0x20002eb8))
+            initial=snapshot();expected=normal_shift_stage(initial,current,rates)
+            m.r(14,0x08020001);self.run_slice(m,0x0802d900,(0x0802dce4,0x0802e698,0x0802e678))
+            pc=m.uc.reg_read(UC_ARM_REG_PC)
+            reset={0x0802dce4:None,0x0802e698:0,0x0802e678:1}[pc]
+            self.assertEqual(ShiftStageResult(snapshot(),reset),expected,(case,current,initial))
+            COUNTS['normal_shift_stage_cases']+=1
+            COUNTS['normal_shift_stage_reset_boundaries']+=int(reset is not None)
+            if reset is not None:
+                # Execute the original factory copy, then supply a save return.
+                # File/flash work is intentionally outside this continuation fixture.
+                bank=(0x60c01000,0x60001000)[reset]
+                m.uc.mem_map(bank,0x4000)
+                m.run(pc,(0x0802e6a6,0x0802e686)[reset],limit=100000)
+                COVERAGE.update(m.last_trace)
+                self.assertEqual(bytes(m.uc.mem_read(bank,16384)),bytes(m.uc.mem_read(0x08045a98,16384)))
+                desc=descs[reset]+16*initial.sides[reset].slot
+                self.assertEqual((m.word(desc+4),m.word(desc+8),m.word(desc+12)),(8,8,0))
+                self.assertEqual(m.r(0),reset)
+                # Explicitly supplied post-save dirty state and varied return words.
+                m.word(0x20002eb8,(case//2)&1);m.r(0,(0,1,0xffffffff)[case%3])
+                resumed=resume_shift_after_reset(snapshot(),reset,current,rates)
+                self.run_slice(m,(0x0802e6aa,0x0802e68a)[reset],
+                               (0x0802dce4,0x0802e698,0x0802e678))
+                pc=m.uc.reg_read(UC_ARM_REG_PC)
+                reset={0x0802dce4:None,0x0802e698:0,0x0802e678:1}[pc]
+                self.assertEqual(ShiftStageResult(snapshot(),reset),resumed,(case,'resumed'))
+                self.assertIsNone(reset)  # A is now 1601, preventing B from winning a second reset.
+                COUNTS['normal_shift_reset_resumptions']+=1
+            if reset is None:
+                tail=button_inputs(*self.button_action_snapshot(m),ButtonEdgeState(),current[2:])
+                self.run_slice(m,0x0802dce4,0x08020000)
+                edge=ButtonEdgeState(tuple(m.uc.mem_read(0x20002f5a,3)),
+                    tuple(m.word(0x20002f28+4*j) for j in range(3)),
+                    tuple(m.word(0x20002f3c+4*j) for j in range(3)))
+                self.assertEqual((*self.button_action_snapshot(m),edge),tail,(case,current))
+                COUNTS['normal_shift_button_tail_cases']+=1
+        self.assertGreater(COUNTS['normal_shift_stage_reset_boundaries'],0)
+
+    def test_shift_release_finish_model(self):
+        from unicorn.arm_const import UC_ARM_REG_SP
+        import itertools
+        for side,gesture,elapsed,display in itertools.product(range(2),(0,1,2,3,4,5,255),
+                ((0,0),(1,9),(6000,6001),(0xffffffff,0x80000000)),((0,0),(1,1),(7,19))):
+            m=SliceMachine()
+            for i in range(2):
+                m.word(0x20002f0c+4*i,elapsed[i]);m.word((0x20002f08,0x20002f04)[i],display[i])
+                m.word(0x20002f34+4*i,77+i)
+            m.uc.mem_write(0x20002f48+1-side,bytes((gesture,)))
+            m.r(6,0x20002f0c);m.r(5,0x20002f48);m.r(2,0x20002f58)
+            m.word(m.uc.reg_read(UC_ARM_REG_SP)+4,gesture)
+            self.run_slice(m,(0x0802db88,0x0802da44)[side],
+                           (0x0802dc9a,0x0802db9a) if side==0 else 0x0802dce4)
+            actual=(tuple(m.word(0x20002f0c+4*i) for i in range(2)),
+                    tuple(m.word(a) for a in (0x20002f08,0x20002f04)))
+            self.assertEqual(actual,shift_release_finish(side,elapsed,display,gesture),
+                             (side,gesture,elapsed,display))
+            self.assertEqual(tuple(m.word(0x20002f34+4*i) for i in range(2)),(77,78))
+            COUNTS['shift_release_finish_cases']+=1
+
+    def test_shift_passive_action_models(self):
+        import itertools
+        for side,press,aux,count,linear,scan,dims in itertools.product(
+                range(2),range(2),range(6),(0,1,2,0x80000000,0xffffffff),
+                (0,1,0x7fff,0x8000,0xffff),(0,63,0xffffffff),((8,8),(0,1),(0x80000000,1))):
+            # Press ignores scan/countdown/linear; sample those dimensions once.
+            if press and (count!=0 or scan!=0 or dims!=(8,8)):continue
+            state=PassiveShiftState(77,aux,-0.25,linear,123,scan,*dims,count)
+            m=SliceMachine()
+            hold=0x20002f34+4*side;mode=(0x20002ef8,0x20002ef4)[side]
+            phase=(0x20002418,0x20002414)[side];runtime=(0x20002ec4,0x20002ec0)[side]
+            scanaddr=(0x20002438,0x20002434)[side];desc=(0x20000a20,0x20000920)[side]
+            m.word(hold,77);m.word(mode,aux);m.floats(phase,[-0.25]);m.word(runtime,123)
+            m.uc.mem_write(0x20013490+2*side,struct.pack('<H',linear))
+            m.word(scanaddr,scan);m.word(desc+4,dims[0]);m.word(desc+8,dims[1])
+            m.word((0x20002ed0,0x20002ecc)[side],count)
+            m.r(1,0x20002f34);m.r(4,0x20002f60);m.r(3,count);m.r(11,0x20002ecc)
+            start=((0x0802e07c,0x0802d9d4),(0x0802dcbe,0x0802dd4a))[side][press]
+            self.run_slice(m,start,(0x0802d9ee,0x0802dce4)[side])
+            actual=PassiveShiftState(m.word(hold),m.word(mode),m.floats(phase)[0],linear,
+                m.word(runtime),m.word(scanaddr),m.word(desc+4),m.word(desc+8),
+                m.word((0x20002ed0,0x20002ecc)[side]))
+            expected=shift_press_action(state) if press else shift_idle_action(side,state)
+            self.assertEqual(actual,expected,(side,press,state))
+            COUNTS['shift_passive_action_cases']+=1
+
+    def test_shift_dispatch_model(self):
+        from unicorn.arm_const import UC_ARM_REG_PC
+        import itertools
+        for side in range(2):
+            boundaries=((0x0802e0cc,0x0802da90,0x0802e07c,0x0802d9d4),
+                        (0x0802dfb8,0x0802da18,0x0802dfe6,0x0802dcbe,0x0802dd4a))[side]
+            routes=(('hold','release','idle','press'),
+                    ('hold','release','release','idle','press'))[side]
+            for mask,previous,gesture,clock in itertools.product(range(32),range(2),(0,1,2,3,4,5,255),(0,1,2,0xffffffff)):
+                current=tuple((mask>>i)&1 for i in range(5))
+                m=SliceMachine()
+                m.uc.mem_write(0x20002f60,bytes(current))
+                m.uc.mem_write(0x20002f48+side,bytes((gesture,)))
+                m.uc.mem_write(0x20002f58+side,bytes((previous,)))
+                event=(0x20002ee4,0x20002edc)[side];m.word(event,clock)
+                m.r(4,0x20002f60);m.r(5,0x20002f48)
+                m.r(2,0x20002f58);m.r(0,current[1])
+                m.r(1,0x20002f34 if side else current[4])
+                self.run_slice(m,(0x0802d99e,0x0802d9ee)[side],boundaries)
+                route=routes[boundaries.index(m.uc.reg_read(UC_ARM_REG_PC))]
+                actual=ConsumedShiftRoute(m.uc.mem_read(0x20002f58+side,1)[0],
+                    m.uc.mem_read(0x20002f48+side,1)[0],m.word(event),route)
+                self.assertEqual(actual,shift_dispatch(side,current,previous,gesture,clock),
+                                 (side,mask,previous,gesture,clock))
+                COUNTS['shift_dispatch_cases']+=1
+
+    def test_consumed_shift_route_model(self):
+        from unicorn.arm_const import UC_ARM_REG_PC
+        for side in range(2):
+            boundaries=((0x0802e0cc,0x0802da90,0x0802e07c),
+                        (0x0802dfb8,0x0802dcbe))[side]
+            routes=(('hold','release','idle'),('hold','idle'))[side]
+            for mask in range(32):
+                current=tuple((mask>>i)&1 for i in range(5))
+                for clock in (0,1,2,0xffffffff):
+                    m=SliceMachine()
+                    m.uc.mem_write(0x20002f60,bytes(current))
+                    m.uc.mem_write(0x20002f48,b'\x04\x04')
+                    m.uc.mem_write(0x20002f58,b'\x01\x01')
+                    event=(0x20002ee4,0x20002edc)[side];m.word(event,clock)
+                    m.r(4,0x20002f60);m.r(5,0x20002f48)
+                    m.r(2,0x20002f58);m.r(0,current[1])
+                    m.r(1,0x20002f34 if side else current[4])
+                    self.run_slice(m,(0x0802d99e,0x0802dc9c)[side],boundaries)
+                    route=routes[boundaries.index(m.uc.reg_read(UC_ARM_REG_PC))]
+                    actual=ConsumedShiftRoute(m.uc.mem_read(0x20002f58+side,1)[0],
+                        m.uc.mem_read(0x20002f48+side,1)[0],m.word(event),route)
+                    self.assertEqual(actual,consumed_shift_route(side,current,clock),(side,mask,clock))
+                    COUNTS['consumed_shift_route_cases']+=1
+
+    def test_shift_release_decision_model(self):
+        from unicorn.arm_const import UC_ARM_REG_PC
+        values=(0,9,10,49,50,51,499,500,1498,1499,1500,1600,1601,0x80000000,0xffffffff)
+        for side in range(2):
+            boundaries=((0x0802dc50,0x0802e2ca,0x0802db88),
+                        (0x0802e4ec,0x0802e37e,0x0802da44))[side]
+            for hold in values:
+                for other in values:
+                    m=SliceMachine()
+                    m.r(1,0x20002f34);m.r(5,0x20002f48)
+                    m.word(0x20002f34,other if side else hold)
+                    m.word(0x20002f38,hold if side else other)
+                    self.run_slice(m,(0x0802e422,0x0802e36c)[side],boundaries)
+                    actual=('select_other','clock_self','none')[boundaries.index(m.uc.reg_read(UC_ARM_REG_PC))]
+                    self.assertEqual(actual,shift_release_action(hold,other),(side,hold,other))
+                    COUNTS['shift_release_decision_cases']+=1
 
     def test_stable_gpio_clock_admission(self):
         for pins in (0,64,128,192):
@@ -2044,11 +2520,17 @@ class FirmwareDifferential(unittest.TestCase):
                         sampled_other=other+side  # A increments before B dispatch
                         action=1500<hold+1<=1600 and hold+1>sampled_other
                         reset=action and sampled_other>300
+                        modeled=long_hold_step(hold,sampled_other,linear)
+                        self.assertEqual(modeled.action,'reset' if reset else 'toggle' if action else 'none')
                         m.r(14,0x08020001)
                         stop=(0x0802e686 if side else 0x0802e6a6) if reset else 0x08020000
                         m.run(0x0802d900,stop,100000);COVERAGE.update(m.last_trace)
                         actual_linear=struct.unpack('<H',m.uc.mem_read(0x20013490+side*2,2))[0]
                         self.assertEqual(actual_linear,1-linear if action and not reset else linear)
+                        self.assertEqual(actual_linear,modeled.linear)
+                        self.assertEqual(m.word(0x20002f34+side*4),modeled.hold)
+                        self.assertEqual(m.word(0x20002eb8),modeled.dirty)
+                        COUNTS['long_hold_model_cases']+=1
                         if reset:
                             self.assertEqual(bytes(m.uc.mem_read(target,16384)),expected)
                             self.assertEqual(struct.unpack('<4I',m.uc.mem_read(desc,16)),(offset,8,8,0))

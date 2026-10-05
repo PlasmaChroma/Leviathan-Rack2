@@ -1,7 +1,7 @@
 {
   "passed": true,
   "unicorn": "2.1.4",
-  "tests_run": 88,
+  "tests_run": 90,
   "failures": 0,
   "errors": 0,
   "counts": {
@@ -143,7 +143,11 @@
     "persistent_shift_release_capture_sequences": 2,
     "shift_release_shared_edge_cases": 1600,
     "shift_release_shared_held_cases": 1600,
-    "consumed_gesture_rearm_sequences": 32
+    "consumed_gesture_rearm_sequences": 32,
+    "consumed_gesture_clock_sequences": 96,
+    "rearmed_clock_admissions": 256,
+    "array_button_action_model_cases": 1152,
+    "shared_button_action_model_cases": 4032
   },
   "metrics": {
     "mode_cycle_standard_max_absolute_error": 2.7567148208618164e-05,
@@ -157,7 +161,7 @@
     "full_sao_min_active_terms": 4,
     "full_sao_max_active_terms": 60
   },
-  "unique_instruction_addresses": 9577,
+  "unique_instruction_addresses": 9584,
   "addresses": [
     "0x0802039c",
     "0x0802039e",
@@ -2659,6 +2663,8 @@
     "0x0802dbca",
     "0x0802dbce",
     "0x0802dbd2",
+    "0x0802dbd6",
+    "0x0802dbda",
     "0x0802dbdc",
     "0x0802dbde",
     "0x0802dbe0",
@@ -3189,6 +3195,9 @@
     "0x0802e250",
     "0x0802e254",
     "0x0802e258",
+    "0x0802e25c",
+    "0x0802e25e",
+    "0x0802e262",
     "0x0802e264",
     "0x0802e266",
     "0x0802e26a",
@@ -3540,6 +3549,8 @@
     "0x0802e6f6",
     "0x0802e6fa",
     "0x0802e6fc",
+    "0x0802e700",
+    "0x0802e704",
     "0x0802e750",
     "0x0802e754",
     "0x0802e756",

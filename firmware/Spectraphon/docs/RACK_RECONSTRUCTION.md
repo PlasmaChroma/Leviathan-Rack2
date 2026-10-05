@@ -41,6 +41,13 @@ executes the firmware, then compares its results with the authored equations.
 | Concurrent Array/shared-button edges | 3,456 event combinations plus 3,456 held-input callbacks | A then B then shared dispatch, A-priority shifted CV target, combined mode/capture/LF effects and no redispatch while held |
 | Simultaneous Shift releases with Array/shared edges | 3,200 combinations, 1,600 held callbacks and two persistent press/hold sequences | A-first selection priority, retained Shift counters at Array/shared dispatch, exact Sub/CV and interaction mirrors, capture start/stop with both Shifts low, and reachable B stop-length underflow |
 | Consumed Shift gesture clearing/re-arm | 32 persistent sequences | Both consumed gestures remain latched while any panel input stays high; all-low clears counters and a new shared edge advances interaction rather than Sub/CV |
+| Reusable Array/shared action models | 1,152 Array and 4,032 shared action cases | Immutable authored state transitions match original action tails, including raw/cached mode mismatches, capture inhibition, LF/mode changes, mirror/dirty rules and unsigned stop lengths |
+| Composed action model (focused UI report) | 6,656 concurrent/release cases | A then B then shared composition matches complete represented state; side counter/gesture updates and shared dirty flag carry between actions |
+| Button edge sampler and connected input tail (focused UI report) | 512 previous/current/pending combinations | Rising edges set events; falling edges retain already-pending events; changed inputs reset button counters; complete tail dispatches and clears boolean events |
+| Reusable timer-prefix model (focused UI report) | 504 paired boundary cases | Elapsed increment/wrap, strict post-increment >6000 expiry with capture exception, and uint32 decrement followed by signed countdown clamp |
+| Reusable admitted-clock action (focused UI report) | 1,152 ISR/UI cases | Countdown/policy, scan-versus-rate routing, injected short-rate lookup, exact saved-period mirror/dirty behavior, and positive conversion saturation for long elapsed words |
+| Reusable Array-selection action (focused UI report) | 384 original selection bodies | Slot advance/wrap, consumed hold/gesture and display flags; scan reset and dirty marking depend on destination versus saved mirror |
+| Clocks during consumed gestures and recovery | 96 additional persistent sequences; 256 fresh admitted edges across all 128 sequences | ISR counts advance but latched-gesture edges are cleared without scheduling capture/scan; subsequent clocks recover the ordinary asymmetric A/B admission rules |
 | Calibration/display stage lifecycle | 200 boot decisions, 704 stable callbacks, 176 releases, 12 post-save caller continuations | Boot-button priority, stage retention/cancellation/advance, eight pending saves and exact reset behavior; physical save excluded |
 | Calibration averaging and stages 1/2 | 9 slow-bank and 576 fast-bank updates, 492 endpoint cases | Shared ring index, all twelve sums/histories, strict update versus inclusive readiness thresholds, float32 reciprocal gains including zero/negative spans |
 | Pitch-table calibration stages 3..11 | 532 independent cases, 36 persistent measurement steps, 18 UI advances, 972 generated-table pitch reads | Acceptance windows, exact reciprocal slopes, unconditional tail extrapolation, retained final slope and normal pitch consumption; stop before final flash save |
@@ -50,6 +57,7 @@ executes the firmware, then compares its results with the authored equations.
 | Reader arithmetic after capture underflow | 200 complete readers with explicit sparse source memory, 12 joined address prefixes and two joined save dispatches | Exact signed/wrapping addresses and coefficient deltas; original recording slot is the next save target; hardware contents at escaped addresses remain unknown |
 | Clock-policy timeout | 32 boundary cases | Strict >6000 threshold, recording exception and same-callback edge override |
 | Opposite-Shift Array selection | 640 cases | Release timing, all 16 slots, wrap, scan-offset reset and persistence mirror |
+| Reusable long-hold decision (focused UI report) | 64 original-handler cases | Ordered opposite-hold threshold, linear toggle/dirty update, hold clamp and deferred reset/save completion |
 | Long holds and factory Array replacement | 64 gesture cases, 32 direct resets | Linear toggle and reset dispatch; exact 8×8 factory spectra, descriptor and copy boundary |
 | Settings record codec | 256 pack and 256 unpack cases | Exact eight-word format, including arbitrary-bit and signed-field behavior |
 | Settings restore and save bookkeeping | 6 scans, 4 defaults, 12 save-tail cases | Sentinel/cursor, 256-byte copies, partial defaults and post-call updates; hardware writes excluded |
@@ -87,7 +95,7 @@ executes the firmware, then compares its results with the authored equations.
 | Save payload faults and multiple dirty slots | 12 failed writes, 24 short writes, 2 multi-slot batches | Failed frames are omitted, successful short counts are ignored, markers persist, and dirty slots save in order |
 | Display priority and mode/auxiliary indicators | 1020 priority cases and 2592 flag/counter cases | Exact four-channel PWM values, override flag and A/B GPIO writes through the complete indicator routine |
 
-The run covers **9,577 distinct instruction addresses**, not 9,577 functions or
+The run covers **9,584 distinct instruction addresses**, not 9,584 functions or
 complete firmware coverage. Machine-readable counts and exact executed addresses
 are in `analysis/continuation_tests.json`. The original 31 host tests also pass
 on native Windows after adding the UCRT `fmaf` loader.
@@ -1150,6 +1158,295 @@ the +8/+12 configuration mirror, dirty flag and unchanged interaction mode.
 Mode 0 is the SAM envelope; mode 5 selects the periodic waveform even in SAM.
 Section 4 gives the checked Follow/Sync indicator mapping.
 
+### Executable button-action definitions
+
+`calibration_release_action(stage, side, hold)` defines active-stage release
+routing for stages 1..11. A cancels at every tested hold; B cancels for uint32
+hold <=9 and otherwise increments stage. Entering stage 3 or 12 returns
+`save_pending=True`, stopping before calibration persistence. Cancellation
+returns stage 0 and `clear_ui=True`; normal release admission may then continue.
+Do not equate UI clearing with clearing hold counters or all engine state.
+
+`calibration_save_return(stage, shortcut)` defines the caller after a pending
+save returns: stage 12 exits and clears UI unconditionally; stage 3 exits only
+for shortcut exactly 1, otherwise it remains 3. The return status is ignored.
+Both helpers return `CalibrationReleaseResult`; their `clear_ui` request means
+the original clearing of five bytes each at raw UI `0x20002f50`, previous
+snapshots `0x20002f58` and current snapshots `0x20002f60`, plus the existing
+GPIO-high sequence documented in calibration lifecycle tests. It does not
+perform those surrounding writes or claim successful persistence.
+
+The models are checked by 176 original release cases across every active stage
+and eight hold values, including eight pending saves, and 12 caller continuations
+with supplied save returns. The same test retains 704 stable-input callbacks.
+These decisions supplement the normal-stage model; active-calibration UI
+clearing and subsequent processing still require composition into that model.
+
+`resume_shift_after_reset(post_io_state, reset_side, current, short_rates)`
+continues the partial normal-stage result after the caller has performed factory
+replacement and the save has returned. Supply the actual post-I/O state and the
+same sampled inputs. It sets the requesting hold to 1601 and resumes after that
+side, without another timer tick or entry display clear. A continues with B;
+B continues directly to the button tail. The firmware does not inspect the save
+return word. This helper does not assume that persistence succeeded.
+
+All 42 reset boundaries in the combined fixtures now execute the original
+16,384-byte factory copy, verify its spectra and 8×8/marker-zero descriptor,
+then resume with explicit supplied save returns and post-save dirty states.
+The continuation compares every represented field and reaches the button tail;
+all 1,536 combined cases now check that tail. Save calls are skipped in this
+fixture, so their success, timing and other mutations are not inferred from it.
+The copied bank and descriptor are checked independently of the UI model.
+
+`normal_shift_stage(ShiftStageState, current, short_rates)` composes timer,
+dispatch, press/idle, long-hold, release admission, selection, admitted-clock and
+release-completion models through `0x0802dce4`. `ShiftSideState` carries the
+represented side fields and all 16 descriptor dimension pairs; `current` is the
+five GPIO-sampled boolean inputs. This stage assumes inactive calibration
+(signed stage <=0). It first ticks both timers, clears both display flags when
+both Shifts are low, then processes A followed by B with shared dirty/display
+and cross-side selection effects carried forward.
+
+The result's `reset_side` is normally `None`. If a long hold requests factory
+replacement, it returns a **partial** state before `0x0802e698` (A) or
+`0x0802e678` (B), identifying the requesting side. Do not pass that partial state
+to the button tail: factory copy/save, post-return hold consumption and any
+remaining B processing still have to execute. No media operation is simulated.
+
+1,536 deterministic combined fixtures compare every represented field against
+the original GPIO-to-Shift handler. They cover every panel mask, previous Shift
+pair and boolean clock pair, with seeded gesture, hold, timer, capture, mode,
+selection, mirror, dimension and arithmetic-boundary combinations. Reset cases
+compare the original pre-factory boundary. Non-reset cases, and reset cases after the explicit continuation fixture, continue through the
+original button tail and compare `button_inputs` outputs and edge state as well.
+This is connected normal-stage evidence; active calibration and actual persistence
+remain separate, and seeded arbitrary combinations do not establish
+physical panel reachability for every state.
+
+`shift_release_finish(side, elapsed, display, other_gesture)` defines common
+release completion: clear this side's elapsed word and clear the opposite
+selection-display word unless the opposite gesture is 4. Own hold and display
+are retained. Opposite-Array selection has just set that gesture to 4, so its
+new selection display survives. The A path subsequently dispatches B; the B
+path proceeds to button-edge sampling. Those subsequent operations are outside
+this helper. 168 original completion slices cover both sides, gesture classes,
+elapsed boundaries and non-boolean display words; 3,200 connected simultaneous
+releases additionally check resulting display state after ordered selection
+and completion. The earlier both-Shifts-low branch clears both displays before
+release handling, which must occur before applying this helper.
+
+`PassiveShiftState`, `shift_press_action` and `shift_idle_action` define the
+press/idle tails selected by dispatch. Press clears the hold counter and sets
+auxiliary phase (`0x20002418` A / `0x20002414` B) to 1.0 unless auxiliary mode
+is 0 or 5; runtime linear state is retained. Idle clears the hold counter and
+sign-extends the saved linear halfword into its runtime word (`0x20002ec4` A /
+`0x20002ec0` B). In modes 0/5 it also increments scan when countdown is active,
+using uint32 increment/product and signed comparison against dimension1×dimension2
+to wrap to zero. A's tail tests the supplied countdown register for nonzero;
+B tests signed >0. Ordinary timer-prefix processing already clamps negatives;
+negative countdown fixtures establish slice behavior, not normal reachability.
+2,760 original-tail comparisons cover press/idle, both sides, all six auxiliary
+modes, countdown boundaries, sign-extension, scan rollover and dimension products.
+These helpers start after dispatch and preserve phase on idle; they do not
+perform the earlier display writes or the following side's dispatch.
+
+`shift_dispatch(side, current, previous, gesture, pending_clock)` joins
+ordinary and consumed Shift routing. Its result records the updated previous
+Shift, gesture byte, pending clock word and route (`press`, `hold`, `release`,
+`idle`). A changed Shift takes press (gesture 3) or release (gesture 2), consuming
+a coincident exact-one clock. A stable high Shift takes hold (gesture 1), unless
+an exact-one clock routes it to release (gesture 2). A stable low Shift normally
+takes idle (gesture 0); A's exact-one clock instead routes to release, while B
+consumes the event and stays idle. Gesture 4 delegates to the consumed rules
+below. Other initial gesture bytes do not alter ordinary dispatch.
+
+3,584 original branch comparisons cover both sides, every five-input mask,
+both previous Shift levels, initial gestures 0/1/2/3/4/5/255 and pending clock
+words 0/1/2/0xffffffff. The test stops at branch entry: press side effects,
+long holds, calibration/release admission and idle updates remain subsequent
+operations. Dispatching `release` is not itself proof that a clock is admitted.
+
+`consumed_shift_route(side, current, pending_clock)` defines dispatch while
+this side's gesture byte is 4. Any of the five panel inputs high retains
+that gesture, copies this side's current Shift into its previous snapshot,
+and routes to the existing hold increment/long-hold logic. With all inputs low,
+previous Shift becomes zero and the gesture clears, except that A with a clock
+word exactly 1 sets gesture 2 and routes to release handling. B takes idle
+handling. Only a clock word exactly 1 is cleared; other words remain unchanged.
+The result stops before hold, release or idle effects (including display,
+scan and linear-state updates), so it must be composed with those branches.
+256 original branch cases cover both sides, all 32 panel masks and clock words
+0/1/2/0xffffffff. The existing 128 persistent capture/re-arm sequences also
+check the model's gesture and event results after actual consumed gestures.
+
+`shift_release_action(hold, other_hold)` defines the normal, non-calibration
+release decision at `0x0802e422` / `0x0802e36c`. With opposite hold >49,
+only own hold 51..1499 selects the opposite Array. With opposite hold <=49,
+own hold <500 invokes the released side's admitted-clock action; all other
+cases do neither. Counters are uint32. The caller must establish release and
+handle consumed gestures first, then apply A's effects before evaluating B.
+450 direct branch comparisons cover both sides, thresholds and high-bit words;
+3,200 simultaneous-release combinations also check these decisions in order
+against the original handler and the independent existing state oracle.
+This defines release routing, not external-clock admission or calibration.
+
+`LongHoldResult` / `long_hold_step(hold, other_hold, linear, dirty)` define
+one held Shift increment and its long-hold decision. Supply the opposite hold
+as observed when this side runs: A precedes B. Increment wraps as uint32;
+values above 1600 clamp to 1600 without an action. Otherwise an action requires
+an incremented hold above 1500 and strictly greater than the opposite hold.
+An opposite hold at most 300 toggles the halfword linear flag, sets dirty to 1
+and consumes the hold as 1601; a larger opposite hold returns `action='reset'`.
+
+The reset result intentionally retains the incremented hold: the firmware
+writes 1601 only after factory replacement and its save call return. The caller
+must perform that deferred completion, rather than treating this helper as the
+entire persistence operation. The 64 original-handler cases compare this model
+at normal return or just before the reset save call; reset cases also check the
+original factory copy and pending side argument.
+
+`ArraySelectionState` / `array_selection_action(side, state)` define the selected
+side's update at `0x0802e4ec` (A) / `0x0802dc50` (B), after selection admission.
+Slot advances as `(slot+1)&15`; hold becomes 1601 and gesture becomes 4. The
+selection display flags become `(1,0)` for A or `(0,1)` for B. If the new slot
+differs from the saved slot mirror, the mirror updates, scan becomes zero and
+dirty becomes 1. If the mirror already equals the destination, scan and dirty
+are retained even though the live selected slot changed. This is a comparison
+with the mirror, not simply an unconditional reset on slot change.
+
+`test_array_selection_action_model` reaches the original selection body through
+an admitted opposite-Shift release, then compares that body with the helper in
+384 cases. Both sides, all 16 slots, mirrors equal to the old slot/destination/an
+unrelated value, scan 0/7 and both prior dirty values are covered. The mismatch
+fixtures specify the instruction behavior without asserting every mismatch is
+reachable through normal controls. Selection thresholds, the released side's
+elapsed reset and later Shift-counter processing remain outside this action.
+
+`ClockTimerState` / `clock_timer_tick(state, capture)` define the earlier timer
+stage `0x0802d946..0x0802d99e`. Each elapsed word increments modulo 2^32. If the
+new value is strictly greater than 6000 and that side's capture flag is zero,
+its policy becomes zero; otherwise policy is retained. Each countdown subtracts
+one modulo 2^32, then becomes zero if the resulting signed word is negative.
+Thus ordinary 0 stays 0 and 1 becomes 0, but supplied `0x80000000` becomes
+`0x7fffffff`, while `0x80000001` becomes zero. Those extreme fixtures define
+instruction arithmetic; they do not establish that normal controls reach them.
+Elapsed `0xffffffff` wraps to zero and does not newly expire policy on that call.
+
+`test_clock_timer_prefix_model` runs the original handler from entry through
+this stage in 504 cases: paired elapsed values around 6000 and unsigned wrap,
+countdowns around zero and the signed boundary, every capture-flag pair and
+zero/one/noncanonical policies. Both sides and capture-flag preservation compare
+exactly. Run this stage before Shift/release/clock admission; later admitted
+clocks may overwrite policy/countdown in the same callback. It is not yet a
+replacement for that intervening handler logic.
+
+`AdmittedClockState` / `admitted_clock_action(state, short_rates=None)` define
+the effects after a clock is admitted at `0x0802e2ca` / `0x0802e37e`. Supply the
+elapsed value after the timer tick. The helper sets policy 1 and countdown 1
+when capture is exactly 1, otherwise the instruction's signed arithmetic form
+of `ceil(dimension1/64)`. In modes 0/5 it advances scan with a signed comparison
+against the wrapped dimension product, preserving rate and period mirror.
+In modes 1..4 it preserves scan, selects the provided short-rate table at periods
+1..1023, divides for 1024..5999, and preserves the prior rate otherwise. Omitting
+the table uses the separately verified initialized table values.
+
+Rate-mode saved period is computed by uint32-to-float32 conversion, float32
+multiplication by bits `0x3faaaaaa`, and truncating signed conversion with positive
+saturation at `0x7fffffff`. Dirty is set only when that mirror changes; an already
+dirty state is retained. Elapsed resets to zero in both routing paths. The helper
+does not decide admission or update Shift/display/event state.
+
+The expanded original ISR/full-handler test now compares this model in 1,152
+cases: both sides, all six auxiliary modes, active/inactive capture, dimensions
+0-by-1/8-by-1/65-by-1/8-by-8, and twelve periods spanning zero, both rate-path
+boundaries, long periods and signed-conversion saturation. Distinguishable
+injected table values check lookup selection. Large periods retain rate but
+still update the saved period; saturation is checked independently of the rate
+cutoff. These long-period fixtures are supplied digital words, not measured
+hardware clock intervals. Saved-period restore has its separate conversion law.
+
+`ButtonEdgeState` / `sample_button_edges(state, current)` define the sampling
+slice `0x0802dce4..0x0802dd24`. Tuples are ordered Array A, Array B, shared.
+`previous` holds the prior GPIO snapshots, `pending` holds event flags, and
+`held` contains these buttons' independent counters, not the Shift counters.
+A changed input updates its previous snapshot and clears its counter. A rising
+input sets pending to 1; a falling input does **not** cancel an already-pending
+event. Unchanged inputs preserve all three fields. This routine does not itself
+increment the independent button counters.
+
+`button_inputs(a, b, shared, edges, current)` connects sampling to `button_actions`
+and returns `(a, b, shared, edges)` with the consumed boolean pending flags cleared.
+It represents the complete handler tail after Shift/clock/selection processing.
+The 512 combinations of three previous bits, three current bits and three prior
+event bits are checked both at the intermediate sampling boundary and at normal
+handler return, including stale pending events coinciding with falling inputs.
+These connected-tail fixtures start in idle raw/cached SAM with inactive capture
+and zero Shift counters; the larger action matrices below cover other states.
+The helper rejects nonboolean pending flags rather than claiming their behavior.
+
+`reference/sp67_ui.py` supplies immutable `ArrayButtonState` /
+`array_button_action(side, state)` and `SharedButtonState` /
+`shared_button_action(state)`. These define the actions after preceding
+Shift/clock/release processing has established hold counters and selection.
+Pass the selected descriptor and current capture cursor in coefficient units.
+Apply pending actions in A Array, B Array, shared order, carrying changed counters,
+gestures and the shared dirty flag between them. The enclosing adapter still owns
+GPIO snapshots, rising-edge detection/clearing, selection, clock scheduling,
+calibration and persistence calls. These helpers do not allocate Array storage.
+
+`button_actions(a, b, shared, pending)` now performs that composition and returns
+the three updated immutable states. `pending` contains A Array, B Array and shared
+booleans in that order. Side states own their hold/gesture/cached-mode fields;
+`shared.dirty` supplies the incoming global dirty flag. The function carries dirty
+changes from A to B to shared, then synchronizes all overlapping fields on return.
+It does not refresh cached modes from raw modes between actions.
+
+The existing 3,456 concurrent-press and 3,200 simultaneous-release fixtures now
+also snapshot every represented field after original Shift/clock processing at
+`0x0802dce4`, evaluate the composition, and compare with the original handler's
+return. The older independent expectations and instruction-order assertions
+remain in place. This checks selected descriptors, cursors, peaks, capture policy,
+engine/LF mirrors, cached/raw modes, counters, gestures, auxiliary/interaction
+mirrors and the shared dirty flag together, including active-capture release cases.
+The focused runner `tests/test_ui_actions.py` includes both individual action
+matrices, both composed matrices, the connected input-tail matrix and timer prefix. Its separate report is
+`analysis/ui_action_tests.json`; it does not overwrite or claim to rerun the
+full-suite baseline in `analysis/continuation_tests.json`.
+
+`test_array_button_action_model` executes the full handler up to the selected
+Array action, snapshots its state, evaluates the independent helper, then runs
+the original action tail to return. Its 1,152 cases cover both sides, both raw
+and cached SAM/SAO values independently, all engines 0..2, active/inactive capture,
+hold boundaries, both LF states, matching/stale engine/LF mirrors, and both
+ordinary and underflowing stop cursors. All represented fields compare exactly.
+
+The expanded matrix establishes details that should not be collapsed into a
+single mode enum or a generic toggle:
+
+* Raw SAM with a shifted Array action consumes the gesture (hold 1601, gesture 4).
+  A then refuses capture changes if its cached mode is nonzero. B's corresponding
+  raw-SAM action does not make this cached-mode check.
+* Raw oscillator mode with capture active ignores the Array action entirely,
+  including LF toggle and mode advance. Raw SAM with capture active ignores an
+  unshifted action; a shifted eligible action stops capture.
+* Starting capture retains clock policy, resets cursor/peak, and sets the selected
+  dimensions/marker to 1024-by-1/0. Stopping preserves the second dimension,
+  marker, cursor and peak, while updating the first dimension with wrapped
+  unsigned subtraction. A clears policy on stop; B retains it.
+* Entering SAO from raw SAM sets raw mode 1 and engine 0 without repairing the
+  engine mirror at this action boundary. Oscillator engine changes do update
+  that mirror if different; Chaos-to-SAM also clears policy. A shifted oscillator
+  action toggles LF and updates its mirror/dirty flag, but does not itself set
+  gesture byte 4 as the raw-SAM capture branch does.
+
+`test_shared_button_action_model` checks 4,032 snapshots through the original
+shared-action tail: both counter boundaries, independent cached modes, every
+auxiliary value 0..5, every interaction enum 0..2, matching/stale mirrors and
+prior dirty state. The helper preserves A-before-B targeting, oscillator wrap
+skipping auxiliary 0, and dirty-flag retention when the resulting mirror already
+matches. The tested domain uses boolean mode flags and engines 0..2; arbitrary
+corrupt enum values are not a compatibility claim.
+
 ### Concurrent Array and shared-button edges
 
 The complete handler processes pending rising edges in this order:
@@ -1270,7 +1567,30 @@ Holding that press does not advance interaction again. Both captures remain
 active throughout: clearing a consumed gesture does not itself stop capture.
 This gives the Rack input adapter a tested all-buttons-released re-arm rule for
 the reached dual-capture state. It does not establish every mixed gesture-byte,
-engine, calibration or pending-clock combination.
+engine or calibration combination.
+
+The same test now supplies each nonempty A/B clock-edge combination through the
+original ISR at `0x08032688` before each of the 32 release snapshots, adding 96
+persistent sequences. ISR event counts increment normally, but both pending
+flags clear without setting either capture policy/countdown or advancing either
+scan offset. These events are consumed, not queued for later replay. The six
+policy/countdown/scan words remain zero through the subsequent all-low re-arm
+and shared-button press/hold steps.
+
+On the exact all-low release callback, a pending A clock leaves A's gesture byte
+at 2 rather than 0; B's remains 0. The following unchanged all-low callback clears
+the A gesture and both counters. This transient is checked separately from the
+clock-free clearing rule above. With any panel input still high, both gesture
+bytes remain 4 in the tested starting state regardless of those clock flags.
+
+Finally each of all 128 sequences supplies fresh A/B clocks with Shift inputs
+low: A admits, B consumes without admission. After B Shift is pressed and stable,
+a further B clock admits. Each admitted edge sets that active capture's policy
+and countdown to 1 and advances its mode-0/5 scan offset to 1. The test checks
+256 admitted edges and exact cumulative ISR counts. This restores the ordinary
+asymmetric admission law from the clock section; do not interpret gesture
+clearing as making B's stable-low clock path admit. Audio/capture-writer execution,
+mixed prior gesture states and other Sub/CV modes remain outside these sequences.
 
 ### Array selection and long holds
 
@@ -1282,7 +1602,8 @@ and the held counter observed by the release branch exceeds 49. A is processed
 first, so that observed counter is H+1 for target A and H for target B.
 The tests use H in {49,50,51,300}, R in {0,50,51,1499,1500}, and all 16 slots.
 
-The selected slot becomes `(slot+1)&15`; its clock scan offset resets to zero,
+The selected slot becomes `(slot+1)&15`; with the matching-old-slot mirrors in
+these fixtures, its clock scan offset resets to zero,
 its configuration mirror is updated, and settings become dirty. This is an
 opposite-Shift **release** gesture, not an increment on initial press.
 Selection lives at `0x20002430` / `0x20000b20`, scan offsets at

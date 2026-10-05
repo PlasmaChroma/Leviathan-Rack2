@@ -22,7 +22,8 @@ gains are not established by the supplied image.
 
 Definitions in the following table are in
 [sp67_extended.py](../reference/sp67_extended.py), except the standard polynomial
-probe in [sp67_reference.py](../reference/sp67_reference.py). Test names refer to
+probe in [sp67_reference.py](../reference/sp67_reference.py) and the UI action
+models in [sp67_ui.py](../reference/sp67_ui.py). Test names refer to
 [test_arm_differential.py](../tests/test_arm_differential.py). Several complete
 behaviors are specified by original-handler fixtures plus prose rather than a
 standalone Python state-machine implementation; those are identified explicitly.
@@ -40,7 +41,7 @@ standalone Python state-machine implementation; those are identified explicitly.
 | Raw overflow diagnosis | `array_reader_addresses`; `test_raw_reader_addresses_after_capture_underflow` | Returns wrapped addresses only; never use them as unchecked host pointers |
 | Composed mode transitions | `test_full_button_mode_cycles_preserve_dsp_state`; reconstruction section 2 | Actual button edges through all engines; retained analyzer rates, continued detectors and working-bank updates; explicit callback-entry pole registers |
 | Callback registration/dispatch | `test_receive_registration_dma_dispatch_preserves_fp_context`, `test_receive_start_success_and_audio_dispatch`; reconstruction section 2 | Original receive setup, successful software DMA start and circular DMA1 half/full dispatch preserve incoming floating-point registers; physical transfers and exception context are not modeled |
-| Capture, buttons and clocks | Section 9 and original-handler tests, including `test_capture_gestures_audio_clock_and_planar_playback`, `test_concurrent_clocks_array_buttons_and_capture_tail` | No complete authored UI state-machine helper yet; port the documented order and preserve its tested contracts |
+| Capture, buttons and clocks | `sp67_ui.calibration_release_action`, `calibration_save_return`, `normal_shift_stage`, `resume_shift_after_reset`, `shift_release_finish`, `shift_press_action`, `shift_idle_action`, `shift_dispatch`, `consumed_shift_route`, `shift_release_action`, `long_hold_step`, `array_selection_action`, `clock_timer_tick`, `admitted_clock_action`, `button_inputs`, `sample_button_edges`, `button_actions`, `array_button_action`, `shared_button_action`; section 9 and original-handler tests, including `test_capture_gestures_audio_clock_and_planar_playback`, `test_concurrent_clocks_array_buttons_and_capture_tail` | Long-hold decisions, selection/clock effects, timer prefix, Array/shared sampling and composed actions have models; normal admission and A/B ordering are composed; reset-return continuation is explicit; active calibration and actual persistence remain separate |
 | Indicators | `indicator_register_values`, `tuning_beacon_action`; full indicator-routine tests | Register duty/pin values are checked; physical colors/brightness and all other direct writers are not |
 | Digital outputs/startup | `clip_a`, `clip_b`; `test_clipping_and_output_lanes`, complete callbacks, `test_disabled_audio_callbacks_preserve_dsp_but_continue_capture` | Eight independent lanes, per-side rounding, mute ordering, disabled DSP with continued capture |
 | Files/settings | `array_save_frame`, `array_decode_sample_buffer`, `array_load_count`, `pack_settings`, `unpack_settings`; complete parser/import/save fixture tests | The bounded tool intentionally rejects unsafe files; explicit file substitutions do not establish real media or flash success |
@@ -173,7 +174,10 @@ capture starts, any panel input held high retains both gesture latches; an
 all-low callback clears their counters and re-arms unshifted shared-button
 interaction changes. Capture itself remains active. See
 `test_consumed_gesture_release_and_rearm`; mixed initial latch states and
-pending clocks are outside that contract.
+other engine/Sub states are outside that contract. Its 96 additional clock-bearing
+sequences establish that ISR edges during the consumed gesture are cleared,
+not deferred; 256 fresh admitted edges across all 128 sequences then verify
+recovery of the normal A/B clock-admission asymmetry.
 The most useful next analysis is callback-entry FPU
 context, other prior-gesture/engine-state Shift releases and long-hold/capture transitions, and
 successful persistence/transport continuations where the binary permits a
@@ -189,8 +193,8 @@ those physical experiments is claimed by the emulator or synthetic file suite.
 ## Reproduction
 
 See [TOOLS_AND_REPRODUCTION.md](TOOLS_AND_REPRODUCTION.md) for dependencies and
-commands. The current report records 88 original-instruction test groups and
-31 host tests, with 9,577 distinct instruction addresses. This is measured
+commands. The current report records 90 original-instruction test groups and
+31 host tests, with 9,584 distinct instruction addresses. This is measured
 coverage of the named contracts, not complete firmware coverage. The separate
 continuation manifest protects current artifacts; initial combined reports and
 ZIP remain historical snapshots.
