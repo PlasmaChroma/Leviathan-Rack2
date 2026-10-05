@@ -33,7 +33,7 @@ def execute(c, return_cpu=False):
             assert call(cpu, 0x4E460, MANAGER, 10000 + slot, 0) == MANAGER + SLOT_SIZE * slot
     cpu.putf(source + 8, c['initial_fraction'])
     cpu.write(source + 20, bytes([c['held'] is not None]))
-    cpu.putf(source + 24, c['held'] or 1.)
+    cpu.putf(source + 24, c['held'] if c['held'] is not None else 1.)
     cpu.reg(0, source)
     cpu.fp(0, c['speed'])
     cpu.fp(1, c['factor'])
@@ -116,7 +116,7 @@ def model(c):
                 new = dict(position=position + math.floor(delta) if crossed else position,
                            fraction=delta - math.floor(delta) if crossed else 0., previous=position,
                            previous_fraction=0., held=int(c['held'] is not None),
-                           held_speed=c['held'] or 1., fade_active=1)
+                           held_speed=c['held'] if c['held'] is not None else 1., fade_active=1)
     return dict(current=current, current_fraction=total-whole, previous_fraction=c['initial_fraction'],
                 source_fade_active=int(triggered or c['already_fading']),
                 active_slots=list(range(5)) if c['saturated'] else [0, 1] if new else [0],

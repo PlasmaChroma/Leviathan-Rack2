@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "boundary_cases": 720,
+  "head_renders": 1368,
+  "comparisons": 219336,
+  "simultaneous_fade_heads": 144,
+  "successful_allocations": 648,
+  "failed_allocation_attempts": 0,
+  "max_abs_error": 3.0401959949521995e-08,
+  "distinct_instruction_addresses": 1652,
+  "limitations": [
+    "Original boundary allocation, trigger, transfer, render and manager update; independent head coordinates/fade states/gains/mix.",
+    "Physical/wrapped/double seams",
+    "Fresh source with available replacement slots",
+    "Supplied Link/stack scheduling and explicit head render order; no whole output effects, persistent reentry or iteration/movement of other old heads."
+  ]
+}

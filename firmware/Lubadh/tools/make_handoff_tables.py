@@ -27,12 +27,12 @@ meta={
 'ClockDivisions':('enum',{0:'All',1:'Even',2:'Odd',3:'Powers of two'},'0x3b320','See clock_division_sets.json.'),
 'Quantisation':('enum',{0:'All division set',1:'Even division set',2:'Odd division set',3:'Powers-of-two division set'},'0x37a44, 0x376ac, factory comments','Comment also says 0 disables: contradictory. Enable state is separate; do not conflate it with list selector.'),
 'EraseRecord':('enum',{0:'Punch-in overwrite',1:'Tap tempo'},'factory comments; 0x28734','Changes Erase+Record gesture.'),
-'MinLength':('samples',None,'0x376ac','Default minimum selected region, not proven universal first-record stopping threshold. Seconds=samples/rate.'),
+'MinLength':('samples',None,'0x376ac','Minimum selected region in samples; complete FirstRec stop consumer requires counter >= 4*MinLength. See FIRST_RECORD_STOP_FINDINGS.md; callback pending-stop handling remains open.'),
 'CrossfadeDuration':('milliseconds',[0,250],'0x376ac','Actual selected fade spans have a 128-sample floor on inspected path; zero is not evidence of discontinuous hard cuts.'),
-'RetrigDelay':('milliseconds',None,'0x49244, factory comments','Delays jack retriggers; block countdown, not proven universal button delay.'),
+'RetrigDelay':('documented milliseconds; consumer callback count',None,'0x3f3a8, 0x493d0; preset_load 0x17538; factory comments','Consumer appends raw integer and decrements once per callback. See RETRIGGER_EVENT_AND_QUEUE_FINDINGS.md; parser-to-shared-preset integration remains open.'),
 'MaxDubLevel':('normalized gain',[0,1],'0x37a44, 0x47818, 0x387fc','Maximum available dub level; transition envelope can vary actual old-buffer coefficient.'),
-'WowFlutterDepth':('normalized',[0,1],'0x37a44, 0x502c4','Effective amount = clamp(Time tape amount * preset depth). Full modulation not numerically probed.'),
-'CrinkleDepth':('normalized',[0,1],'0x37a44, 0x502c4','Effective amount = clamp(Time tape amount * preset depth). RNG/filtered irregularity.'),
+'WowFlutterDepth':('normalized',[0,1],'0x37a44, 0x502c4','Effective amount = clamp(Time tape amount * preset depth). Persistent scalar phases/release and factory initialization checked with explicit entropy/libm boundaries; scheduling remains open. See FLUTTER_FACTORY_FINDINGS.md.'),
+'CrinkleDepth':('normalized',[0,1],'0x37a44, 0x502c4','Effective amount = clamp(Time tape amount * preset depth). Factory seeded MT19937/filter recurrence and forced uniform endpoints checked; actual vector sizing and modulation/touch integration remain open. See FLUTTER_FACTORY_FINDINGS.md.'),
 'TapeAge':('normalized',[0,1],'0x37a44, 0x4f524','Mix amount for active static five-one-pole TapeFilter, not standalone TapeAge class.'),
 'Hysterisis':('normalized',[0,1],'0x37a44, 0x4fce8','Original misspelling preserved. Mix amount for 68/159/251/375-sample signed delay diffuser.'),
 'Wear':('normalized',[0,1],'0x37a44, 0x4fc60','Mix x toward x*abs(x); applies in input and playback chains.'),
@@ -51,11 +51,16 @@ for key,value in D.items():
 (ROOT/'tables/parameter_bible.json').write_text(json.dumps({'scope':'Supplied 2.1.0 preset schema; ranges without full validation are not hardware measurements','fields':rows},indent=2)+'\n')
 text=['# Parameter bible — supplied Lúbadh 2.1.0 update','',f'{len(rows)} flattened fields; exact vendor spellings preserved. Default = 01-Tape-Looper. Numeric ranges here are documented preset ranges, not measured voltage limits.','']
 for r in rows:
- text += [f"## `{r['key']}`",'',f"**Default:** `{r['default']}` · **Unit:** {r['unit']}  ",f"**Evidence:** `{r['evidence']}`",'',r['implementation_note'],'']
+ text += [f"## `{r['key']}`",'',f"**Default:** `{r['default']}` · **Unit:** {r['unit']}\\",f"**Evidence:** `{r['evidence']}`",'',r['implementation_note'],'']
  if r['values_or_documented_range'] is not None:text += ['Values / documented range: `'+json.dumps(r['values_or_documented_range'])+'`','']
 (ROOT/'report/PARAMETER_BIBLE.md').write_text('\n'.join(text))
 clocks={'all':[1,2,3,4,5,6,7,8,9,10,11,12,16,24,32,64],'even':[2,4,6,8,10,12,16,24,32,64],'odd':[1,3,5,7,9,11],'powers_of_two':[1,2,4,8,16,32,64]}
-(ROOT/'tables/clock_division_sets.json').write_text(json.dumps({'source':'Uploaded preset comments, corroborated list-selection functions','clock':clocks,'start_length_quantisation':{k:[x for x in v if x!=1] for k,v in clocks.items()},'caveat':'Preset Quantisation=0 chooses All; source prose is contradictory about disabling, which is separate runtime state.'},indent=2)+'\n')
+clock_bytes=json.loads((ROOT/'evidence/time_indexed_table_bytes.json').read_text())
+assert clock_bytes['main_sha256']=='2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4'
+runtime_clocks={r['name'][6:]:r['values'] for r in clock_bytes['tables'] if r['name'].startswith('clock_')}
+runtime_quant={r['name'][13:]:r['values'] for r in clock_bytes['tables'] if r['name'].startswith('quantisation_')}
+constructor_quant=next(r['values'] for r in clock_bytes['tables'] if r['name']=='constructor_quantisation')
+(ROOT/'tables/clock_division_sets.json').write_text(json.dumps({'source':'Documented musical lists plus archived ELF data extraction in evidence/time_indexed_table_bytes.json','clock':clocks,'runtime_clock':runtime_clocks,'runtime_constructor_quantisation':constructor_quant,'runtime_start_length_quantisation':runtime_quant,'start_length_quantisation':{k:[x for x in v if x!=1] for k,v in clocks.items()},'caveat':'clock and start_length_quantisation retain documented musical lists; runtime arrays include the leading zero copied by their producers. Constructor quantisation is the powers-of-two default; preset selector 0 installs All, not globally disabled quantisation. Zero-entry consumer and runtime endpoint behavior remain unexecuted.'},indent=2)+'\n')
 constants={
  'archive_sha256':(hashlib.sha256((ROOT.parent/'lubadh-v2.1.0.tar.gz').read_bytes()).hexdigest() if (ROOT.parent/'lubadh-v2.1.0.tar.gz').exists() else json.loads((ROOT/'tables/recovered_constants.json').read_text())['archive_sha256']),
  'main_sha256':hashlib.sha256((ROOT/'extracted/bin/lubadh_main').read_bytes()).hexdigest(),

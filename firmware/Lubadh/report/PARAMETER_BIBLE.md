@@ -4,7 +4,7 @@
 
 ## `RecordSpeed`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x47c08, 0x47818`
 
 Do not implement all presets as fixed-speed loop recording.
@@ -13,7 +13,7 @@ Values / documented range: `{"0": "Variable, signed recording speed follows tran
 
 ## `PlaybackSpeed.Looping`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x3a6ac, 0x4eea8`
 
 Per-tap speed, independent of one-shot setting.
@@ -22,7 +22,7 @@ Values / documented range: `{"0": "Follow live speed", "1": "Hold speed at tap a
 
 ## `PlaybackSpeed.Oneshot`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x4eea8`
 
 Separate preset field.
@@ -31,7 +31,7 @@ Values / documented range: `{"0": "Follow live speed", "1": "Hold speed at tap a
 
 ## `MultiTap`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x4eea8, 0x4e358`
 
 Four engines, five transition Tap slots per engine; not twenty ordinary voices.
@@ -40,7 +40,7 @@ Values / documented range: `{"0": "Single musical playback head with transition 
 
 ## `SpeedControl`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x37510; fillSpeedTable symbols`
 
 Exact notched/stepped table boundaries remain unprobed.
@@ -49,14 +49,14 @@ Values / documented range: `{"0": "Notched", "1": "Stepped", "2": "Smooth", "3":
 
 ## `SpeedMarkers`
 
-**Default:** `[0, 0.5, 1.0, 2.0, 4.0]` · **Unit:** array  
+**Default:** `[0, 0.5, 1.0, 2.0, 4.0]` · **Unit:** array\
 **Evidence:** `factory preset comments; fillSpeedTable`
 
 Preserve order/data. Listed defaults are magnitude markers; signed mapping requires fillSpeedTable.
 
 ## `TimePot`
 
-**Default:** `2` · **Unit:** enum  
+**Default:** `2` · **Unit:** enum\
 **Evidence:** `0x37a44`
 
 Selects the user-defined third Time function, not all Time UI states.
@@ -65,7 +65,7 @@ Values / documented range: `{"0": "Crossfade duration", "1": "Speed slew time", 
 
 ## `RecordJack`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x284b0, 0x3eed8`
 
 Clock is a configurable RECORD input role; do not unconditionally clock RETRIG.
@@ -74,28 +74,28 @@ Values / documented range: `{"0": "Latching record", "1": "Gated record", "2": "
 
 ## `ExternalClock.Average`
 
-**Default:** `4` · **Unit:** interval count  
+**Default:** `4` · **Unit:** interval count\
 **Evidence:** `factory comments; 0x3eed8`
 
 Average inter-pulse durations; exact outlier/first-pulse handling unverified.
 
 ## `ExternalClock.Resolution`
 
-**Default:** `64` · **Unit:** pulses/full loop  
+**Default:** `64` · **Unit:** pulses/full loop\
 **Evidence:** `factory comments; 0x3eed8`
 
 Zero selects currently selected Clock Division. Not necessarily MIDI PPQ.
 
 ## `ExternalClock.Timeout`
 
-**Default:** `0` · **Unit:** seconds  
+**Default:** `0` · **Unit:** seconds\
 **Evidence:** `factory comments; 0x3eed8`
 
 Zero disables timeout. Actual timeout interaction remains to be tested.
 
 ## `ClockDivisions`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `0x3b320`
 
 See clock_division_sets.json.
@@ -104,7 +104,7 @@ Values / documented range: `{"0": "All", "1": "Even", "2": "Odd", "3": "Powers o
 
 ## `Quantisation`
 
-**Default:** `3` · **Unit:** enum  
+**Default:** `3` · **Unit:** enum\
 **Evidence:** `0x37a44, 0x376ac, factory comments`
 
 Comment also says 0 disables: contradictory. Enable state is separate; do not conflate it with list selector.
@@ -113,7 +113,7 @@ Values / documented range: `{"0": "All division set", "1": "Even division set", 
 
 ## `EraseRecord`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `factory comments; 0x28734`
 
 Changes Erase+Record gesture.
@@ -122,14 +122,14 @@ Values / documented range: `{"0": "Punch-in overwrite", "1": "Tap tempo"}`
 
 ## `MinLength`
 
-**Default:** `1280` · **Unit:** samples  
+**Default:** `1280` · **Unit:** samples\
 **Evidence:** `0x376ac`
 
-Default minimum selected region, not proven universal first-record stopping threshold. Seconds=samples/rate.
+Minimum selected region in samples; complete FirstRec stop consumer requires counter >= 4*MinLength. See FIRST_RECORD_STOP_FINDINGS.md; callback pending-stop handling remains open.
 
 ## `CrossfadeDuration`
 
-**Default:** `250` · **Unit:** milliseconds  
+**Default:** `250` · **Unit:** milliseconds\
 **Evidence:** `0x376ac`
 
 Actual selected fade spans have a 128-sample floor on inspected path; zero is not evidence of discontinuous hard cuts.
@@ -138,14 +138,14 @@ Values / documented range: `[0, 250]`
 
 ## `RetrigDelay`
 
-**Default:** `0` · **Unit:** milliseconds  
-**Evidence:** `0x49244, factory comments`
+**Default:** `0` · **Unit:** documented milliseconds; consumer callback count\
+**Evidence:** `0x3f3a8, 0x493d0; preset_load 0x17538; factory comments`
 
-Delays jack retriggers; block countdown, not proven universal button delay.
+Consumer appends raw integer and decrements once per callback. See RETRIGGER_EVENT_AND_QUEUE_FINDINGS.md; parser-to-shared-preset integration remains open.
 
 ## `MaxDubLevel`
 
-**Default:** `0.9` · **Unit:** normalized gain  
+**Default:** `0.9` · **Unit:** normalized gain\
 **Evidence:** `0x37a44, 0x47818, 0x387fc`
 
 Maximum available dub level; transition envelope can vary actual old-buffer coefficient.
@@ -154,25 +154,25 @@ Values / documented range: `[0, 1]`
 
 ## `WowFlutterDepth`
 
-**Default:** `0.5` · **Unit:** normalized  
+**Default:** `0.5` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x502c4`
 
-Effective amount = clamp(Time tape amount * preset depth). Full modulation not numerically probed.
+Effective amount = clamp(Time tape amount * preset depth). Persistent scalar phases/release and factory initialization checked with explicit entropy/libm boundaries; scheduling remains open. See FLUTTER_FACTORY_FINDINGS.md.
 
 Values / documented range: `[0, 1]`
 
 ## `CrinkleDepth`
 
-**Default:** `0.2` · **Unit:** normalized  
+**Default:** `0.2` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x502c4`
 
-Effective amount = clamp(Time tape amount * preset depth). RNG/filtered irregularity.
+Effective amount = clamp(Time tape amount * preset depth). Factory seeded MT19937/filter recurrence and forced uniform endpoints checked; actual vector sizing and modulation/touch integration remain open. See FLUTTER_FACTORY_FINDINGS.md.
 
 Values / documented range: `[0, 1]`
 
 ## `TapeAge`
 
-**Default:** `0.3` · **Unit:** normalized  
+**Default:** `0.3` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x4f524`
 
 Mix amount for active static five-one-pole TapeFilter, not standalone TapeAge class.
@@ -181,7 +181,7 @@ Values / documented range: `[0, 1]`
 
 ## `Hysterisis`
 
-**Default:** `0.2` · **Unit:** normalized  
+**Default:** `0.2` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x4fce8`
 
 Original misspelling preserved. Mix amount for 68/159/251/375-sample signed delay diffuser.
@@ -190,7 +190,7 @@ Values / documented range: `[0, 1]`
 
 ## `Wear`
 
-**Default:** `0.125` · **Unit:** normalized  
+**Default:** `0.125` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x4fc60`
 
 Mix x toward x*abs(x); applies in input and playback chains.
@@ -199,7 +199,7 @@ Values / documented range: `[0, 1]`
 
 ## `Reverb`
 
-**Default:** `0.6` · **Unit:** normalized  
+**Default:** `0.6` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x496c0`
 
 u=clamp(Time tape amount*preset); normalized dry/wet; decay=min(2u,0.9). Full plate not ported.
@@ -208,7 +208,7 @@ Values / documented range: `[0, 1]`
 
 ## `Knee`
 
-**Default:** `0` · **Unit:** normalized  
+**Default:** `0` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x4ffe0, 0x4fea8`
 
 Not multiplied by Tape Amount. Knee <= double 0.01 selects rational mode.
@@ -217,7 +217,7 @@ Values / documented range: `[0, 1]`
 
 ## `Compensation`
 
-**Default:** `0.2` · **Unit:** normalized  
+**Default:** `0.2` · **Unit:** normalized\
 **Evidence:** `0x37a44, 0x4ffe0, 0x4fea8`
 
 Multiplied by Tape Amount; pre-gain in rational mode, post-gain in knee mode.
@@ -226,35 +226,35 @@ Values / documented range: `[0, 1]`
 
 ## `LowCutFreq`
 
-**Default:** `20` · **Unit:** Hz  
+**Default:** `20` · **Unit:** Hz\
 **Evidence:** `preset comments; 0x4f474`
 
 Input resonant biquad; independent of TapeAge static bank. Coefficient law not fully verified.
 
 ## `LowCutQ`
 
-**Default:** `0.2` · **Unit:** normalized  
+**Default:** `0.2` · **Unit:** normalized\
 **Evidence:** `preset comments; 0x4f474`
 
 Vendor comments call it 0..1; exact Q transform is not established.
 
 ## `HighCutFreq`
 
-**Default:** `15000` · **Unit:** Hz  
+**Default:** `15000` · **Unit:** Hz\
 **Evidence:** `preset comments; 0x4f474`
 
 Input one-pole lowpass, independent of TapeAge wet bank.
 
 ## `SpeedSlewTime`
 
-**Default:** `25` · **Unit:** milliseconds  
+**Default:** `25` · **Unit:** milliseconds\
 **Evidence:** `0x37510, 0x37408`
 
 Observed finite block ramp with nominal 2.7 divisor and integer conversions; not an exponential time constant.
 
 ## `CapacativeTouchMode`
 
-**Default:** `0` · **Unit:** enum  
+**Default:** `0` · **Unit:** enum\
 **Evidence:** `factory comments; 0x27c74`
 
 Original misspelling preserved. Physical touch enable/calibration is separate.

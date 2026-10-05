@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "trigger_cases": 960,
+  "move_render_update_blocks": 6720,
+  "gain_render_calls": 4772,
+  "stationary_outside_render_omissions": 240,
+  "comparisons": 484080,
+  "max_abs_error": 0.0,
+  "lower_head_resets": 316,
+  "upper_fade_resets": 372,
+  "distinct_instruction_addresses": 651,
+  "limitations": [
+    "Complete original inactive trigger_fade, Tap.move, get_xfade and Tap.update; independent state and interpolation models.",
+    "All four kinds, direction booleans, integer interval endpoints and fractional motion tested; supplied triggers/scheduling.",
+    "Stationary out-of-table render omitted explicitly; state movement/update still checked. No already-active trigger diagnostic path, zero duration, extreme coordinates, simultaneous fades, manager allocation or whole audio callback."
+  ]
+}

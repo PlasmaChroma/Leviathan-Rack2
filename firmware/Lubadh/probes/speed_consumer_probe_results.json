@@ -1,0 +1,559 @@
+{
+  "status": "PASS",
+  "comparisons": 3149,
+  "comparisons_by_contract": {
+    "quantizer": 89,
+    "slew": 2412,
+    "snap": 72,
+    "tap_speed": 576
+  },
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "distinct_instruction_addresses": 122,
+  "slew_fixtures": [
+    {
+      "time": 0.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 1,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 16,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 128,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 1,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 16,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 128,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 1,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 16,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 128,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 1,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 16,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 0.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 128,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 1,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 16,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 128,
+      "calls": 1,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 1,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 16,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 128,
+      "calls": 1,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 1,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 16,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 128,
+      "calls": 1,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 1,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 16,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 2.9,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 128,
+      "calls": 1,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 1,
+      "calls": 2,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 16,
+      "calls": 2,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 128,
+      "calls": 2,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 1,
+      "calls": 2,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 16,
+      "calls": 2,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 128,
+      "calls": 2,
+      "final": -1.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 1,
+      "calls": 2,
+      "final": 0.6999999284744263,
+      "drift": -5.960464477539063e-08
+    },
+    {
+      "time": 5.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 16,
+      "calls": 2,
+      "final": 0.6999999284744263,
+      "drift": -5.960464477539063e-08
+    },
+    {
+      "time": 5.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 128,
+      "calls": 2,
+      "final": 0.6999999284744263,
+      "drift": -5.960464477539063e-08
+    },
+    {
+      "time": 5.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 1,
+      "calls": 2,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 16,
+      "calls": 2,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 5.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 128,
+      "calls": 2,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 1,
+      "calls": 10,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 16,
+      "calls": 10,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 128,
+      "calls": 10,
+      "final": 4.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 1,
+      "calls": 10,
+      "final": -0.9999999403953552,
+      "drift": 5.960464477539063e-08
+    },
+    {
+      "time": 25.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 16,
+      "calls": 10,
+      "final": -0.9999999403953552,
+      "drift": 5.960464477539063e-08
+    },
+    {
+      "time": 25.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 128,
+      "calls": 10,
+      "final": -0.9999999403953552,
+      "drift": 5.960464477539063e-08
+    },
+    {
+      "time": 25.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 1,
+      "calls": 10,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 16,
+      "calls": 10,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 128,
+      "calls": 10,
+      "final": 0.699999988079071,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 1,
+      "calls": 10,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 16,
+      "calls": 10,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 25.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 128,
+      "calls": 10,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 100.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 1,
+      "calls": 38,
+      "final": 3.9999985694885254,
+      "drift": -1.430511474609375e-06
+    },
+    {
+      "time": 100.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 16,
+      "calls": 38,
+      "final": 3.9999985694885254,
+      "drift": -1.430511474609375e-06
+    },
+    {
+      "time": 100.0,
+      "start": -2.0,
+      "target": 4.0,
+      "frames": 128,
+      "calls": 38,
+      "final": 3.9999985694885254,
+      "drift": -1.430511474609375e-06
+    },
+    {
+      "time": 100.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 1,
+      "calls": 38,
+      "final": -0.9999997019767761,
+      "drift": 2.980232238769531e-07
+    },
+    {
+      "time": 100.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 16,
+      "calls": 38,
+      "final": -0.9999997019767761,
+      "drift": 2.980232238769531e-07
+    },
+    {
+      "time": 100.0,
+      "start": 1.0,
+      "target": -1.0,
+      "frames": 128,
+      "calls": 38,
+      "final": -0.9999997019767761,
+      "drift": 2.980232238769531e-07
+    },
+    {
+      "time": 100.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 1,
+      "calls": 38,
+      "final": 0.6999998092651367,
+      "drift": -1.7881393432617188e-07
+    },
+    {
+      "time": 100.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 16,
+      "calls": 38,
+      "final": 0.6999998092651367,
+      "drift": -1.7881393432617188e-07
+    },
+    {
+      "time": 100.0,
+      "start": 0.10000000149011612,
+      "target": 0.699999988079071,
+      "frames": 128,
+      "calls": 38,
+      "final": 0.6999998092651367,
+      "drift": -1.7881393432617188e-07
+    },
+    {
+      "time": 100.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 1,
+      "calls": 38,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 100.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 16,
+      "calls": 38,
+      "final": 0.0,
+      "drift": 0.0
+    },
+    {
+      "time": 100.0,
+      "start": 0.0,
+      "target": 0.0,
+      "frames": 128,
+      "calls": 38,
+      "final": 0.0,
+      "drift": 0.0
+    }
+  ],
+  "limitations": [
+    "processSpeed stops before flutter and capacitive-touch processing.",
+    "Complete caller event sequences, ADC/CV pot handling and linked forwarding are not checked.",
+    "Finite valid marker lists and nonnegative slew times only."
+  ]
+}

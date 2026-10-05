@@ -395,7 +395,7 @@
       "unit": "samples",
       "values_or_documented_range": null,
       "evidence": "0x376ac",
-      "implementation_note": "Default minimum selected region, not proven universal first-record stopping threshold. Seconds=samples/rate.",
+      "implementation_note": "Minimum selected region in samples; complete FirstRec stop consumer requires counter >= 4*MinLength. See FIRST_RECORD_STOP_FINDINGS.md; callback pending-stop handling remains open.",
       "preset_values": {
         "01-Tape-Looper": 1280,
         "02-Clean": 1280,
@@ -435,10 +435,10 @@
     {
       "key": "RetrigDelay",
       "default": 0,
-      "unit": "milliseconds",
+      "unit": "documented milliseconds; consumer callback count",
       "values_or_documented_range": null,
-      "evidence": "0x49244, factory comments",
-      "implementation_note": "Delays jack retriggers; block countdown, not proven universal button delay.",
+      "evidence": "0x3f3a8, 0x493d0; preset_load 0x17538; factory comments",
+      "implementation_note": "Consumer appends raw integer and decrements once per callback. See RETRIGGER_EVENT_AND_QUEUE_FINDINGS.md; parser-to-shared-preset integration remains open.",
       "preset_values": {
         "01-Tape-Looper": 0,
         "02-Clean": 0,
@@ -484,7 +484,7 @@
         1
       ],
       "evidence": "0x37a44, 0x502c4",
-      "implementation_note": "Effective amount = clamp(Time tape amount * preset depth). Full modulation not numerically probed.",
+      "implementation_note": "Effective amount = clamp(Time tape amount * preset depth). Persistent scalar phases/release and factory initialization checked with explicit entropy/libm boundaries; scheduling remains open. See FLUTTER_FACTORY_FINDINGS.md.",
       "preset_values": {
         "01-Tape-Looper": 0.5,
         "02-Clean": 0,
@@ -507,7 +507,7 @@
         1
       ],
       "evidence": "0x37a44, 0x502c4",
-      "implementation_note": "Effective amount = clamp(Time tape amount * preset depth). RNG/filtered irregularity.",
+      "implementation_note": "Effective amount = clamp(Time tape amount * preset depth). Factory seeded MT19937/filter recurrence and forced uniform endpoints checked; actual vector sizing and modulation/touch integration remain open. See FLUTTER_FACTORY_FINDINGS.md.",
       "preset_values": {
         "01-Tape-Looper": 0.2,
         "02-Clean": 0,

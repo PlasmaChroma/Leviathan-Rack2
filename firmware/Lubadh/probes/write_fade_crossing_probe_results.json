@@ -1,0 +1,70 @@
+{
+  "status": "PASS",
+  "cases": 864,
+  "comparisons": 1772064,
+  "max_abs_error": 0.0,
+  "distinct_instruction_addresses": 545,
+  "examples": [
+    {
+      "previous": 2.0,
+      "current": -0.25,
+      "writes": 128,
+      "interpolated_prefix": 113,
+      "suffix": 15
+    },
+    {
+      "previous": 2.0,
+      "current": -0.75,
+      "writes": 128,
+      "interpolated_prefix": 93,
+      "suffix": 35
+    },
+    {
+      "previous": 2.0,
+      "current": -1.0,
+      "writes": 128,
+      "interpolated_prefix": 85,
+      "suffix": 43
+    },
+    {
+      "previous": 2.0,
+      "current": -2.0,
+      "writes": 128,
+      "interpolated_prefix": 63,
+      "suffix": 65
+    },
+    {
+      "previous": 254.0,
+      "current": 255.0,
+      "writes": 128,
+      "interpolated_prefix": 0,
+      "suffix": 128
+    },
+    {
+      "previous": 254.0,
+      "current": 255.25,
+      "writes": 128,
+      "interpolated_prefix": 0,
+      "suffix": 128
+    },
+    {
+      "previous": 254.0,
+      "current": 256.0,
+      "writes": 128,
+      "interpolated_prefix": 0,
+      "suffix": 128
+    },
+    {
+      "previous": 254.0,
+      "current": 258.0,
+      "writes": 128,
+      "interpolated_prefix": 0,
+      "suffix": 128
+    }
+  ],
+  "limitations": [
+    "Original Fade.move and complete recordInput; explicit sequencing rather than full callback expiry.",
+    "Initialized Tap, transparent clipper, reconstructed fade table, supplied input and tape; prefixes kept within table bounds.",
+    "Stationary out-of-range, arbitrarily large prefix overshoots, event production and manager lifecycle outside this suite."
+  ]
+}

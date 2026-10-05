@@ -54,7 +54,7 @@ def model(c):
         new_heads.append(dict(slot=next_slot, position=origin + math.floor(delta) if advance else origin,
                               fraction=delta-math.floor(delta) if advance else 0., previous=origin,
                               previous_fraction=0., held=int(c['held'] is not None),
-                              held_speed=c['held'] or 1., physical_fade=incoming_flags[0],
+                              held_speed=c['held'] if c['held'] is not None else 1., physical_fade=incoming_flags[0],
                               loop_fade=incoming_flags[1]))
         next_slot += 1
 

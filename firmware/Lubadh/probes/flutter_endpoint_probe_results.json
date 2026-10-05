@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "random_word": "0x0",
+      "upper_fallback": false,
+      "raw": -1.5,
+      "filtered": -0.0007333546527661383,
+      "factor": 0.999987781047821
+    },
+    {
+      "random_word": "0xffffff00",
+      "upper_fallback": false,
+      "raw": 0.49999988079071045,
+      "filtered": 0.00024445148301310837,
+      "factor": 1.0000040531158447
+    },
+    {
+      "random_word": "0xffffff7f",
+      "upper_fallback": false,
+      "raw": 0.49999988079071045,
+      "filtered": 0.00024445148301310837,
+      "factor": 1.0000040531158447
+    },
+    {
+      "random_word": "0xffffff80",
+      "upper_fallback": true,
+      "raw": 0.49999988079071045,
+      "filtered": 0.00024445148301310837,
+      "factor": 1.0000040531158447
+    },
+    {
+      "random_word": "0xffffffff",
+      "upper_fallback": true,
+      "raw": 0.49999988079071045,
+      "filtered": 0.00024445148301310837,
+      "factor": 1.0000040531158447
+    }
+  ],
+  "distinct_instruction_addresses": 427,
+  "limitations": [
+    "Complete original constructor/scalar process/MT tempering and uniform endpoint branch; host-libm and explicit entropy services.",
+    "Inverse-tempered state words deliberately supplied; tests branch arithmetic, not probability or entropy quality."
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "status": "PASS",
+  "sequences": 3,
+  "process_calls": 384,
+  "rng_draws": 16128,
+  "comparisons": 260352,
+  "max_abs_error": 0.0,
+  "distinct_instruction_addresses": 533,
+  "upper_rounding_cases": 0,
+  "summaries": [
+    {
+      "seed": 5489,
+      "filter_profile": 0,
+      "frequencies": [
+        0.6000000238418579,
+        5.0
+      ],
+      "initial": [
+        0,
+        0.0
+      ],
+      "raw_noise_mean": -0.493667790056428,
+      "raw_noise_variance": 0.3323614308029082,
+      "factor_min": 0.9963446259498596,
+      "factor_max": 1.022892713546753
+    },
+    {
+      "seed": 1337,
+      "filter_profile": 0,
+      "frequencies": [
+        0.6000000238418579,
+        5.0
+      ],
+      "initial": [
+        0,
+        0.0
+      ],
+      "raw_noise_mean": -0.49962920551410034,
+      "raw_noise_variance": 0.326007268588219,
+      "factor_min": 0.9963107705116272,
+      "factor_max": 1.0228785276412964
+    },
+    {
+      "seed": 3735928559,
+      "filter_profile": 0,
+      "frequencies": [
+        0.6000000238418579,
+        5.0
+      ],
+      "initial": [
+        0,
+        0.0
+      ],
+      "raw_noise_mean": -0.49564662464850007,
+      "raw_noise_variance": 0.3264718899707498,
+      "factor_min": 0.9963855743408203,
+      "factor_max": 1.02285635471344
+    }
+  ],
+  "limitations": [
+    "Complete original constructor and scalar process; explicit glibc math services and supplied entropy seed, no physical entropy device.",
+    "Independent factory table/coefficients/seed expansion and persistent phases/RNG/filters/output; noise-vector length and depth controls supplied.",
+    "Host-libm boundary does not prove appliance-libm identity; rare RNG endpoint covered separately, actual scheduling, touch and vector overload remain open."
+  ],
+  "factory_initialization": {
+    "frequencies": [
+      0.6000000238418579,
+      5.0
+    ],
+    "phases": [
+      [
+        0,
+        0.0
+      ],
+      [
+        0,
+        0.17000000178813934
+      ]
+    ],
+    "filters": [
+      [
+        [
+          1.0,
+          -0.9994890093803406,
+          0.0
+        ],
+        [
+          0.0005109906196594238,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          1.0,
+          0.04322496056556702,
+          0.0
+        ],
+        [
+          0.9567750692367554,
+          0.0,
+          0.0
+        ]
+      ]
+    ],
+    "service_counts": {
+      "0x162e4": 1,
+      "0x160f8": 1,
+      "0x159d8": 2,
+      "0x16224": 255,
+      "0x16368": 2
+    },
+    "default_depths": [
+      0.0,
+      0.0
+    ],
+    "default_noise_vector_length": 0
+  }
+}

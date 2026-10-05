@@ -1,0 +1,88 @@
+{
+  "status": "PASS_DATA_AND_NUMERICAL_ONLY",
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "deck_maps": [
+    {
+      "deck": "A",
+      "channel_id": 0,
+      "constructor_literal": "0x3dd60",
+      "init_hardware_literal": "0x37108",
+      "copied_first_16_bytes": [
+        5,
+        4,
+        7,
+        6,
+        40,
+        22,
+        42,
+        32,
+        33,
+        27,
+        25,
+        35,
+        128,
+        129,
+        130,
+        134
+      ],
+      "mcp_pins": {
+        "speed": 5,
+        "first": 4,
+        "time": 7,
+        "second": 6
+      }
+    },
+    {
+      "deck": "B",
+      "channel_id": 1,
+      "constructor_literal": "0x3dd50",
+      "init_hardware_literal": "0x370f8",
+      "copied_first_16_bytes": [
+        0,
+        1,
+        2,
+        3,
+        41,
+        13,
+        38,
+        36,
+        34,
+        43,
+        23,
+        37,
+        131,
+        132,
+        133,
+        135
+      ],
+      "mcp_pins": {
+        "speed": 0,
+        "first": 1,
+        "time": 2,
+        "second": 3
+      }
+    }
+  ],
+  "cached_time_constructor_literal": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "mcp_response_pairs_checked": 65536,
+  "decoded_domain": [
+    0,
+    4095
+  ],
+  "invalid_pin_return": 65535,
+  "inverted_invalid_pin_value": -61440,
+  "limitations": [
+    "Instruction interpretation and destination offsets are established by static disassembly, not executed here.",
+    "Constructor/initHardware install valid pins; arbitrary alternate writers and restored/corrupted state are not excluded.",
+    "Does not execute SPI, ADC, Time dispatch, or firmware hardware initialization."
+  ]
+}

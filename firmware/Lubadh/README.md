@@ -10,6 +10,43 @@ Start with **`report/LUBADH_REVERSE_ENGINEERING.html`** (or its Markdown version
 | `report/RACK_IMPLEMENTATION_HANDOFF.md` / `.html` | Native architecture, proposed IO contract, implementation phases and acceptance tests. |
 | `report/PARAMETER_BIBLE.md` / `.html` | All 31 flattened preset fields with semantics and implementation traps. |
 | `report/CONTINUATION_AUDIT.md` | Subsequent coverage audit, anti-alias probes, official manual findings and research priorities. |
+| `report/SPECIFICATION_READINESS.md` | Current per-feature readiness decision and remaining parity specification gaps. |
+| `report/PERSISTENT_RECORD_PIPELINE.md` | Same-tape playback/record scheduling, overlapping recording heads, playback splices and in-range moving write envelopes. |
+| `report/PLATE_INITIALIZATION_FINDINGS.md` | Executed inlined plate constructor, thirteen delay descriptors and next process-reconstruction steps. |
+| `report/PLATE_PROCESS_FINDINGS.md` | Complete independently checked plate recurrence, modulation tables, reverb publication and seeded state wraps. |
+| `report/OUTPUT_COLOR_PIPELINE.md` | Persistent connected TapeFilter/wear/diffuser/plate/clipper callback slice with intermediate-stage comparisons. |
+| `report/CONNECTED_RECORD_OUTPUT_PIPELINE.md` | Same-tape playback, complete output effects and recording with persistent matrix and actual-output-default long fixture. |
+| `report/TIME_EFFECT_PUBLICATION.md` | Complete forced Time effect setter, factory scalar publication, gating and distinct clipping producers. |
+| `report/INPUT_COLOR_PIPELINE.md` | Connected input coloration, independent high-pass biquad/low-pass coefficient laws and persistent preset updates. |
+| `report/CONNECTED_INPUT_OUTPUT_RECORD_PIPELINE.md` | Input coloration/AntiAlias/history joined to tape writes, playback and actual final output clipping. |
+| `report/MONITOR_MIX_FINDINGS.md` | Executed monitor replacement/fade branch, source preservation and asymmetric endpoint behavior. |
+| `report/SPEED_TABLE_AND_SLEW_FINDINGS.md` | All four speed-table laws, calibrated V/oct arithmetic, marker quantization and callback-counted slew/snap/tap-speed consumers. |
+| `report/POT_SPEED_EVENT_PUBLICATION.md` | Complete pot deadband/deferred consumer and production ADC recurrence joined to asymmetric two-deck speed dispatch. |
+| `report/RETRIGGER_EVENT_AND_QUEUE_FINDINGS.md` | Pending-event suppression, delayed queue countdown/compaction, complete retrigger cooldown/activation and V/oct reverse event. |
+| `report/EXTERNAL_CLOCK_ESTIMATOR_FINDINGS.md` | Complete clock averaging/timeout/direction/slew estimator, initial timestamp/window slices and deque rotation. |
+| `report/TAP_CLOCK_INTERACTION_FINDINGS.md` | Complete tap/reset consumers interleaved with clock, shared timestamp/priming and callback tap-span/division-limit slice. |
+| `report/JACK_EVENT_ROUTING_FINDINGS.md` | Complete asymmetric two-deck jack dispatcher with inert event recorders; original GPIO edge recurrence joined to routing. |
+| `report/RECORD_GATE_EVENT_FINDINGS.md` | Complete gate wrappers and three state-method consumers with setState recorder; event-produced overdub release fade and motion. |
+| `report/CHANNEL_SET_STATE_FINDINGS.md` | Complete state publication/head activation/erase-request graph and real Playback/Overdub gate round trips. |
+| `report/FIRST_RECORD_STOP_FINDINGS.md` | Complete first-record stop consumer joined to state/region/head publication; exact four-times-MinLength threshold and tail metadata. |
+| `report/PENDING_FIRST_RECORD_STOP_FINDINGS.md` | Original counter movement, strict pending retry and capacity-stop branches joined to real completion consumers. |
+| `report/FIRST_RECORD_TAIL_WRITE_FINDINGS.md` | Connected first-record completion, input history, trailing tape writes and Tap reset over persistent callback slices. |
+| `report/WRITE_FADE_EXPIRY_FINDINGS.md` | Original write-fade movement, real head-list dispatch and asymmetric expiry resets with inert recordInput observers. |
+| `report/WRITE_FADE_CROSSING_FINDINGS.md` | Complete crossing-block recordInput tape arithmetic, lower preserve-tape suffix and upper ordinary-feedback suffix. |
+| `report/GATE_WRITE_HISTORY_FINDINGS.md` | Persistent real gate/state/head/write/expiry histories through both manager updates; exact tape agreement and independently checked fresh-head fades. |
+| `report/TAP_FADE_STATE_FINDINGS.md` | Independent active fade trigger/motion/cleanup states joined to 4,772 original gain renders, with explicit stationary out-of-table omissions. |
+| `report/ACTIVE_FADE_BOUNDARY_FINDINGS.md` | Already-active retrigger reinitialization and independently generated boundary fade states joined to raw splice audio and manager cleanup. |
+| `report/SEAM_FADE_AUDIO_FINDINGS.md` | Independent physical/wrapped/overlapping seam states through raw audio and cleanup; inherited fade movement checked on 144 simultaneous-fade heads. |
+| `report/SATURATED_SEAM_AUDIO_FINDINGS.md` | Four/five occupied-slot seam allocation and raw audio: outgoing fades persist on failed replacement, with independent state/mix checks. |
+| `report/FLUTTER_STATE_FINDINGS.md` | Persistent scalar periodic phases, seeded MT19937 irregularity, two biquads and release-to-unity, with explicit table/filter fixtures. |
+| `report/FLUTTER_FACTORY_FINDINGS.md` | Original factory constructor, independent sine/coefficient/seed laws, persistent factory state and forced uniform upper-rounding endpoints. |
+| `report/SPEED_MODULATION_JOIN_FINDINGS.md` | Static buffer/speed/touch publication contract and prepared joined probe; execution pending approval-review authentication recovery. |
+| `report/TIME_SELECTOR_STATIC_CONTRACT.md` | Static six-selector dispatch, preset third-function laws, deferred clock publication, cached-input endpoint question and selector lifecycle. |
+| `report/TIME_MENU_LIFECYCLE.md` | Static two-deck file versus one-deck preset selector ownership, status guards, restore/cancel paths, IO ordering and proposed native transaction/pickup acceptance histories. |
+| `report/FILE_LOAD_COMPLETION_STATIC.md` | Static file status dispatch, pre-success tap shutdown, stereo target selection, imported-extent subtraction and Playback/retrigger publication, separated from script conversion and worker guarantees. |
+| `report/IMPORT_TAIL_STATIC_CONTRACT.md` | Static audio_load clear/read, maximum stereo extent, inlined tail policies, capacity truncation and length-before-status publication; short-file, tag and synchronization gaps. |
+| `report/FILE_BROWSER_STATIC_CONTRACT.md` | Static saved-folder index-0 provenance, saved/import tail defaults, listing-order distinction, twelve-file local limit and native selection acceptance gaps. |
+| `report/EXPORT_ROUND_TRIP_STATIC_CONTRACT.md` | Static stored-extent export, common linked length, raw write import provenance and saved-folder tail round-trip implications; conversion, snapshot and failure gaps. |
 | `report/TRANSPORT_FINDINGS.md` | Original-byte transport, overdub, fade, block-history and first-record tail contracts. |
 | `report/LOOP_REGION_AND_ALLOCATION_FINDINGS.md` | Loop-control scaling, successive-call endpoints, engine/slot saturation and fade reclamation. |
 | `report/BOUNDARY_TRANSITION_FINDINGS.md` | Ordinary-region callback transitions, outgoing/incoming head coordinates and slot-exhaustion handling. |
@@ -53,6 +90,57 @@ The follow-up **[`report/WRAPPED_SPLICE_AND_RENDER_FINDINGS.md`](report/WRAPPED_
 Seven routines across six arithmetic groups passed 4,725 restricted original-instruction comparisons; an eighth routine, TapeAllpass, passed a separate 1,200-sample impulse comparison. **Total: 5,925 numerical comparisons.** This does not boot or validate the complete firmware, hardware, analog circuits, ARM floating-point environment, transport, or plate reverb.
 
 The native C++ reference independently passed **8,154 invariant checks**. These are model tests, not additional hardware comparisons. Detailed limitations and tolerances are in the reports and result JSON.
+
+The **[`report/PERSISTENT_RECORD_PIPELINE.md`](report/PERSISTENT_RECORD_PIPELINE.md)**
+joins playback to actual recording on the same tape. It passes 108 sequences,
+1,296 blocks and 10,840,068 comparisons, including ordinary playback splices,
+held/following recording and overlapping recording engines. A separate in-range
+moving write-envelope probe passes 1,044 cases and 2,138,112 comparisons.
+Later suites connect first-record tail writes and gate-to-write expiry through
+both manager updates. The latest
+**[`gate write history findings`](report/GATE_WRITE_HISTORY_FINDINGS.md)** check
+48 sequences / 702 slices with exact tape agreement and independently checked
+fresh-head fades. Active fade state generation is separately checked against
+original triggering, motion, rendering and cleanup. Full scheduling, boundaries,
+aliases and their connected fade production remain open. See the
+**[`specification readiness ledger`](report/SPECIFICATION_READINESS.md)** for
+the current per-feature decision; the complete parity specification is not yet ready.
+
+**[`report/PLATE_PROCESS_FINDINGS.md`](report/PLATE_PROCESS_FINDINGS.md)** checks
+the complete original MonoPlate process against an independent state model:
+five 16,384-sample profiles pass 2,129,920 numerical comparisons. Reconstructed
+modulation tables and 60 reverb publication cases pass 496 assertions; 24 seeded
+wrap/control sequences pass 178,176 comparisons. All numerical discrepancies
+are zero in these fixtures. The connected
+**[`output coloration slice`](report/OUTPUT_COLOR_PIPELINE.md)** separately
+passes 480 blocks, 38,196 samples and 200,580 comparisons across every effect
+stage. That isolated probe receives supplied mix vectors; the subsequent connected
+probe below joins tape rendering and recording. Event producers, routing, speed tables, file/tail
+semantics and Rack adaptation remain specification gaps.
+
+**[`Connected playback/output/recording`](report/CONNECTED_RECORD_OUTPUT_PIPELINE.md)**
+now passes 108 sequences and 2,592 blocks, with zero discrepancy across every
+observed stage and tape writes. A separate 24,576-sample fixture uses the actual
+output clipper defaults. **[`Time effect publication`](report/TIME_EFFECT_PUBLICATION.md)**
+adds 2,879 assertions across factory presets, clamp/gating cases, constructor
+output clipping and the distinct Time/preset-update write-compensation caps.
+Input coloration, recording boundaries, complete control/preset graphs and the
+other readiness gaps remain open.
+
+**[`Input coloration and coefficients`](report/INPUT_COLOR_PIPELINE.md)** now
+passes 50 normalized coefficient cases and 36 preset updates across 288 blocks,
+32,508 samples and 134,904 comparisons, with zero discrepancy. It checks the
+input filter/age/wear/diffuser connection and persistent histories; routing,
+AntiAlias, input history and actual recording are still separate integrations.
+
+The newer **[`joined input/tape/output suite`](report/CONNECTED_INPUT_OUTPUT_RECORD_PIPELINE.md)**
+now passes 108 sequences and 2,592 blocks with zero discrepancy across all
+observed DSP stages and tape writes. Its separate 24,576-sample sequence cycles
+through all ten factory filter settings with the actual output clipper defaults.
+**[`Monitoring copy/fade`](report/MONITOR_MIX_FINDINGS.md)** adds 160 isolated
+cases; monitoring remains disabled in the joined suite. Full control/routing,
+record boundaries/tails, speed tables and the readiness ledger's other gaps
+still prevent a complete parity claim.
 
 ## Re-run the numeric tests
 

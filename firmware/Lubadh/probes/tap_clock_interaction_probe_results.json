@@ -1,0 +1,446 @@
+{
+  "status": "PASS",
+  "sequences": 216,
+  "consumer_calls": 3240,
+  "comparisons": 23352,
+  "span_publication_cases": 120,
+  "distinct_instruction_addresses": 248,
+  "traces": [
+    {
+      "initial_first_tap": 0,
+      "steps": [
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 1500000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 400000000,
+          "first_tap": 0,
+          "timestamp": 1900000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 600000000,
+          "first_tap": 0,
+          "timestamp": 2500000000,
+          "target": 0.2118489295244217,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 1000000000,
+          "first_tap": 0,
+          "timestamp": 3500000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "reset",
+          "elapsed_ns": 0,
+          "first_tap": 1,
+          "timestamp": 3500000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 10000000,
+          "first_tap": 0,
+          "timestamp": 3510000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 4010000000,
+          "target": 0.11555396765470505,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 4510000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 2000000000,
+          "first_tap": 0,
+          "timestamp": 6510000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 7010000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 0,
+          "first_tap": 0,
+          "timestamp": 7010000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": -10000000,
+          "first_tap": 0,
+          "timestamp": 7000000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "reset",
+          "elapsed_ns": 0,
+          "first_tap": 1,
+          "timestamp": 7000000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 7500000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 15000000000,
+          "first_tap": 0,
+          "timestamp": 22500000000,
+          "target": 0.1355833113193512,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "initial_first_tap": 1,
+      "steps": [
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 1500000000,
+          "target": 1.25,
+          "remaining": 0,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 400000000,
+          "first_tap": 0,
+          "timestamp": 1900000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 600000000,
+          "first_tap": 0,
+          "timestamp": 2500000000,
+          "target": 0.2118489295244217,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 1000000000,
+          "first_tap": 0,
+          "timestamp": 3500000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "reset",
+          "elapsed_ns": 0,
+          "first_tap": 1,
+          "timestamp": 3500000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 10000000,
+          "first_tap": 0,
+          "timestamp": 3510000000,
+          "target": 2.03374981880188,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.0,
+            0.6000000238418579
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 4010000000,
+          "target": 0.11555396765470505,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 4510000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "clock",
+          "elapsed_ns": 2000000000,
+          "first_tap": 0,
+          "timestamp": 6510000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 7010000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 0,
+          "first_tap": 0,
+          "timestamp": 7010000000,
+          "target": 4.0,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": -10000000,
+          "first_tap": 0,
+          "timestamp": 7000000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "reset",
+          "elapsed_ns": 0,
+          "first_tap": 1,
+          "timestamp": 7000000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 500000000,
+          "first_tap": 0,
+          "timestamp": 7500000000,
+          "target": 0.009999999776482582,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        },
+        {
+          "event": "tap",
+          "elapsed_ns": 15000000000,
+          "first_tap": 0,
+          "timestamp": 22500000000,
+          "target": 0.1355833113193512,
+          "remaining": 10,
+          "window": [
+            0.0,
+            0.0,
+            0.6000000238418579,
+            0.5
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Synthetic system-clock boundary; complete consumer calls, not upstream physical button/clock producers.",
+    "Initialized deque fixtures, one-node integer reset and four-entry clock window.",
+    "Tap span supplied in interleaved suite; callback span/limit slice separately checked with supplied region/division/live speed.",
+    "No linked deck event forwarding or audible transport scheduling."
+  ]
+}

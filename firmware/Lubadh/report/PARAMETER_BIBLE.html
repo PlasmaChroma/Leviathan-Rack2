@@ -77,16 +77,16 @@ main{max-width:1080px;margin:30px auto;padding:40px 50px;background:var(--paper)
 <h2 id="minlength"><code>MinLength</code></h2>
 <p><strong>Default:</strong> <code>1280</code> · <strong>Unit:</strong> samples<br />
 <strong>Evidence:</strong> <code>0x376ac</code></p>
-<p>Default minimum selected region, not proven universal first-record stopping threshold. Seconds=samples/rate.</p>
+<p>Minimum selected region in samples; complete FirstRec stop consumer requires counter >= 4*MinLength. See FIRST_RECORD_STOP_FINDINGS.md; callback pending-stop handling remains open.</p>
 <h2 id="crossfadeduration"><code>CrossfadeDuration</code></h2>
 <p><strong>Default:</strong> <code>250</code> · <strong>Unit:</strong> milliseconds<br />
 <strong>Evidence:</strong> <code>0x376ac</code></p>
 <p>Actual selected fade spans have a 128-sample floor on inspected path; zero is not evidence of discontinuous hard cuts.</p>
 <p>Values / documented range: <code>[0, 250]</code></p>
 <h2 id="retrigdelay"><code>RetrigDelay</code></h2>
-<p><strong>Default:</strong> <code>0</code> · <strong>Unit:</strong> milliseconds<br />
-<strong>Evidence:</strong> <code>0x49244, factory comments</code></p>
-<p>Delays jack retriggers; block countdown, not proven universal button delay.</p>
+<p><strong>Default:</strong> <code>0</code> · <strong>Unit:</strong> documented milliseconds; consumer callback count<br />
+<strong>Evidence:</strong> <code>0x3f3a8, 0x493d0; preset_load 0x17538; factory comments</code></p>
+<p>Consumer appends raw integer and decrements once per callback. See RETRIGGER_EVENT_AND_QUEUE_FINDINGS.md; parser-to-shared-preset integration remains open.</p>
 <h2 id="maxdublevel"><code>MaxDubLevel</code></h2>
 <p><strong>Default:</strong> <code>0.9</code> · <strong>Unit:</strong> normalized gain<br />
 <strong>Evidence:</strong> <code>0x37a44, 0x47818, 0x387fc</code></p>
