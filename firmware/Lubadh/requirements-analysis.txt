@@ -1,2 +1,0 @@
-unicorn==2.1.4
-capstone==5.0.7

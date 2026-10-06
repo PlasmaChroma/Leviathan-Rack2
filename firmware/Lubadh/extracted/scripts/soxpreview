@@ -1,1 +1,0 @@
-sox -G "/media/usb/samples/$1/$2" -t raw -r 49148 -b 32 -c 1 -e floating-point /root/samples/load/Preview trim 0 5

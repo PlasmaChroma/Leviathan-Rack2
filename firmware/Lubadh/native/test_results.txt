@@ -1,1 +1,0 @@
-PASS: 8154 native reference invariant checks (not hardware equivalence).

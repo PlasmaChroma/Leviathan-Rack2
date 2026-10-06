@@ -1,8 +1,0 @@
-if [ -s /media/usb/samples/.folders ]
-then 
-    echo "folders detected"
-    return 0
-else
-    echo "no folders detected"
-    return 1
-fi

@@ -1,8 +1,0 @@
-address,provisional_name,role,confidence
-0x08004678,MacroBendReroll,Speedtable andrate-slew RNG,verified
-0x080047a8,BufferWrite,Capturewriting/bankcycle/Freeze,verified-representative
-0x0800493c,BufferRead,Linearinterpolation/signedrateslew/wrap,verified-representative
-0x08004a6c,BufferInit,Memorysplit/defaults,verified
-0x08004bf8,MacroBreakReroll,Extraexponent/silence/randomposition,verified
-0x08004d58,BufferProcess,Segmentation/scheduling/window/Freeze,verified-representative
-0x08018958,LibcRand,CalledbyMacroalgorithms,strong-static
