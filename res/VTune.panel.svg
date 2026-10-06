@@ -24,12 +24,12 @@
       <rect id="VF_OUTLINE_RASTER" x="100" y="6200" width="3864" height="5640" style="stroke:#55dfff;stroke-width:20" />
       <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="396.1" y="11943.102" width="3271.933" height="1224.054" />
       <circle id="VESSEL_EXPANDER_LIGHT" cx="320" cy="580" r="75" style="fill:#ffbd66" />
-      <circle id="VELOCITY_PARAM" cx="3014" cy="1740.0001" r="75" style="fill:#55dfff" />
-      <circle id="SPEED_PARAM" cx="1050" cy="1740.0001" r="75" style="fill:#55dfff" />
-      <circle id="PRESSURE_PARAM" cx="1050" cy="3515" r="75" style="fill:#55dfff" />
-      <circle id="SUSTAIN_PARAM" cx="3014" cy="3515" r="75" style="fill:#55dfff" />
-      <circle id="IMPERFECTION_PARAM" cx="1050" cy="5290" r="75" style="fill:#55dfff" />
-      <circle id="WIDTH_PARAM" cx="3014" cy="5290" r="75" style="fill:#55dfff" />
+      <circle id="VELOCITY_PARAM" cx="2953.9644" cy="1740.0001" r="75" style="fill:#55dfff" />
+      <circle id="SPEED_PARAM" cx="1109.9833" cy="1740.0001" r="75" style="fill:#55dfff" />
+      <circle id="PRESSURE_PARAM" cx="1109.9833" cy="3515" r="75" style="fill:#55dfff" />
+      <circle id="SUSTAIN_PARAM" cx="2953.9644" cy="3515" r="75" style="fill:#55dfff" />
+      <circle id="IMPERFECTION_PARAM" cx="1109.9833" cy="5290" r="75" style="fill:#55dfff" />
+      <circle id="WIDTH_PARAM" cx="2953.9644" cy="5290" r="75" style="fill:#55dfff" />
     </g>
   </g>
 </svg>

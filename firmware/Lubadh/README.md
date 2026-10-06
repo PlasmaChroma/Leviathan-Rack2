@@ -47,6 +47,10 @@ Start with **`report/LUBADH_REVERSE_ENGINEERING.html`** (or its Markdown version
 | `report/IMPORT_TAIL_STATIC_CONTRACT.md` | Static audio_load clear/read, maximum stereo extent, inlined tail policies, capacity truncation and length-before-status publication; short-file, tag and synchronization gaps. |
 | `report/FILE_BROWSER_STATIC_CONTRACT.md` | Static saved-folder index-0 provenance, saved/import tail defaults, listing-order distinction, twelve-file local limit and native selection acceptance gaps. |
 | `report/EXPORT_ROUND_TRIP_STATIC_CONTRACT.md` | Static stored-extent export, common linked length, raw write import provenance and saved-folder tail round-trip implications; conversion, snapshot and failure gaps. |
+| `report/AUTOSAVE_AUDIO_STATIC_CONTRACT.md` | Static per-deck autosave mapping, live extent rereads and scheduler yields, alternating raw slots and tracker-byte publication; restoration and crash-consistency gaps. |
+| `report/AUTOSAVE_RESTORE_AUDIO_STATIC.md` | Startup tracker-byte selection, selected-file type gate, fixed-capacity raw read and local error joins; metadata extent and activation gaps. |
+| `report/AUTOSAVE_RESTORE_STATE_STATIC.md` | Persisted length ownership, nonblank Playback/region activation, loop modes and Time publication; producer/default/settled-state gaps. |
+| `report/AUTOSAVE_SETTINGS_WORKER_STATIC.md` | Settings consumer's separate mapped-field reads, five-second requested delay and independent slot alternation; coherent producer/generation gaps. |
 | `report/TRANSPORT_FINDINGS.md` | Original-byte transport, overdub, fade, block-history and first-record tail contracts. |
 | `report/LOOP_REGION_AND_ALLOCATION_FINDINGS.md` | Loop-control scaling, successive-call endpoints, engine/slot saturation and fade reclamation. |
 | `report/BOUNDARY_TRANSITION_FINDINGS.md` | Ordinary-region callback transitions, outgoing/incoming head coordinates and slot-exhaustion handling. |

@@ -1,0 +1,124 @@
+{
+  "status": "PASS_BYTES_AND_INDEPENDENT_PREDICATE_ONLY",
+  "main_sha256": "2e5827862cf947f61899facf558e39965373c324d401e095622ed3c578d15cd4",
+  "checked_words": [
+    {
+      "address": "0x2b358",
+      "word": "0xe5dd3023"
+    },
+    {
+      "address": "0x2b35c",
+      "word": "0xe2433031"
+    },
+    {
+      "address": "0x2b360",
+      "word": "0xe3530001"
+    },
+    {
+      "address": "0x2b364",
+      "word": "0x8a0008ac"
+    },
+    {
+      "address": "0x2b270",
+      "word": "0xe30a38c0"
+    },
+    {
+      "address": "0x2b274",
+      "word": "0xe3403708"
+    },
+    {
+      "address": "0x2b4cc",
+      "word": "0xe59d2014"
+    },
+    {
+      "address": "0x2b4d4",
+      "word": "0xebffab3d"
+    },
+    {
+      "address": "0x2b4d8",
+      "word": "0xe1a00005"
+    }
+  ],
+  "rejected_branch_target": "0x2d61c",
+  "accepted_tracker_bytes": [
+    49,
+    50
+  ],
+  "rejected_count": 254,
+  "enumerated_count": 256,
+  "requested_raw_read_bytes": 118008000,
+  "settings_key_literals": [
+    {
+      "address": "0x71278",
+      "key": "blank"
+    },
+    {
+      "address": "0x71280",
+      "key": "length"
+    },
+    {
+      "address": "0x71288",
+      "key": "modes"
+    },
+    {
+      "address": "0x71290",
+      "key": "monitoring"
+    },
+    {
+      "address": "0x7129c",
+      "key": "playLoop"
+    },
+    {
+      "address": "0x712a8",
+      "key": "recLoop"
+    },
+    {
+      "address": "0x712b0",
+      "key": "time"
+    },
+    {
+      "address": "0x712b8",
+      "key": "active"
+    },
+    {
+      "address": "0x712c0",
+      "key": "clkDiv"
+    },
+    {
+      "address": "0x712c8",
+      "key": "feedback"
+    },
+    {
+      "address": "0x712d4",
+      "key": "xfade"
+    },
+    {
+      "address": "0x712dc",
+      "key": "slew"
+    },
+    {
+      "address": "0x712e4",
+      "key": "tape"
+    },
+    {
+      "address": "0x712ec",
+      "key": "file"
+    },
+    {
+      "address": "0x712f4",
+      "key": "folder"
+    },
+    {
+      "address": "0x712fc",
+      "key": "quantiseFlag"
+    },
+    {
+      "address": "0x7130c",
+      "key": "quantiseGrid"
+    }
+  ],
+  "limitations": [
+    "No original ARM instructions, stream reads or exception paths executed.",
+    "Enumeration covers byte-value acceptance only; it says nothing about failed get() destination contents or file validity."
+  ]
+}

@@ -727,9 +727,13 @@ struct VesselWidget final : ModuleWidget {
         addParam(binauralKnob);
         auto* bandLabel = new BinauralBandLabel();
         bandLabel->vessel = module;
-        bandLabel->box.size = Vec(mm2px(16.f), mm2px(3.f));
-        bandLabel->box.pos = Vec(binauralKnob->box.pos.x + .5f * binauralKnob->box.size.x - .5f * bandLabel->box.size.x,
-            binauralKnob->box.pos.y - mm2px(3.f));
+        math::Rect bandLabelRect(
+            Vec((binauralKnob->box.pos.x + .5f * binauralKnob->box.size.x) / mm2px(1.f) - 8.f,
+                binauralKnob->box.pos.y / mm2px(1.f) - 3.f),
+            Vec(16.f, 3.f));
+        panel_svg::loadRectFromSvgMm(panel.panelPath(), "BINAURAL_BAND_LABEL", &bandLabelRect);
+        bandLabel->box.pos = mm2px(bandLabelRect.pos);
+        bandLabel->box.size = mm2px(bandLabelRect.size);
         addChild(bandLabel);
         auto* bowlSwitch = createParamCentered<PlasmaSwitch>(mm2px(point("BOWL_PARAM", 27.f, 83.5f)), module, Vessel::BOWL_PARAM);
         bowlSwitch->invertDisplay = true;

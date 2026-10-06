@@ -1,0 +1,63 @@
+{
+  "status": "PASS_STATIC_ELF_DATA_ONLY",
+  "worker_sha256": "5449c24265304400012bb37d0250ca7dae0cd38c7c5f0e848a3bdc4dcd873622",
+  "imports": [
+    {
+      "plt": "0x124e0",
+      "got": "0x2f01c",
+      "symbol": "_ZNSo5writeEPKci"
+    },
+    {
+      "plt": "0x125c4",
+      "got": "0x2f068",
+      "symbol": "_ZNSt13basic_filebufIcSt11char_traitsIcEE4openEPKcSt13_Ios_Openmode"
+    },
+    {
+      "plt": "0x1263c",
+      "got": "0x2f090",
+      "symbol": "sched_yield"
+    },
+    {
+      "plt": "0x127e0",
+      "got": "0x2f11c",
+      "symbol": "_ZNSt9basic_iosIcSt11char_traitsIcEE5clearESt12_Ios_Iostate"
+    },
+    {
+      "plt": "0x12894",
+      "got": "0x2f158",
+      "symbol": "_ZNSo3putEc"
+    },
+    {
+      "plt": "0x128c4",
+      "got": "0x2f168",
+      "symbol": "_ZNSt13basic_filebufIcSt11char_traitsIcEE5closeEv"
+    },
+    {
+      "plt": "0x12870",
+      "got": "0x2f14c",
+      "symbol": "_ZNSt10filesystem6statusERKNS_7__cxx114pathE"
+    }
+  ],
+  "literals": [
+    {
+      "address": "0x1d108",
+      "value": "autosave/"
+    },
+    {
+      "address": "0x1d114",
+      "value": "audio/"
+    },
+    {
+      "address": "0x1d128",
+      "value": ".dat"
+    },
+    {
+      "address": "0x1d170",
+      "value": "EoD_"
+    }
+  ],
+  "limitations": [
+    "No ARM execution, file operation, original libstdc++ or autosave session tested.",
+    "Imported names are provenance for static call analysis, not proof of runtime success."
+  ]
+}

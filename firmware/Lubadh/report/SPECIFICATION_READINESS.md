@@ -361,3 +361,41 @@ worker publishes 2 for these failures. Ten explicit native acceptance cases
 cover marked tail round trips, channel ownership, immutable generation capture,
 invalid extents, staged failures and stale completion. These are specification
 gates, not executed native tests; runtime/library exceptions remain open.
+
+`AUTOSAVE_AUDIO_STATIC_CONTRACT.md` establishes the audio writer's separate
+deck mappings, startup semaphore gate, alternating 1/2 raw .dat slots and
+post-close tracker byte. Unlike manual export, it rereads live stored extent
+after every cell write and calls sched_yield between writes, so neither one
+length nor one tape generation is captured by this loop. Seven hash-checked
+ELF import resolutions and four literals pass as static data only. Reader
+selection/fallback, autosave_data fields, startup activation, runtime failure
+histories and matching audio/settings generations remain open. A verified
+generation manifest is proposed as a native improvement; complete patch
+persistence and bounded snapshot policy are still specification requirements.
+
+`AUTOSAVE_RESTORE_AUDIO_STATIC.md` connects the main reader to the writer's
+per-deck slots. Tracker byte acceptance is exactly '1'/'2'; hash-checked words
+and all 256 independently modeled values pass. The selected file gets a type
+gate followed by a 118008000-byte read; the local read slice does not derive
+extent from gcount or clear the array. A traced catch body logs and continues
+to settings preparation, with no local alternate-slot retry. Settings extent,
+constructor defaults, error routing and startup activation still need closure;
+this is static reader progress, not an executed restore fixture or parity claim.
+
+`AUTOSAVE_RESTORE_STATE_STATIC.md` connects parsed settings length to nonblank
+Playback and L-12292/L-9834/min(L-12293,12292) extent installation, independent
+of raw read count. It traces fifteen root/nested values through mode and Time
+publication, conditional retrigger and preset force_replace. Seventeen literal
+keys/groups are hash-checked ELF data; no new ARM/Hjson execution is claimed.
+Producer capture, malformed/missing defaults, actual asset/metadata bounds and
+settled preset/control/head state remain open. Native restore requires explicit
+versioned extents and verification against the asset before publication.
+
+`AUTOSAVE_SETTINGS_WORKER_STATIC.md` establishes separate mapped blank/length/
+mode reads during Hjson construction, a five-second requested interval between
+passes and independent slot alternation. Settings-worker hash, three PLT/GOT
+imports, six keys and the sleep literal pass static inspection; audio-worker
+checks remain passing. No coherent settings producer snapshot or common audio/
+settings generation has been demonstrated. Main publication, all remaining
+serialized fields and tracker/failure histories remain open; native generation
+capture and verified asset manifests require concrete implementation decisions.

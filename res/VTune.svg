@@ -24,8 +24,8 @@
      inkscape:document-units="mm"
      showgrid="false"
      inkscape:zoom="2.4193418"
-     inkscape:cx="76.880415"
-     inkscape:cy="242.83465"
+     inkscape:cx="76.880414"
+     inkscape:cy="242.83464"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -88,13 +88,21 @@
        stroke-width="24"
        opacity="0.65"
        id="rect3" />
-    <g id="vtune_section_fields" style="display:inline">
-      <g id="glass">
-        <g id="glass_input">
+    <g
+       id="vtune_section_fields"
+       style="display:inline">
+      <g
+         id="glass">
+        <g
+           id="glass_input">
           <rect
              id="vtune_input_field"
-             x="250" y="1050" width="3564" height="5100"
-             rx="180" ry="180"
+             x="250"
+             y="1050"
+             width="3564"
+             height="5100"
+             rx="180"
+             ry="180"
              style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
         </g>
       </g>
@@ -123,37 +131,37 @@
          style="fill:#ffbd66" />
       <circle
          id="VELOCITY_PARAM"
-         cx="3014"
+         cx="2953.9644"
          cy="1740.0001"
          r="75"
          style="fill:#55dfff" />
       <circle
          id="SPEED_PARAM"
-         cx="1050"
+         cx="1109.9833"
          cy="1740.0001"
          r="75"
          style="fill:#55dfff" />
       <circle
          id="PRESSURE_PARAM"
-         cx="1050"
+         cx="1109.9833"
          cy="3515"
          r="75"
          style="fill:#55dfff" />
       <circle
          id="SUSTAIN_PARAM"
-         cx="3014"
+         cx="2953.9644"
          cy="3515"
          r="75"
          style="fill:#55dfff" />
       <circle
          id="IMPERFECTION_PARAM"
-         cx="1050"
+         cx="1109.9833"
          cy="5290"
          r="75"
          style="fill:#55dfff" />
       <circle
          id="WIDTH_PARAM"
-         cx="3014"
+         cx="2953.9644"
          cy="5290"
          r="75"
          style="fill:#55dfff" />
@@ -169,39 +177,39 @@
        font-size="282.222"
        font-weight="600">
       <text
-         x="3014"
+         x="2953.9644"
          y="2440"
          id="text5"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">VELOCITY</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VELOCITY</text>
       <text
-         x="1050"
+         x="1109.9833"
          y="2440"
          id="text6"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SPEED</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SPEED</text>
       <text
-         x="1050"
+         x="1109.9833"
          y="4215"
          id="text7"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">PRESSURE</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">PRESSURE</text>
       <text
-         x="3014"
+         x="2953.9644"
          y="4216.4106"
          id="text8"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SUSTAIN</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SUSTAIN</text>
       <text
-         x="1044.2147"
+         x="1104.198"
          y="5990"
          id="text9"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198978px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
            sodipodi:role="line"
            id="tspan10"
-           x="1044.2147"
+           x="1104.198"
            y="5990">FLAWS</tspan></text>
       <text
-         x="3014"
+         x="2953.9644"
          y="5990"
          id="text10"
-         style="-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-family:Rubik, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-variation-settings:'wght' 400;font-size:282.22198978px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">WIDTH</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">WIDTH</text>
     </g>
     <g
        id="theme_text_output"

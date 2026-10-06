@@ -1,0 +1,56 @@
+{
+  "status": "PASS_STATIC_ELF_DATA_ONLY",
+  "worker_sha256": "3b48ea8b2d279a73667dda4871827a613d432e4819fddaecf259ec744eb9af13",
+  "imports": [
+    {
+      "plt": "0x14590",
+      "got": "0x4c1b8",
+      "symbol": "nanosleep"
+    },
+    {
+      "plt": "0x140f8",
+      "got": "0x4c030",
+      "symbol": "__errno_location"
+    },
+    {
+      "plt": "0x143b0",
+      "got": "0x4c118",
+      "symbol": "_ZNSi3getERc"
+    }
+  ],
+  "literals": [
+    {
+      "address": "0x33f40",
+      "value": "blank"
+    },
+    {
+      "address": "0x33f48",
+      "value": "length"
+    },
+    {
+      "address": "0x33f50",
+      "value": "monitoring"
+    },
+    {
+      "address": "0x33f5c",
+      "value": "playLoop"
+    },
+    {
+      "address": "0x33f68",
+      "value": "recLoop"
+    },
+    {
+      "address": "0x33f70",
+      "value": "modes"
+    }
+  ],
+  "limitations": [
+    "No ARM execution, file operation, original libstdc++ or autosave session tested.",
+    "Imported names are provenance for static call analysis, not proof of runtime success."
+  ],
+  "sleep_literal": {
+    "address": "0x16798",
+    "seconds": 5,
+    "nanoseconds": 0
+  }
+}
