@@ -24,12 +24,12 @@
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
      inkscape:cx="153.76083"
-     inkscape:cy="242.83464"
-     inkscape:window-width="1356"
-     inkscape:window-height="1211"
-     inkscape:window-x="26"
-     inkscape:window-y="26"
-     inkscape:window-maximized="0"
+     inkscape:cy="275.90149"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
      inkscape:current-layer="svg20"
      showgrid="false" />
   <defs
@@ -88,19 +88,28 @@
        stroke-width="24"
        opacity="0.65"
        id="rect3" />
-    <g id="vessel_section_fields" style="display:inline">
-      <g id="glass">
-        <g id="glass_input">
+    <g
+       id="vessel_section_fields"
+       style="display:inline">
+      <g
+         id="glass">
+        <g
+           id="glass_input">
           <path
              id="vessel_input_field"
              d="M 430,7550 H 5520 Q 5700,7550 5700,7730 V 10520 Q 5700,10700 5520,10700 H 3120 Q 3000,10700 3000,10820 V 11920 Q 3000,12100 2820,12100 H 430 Q 250,12100 250,11920 V 7730 Q 250,7550 430,7550 Z"
              style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
         </g>
-        <g id="glass_output">
+        <g
+           id="glass_output">
           <rect
              id="vessel_output_field"
-             x="3100" y="10800" width="2600" height="1300"
-             rx="118" ry="126"
+             x="3100"
+             y="10800"
+             width="2600"
+             height="1300"
+             rx="118"
+             ry="126"
              style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
         </g>
       </g>
@@ -180,11 +189,17 @@
          style="fill:#2a1430;fill-opacity:1" />
       <rect
          id="MALLET_SELECTOR"
-         x="5950"
-         y="8070.0005"
-         width="2044.0426"
-         height="3971.8298"
-         style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20" />
+         x="5830.2305"
+         y="8100.231"
+         width="2123.5393"
+         height="4001.3394"
+         style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20.4608" />
+      <circle
+         id="VTUNE_SPAWN"
+         cx="7818"
+         cy="7871.1997"
+         r="75"
+         style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="VTUNE_EXPANDER_LIGHT"
          cx="7808"
@@ -205,13 +220,13 @@
          style="fill:#ff70cb;fill-opacity:1" />
       <circle
          id="PITCH_PARAM"
-         cx="3973.9941"
+         cx="3913.9941"
          cy="8470"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="FINE_PARAM"
-         cx="5314.9585"
+         cx="5254.9585"
          cy="8470"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
@@ -242,25 +257,25 @@
       <circle
          id="VOCT_INPUT"
          cx="900"
-         cy="11170"
+         cy="11230"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="LEVEL_PARAM"
          cx="2200"
-         cy="11170"
+         cy="11230"
          r="75"
          style="fill:#55dfff;fill-opacity:1" />
       <circle
          id="LEFT_OUTPUT"
          cx="3770.0276"
-         cy="11170"
+         cy="11230"
          r="75"
          style="fill:#ffbd66;fill-opacity:1" />
       <circle
          id="RIGHT_OUTPUT"
          cx="5070.0278"
-         cy="11170"
+         cy="11230"
          r="75"
          style="fill:#ffbd66;fill-opacity:1" />
     </g>
@@ -302,21 +317,21 @@
          id="text9"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CRYSTAL</text>
       <text
-         x="3973.9941"
+         x="3913.9941"
          y="9379.9551"
          id="text10"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
            sodipodi:role="line"
            id="tspan1"
-           x="3973.9941"
+           x="3913.9941"
            y="9379.9551">FREQ</tspan></text>
       <text
-         x="5314.9585"
+         x="5254.9585"
          y="9319.9775"
          id="text11"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
       <text
-         x="6963.2725"
+         x="6883.251"
          y="7969.978"
          id="text12"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MALLET</text>
@@ -343,12 +358,12 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUB</text>
       <text
          x="900"
-         y="11829.955"
+         y="11889.955"
          id="text17"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
       <text
          x="2200"
-         y="11829.955"
+         y="11889.955"
          id="text18"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">LEVEL</text>
     </g>
@@ -358,12 +373,12 @@
        font-weight="600">
       <text
          x="3770.0276"
-         y="11829.955"
+         y="11889.955"
          id="text19"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">L</text>
       <text
          x="5070.0278"
-         y="11829.955"
+         y="11889.955"
          id="text20"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">R</text>
     </g>

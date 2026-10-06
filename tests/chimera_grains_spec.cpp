@@ -9,6 +9,48 @@ static void need(bool ok, const char* name) {
 }
 
 int main() {
+    {
+        // A ramp is smooth everywhere except its loop seam. At these settings
+        // the source wraps before the finite Gene's release window starts.
+        chimera::Reel seamReel(20, 20);
+        for (unsigned i = 0; i < 4800; ++i)
+            need(seamReel.write(i, {float(2.0 * i / 4799 - 1.0), float(2.0 * i / 4799 - 1.0)}, i),
+                 "mismatched splice endpoints prepared");
+        for (float rate : {2.f, -2.f, 4.f, -4.f}) {
+            for (float morph : {.5012043f, 1.f}) {
+                for (int quality = 0; quality < 3; ++quality) {
+                    chimera::Grains smooth, hard;
+                    smooth.setSmooth(true);
+                    smooth.setBandlimited(quality != 0);
+                    smooth.setBalancedBandlimiting(quality == 2);
+                    chimera::CoreOutput control{};
+                    control.gene = .1216867566f; control.morph = morph;
+                    control.rate = rate; control.slide = .13f;
+                    float previous = 0, previousHard = 0, maxStep = 0, hardStep = 0;
+                    for (unsigned frame = 0; frame < 24000; ++frame) {
+                        // Exercise copied transition tails and subsequent launches.
+                        const chimera::Region region = frame < 12000 ?
+                            chimera::Region{0, 4800} : chimera::Region{800, 4000};
+                        const auto a = smooth.step(seamReel, region, control);
+                        const auto b = hard.step(seamReel, region, control);
+                        maxStep = std::max(maxStep, std::fabs(a.audio.r - previous));
+                        hardStep = std::max(hardStep, std::fabs(b.audio.r - previousHard));
+                        need(!a.invalidSource && std::isfinite(a.audio.r) &&
+                             std::fabs(a.audio.r) < 2.f,
+                             "smoothed wraps remain finite and bounded");
+                        need(a.audio.l == a.audio.r,
+                             "wrap correction preserves matched stereo channels");
+                        need(a.primaryBoundary == b.primaryBoundary && a.completions == b.completions &&
+                             a.primaryPosition == b.primaryPosition && smooth.onsetCount() == hard.onsetCount(),
+                             "wrap smoothing preserves source trajectory and musical scheduling");
+                        previous = a.audio.r; previousHard = b.audio.r;
+                    }
+                    need(hardStep > .2f && maxStep < .08f,
+                         "forward reverse pitched overlap and tails suppress internal splice clicks");
+                }
+            }
+        }
+    }
     chimera::Reel reel(20, 20);
     for (std::uint32_t i = 0; i < 4800; ++i)
         need(reel.write(i, chimera::StereoFrame{1.f, 1.f}, i), "constant source prepared");

@@ -40,25 +40,33 @@ private:
     };
     static const BalancedTable& balancedTable() { static const BalancedTable instance; return instance; }
 public:
-    static StereoFrame cubic(const Reel& reel, Region r, double coordinate, bool& invalid) {
+    // Smoothed voices correct wraps separately; clamp taps to prevent an
+    // interpolation jump before the playhead itself crosses the endpoint.
+    static StereoFrame cubic(const Reel& reel, Region r, double coordinate, bool& invalid,
+                             bool clampEdges = false) {
         const double p = profile1::wrapPosition(coordinate, r);
         const std::int64_t base = static_cast<std::int64_t>(std::floor(p));
         const double t = p - base;
-        const StereoFrame a = reel.readActive(profile1::wrapTap(base, -1, r));
-        const StereoFrame b = reel.readActive(profile1::wrapTap(base, 0, r));
-        const StereoFrame c = reel.readActive(profile1::wrapTap(base, 1, r));
-        const StereoFrame d = reel.readActive(profile1::wrapTap(base, 2, r));
+        const auto tap = [&](int offset) {
+            const std::int64_t at = base + offset;
+            return clampEdges ? static_cast<std::uint32_t>(std::max<std::int64_t>(r.begin,
+                std::min<std::int64_t>(r.end - 1, at))) : profile1::wrapTap(base, offset, r);
+        };
+        const StereoFrame a = reel.readActive(tap(-1));
+        const StereoFrame b = reel.readActive(tap(0));
+        const StereoFrame c = reel.readActive(tap(1));
+        const StereoFrame d = reel.readActive(tap(2));
         const float left = float(profile1::cubic(a.l,b.l,c.l,d.l,t));
         const float right = float(profile1::cubic(a.r,b.r,c.r,d.r,t));
         if (!profile1::finite(left) || !profile1::finite(right)) invalid = true;
         return {profile1::audio(left), profile1::audio(right)};
     }
     StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid,
-                     bool accelerate = true, bool balanced = false) const {
+                     bool accelerate = true, bool balanced = false, bool clampEdges = false) const {
         if (r.end <= r.begin) return {0, 0};
         if (!profile1::finite(speed)) { invalid = true; speed = 1; }
         const double width = profile1::clamp(std::fabs(speed), 1.0, 512.0);
-        if (width <= 1.0) return cubic(reel, r, coordinate, invalid);
+        if (width <= 1.0) return cubic(reel, r, coordinate, invalid, clampEdges);
         if (accelerate && width >= r.end-r.begin) {
             // A Splice's first non-DC Fourier bin is beyond the stop band.
             // Folding thousands of repeated kernel taps is equivalent to its
@@ -89,12 +97,16 @@ public:
         const double p = profile1::wrapPosition(coordinate, r), radius = (balanced ? 4.0 : 8.0) * width;
         const std::int64_t begin = std::int64_t(std::ceil(p-radius));
         const std::int64_t end = std::int64_t(std::floor(p+radius));
-        std::uint32_t at = profile1::wrapTap(begin, 0, r);
+        const auto boundedTap = [&](std::int64_t tap) {
+            return static_cast<std::uint32_t>(std::max<std::int64_t>(r.begin,
+                std::min<std::int64_t>(r.end - 1, tap)));
+        };
+        std::uint32_t at = clampEdges ? boundedTap(begin) : profile1::wrapTap(begin, 0, r);
         const double scale = 1024.0 / width;
         double left = 0, right = 0, weight = 0;
         for (std::int64_t tap = begin; tap <= end;) {
             unsigned block = 0;
-            if (accelerate && width >= 32) {
+            if (accelerate && width >= 32 && (!clampEdges || (tap >= r.begin && tap < r.end))) {
                 for (unsigned size : {256u, 64u, 16u}) {
                     if (size <= width*0.5 && at % size == 0 && at + size <= r.end &&
                         end-tap+1 >= size) { block = size; break; }
@@ -116,7 +128,8 @@ public:
                 }
                 weight += coeff[0]*block + coeff[2]*block*(block+1.0)/(3.0*(block-1));
                 tap += block; at += block;
-                if (at == r.end) at = r.begin;
+                if (clampEdges) at = boundedTap(tap);
+                else if (at == r.end) at = r.begin;
                 continue;
             }
             const double gain = gainAt((double(tap)-p)*scale, balanced);
@@ -126,7 +139,8 @@ public:
             right += profile1::clamp(profile1::audio(value.r), -64.0, 64.0) * gain;
             weight += gain;
             ++tap;
-            if (++at == r.end) at = r.begin;
+            if (clampEdges) at = boundedTap(tap);
+            else if (++at == r.end) at = r.begin;
         }
         const double inverseWeight = 1.0 / weight;
         StereoFrame filtered{float(left*inverseWeight), float(right*inverseWeight)};

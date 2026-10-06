@@ -49,6 +49,8 @@ Vessel::Vessel() {
     configParam(WIDTH_PARAM, 0.f, 1.f, .7f, "Stereo width", "%", 0.f, 100.f);
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
+    configButton(ADD_TUNE_PARAM, "Spawn V.Tune");
+    getParamQuantity(ADD_TUNE_PARAM)->randomizeEnabled = false;
     const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
         "Rub gate", "Retired speed input (unused)", "Retired pressure input (unused)",
         "Rub intensity (0-10 V, overrides speed and pressure; requires Rub gate)"};

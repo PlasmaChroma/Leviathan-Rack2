@@ -283,10 +283,11 @@ public:
             if (v.active) {
                 const double w = voiceWeight(v) * (transitionRemaining_ ?
                     (1.0 - transitionFraction) : (1.0 - tailFraction));
-                const StereoFrame source = firmwareEnvelopes_ && !v.full ?
+                StereoFrame source = firmwareEnvelopes_ && !v.full ?
                     readFirmware(reel, v.region, v.position + pmOffset,
                         c.rate * v.ratio + delta + pmDelta, firmwareDense_, result.invalidSource) :
-                    read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource);
+                    read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource, v.smooth && !v.full);
+                source = smoothWrap(v, source, pmOffset, delta + pmDelta, c.rate * v.ratio);
                 const StereoFrame mixed = profile1::stereoCrossmix(source, v.crossmix);
                 sumL += mixed.l * w;
                 sumR += mixed.r * w;
@@ -316,7 +317,8 @@ public:
             }
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
-                const StereoFrame source = read(reel, tail.region, tail.position + pmOffset, c.rate * tail.ratio + delta + pmDelta, result.invalidSource);
+                StereoFrame source = read(reel, tail.region, tail.position + pmOffset, c.rate * tail.ratio + delta + pmDelta, result.invalidSource, tail.smooth && !tail.full);
+                source = smoothWrap(tail, source, pmOffset, delta + pmDelta, c.rate * tail.ratio);
                 const StereoFrame mixed = profile1::stereoCrossmix(source, tail.crossmix);
                 tailLast_[i] = StereoFrame{static_cast<float>(mixed.l * w),
                                            static_cast<float>(mixed.r * w)};
@@ -407,7 +409,36 @@ private:
         float crossmix = 0.f;
         double travel = 0, wallEstimate = 1;
         Region region{0, 0};
+        bool haveWrapSample = false;
+        double lastReadPosition = 0, lastReadAdvance = 0;
+        StereoFrame wrapSample{0.f, 0.f}, wrapResidual{0.f, 0.f};
+        std::uint8_t wrapAge = 96;
     };
+    StereoFrame smoothWrap(Voice& v, StereoFrame source, double pmOffset,
+                           double displacement, double advance) const {
+        if (!v.smooth || v.full || firmwareEnvelopes_) return source;
+        const double position = pmOffset == 0.0 ? v.position :
+            profile1::wrapPosition(v.position + pmOffset, v.region);
+        // A finite Gene can traverse the splice several times while its age
+        // envelope is open. Preserve that trajectory and remove only the jump
+        // at each source wrap. Use the previous frame's advance: rate changes
+        // affect the NEXT read, whereas Slide/PM displacement affects this one.
+        const double next = v.lastReadPosition + v.lastReadAdvance + displacement;
+        if (v.haveWrapSample && (next < v.region.begin || next >= v.region.end)) {
+            v.wrapResidual = {v.wrapSample.l - source.l, v.wrapSample.r - source.r};
+            v.wrapAge = 0;
+        }
+        if (v.wrapAge < 96) {
+            const float fade = 1.f - edgeGain(double(v.wrapAge++) / 96.0);
+            source.l += v.wrapResidual.l * fade;
+            source.r += v.wrapResidual.r * fade;
+        }
+        v.wrapSample = source;
+        v.lastReadPosition = position;
+        v.lastReadAdvance = advance;
+        v.haveWrapSample = true;
+        return source;
+    }
     void forceTransition() {
         if (firmwareEnvelopes_ && !full_) {
             // Organize rotates a launch slot; the other voices keep their
@@ -545,12 +576,13 @@ private:
             residualBlend_ = static_cast<float>(v.unity);
         }
     }
-    StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid) {
+    StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid,
+                     bool clampEdges = false) {
         if (qualityBlend_ <= 0 || std::fabs(speed) <= 1.0)
-            return PlaybackReader::cubic(reel, r, coordinate, invalid);
-        StereoFrame filtered = readFiltered(reel, r, coordinate, speed, invalid);
+            return PlaybackReader::cubic(reel, r, coordinate, invalid, clampEdges);
+        StereoFrame filtered = readFiltered(reel, r, coordinate, speed, invalid, clampEdges);
         if (qualityBlend_ < 1) {
-            const auto original = PlaybackReader::cubic(reel, r, coordinate, invalid);
+            const auto original = PlaybackReader::cubic(reel, r, coordinate, invalid, clampEdges);
             filtered.l = float(original.l + (filtered.l-original.l)*qualityBlend_);
             filtered.r = float(original.r + (filtered.r-original.r)*qualityBlend_);
         }
@@ -592,12 +624,13 @@ private:
         if (!profile1::finite(out.l) || !profile1::finite(out.r)) invalid = true;
         return {profile1::audio(out.l), profile1::audio(out.r)};
     }
-    StereoFrame readFiltered(const Reel& reel, Region r, double coordinate, double speed, bool& invalid) {
-        if (std::fabs(speed) <= 1.0) return PlaybackReader::cubic(reel, r, coordinate, invalid);
-        if (balancedBlend_ <= 0) return reader_.read(reel, r, coordinate, speed, invalid);
-        if (balancedBlend_ >= 1) return reader_.read(reel, r, coordinate, speed, invalid, true, true);
-        const auto full = reader_.read(reel, r, coordinate, speed, invalid);
-        const auto balanced = reader_.read(reel, r, coordinate, speed, invalid, true, true);
+    StereoFrame readFiltered(const Reel& reel, Region r, double coordinate, double speed, bool& invalid,
+                             bool clampEdges = false) {
+        if (std::fabs(speed) <= 1.0) return PlaybackReader::cubic(reel, r, coordinate, invalid, clampEdges);
+        if (balancedBlend_ <= 0) return reader_.read(reel, r, coordinate, speed, invalid, true, false, clampEdges);
+        if (balancedBlend_ >= 1) return reader_.read(reel, r, coordinate, speed, invalid, true, true, clampEdges);
+        const auto full = reader_.read(reel, r, coordinate, speed, invalid, true, false, clampEdges);
+        const auto balanced = reader_.read(reel, r, coordinate, speed, invalid, true, true, clampEdges);
         return {float(full.l + (balanced.l-full.l)*balancedBlend_),
                 float(full.r + (balanced.r-full.r)*balancedBlend_)};
     }

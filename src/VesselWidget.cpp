@@ -573,6 +573,50 @@ struct VesselStrikeArea final : VesselPerformanceArea {
 struct VesselRotateArea final : VesselPerformanceArea {
     VesselRotateArea() : VesselPerformanceArea(Kind::Rotate) {}
 };
+struct VesselTuneSpawnButton final : TL1105 {
+    ModuleWidget* owner = nullptr;
+
+    void draw(const DrawArgs& args) override {
+        TL1105::draw(args);
+        const float cx = .5f * box.size.x;
+        const float cy = .5f * box.size.y;
+        const float halfW = 2.8f, halfH = 3.3f;
+        const float offset = halfW / 3.f;
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, cx - halfW + offset, cy - halfH);
+        nvgLineTo(args.vg, cx + halfW + offset, cy);
+        nvgLineTo(args.vg, cx - halfW + offset, cy + halfH);
+        nvgClosePath(args.vg);
+        nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
+        nvgFill(args.vg);
+    }
+
+    void onButton(const event::Button& e) override {
+        TL1105::onButton(e);
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) return;
+        e.consume(this);
+        if (!owner || !module || !modelVTune || !APP || !APP->engine
+                || !APP->scene || !APP->scene->rack) return;
+        if (module->rightExpander.module && module->rightExpander.module->model == modelVTune) return;
+
+        auto* tuneModule = modelVTune->createModule();
+        if (!tuneModule) return;
+        auto* tuneWidget = modelVTune->createModuleWidget(tuneModule);
+        if (!tuneWidget) {
+            delete tuneModule;
+            return;
+        }
+        APP->engine->addModule(tuneModule);
+        APP->scene->rack->setModulePosForce(tuneWidget, owner->box.pos.plus(Vec(owner->box.size.x, 0.f)));
+        APP->scene->rack->addModule(tuneWidget);
+        if (APP->history) {
+            auto* action = new history::ModuleAdd;
+            action->name = "add V.Tune";
+            action->setModule(tuneWidget);
+            APP->history->push(action);
+        }
+    }
+};
 struct BinauralBandLabel final : TransparentWidget {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
@@ -632,6 +676,7 @@ struct VesselWidget final : ModuleWidget {
     Widget* metalBowlRaster = nullptr;
     Widget* crystalBowlRaster = nullptr;
     VesselPitchTintLayer* bowlPitchTint = nullptr;
+    VesselTuneSpawnButton* tuneSpawnButton = nullptr;
     explicit VesselWidget(Vessel* module) {
         setModule(module);
         {
@@ -708,6 +753,10 @@ struct VesselWidget final : ModuleWidget {
         panel_svg::loadRectFromSvgMm(panel.panelPath(), "ROTATE_AREA", &rotateRect);
         auto* rotateArea = createParam<VesselRotateArea>(mm2px(rotateRect.pos), module, Vessel::ROTATE_PARAM);
         rotateArea->box.size = mm2px(rotateRect.size); addParam(rotateArea);
+        tuneSpawnButton = createParamCentered<VesselTuneSpawnButton>(
+            mm2px(point("VTUNE_SPAWN", 78.18f, 21.f)), module, Vessel::ADD_TUNE_PARAM);
+        tuneSpawnButton->owner = this;
+        addParam(tuneSpawnButton);
         bowlPitchTint = new VesselPitchTintLayer(module, metalBowlRect, crystalBowlRect);
         bowlPitchTint->box.size = box.size;
         struct InputPlacement { const char* anchor; int id; float x; float y; };
@@ -775,6 +824,11 @@ struct VesselWidget final : ModuleWidget {
         layerTiming.beginCycle(enabled);
         const auto start = debug_terminal::debugTimerStart(enabled);
         auto* vessel = static_cast<Vessel*>(module);
+        if (tuneSpawnButton) {
+            const bool linked = vessel && vessel->rightExpander.module
+                && vessel->rightExpander.module->model == modelVTune;
+            tuneSpawnButton->setVisible(!linked);
+        }
         const float frameTime = APP && APP->window
             ? clamp(float(APP->window->getLastFrameDuration()), 0.f, .1f) : 1.f / 60.f;
         const bool rubbing = vessel && vessel->visualRubbing.load(std::memory_order_relaxed);
