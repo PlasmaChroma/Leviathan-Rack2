@@ -1,0 +1,145 @@
+{
+  "files": [
+    {
+      "file": "DataBender-14hp-reference.svg",
+      "bytes": 1865726,
+      "element_count": 553,
+      "tags": [
+        "desc",
+        "ellipse",
+        "g",
+        "path",
+        "rect",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "DataBender-14hp.svg",
+      "bytes": 137160,
+      "element_count": 138,
+      "tags": [
+        "circle",
+        "desc",
+        "ellipse",
+        "g",
+        "path",
+        "rect",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-Button.svg",
+      "bytes": 23160,
+      "element_count": 16,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-Jack.svg",
+      "bytes": 75939,
+      "element_count": 17,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-LED-Blue.svg",
+      "bytes": 7206,
+      "element_count": 14,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-LED-Green.svg",
+      "bytes": 6802,
+      "element_count": 12,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-LED-Off.svg",
+      "bytes": 7182,
+      "element_count": 13,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-RepeatsKnob.svg",
+      "bytes": 72995,
+      "element_count": 17,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-SmallKnob.svg",
+      "bytes": 61291,
+      "element_count": 17,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    },
+    {
+      "file": "assets/DB-TimeKnob.svg",
+      "bytes": 108248,
+      "element_count": 17,
+      "tags": [
+        "g",
+        "path",
+        "svg",
+        "title"
+      ],
+      "has_raster": false,
+      "has_font_dependencies": false
+    }
+  ],
+  "tested_in_live_rack": false,
+  "cpp_header_compiled": false,
+  "component_guides": 35,
+  "visible_lettering_groups": 34
+}

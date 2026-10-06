@@ -1,0 +1,1046 @@
+{
+  "panel": {
+    "width_hp": 14,
+    "width_mm": 71.12,
+    "height_mm": 128.5,
+    "source_width_px": 280,
+    "source_height_px": 509,
+    "source_sha256": "4c55966ae7e4864d9a5d30291a4ebb0bfaaa0f9f2159ef0591e87007db108688",
+    "coordinates": "Origin at top left; x right, y down. Visible centers measured from supplied raster, not manufacturer drill data.",
+    "rack_svg_dpi": 75
+  },
+  "controls": [
+    {
+      "name": "TIME_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 54.8,
+        "y": 78.8
+      },
+      "mm": {
+        "x": 13.9192,
+        "y": 19.893517
+      },
+      "rack_px_75dpi": {
+        "x": 41.1,
+        "y": 58.740699
+      },
+      "reference_radius_mm": 9.268141
+    },
+    {
+      "name": "REPEATS_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 34.0,
+        "y": 181.8
+      },
+      "mm": {
+        "x": 8.636,
+        "y": 45.896464
+      },
+      "rack_px_75dpi": {
+        "x": 25.5,
+        "y": 135.521054
+      },
+      "reference_radius_mm": 6.837153
+    },
+    {
+      "name": "MIX_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 34.0,
+        "y": 264.7
+      },
+      "mm": {
+        "x": 8.636,
+        "y": 66.825049
+      },
+      "rack_px_75dpi": {
+        "x": 25.5,
+        "y": 197.318058
+      },
+      "reference_radius_mm": 5.72295
+    },
+    {
+      "name": "BEND_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 107.2,
+        "y": 241.0
+      },
+      "mm": {
+        "x": 27.2288,
+        "y": 60.841847
+      },
+      "rack_px_75dpi": {
+        "x": 80.4,
+        "y": 179.651122
+      },
+      "reference_radius_mm": 5.824242
+    },
+    {
+      "name": "BREAK_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 178.8,
+        "y": 240.8
+      },
+      "mm": {
+        "x": 45.4152,
+        "y": 60.791356
+      },
+      "rack_px_75dpi": {
+        "x": 134.1,
+        "y": 179.502034
+      },
+      "reference_radius_mm": 5.824242
+    },
+    {
+      "name": "CORRUPT_PARAM",
+      "kind": "param",
+      "role": "knob",
+      "source_px": {
+        "x": 250.4,
+        "y": 240.0
+      },
+      "mm": {
+        "x": 63.6016,
+        "y": 60.589391
+      },
+      "rack_px_75dpi": {
+        "x": 187.8,
+        "y": 178.905682
+      },
+      "reference_radius_mm": 5.824242
+    },
+    {
+      "name": "SHIFT_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 161.6,
+        "y": 83.5
+      },
+      "mm": {
+        "x": 41.0464,
+        "y": 21.080059
+      },
+      "rack_px_75dpi": {
+        "x": 121.2,
+        "y": 62.244269
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "CLOCK_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 205.6,
+        "y": 83.5
+      },
+      "mm": {
+        "x": 52.2224,
+        "y": 21.080059
+      },
+      "rack_px_75dpi": {
+        "x": 154.2,
+        "y": 62.244269
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "MODE_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 249.6,
+        "y": 83.5
+      },
+      "mm": {
+        "x": 63.3984,
+        "y": 21.080059
+      },
+      "rack_px_75dpi": {
+        "x": 187.2,
+        "y": 62.244269
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "BEND_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 117.6,
+        "y": 158.6
+      },
+      "mm": {
+        "x": 29.8704,
+        "y": 40.039489
+      },
+      "rack_px_75dpi": {
+        "x": 88.2,
+        "y": 118.226838
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "BREAK_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 161.6,
+        "y": 158.6
+      },
+      "mm": {
+        "x": 41.0464,
+        "y": 40.039489
+      },
+      "rack_px_75dpi": {
+        "x": 121.2,
+        "y": 118.226838
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "CORRUPT_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 205.6,
+        "y": 158.6
+      },
+      "mm": {
+        "x": 52.2224,
+        "y": 40.039489
+      },
+      "rack_px_75dpi": {
+        "x": 154.2,
+        "y": 118.226838
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "FREEZE_BUTTON_PARAM",
+      "kind": "param",
+      "role": "button",
+      "source_px": {
+        "x": 249.6,
+        "y": 158.6
+      },
+      "mm": {
+        "x": 63.3984,
+        "y": 40.039489
+      },
+      "rack_px_75dpi": {
+        "x": 187.2,
+        "y": 118.226838
+      },
+      "reference_radius_mm": 2.861475
+    },
+    {
+      "name": "SHIFT_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 161.3,
+        "y": 58.8
+      },
+      "mm": {
+        "x": 40.9702,
+        "y": 14.844401
+      },
+      "rack_px_75dpi": {
+        "x": 120.975,
+        "y": 43.831892
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "CLOCK_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 205.3,
+        "y": 58.8
+      },
+      "mm": {
+        "x": 52.1462,
+        "y": 14.844401
+      },
+      "rack_px_75dpi": {
+        "x": 153.975,
+        "y": 43.831892
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "MODE_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 249.3,
+        "y": 58.8
+      },
+      "mm": {
+        "x": 63.3222,
+        "y": 14.844401
+      },
+      "rack_px_75dpi": {
+        "x": 186.975,
+        "y": 43.831892
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "BEND_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 117.3,
+        "y": 133.8
+      },
+      "mm": {
+        "x": 29.7942,
+        "y": 33.778585
+      },
+      "rack_px_75dpi": {
+        "x": 87.975,
+        "y": 99.739918
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "BREAK_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 161.3,
+        "y": 133.8
+      },
+      "mm": {
+        "x": 40.9702,
+        "y": 33.778585
+      },
+      "rack_px_75dpi": {
+        "x": 120.975,
+        "y": 99.739918
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "CORRUPT_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 205.3,
+        "y": 133.8
+      },
+      "mm": {
+        "x": 52.1462,
+        "y": 33.778585
+      },
+      "rack_px_75dpi": {
+        "x": 153.975,
+        "y": 99.739918
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "FREEZE_LIGHT",
+      "kind": "light",
+      "role": "indicator",
+      "source_px": {
+        "x": 249.3,
+        "y": 133.8
+      },
+      "mm": {
+        "x": 63.3222,
+        "y": 33.778585
+      },
+      "rack_px_75dpi": {
+        "x": 186.975,
+        "y": 99.739918
+      },
+      "reference_radius_mm": 1.72195
+    },
+    {
+      "name": "CLOCK_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 33.5,
+        "y": 328.3
+      },
+      "mm": {
+        "x": 8.509,
+        "y": 82.881238
+      },
+      "rack_px_75dpi": {
+        "x": 25.125,
+        "y": 244.728064
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "BEND_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 86.2,
+        "y": 328.3
+      },
+      "mm": {
+        "x": 21.8948,
+        "y": 82.881238
+      },
+      "rack_px_75dpi": {
+        "x": 64.65,
+        "y": 244.728064
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "BREAK_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 140.6,
+        "y": 328.3
+      },
+      "mm": {
+        "x": 35.7124,
+        "y": 82.881238
+      },
+      "rack_px_75dpi": {
+        "x": 105.45,
+        "y": 244.728064
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "CORRUPT_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 195.0,
+        "y": 328.3
+      },
+      "mm": {
+        "x": 49.53,
+        "y": 82.881238
+      },
+      "rack_px_75dpi": {
+        "x": 146.25,
+        "y": 244.728064
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "FREEZE_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 249.8,
+        "y": 328.3
+      },
+      "mm": {
+        "x": 63.4492,
+        "y": 82.881238
+      },
+      "rack_px_75dpi": {
+        "x": 187.35,
+        "y": 244.728064
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "LEFT_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 33.5,
+        "y": 383.2
+      },
+      "mm": {
+        "x": 8.509,
+        "y": 96.741061
+      },
+      "rack_px_75dpi": {
+        "x": 25.125,
+        "y": 285.652739
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "BEND_GATE_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 86.2,
+        "y": 383.2
+      },
+      "mm": {
+        "x": 21.8948,
+        "y": 96.741061
+      },
+      "rack_px_75dpi": {
+        "x": 64.65,
+        "y": 285.652739
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "BREAK_GATE_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 140.6,
+        "y": 383.2
+      },
+      "mm": {
+        "x": 35.7124,
+        "y": 96.741061
+      },
+      "rack_px_75dpi": {
+        "x": 105.45,
+        "y": 285.652739
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "CORRUPT_GATE_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 195.0,
+        "y": 383.2
+      },
+      "mm": {
+        "x": 49.53,
+        "y": 96.741061
+      },
+      "rack_px_75dpi": {
+        "x": 146.25,
+        "y": 285.652739
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "LEFT_OUTPUT",
+      "kind": "output",
+      "role": "jack",
+      "source_px": {
+        "x": 249.8,
+        "y": 383.2
+      },
+      "mm": {
+        "x": 63.4492,
+        "y": 96.741061
+      },
+      "rack_px_75dpi": {
+        "x": 187.35,
+        "y": 285.652739
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "RIGHT_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 33.5,
+        "y": 438.0
+      },
+      "mm": {
+        "x": 8.509,
+        "y": 110.575639
+      },
+      "rack_px_75dpi": {
+        "x": 25.125,
+        "y": 326.50287
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "MIX_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 86.2,
+        "y": 438.0
+      },
+      "mm": {
+        "x": 21.8948,
+        "y": 110.575639
+      },
+      "rack_px_75dpi": {
+        "x": 64.65,
+        "y": 326.50287
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "REPEATS_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 140.6,
+        "y": 438.0
+      },
+      "mm": {
+        "x": 35.7124,
+        "y": 110.575639
+      },
+      "rack_px_75dpi": {
+        "x": 105.45,
+        "y": 326.50287
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "TIME_CV_INPUT",
+      "kind": "input",
+      "role": "jack",
+      "source_px": {
+        "x": 195.0,
+        "y": 438.0
+      },
+      "mm": {
+        "x": 49.53,
+        "y": 110.575639
+      },
+      "rack_px_75dpi": {
+        "x": 146.25,
+        "y": 326.50287
+      },
+      "reference_radius_mm": 4.380843
+    },
+    {
+      "name": "RIGHT_OUTPUT",
+      "kind": "output",
+      "role": "jack",
+      "source_px": {
+        "x": 249.8,
+        "y": 438.0
+      },
+      "mm": {
+        "x": 63.4492,
+        "y": 110.575639
+      },
+      "rack_px_75dpi": {
+        "x": 187.35,
+        "y": 326.50287
+      },
+      "reference_radius_mm": 4.380843
+    }
+  ],
+  "mounting_holes": [
+    {
+      "mm": {
+        "x": 7.6962,
+        "y": 3.079961
+      }
+    },
+    {
+      "mm": {
+        "x": 63.627,
+        "y": 3.079961
+      }
+    },
+    {
+      "mm": {
+        "x": 7.6962,
+        "y": 125.091847
+      }
+    },
+    {
+      "mm": {
+        "x": 63.627,
+        "y": 125.091847
+      }
+    }
+  ],
+  "lettering": [
+    {
+      "id": "title",
+      "text": "Data Bender",
+      "source_crop_px": [
+        73,
+        7,
+        239,
+        30
+      ],
+      "contours": 18
+    },
+    {
+      "id": "shift",
+      "text": "shift",
+      "source_crop_px": [
+        145,
+        98,
+        178,
+        111
+      ],
+      "contours": 4
+    },
+    {
+      "id": "clock-button",
+      "text": "clock",
+      "source_crop_px": [
+        188,
+        98,
+        223,
+        111
+      ],
+      "contours": 5
+    },
+    {
+      "id": "mode",
+      "text": "mode",
+      "source_crop_px": [
+        232,
+        98,
+        267,
+        111
+      ],
+      "contours": 7
+    },
+    {
+      "id": "time-knob",
+      "text": "time",
+      "source_crop_px": [
+        39,
+        128,
+        69,
+        144
+      ],
+      "contours": 6
+    },
+    {
+      "id": "bend",
+      "text": "bend",
+      "source_crop_px": [
+        99,
+        175,
+        137,
+        190
+      ],
+      "contours": 7
+    },
+    {
+      "id": "break",
+      "text": "break",
+      "source_crop_px": [
+        142,
+        175,
+        181,
+        190
+      ],
+      "contours": 6
+    },
+    {
+      "id": "corrupt",
+      "text": "corrupt",
+      "source_crop_px": [
+        181,
+        175,
+        229,
+        190
+      ],
+      "contours": 9
+    },
+    {
+      "id": "freeze-button",
+      "text": "freeze",
+      "source_crop_px": [
+        230,
+        175,
+        270,
+        190
+      ],
+      "contours": 8
+    },
+    {
+      "id": "stereo",
+      "text": "(stereo)",
+      "source_crop_px": [
+        93,
+        190,
+        139,
+        205
+      ],
+      "contours": 13
+    },
+    {
+      "id": "default",
+      "text": "(default)",
+      "source_crop_px": [
+        138,
+        190,
+        183,
+        205
+      ],
+      "contours": 10
+    },
+    {
+      "id": "reset",
+      "text": "(reset)",
+      "source_crop_px": [
+        184,
+        190,
+        228,
+        205
+      ],
+      "contours": 8
+    },
+    {
+      "id": "latch",
+      "text": "(latch)",
+      "source_crop_px": [
+        231,
+        190,
+        271,
+        205
+      ],
+      "contours": 7
+    },
+    {
+      "id": "repeats-knob",
+      "text": "repeats",
+      "source_crop_px": [
+        10,
+        215,
+        59,
+        231
+      ],
+      "contours": 11
+    },
+    {
+      "id": "mix-knob",
+      "text": "mix",
+      "source_crop_px": [
+        22,
+        295,
+        47,
+        309
+      ],
+      "contours": 4
+    },
+    {
+      "id": "bend-cv",
+      "text": "cv",
+      "source_crop_px": [
+        91,
+        299,
+        105,
+        311
+      ],
+      "contours": 2
+    },
+    {
+      "id": "break-cv",
+      "text": "cv",
+      "source_crop_px": [
+        145,
+        299,
+        159,
+        311
+      ],
+      "contours": 2
+    },
+    {
+      "id": "corrupt-cv",
+      "text": "cv",
+      "source_crop_px": [
+        199,
+        299,
+        213,
+        311
+      ],
+      "contours": 2
+    },
+    {
+      "id": "clock-input",
+      "text": "clock",
+      "source_crop_px": [
+        16,
+        346,
+        53,
+        362
+      ],
+      "contours": 5
+    },
+    {
+      "id": "freeze-input",
+      "text": "freeze",
+      "source_crop_px": [
+        228,
+        346,
+        269,
+        362
+      ],
+      "contours": 10
+    },
+    {
+      "id": "bend-gate",
+      "text": "gate",
+      "source_crop_px": [
+        91,
+        354,
+        114,
+        365
+      ],
+      "contours": 8
+    },
+    {
+      "id": "break-gate",
+      "text": "gate",
+      "source_crop_px": [
+        145,
+        354,
+        168,
+        365
+      ],
+      "contours": 8
+    },
+    {
+      "id": "corrupt-gate",
+      "text": "gate",
+      "source_crop_px": [
+        199,
+        354,
+        222,
+        365
+      ],
+      "contours": 8
+    },
+    {
+      "id": "left-input",
+      "text": "left",
+      "source_crop_px": [
+        20,
+        405,
+        43,
+        420
+      ],
+      "contours": 5
+    },
+    {
+      "id": "bend-input",
+      "text": "bend",
+      "source_crop_px": [
+        70,
+        405,
+        104,
+        419
+      ],
+      "contours": 6
+    },
+    {
+      "id": "break-input",
+      "text": "break",
+      "source_crop_px": [
+        121,
+        405,
+        159,
+        420
+      ],
+      "contours": 8
+    },
+    {
+      "id": "corrupt-input",
+      "text": "corrupt",
+      "source_crop_px": [
+        170,
+        405,
+        216,
+        420
+      ],
+      "contours": 7
+    },
+    {
+      "id": "left-output",
+      "text": "left",
+      "source_crop_px": [
+        236,
+        405,
+        262,
+        420
+      ],
+      "contours": 5
+    },
+    {
+      "id": "right-input",
+      "text": "right",
+      "source_crop_px": [
+        16,
+        458,
+        48,
+        475
+      ],
+      "contours": 7
+    },
+    {
+      "id": "mix-input",
+      "text": "mix",
+      "source_crop_px": [
+        74,
+        458,
+        99,
+        473
+      ],
+      "contours": 4
+    },
+    {
+      "id": "repeats-input",
+      "text": "repeats",
+      "source_crop_px": [
+        117,
+        458,
+        163,
+        474
+      ],
+      "contours": 7
+    },
+    {
+      "id": "time-input",
+      "text": "time",
+      "source_crop_px": [
+        181,
+        458,
+        208,
+        473
+      ],
+      "contours": 6
+    },
+    {
+      "id": "right-output",
+      "text": "right",
+      "source_crop_px": [
+        234,
+        458,
+        267,
+        474
+      ],
+      "contours": 7
+    },
+    {
+      "id": "brand",
+      "text": "QU-BIT",
+      "source_crop_px": [
+        100,
+        477,
+        179,
+        504
+      ],
+      "contours": 8
+    }
+  ]
+}
