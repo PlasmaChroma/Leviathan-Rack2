@@ -120,6 +120,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/moirai_engine_spec \
 	build/tests/moirai_module_spec \
 	build/tests/theme_service_spec \
+	build/tests/theme_color_clipboard_spec \
 	build/tests/theme_persistence_spec \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
@@ -796,6 +797,7 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/moirai_engine_spec)
 	$(call run_rack_test_bin,build/tests/moirai_module_spec)
 	$(call run_test_bin,build/tests/theme_service_spec)
+	$(call run_test_bin,build/tests/theme_color_clipboard_spec)
 	$(call run_rack_test_bin,build/tests/theme_persistence_spec)
 	python3 tests/octavia_sibyl_contract_spec.py
 	python3 tests/octavia_semantic_contract_spec.py
@@ -1174,6 +1176,9 @@ build/tests/puffy_character_controller_spec: tests/puffy_character_controller_sp
 
 build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp -o $@
+
+build/tests/theme_color_clipboard_spec: tests/theme_color_clipboard_spec.cpp src/theme/ThemeColorClipboard.hpp src/theme/ThemeTypes.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/theme_color_clipboard_spec.cpp -o $@
 
 build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemeTypes.hpp src/theme/ThemePresets.cpp src/theme/ThemePresets.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -o $@

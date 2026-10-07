@@ -1,15 +1,42 @@
 # Leviathan Theme Module — Implementation Specification v0.2
 
+## Implemented revision: SVG editor anchors and clipboard colors
+
+The paste icon beside the selected color code applies clipboard text to the
+selected role and saves it. Accepted formats are six-digit or three-digit hex
+with an optional leading `#`, and decimal integer `R,G,B` channels from 0 to
+255. Surrounding whitespace (including whitespace around RGB channels) is
+ignored. Invalid input leaves the color unchanged and blinks a red ring around
+the paste icon three times.
+
+Editor geometry is loaded once from `Theme.panel.svg` through `PanelSvgUtils`.
+Edit the master `res/Theme.svg`: the four authored preview-card rectangles also
+define their controls' bounds; the hidden Components layer defines the other
+control rectangles, standalone label points, paste-button center, and screw
+centers. Drawing and hit-testing share the cached rectangles. Regenerate the
+split assets and panel anchor atlas after changing the master.
+
+## Implemented revision: factory backgrounds and simplified editor
+
+The ORIGINAL button has been removed. Each factory field now enables and
+applies an explicit background: Leviathan `#000000`, Abyssal `#050A18`, Mono
+`#080808`, and Ultraviolet `#10051C`. BACKGROUND still edits or pastes a custom
+color. Legacy saved background-enable flags remain supported when loading.
+
 ## Implemented revision: optional SVG panel background (schema 3)
 
 Schema 3 adds `background` (RGB hex) and `backgroundEnabled` (boolean) to active
 and user-preset palettes. V1/V2 documents and factory defaults keep the authored
-background. Editing BACKGROUND enables its custom color; the ORIGINAL toggle
-restores the authored background while retaining the selected custom color.
+background. Editing BACKGROUND enables its custom color.
 
 All 27 base SVGs (including the blank template) now use pure black (`#000000`)
-for their authored panel background. ORIGINAL restores that black base. The
-existing custom background color and schema 3 persistence are unchanged.
+for their authored panel background. The Leviathan factory field applies that
+black base. The schema 3 persistence format is unchanged.
+
+The fifth factory preset, All Hallows (`factory:all-hallows`), uses pumpkin
+orange input glass (`#F07818`), violet output glass (`#7E3FC4`), warm bone text
+(`#FFF0D2`), a midnight background (`#100B16`), and 125% texture. Its full-width
+button is positioned by the `PRESET_5` rectangle above the logo.
 
 Each master SVG's explicit `theme_background` group is extracted into
 `.background.svg` with its ancestor transforms/styles and removed from

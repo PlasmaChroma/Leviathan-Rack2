@@ -23,10 +23,13 @@ int main() {
 	initialize(canonicalDefault(), "factory:leviathan");
 	std::size_t factoryCount = 0u;
 	const FactoryPreset* factory = factoryPresets(&factoryCount);
-	check("four stable factory presets are registered", factory && factoryCount == 4u);
-	check("canonical factory preset is discoverable",
+	check("five stable factory presets are registered", factory && factoryCount == 5u);
+	ThemeSnapshot leviathanFactory = canonicalDefault();
+	leviathanFactory.colors.background = ThemeColor(0, 0, 0);
+	leviathanFactory.colors.backgroundEnabled = true;
+	check("Leviathan factory preset explicitly applies its black background",
 		findFactoryPreset("factory:leviathan")
-		&& findFactoryPreset("factory:leviathan")->snapshot == canonicalDefault());
+		&& findFactoryPreset("factory:leviathan")->snapshot == leviathanFactory);
 	check("unknown factory preset is rejected", findFactoryPreset("factory:unknown") == nullptr);
 	const ThemeState initial = read();
 	check("canonical input color matches classic panel purple",
@@ -34,6 +37,16 @@ int main() {
 	check("canonical output color", initial.snapshot.colors.output == ThemeColor{0x1c, 0xcc, 0xd9});
 	check("canonical text color is white", initial.snapshot.colors.textInput == ThemeColor{0xff, 0xff, 0xff});
 	const FactoryPreset* mono = findFactoryPreset("factory:monochrome");
+	const FactoryPreset* allHallows = findFactoryPreset("factory:all-hallows");
+	check("All Hallows uses pumpkin orange, violet, warm bone text, and a midnight background",
+		allHallows && std::string(allHallows->name) == "All Hallows"
+		&& allHallows->snapshot.colors.input == ThemeColor(0xf0, 0x78, 0x18)
+		&& allHallows->snapshot.colors.output == ThemeColor(0x7e, 0x3f, 0xc4)
+		&& allHallows->snapshot.colors.textInput == ThemeColor(0xff, 0xf0, 0xd2)
+		&& allHallows->snapshot.colors.textOutput == ThemeColor(0xff, 0xf0, 0xd2)
+		&& allHallows->snapshot.colors.background == ThemeColor(0x10, 0x0b, 0x16)
+		&& allHallows->snapshot.colors.backgroundEnabled
+		&& std::fabs(allHallows->snapshot.surface.textureAmount - 1.25f) < 1e-6f);
 	check("Mono preset uses its representative input/output contrast",
 		mono && mono->snapshot.colors.input == ThemeColor{0xba, 0xba, 0xba}
 		&& mono->snapshot.colors.output == ThemeColor{0x32, 0x32, 0x32}
@@ -136,6 +149,20 @@ int main() {
 	check("custom background can be re-enabled", read().snapshot.colors.backgroundEnabled);
 	resetToDefault();
 	check("reset restores the authored background", !read().snapshot.colors.backgroundEnabled);
+	const ThemeColor expectedBackgrounds[] = {
+		ThemeColor(0x00, 0x00, 0x00), ThemeColor(0x05, 0x0a, 0x18),
+		ThemeColor(0x08, 0x08, 0x08), ThemeColor(0x10, 0x05, 0x1c),
+		ThemeColor(0x10, 0x0b, 0x16)};
+	for (std::size_t i = 0; i < factoryCount; ++i) {
+		setColor(ThemeRole::Background, blue);
+		setBackgroundEnabled(false);
+		applyPreset(factory[i].snapshot, factory[i].id);
+		check(std::string(factory[i].name) + " factory field replaces and enables the background",
+			read().snapshot.colors.backgroundEnabled
+			&& color(ThemeRole::Background) == expectedBackgrounds[i]
+			&& read().snapshot == factory[i].snapshot
+			&& read().activePreset == factory[i].id);
+	}
 
 	if (failures) {
 		std::cerr << failures << " theme service test(s) failed\n";

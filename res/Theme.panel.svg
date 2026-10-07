@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 180 380" version="1.1" id="svg11" sodipodi:docname="Theme.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 180 380" version="1.1" id="svg11" sodipodi:docname="Theme.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
   <defs id="defs5">
     <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#111722" id="stop1" />
@@ -16,17 +16,36 @@
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
     </linearGradient>
   </defs>
-  <g id="glass_input" data-theme-runtime-substrate="neutral">
-    <rect x="8" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect7" />
+  <g id="glass_input" style="display:none" data-theme-runtime-substrate="neutral">
+    <rect x="8" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="ROLE_INPUT" style="fill:#000000;fill-opacity:1" />
   </g>
-  <g id="glass_output" data-theme-runtime-substrate="neutral">
-    <rect x="92" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect8" />
+  <g id="glass_output" style="display:none" data-theme-runtime-substrate="neutral">
+    <rect x="92" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="ROLE_OUTPUT" style="fill:#000000;fill-opacity:1" />
   </g>
-  <g id="glass_text_output" data-theme-runtime-substrate="neutral">
-    <rect x="92" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="text_output_card" />
+  <g id="glass_text_output" style="display:none" data-theme-runtime-substrate="neutral">
+    <rect x="92" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="ROLE_TEXT_OUTPUT" style="fill:#000000;fill-opacity:1" />
   </g>
-  <g id="glass_text_input" data-theme-runtime-substrate="neutral">
-    <rect x="8" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect9" />
+  <g id="glass_text_input" style="display:none" data-theme-runtime-substrate="neutral">
+    <rect x="8" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="ROLE_TEXT_INPUT" style="fill:#000000;fill-opacity:1" />
   </g>
   <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="41.6939" y="353.248" width="96.6122" height="36.1915" fill="none" />
+  <g id="components" inkscape:groupmode="layer" inkscape:label="Components" style="display:none">
+    <rect id="ROLE_BACKGROUND" x="8" y="82" width="80" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="COLOR_SV" x="9" y="112" width="137" height="94" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="COLOR_HUE" x="151" y="112" width="20" height="94" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="TEXTURE_SLIDER" x="10" y="235" width="160" height="16.749311" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_1" x="9" y="274" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_2" x="91" y="274" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_3" x="9" y="303" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_4" x="91" y="303" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_5" x="9" y="332" width="160" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="COLOR_CODE_LABEL" cx="9" cy="220" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="PASTE_COLOR_BUTTON" cx="78" cy="220" r="5" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="SELECTED_ROLE_LABEL" cx="171" cy="220" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="FACTORY_FIELDS_LABEL" cx="9" cy="268" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="SCREW_TOP_LEFT" cx="22.5" cy="7.5" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="SCREW_TOP_RIGHT" cx="157.5" cy="7.5" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="SCREW_BOTTOM_LEFT" cx="22.5" cy="372.5" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+    <circle id="SCREW_BOTTOM_RIGHT" cx="157.5" cy="372.5" r="1" style="fill:#6a7e3b;fill-opacity:1" />
+  </g>
 </svg>

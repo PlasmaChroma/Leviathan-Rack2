@@ -1,4 +1,6 @@
 #include "plugin.hpp"
+#include "PanelSvgUtils.hpp"
+#include "theme/ThemeColorClipboard.hpp"
 
 #include "theme/ThemePersistence.hpp"
 #include "theme/ThemePresets.hpp"
@@ -46,6 +48,7 @@ ThemeColor colorForRole(const ThemeSnapshot& snapshot, ThemeRole role) {
 // Repainting every semantic glass surface is library-wide work. The editor
 // remains locally smooth while global drag publications are limited to 1 Hz.
 constexpr double kThemeGlobalPublishIntervalSec = 1.0;
+constexpr std::size_t kThemePresetSlots = 5u;
 
 void rgbToHsv(ThemeColor color, float* hue, float* saturation, float* value) {
 	const float r = color.r / 255.f;
@@ -112,20 +115,61 @@ struct ThemeEditor final : TransparentWidget {
 	bool pickerTextureValid = false;
 	bool textureHovered = false;
 	double lastGlobalPublishAt = NAN;
+	math::Rect roleAreas[5];
+	math::Rect presetAreas[kThemePresetSlots];
+	math::Rect svArea, hueArea, textureArea;
+	Vec hexLabel, selectedLabel, factoryLabel;
+
+	void loadLayout(const std::string& panelPath) {
+		auto rect = [&](const char* id, math::Rect fallback) {
+			math::Rect mm;
+			return panel_svg::loadRectFromSvgMm(panelPath, id, &mm)
+				? math::Rect(mm2px(mm.pos), mm2px(mm.size)) : fallback;
+		};
+		auto point = [&](const char* id, Vec fallback) {
+			Vec mm;
+			return panel_svg::loadPointFromSvgMm(panelPath, id, &mm) ? mm2px(mm) : fallback;
+		};
+		const char* roleIds[] = {"ROLE_INPUT", "ROLE_OUTPUT", "ROLE_TEXT_INPUT",
+			"ROLE_TEXT_OUTPUT", "ROLE_BACKGROUND"};
+		for (int i = 0; i < 5; ++i)
+			roleAreas[i] = rect(roleIds[i], math::Rect(Vec(8.f + (i % 2) * 84.f,
+				36.f + (i / 2) * 23.f), Vec(80.f, 20.f)));
+		const char* presetIds[] = {"PRESET_1", "PRESET_2", "PRESET_3", "PRESET_4", "PRESET_5"};
+		for (int i = 0; i < 4; ++i)
+			presetAreas[i] = rect(presetIds[i], math::Rect(Vec(9.f + (i % 2) * 82.f,
+				274.f + (i / 2) * 29.f), Vec(78.f, 24.f)));
+		presetAreas[4] = rect(presetIds[4], math::Rect(Vec(9.f, 332.f), Vec(160.f, 20.f)));
+		svArea = rect("COLOR_SV", math::Rect(Vec(9.f, 112.f), Vec(137.f, 94.f)));
+		hueArea = rect("COLOR_HUE", math::Rect(Vec(151.f, 112.f), Vec(20.f, 94.f)));
+		textureArea = rect("TEXTURE_SLIDER", math::Rect(Vec(10.f, 235.f),
+			Vec(160.f, visual_assets::neonBarSliderAssetHeight(160.f))));
+		hexLabel = point("COLOR_CODE_LABEL", Vec(9.f, 220.f));
+		selectedLabel = point("SELECTED_ROLE_LABEL", Vec(171.f, 220.f));
+		factoryLabel = point("FACTORY_FIELDS_LABEL", Vec(9.f, 268.f));
+	}
+
+	bool pasteColor() {
+		if (!APP || !APP->window || !APP->window->win) return false;
+		const char* clipboard = glfwGetClipboardString(APP->window->win);
+		ThemeColor color;
+		if (!clipboard || !leviathan::theme::parseClipboardColor(clipboard, &color)) return false;
+		commitDrag();
+		leviathan::theme::setColor(selectedRole, color);
+		leviathan::theme::persistence::saveToUserStorage();
+		pickerValid = false;
+		dirty();
+		return true;
+	}
 
 	math::Rect roleRect(int index) const {
-		return math::Rect(Vec(8.f + (index % 2) * 84.f, 36.f + (index / 2) * 23.f), Vec(80.f, 20.f));
+		return roleAreas[index];
 	}
-	math::Rect originalBackgroundRect() const { return roleRect(5); }
-	math::Rect svRect() const { return math::Rect(Vec(9.f, 112.f), Vec(137.f, 94.f)); }
-	math::Rect hueRect() const { return math::Rect(Vec(151.f, 112.f), Vec(20.f, 94.f)); }
-	math::Rect textureRect() const {
-		return math::Rect(
-			Vec(10.f, 235.f),
-			Vec(160.f, visual_assets::neonBarSliderAssetHeight(160.f)));
-	}
+	math::Rect svRect() const { return svArea; }
+	math::Rect hueRect() const { return hueArea; }
+	math::Rect textureRect() const { return textureArea; }
 	math::Rect presetRect(int index) const {
-		return math::Rect(Vec(9.f + (index % 2) * 82.f, 274.f + (index / 2) * 29.f), Vec(78.f, 24.f));
+		return presetAreas[index];
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
@@ -273,13 +317,6 @@ struct ThemeEditor final : TransparentWidget {
 			return;
 		}
 
-		if (originalBackgroundRect().contains(e.pos)) {
-			leviathan::theme::setBackgroundEnabled(!leviathan::theme::read().snapshot.colors.backgroundEnabled);
-			leviathan::theme::persistence::saveToUserStorage();
-			dirty();
-			e.consume(this);
-			return;
-		}
 		for (int i = 0; i < 5; ++i) {
 			if (roleRect(i).contains(e.pos)) {
 				const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::TextInput, ThemeRole::TextOutput, ThemeRole::Background};
@@ -303,7 +340,7 @@ struct ThemeEditor final : TransparentWidget {
 
 		std::size_t presetCount = 0u;
 		const FactoryPreset* presets = leviathan::theme::factoryPresets(&presetCount);
-		for (std::size_t i = 0u; i < presetCount && i < 4u; ++i) {
+		for (std::size_t i = 0u; i < presetCount && i < kThemePresetSlots; ++i) {
 			if (presetRect(int(i)).contains(e.pos)) {
 				leviathan::theme::persistence::applyFactoryPresetAndSave(presets[i].id);
 				dirty();
@@ -466,7 +503,6 @@ struct ThemeEditor final : TransparentWidget {
 			}
 		}
 
-		button(args, originalBackgroundRect(), "ORIGINAL", !snapshot.colors.backgroundEnabled);
 		const math::Rect sv = svRect();
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, sv.pos.x, sv.pos.y, sv.size.x, sv.size.y);
@@ -508,8 +544,8 @@ struct ThemeEditor final : TransparentWidget {
 
 		char hex[16];
 		std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", selected.r, selected.g, selected.b);
-		text(args, 9.f, 220.f, 11.f, hex, nvgRGBA(235, 240, 247, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		text(args, 171.f, 220.f, 9.f, "SELECTED ROLE", nvgRGBA(116, 132, 150, 255), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+		text(args, hexLabel.x, hexLabel.y, 11.f, hex, nvgRGBA(235, 240, 247, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		text(args, selectedLabel.x, selectedLabel.y, 9.f, "SELECTED ROLE", nvgRGBA(116, 132, 150, 255), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 
 		const math::Rect texture = textureRect();
 		const float textureAmount = dragTarget == DragTexture && pickerTextureValid
@@ -519,17 +555,59 @@ struct ThemeEditor final : TransparentWidget {
 			int(std::round(textureAmount * 100.f)));
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, texture.pos.x, texture.pos.y);
+		nvgScale(args.vg, 1.f, texture.size.y /
+			std::max(visual_assets::neonBarSliderAssetHeight(texture.size.x), 1.f));
 		visual_assets::drawNeonBarSlider(
-			args, Vec(texture.size.x, 28.f), textureAmount * 0.5f,
+			args, texture.size, textureAmount * 0.5f,
 			textureHovered || dragTarget == DragTexture, textureLabel);
 		nvgRestore(args.vg);
 
-		text(args, 9.f, 268.f, 8.5f, "FACTORY FIELDS", nvgRGBA(150, 165, 181, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		text(args, factoryLabel.x, factoryLabel.y, 8.5f, "PRESETS", nvgRGBA(150, 165, 181, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		std::size_t presetCount = 0u;
 		const FactoryPreset* presets = leviathan::theme::factoryPresets(&presetCount);
-		for (std::size_t i = 0u; i < presetCount && i < 4u; ++i)
+		for (std::size_t i = 0u; i < presetCount && i < kThemePresetSlots; ++i)
 			button(args, presetRect(int(i)), presets[i].name, state.activePreset == presets[i].id);
 
+	}
+};
+
+struct ThemePasteButton final : LeviathanIconButton {
+	double errorStartedAt = -1.0;
+	ui::Tooltip* tooltip = nullptr;
+
+	~ThemePasteButton() override { destroyTooltip(); }
+	void destroyTooltip() {
+		if (!tooltip) return;
+		if (APP && APP->scene) APP->scene->removeChild(tooltip);
+		delete tooltip;
+		tooltip = nullptr;
+	}
+	void onEnter(const event::Enter& e) override {
+		LeviathanIconButton::onEnter(e);
+		if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
+		tooltip = new ui::Tooltip;
+		tooltip->text = "Paste color (#RRGGBB or R,G,B)";
+		APP->scene->addChild(tooltip);
+	}
+	void onLeave(const event::Leave& e) override {
+		LeviathanIconButton::onLeave(e);
+		destroyTooltip();
+	}
+	void draw(const DrawArgs& args) override {
+		LeviathanIconButton::draw(args);
+		if (errorStartedAt < 0.0) return;
+		const double elapsed = system::getTime() - errorStartedAt;
+		if (elapsed >= 1.2) {
+			errorStartedAt = -1.0;
+			return;
+		}
+		if (elapsed < 0.0 || int(elapsed / 0.2) % 2 != 0) return;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, box.size.x * 0.5f, box.size.y * 0.5f,
+			std::max(box.size.x, box.size.y) * 0.5f + 2.f);
+		nvgStrokeWidth(args.vg, 2.f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 45, 45, 255));
+		nvgStroke(args.vg);
 	}
 };
 
@@ -546,6 +624,7 @@ struct ThemeModuleWidget final : ModuleWidget {
 		auto* framebuffer = new widget::FramebufferWidget;
 		framebuffer->box.size = box.size;
 		auto* editor = new ThemeEditor;
+		editor->loadLayout(panelPath);
 		editor->box.size = box.size;
 		editor->framebuffer = framebuffer;
 		editor->panelSurface = panelSurface;
@@ -553,14 +632,27 @@ struct ThemeModuleWidget final : ModuleWidget {
 		framebuffer->addChild(editor);
 		addChild(framebuffer);
 
+		auto* paste = new ThemePasteButton;
+		paste->iconSvg = visual_assets::loadPluginSvgCached("res/icon/nautiloid-paste.svg");
+		paste->iconScale = 0.52f;
+		Vec pasteCenter(78.f, 220.f), pasteCenterMm;
+		if (panel_svg::loadPointFromSvgMm(panelPath, "PASTE_COLOR_BUTTON", &pasteCenterMm))
+			pasteCenter = mm2px(pasteCenterMm);
+		paste->box.pos = pasteCenter.minus(paste->box.size.mult(0.5f));
+		paste->buttonAction = [editor, paste]() {
+			paste->errorStartedAt = editor->pasteColor() ? -1.0 : system::getTime();
+		};
+		addChild(paste);
+
 		splitPanel.addCompactLeviathanLogoBranding();
-		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
-		addChild(createWidget<CyanOrbScrew>(
-			Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0.f)));
-		addChild(createWidget<CyanOrbScrew>(
-			Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<CyanOrbScrew>(
-			Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		const char* screwIds[] = {"SCREW_TOP_LEFT", "SCREW_TOP_RIGHT", "SCREW_BOTTOM_LEFT", "SCREW_BOTTOM_RIGHT"};
+		for (int i = 0; i < 4; ++i) {
+			Vec center((i % 2) ? box.size.x - 1.5f * RACK_GRID_WIDTH : 1.5f * RACK_GRID_WIDTH,
+				(i / 2) ? RACK_GRID_HEIGHT - 0.5f * RACK_GRID_WIDTH : 0.5f * RACK_GRID_WIDTH);
+			Vec mm;
+			if (panel_svg::loadPointFromSvgMm(panelPath, screwIds[i], &mm)) center = mm2px(mm);
+			addChild(createWidgetCentered<CyanOrbScrew>(center));
+		}
 	}
 };
 
