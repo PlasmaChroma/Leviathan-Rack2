@@ -34,11 +34,12 @@
     <rect id="COLOR_SV" x="9" y="112" width="137" height="94" style="fill:#6a7e3b;fill-opacity:1" />
     <rect id="COLOR_HUE" x="151" y="112" width="20" height="94" style="fill:#6a7e3b;fill-opacity:1" />
     <rect id="TEXTURE_SLIDER" x="10" y="235" width="160" height="16.749311" style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_1" x="9" y="274" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_2" x="91" y="274" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_3" x="9" y="303" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_4" x="91" y="303" width="78" height="24" style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_5" x="9" y="332" width="160" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_1" x="9" y="274" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_2" x="91" y="274" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_3" x="9" y="299" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_4" x="91" y="299" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_5" x="9" y="324" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_6" x="91" y="324" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
     <circle id="COLOR_CODE_LABEL" cx="9" cy="220" r="1" style="fill:#6a7e3b;fill-opacity:1" />
     <circle id="PASTE_COLOR_BUTTON" cx="78" cy="220" r="5" style="fill:#6a7e3b;fill-opacity:1" />
     <circle id="SELECTED_ROLE_LABEL" cx="171" cy="220" r="1" style="fill:#6a7e3b;fill-opacity:1" />

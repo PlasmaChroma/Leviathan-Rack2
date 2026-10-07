@@ -23,7 +23,7 @@ int main() {
 	initialize(canonicalDefault(), "factory:leviathan");
 	std::size_t factoryCount = 0u;
 	const FactoryPreset* factory = factoryPresets(&factoryCount);
-	check("five stable factory presets are registered", factory && factoryCount == 5u);
+	check("six stable factory presets are registered", factory && factoryCount == 6u);
 	ThemeSnapshot leviathanFactory = canonicalDefault();
 	leviathanFactory.colors.background = ThemeColor(0, 0, 0);
 	leviathanFactory.colors.backgroundEnabled = true;
@@ -38,6 +38,16 @@ int main() {
 	check("canonical text color is white", initial.snapshot.colors.textInput == ThemeColor{0xff, 0xff, 0xff});
 	const FactoryPreset* mono = findFactoryPreset("factory:monochrome");
 	const FactoryPreset* allHallows = findFactoryPreset("factory:all-hallows");
+	const FactoryPreset* saturnalia = findFactoryPreset("factory:saturnalia");
+	check("Saturnalia uses wine red, evergreen, gold text, and a warm dark background",
+		saturnalia && std::string(saturnalia->name) == "Saturnalia"
+		&& saturnalia->snapshot.colors.input == ThemeColor(0xb8, 0x32, 0x48)
+		&& saturnalia->snapshot.colors.output == ThemeColor(0x24, 0x80, 0x58)
+		&& saturnalia->snapshot.colors.textInput == ThemeColor(0xff, 0xe4, 0xa0)
+		&& saturnalia->snapshot.colors.textOutput == ThemeColor(0xff, 0xe4, 0xa0)
+		&& saturnalia->snapshot.colors.background == ThemeColor(0x10, 0x0d, 0x08)
+		&& saturnalia->snapshot.colors.backgroundEnabled
+		&& std::fabs(saturnalia->snapshot.surface.textureAmount - 1.10f) < 1e-6f);
 	check("All Hallows uses pumpkin orange, violet, warm bone text, and a midnight background",
 		allHallows && std::string(allHallows->name) == "All Hallows"
 		&& allHallows->snapshot.colors.input == ThemeColor(0xf0, 0x78, 0x18)
@@ -152,7 +162,7 @@ int main() {
 	const ThemeColor expectedBackgrounds[] = {
 		ThemeColor(0x00, 0x00, 0x00), ThemeColor(0x05, 0x0a, 0x18),
 		ThemeColor(0x08, 0x08, 0x08), ThemeColor(0x10, 0x05, 0x1c),
-		ThemeColor(0x10, 0x0b, 0x16)};
+		ThemeColor(0x10, 0x0b, 0x16), ThemeColor(0x10, 0x0d, 0x08)};
 	for (std::size_t i = 0; i < factoryCount; ++i) {
 		setColor(ThemeRole::Background, blue);
 		setBackgroundEnabled(false);

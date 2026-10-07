@@ -37,7 +37,7 @@
       <rect id="MALLET_ORBIT" x="339" y="2750" width="7450" height="900" style="fill:#2a1430;fill-opacity:1" />
       <rect id="STRIKE_AREA" x="350" y="2250" width="3674" height="5100" style="fill:#2a1430;fill-opacity:1" />
       <rect id="ROTATE_AREA" x="4104" y="2250" width="3674" height="5100" style="fill:#2a1430;fill-opacity:1" />
-      <rect id="MALLET_SELECTOR" x="5830.2305" y="8100.231" width="2123.5393" height="4001.3394" style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20.4608" />
+      <rect id="MALLET_SELECTOR" x="5810.3257" y="8120.3262" width="2163.3489" height="4001.1489" style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20.6512" />
       <circle id="VTUNE_SPAWN" cx="7818" cy="7625" r="75" style="fill:#55dfff;fill-opacity:1" />
       <circle id="VTUNE_EXPANDER_LIGHT" cx="7808" cy="580" r="10" style="fill:#2a1430;fill-opacity:1" />
       <circle id="BINAURAL_PARAM" cx="902.39893" cy="8529.9785" r="75" style="fill:#55dfff;fill-opacity:1" />

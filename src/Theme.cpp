@@ -48,7 +48,7 @@ ThemeColor colorForRole(const ThemeSnapshot& snapshot, ThemeRole role) {
 // Repainting every semantic glass surface is library-wide work. The editor
 // remains locally smooth while global drag publications are limited to 1 Hz.
 constexpr double kThemeGlobalPublishIntervalSec = 1.0;
-constexpr std::size_t kThemePresetSlots = 5u;
+constexpr std::size_t kThemePresetSlots = 6u;
 
 void rgbToHsv(ThemeColor color, float* hue, float* saturation, float* value) {
 	const float r = color.r / 255.f;
@@ -135,11 +135,10 @@ struct ThemeEditor final : TransparentWidget {
 		for (int i = 0; i < 5; ++i)
 			roleAreas[i] = rect(roleIds[i], math::Rect(Vec(8.f + (i % 2) * 84.f,
 				36.f + (i / 2) * 23.f), Vec(80.f, 20.f)));
-		const char* presetIds[] = {"PRESET_1", "PRESET_2", "PRESET_3", "PRESET_4", "PRESET_5"};
-		for (int i = 0; i < 4; ++i)
+		const char* presetIds[] = {"PRESET_1", "PRESET_2", "PRESET_3", "PRESET_4", "PRESET_5", "PRESET_6"};
+		for (std::size_t i = 0; i < kThemePresetSlots; ++i)
 			presetAreas[i] = rect(presetIds[i], math::Rect(Vec(9.f + (i % 2) * 82.f,
-				274.f + (i / 2) * 29.f), Vec(78.f, 24.f)));
-		presetAreas[4] = rect(presetIds[4], math::Rect(Vec(9.f, 332.f), Vec(160.f, 20.f)));
+				274.f + (i / 2) * 25.f), Vec(78.f, 20.f)));
 		svArea = rect("COLOR_SV", math::Rect(Vec(9.f, 112.f), Vec(137.f, 94.f)));
 		hueArea = rect("COLOR_HUE", math::Rect(Vec(151.f, 112.f), Vec(20.f, 94.f)));
 		textureArea = rect("TEXTURE_SLIDER", math::Rect(Vec(10.f, 235.f),

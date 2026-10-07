@@ -35,8 +35,14 @@ black base. The schema 3 persistence format is unchanged.
 
 The fifth factory preset, All Hallows (`factory:all-hallows`), uses pumpkin
 orange input glass (`#F07818`), violet output glass (`#7E3FC4`), warm bone text
-(`#FFF0D2`), a midnight background (`#100B16`), and 125% texture. Its full-width
-button is positioned by the `PRESET_5` rectangle above the logo.
+(`#FFF0D2`), a midnight background (`#100B16`), and 125% texture.
+
+Saturnalia (`factory:saturnalia`) uses wine red inputs (`#B83248`), evergreen
+outputs (`#248058`), gold text (`#FFE4A0`), a warm dark background (`#100D08`),
+and 110% texture. The six preset buttons form a two-column, three-row grid:
+each is 78 by 20 SVG units with 4-unit horizontal and 5-unit vertical gaps.
+All Hallows and Saturnalia occupy the bottom row, using `PRESET_5` and
+`PRESET_6` anchors above the logo.
 
 Each master SVG's explicit `theme_background` group is extracted into
 `.background.svg` with its ancestor transforms/styles and removed from

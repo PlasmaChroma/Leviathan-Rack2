@@ -231,30 +231,31 @@
        x="9"
        y="274"
        width="78"
-       height="24"
+       height="20"
        style="fill:#6a7e3b;fill-opacity:1" />
     <rect
        id="PRESET_2"
        x="91"
        y="274"
        width="78"
-       height="24"
+       height="20"
        style="fill:#6a7e3b;fill-opacity:1" />
     <rect
        id="PRESET_3"
        x="9"
-       y="303"
+       y="299"
        width="78"
-       height="24"
+       height="20"
        style="fill:#6a7e3b;fill-opacity:1" />
     <rect
        id="PRESET_4"
        x="91"
-       y="303"
+       y="299"
        width="78"
-       height="24"
+       height="20"
        style="fill:#6a7e3b;fill-opacity:1" />
-    <rect id="PRESET_5" x="9" y="332" width="160" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_5" x="9" y="324" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
+    <rect id="PRESET_6" x="91" y="324" width="78" height="20" style="fill:#6a7e3b;fill-opacity:1" />
     <circle
        id="COLOR_CODE_LABEL"
        cx="9"
