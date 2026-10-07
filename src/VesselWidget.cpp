@@ -2,6 +2,7 @@
 #include "vessel/PitchColorMap.hpp"
 #include "NvgOwnedImage.hpp"
 #include "PanelSvgUtils.hpp"
+#include "theme/ThemedTextWidget.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/VisualAssets.hpp"
@@ -505,7 +506,7 @@ struct VesselPerformanceArea : app::Switch {
     std::string tooltipText() const {
         const int percent = int(std::lround(100.f * currentAmount));
         return kind == Kind::Strike
-            ? string::f("Strike: %d%% Velocity", percent)
+            ? string::f("Hit: %d%% Velocity", percent)
             : string::f("Rub: %d%% Intensity", percent);
     }
     void createPadTooltip() {
@@ -617,7 +618,7 @@ struct VesselTuneSpawnButton final : TL1105 {
         }
     }
 };
-struct BinauralBandLabel final : TransparentWidget {
+struct BinauralBandLabel final : leviathan::theme::ThemedTextWidget<> {
     Vessel* vessel = nullptr;
     void draw(const DrawArgs& args) override {
         if (!vessel || !APP || !APP->window || !APP->window->uiFont) return;
@@ -628,7 +629,7 @@ struct BinauralBandLabel final : TransparentWidget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFontSize(args.vg, 9.f);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg, nvgRGB(255, 255, 255));
+        nvgFillColor(args.vg, inputTextColor);
         nvgText(args.vg, box.size.x * .5f, box.size.y * .5f, band, nullptr);
     }
 };
@@ -767,8 +768,8 @@ struct VesselWidget final : ModuleWidget {
         const InputPlacement inputs[] = {
             {"STRIKE_INPUT", Vessel::STRIKE_INPUT, 9.f, 98.f},
             {"VELOCITY_INPUT", Vessel::VELOCITY_INPUT, 22.f, 98.f},
-            {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 39.f, 98.f},
-            {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 52.f, 98.f},
+            {"INTENSITY_INPUT", Vessel::INTENSITY_INPUT, 52.f, 98.f},
+            {"ROTATE_INPUT", Vessel::ROTATE_INPUT, 39.f, 98.f},
             {"VOCT_INPUT", Vessel::VOCT_INPUT, 9.f, 110.5f}
         };
         for (const auto& input : inputs) addInput(createInputCentered<Magitek2InputJack>(

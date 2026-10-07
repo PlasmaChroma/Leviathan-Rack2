@@ -251,13 +251,13 @@
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="INTENSITY_INPUT"
-         cx="3770.0276"
+         cx="5070.0278"
          cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
       <circle
          id="ROTATE_INPUT"
-         cx="5070.0278"
+         cx="3770.0276"
          cy="9920"
          r="75"
          style="fill:#70e69c;fill-opacity:1" />
@@ -301,7 +301,7 @@
          y="7149.9775"
          text-anchor="start"
          id="text5"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">STRIKE</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">HIT</text>
       <text
          x="7578"
          y="7149.9775"
@@ -346,23 +346,29 @@
          x="900"
          y="10579.955"
          id="text13"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">STRIKE</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+           sodipodi:role="line"
+           id="tspan7">HIT (T)</tspan></text>
       <text
          x="2200"
          y="10579.955"
          id="text14"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
       <text
-         x="3770.0276"
+         x="5070.0278"
          y="10579.955"
          font-size="240"
          id="text15"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INTENSITY</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+           sodipodi:role="line"
+           id="tspan2">INTENSE</tspan></text>
       <text
-         x="5070.0278"
+         x="3770.0276"
          y="10579.955"
          id="text16"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUB</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+           sodipodi:role="line"
+           id="tspan6">RUB (G)</tspan></text>
       <text
          x="900"
          y="11889.955"

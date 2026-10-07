@@ -47,8 +47,8 @@
       <circle id="FINE_PARAM" cx="5254.9585" cy="8470" r="75" style="fill:#55dfff;fill-opacity:1" />
       <circle id="STRIKE_INPUT" cx="900" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
       <circle id="VELOCITY_INPUT" cx="2200" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
-      <circle id="INTENSITY_INPUT" cx="3770.0276" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
-      <circle id="ROTATE_INPUT" cx="5070.0278" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="INTENSITY_INPUT" cx="5070.0278" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="ROTATE_INPUT" cx="3770.0276" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
       <circle id="VOCT_INPUT" cx="900" cy="11230" r="75" style="fill:#70e69c;fill-opacity:1" />
       <circle id="LEVEL_PARAM" cx="2200" cy="11230" r="75" style="fill:#55dfff;fill-opacity:1" />
       <circle id="LEFT_OUTPUT" cx="3770.0276" cy="11230" r="75" style="fill:#ffbd66;fill-opacity:1" />

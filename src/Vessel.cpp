@@ -35,8 +35,8 @@ Vessel::Vessel() {
     configParam(PITCH_PARAM, std::log2(20.f/261.625565f), std::log2(2000.f/261.625565f), 0.f,
         "Basic bowl frequency", " Hz", 2.f, 261.625565f);
     configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tuning", " cents");
-    configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
-    configButton(STRIKE_PARAM, "Strike bowl");
+    configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Hit velocity", "%", 0.f, 100.f);
+    configButton(STRIKE_PARAM, "Hit bowl");
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
     configButton(ROTATE_PARAM, "Rub bowl");
     getParamQuantity(ROTATE_PARAM)->randomizeEnabled = false;
@@ -51,7 +51,7 @@ Vessel::Vessel() {
     configParam(BINAURAL_PARAM, 0.f, 33.f, 0.f, "Binaural bowl frequency difference", " Hz");
     configButton(ADD_TUNE_PARAM, "Spawn V.Tune");
     getParamQuantity(ADD_TUNE_PARAM)->randomizeEnabled = false;
-    const char* names[] = {"Pitch (1 V/oct)", "Strike gate", "Velocity (0-10 V, replaces knob)",
+    const char* names[] = {"Pitch (1 V/oct)", "Hit gate", "Velocity (0-10 V, replaces knob)",
         "Rub gate", "Retired speed input (unused)", "Retired pressure input (unused)",
         "Rub intensity (0-10 V, overrides speed and pressure; requires Rub gate)"};
     for (int i = 0; i < INPUTS_LEN; ++i) configInput(i, names[i]);
