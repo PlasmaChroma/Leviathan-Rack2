@@ -82,7 +82,9 @@ void gatesAndControls() {
 }
 
 void tuningAndMorph() {
-    Vessel m; m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 2000);
+    Vessel m;
+    m.params[Vessel::BOWL_PARAM].setValue(0); // Exercise the metal-to-crystal morph explicitly.
+    m.params[Vessel::ROTATE_PARAM].setValue(1); run(m, 2000);
     const double previous = m.audio.engine().settings().frequency;
     cable(m, Vessel::VOCT_INPUT, 1); run(m);
     require(m.audio.engine().settings().frequency < 2*previous, "pitch CV change is not smoothed");

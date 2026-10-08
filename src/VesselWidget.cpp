@@ -17,6 +17,10 @@
 #include <nanosvgrast.h>
 
 namespace {
+bool vesselUsesCrystalBowl(Vessel* vessel) {
+    return !vessel || vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
+}
+
 // Match MALLET_PARAM's persistent ordering.
 const char* const vesselMalletPaths[] = {
     "res/Vessel/PureWoodMallet.png", "res/Vessel/Suede.png",
@@ -110,7 +114,7 @@ struct VesselPitchTintLayer final : TransparentWidget {
     Vessel* vessel = nullptr;
     Widget* metalRaster = nullptr;
     Widget* crystalRaster = nullptr;
-    bool crystalSelected = false;
+    bool crystalSelected = true;
     NVGcolor displayedTint = vesselPitchTint(261.625565f);
     bool tintInitialized = false;
 
@@ -141,7 +145,7 @@ struct VesselPitchTintLayer final : TransparentWidget {
             // Blend the color itself so octave jumps don't sweep unrelated hues.
             displayedTint = mixPitchTint(displayedTint, targetTint, 5.f * frameTime);
         }
-        crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
+        crystalSelected = vesselUsesCrystalBowl(vessel);
         if (metalRaster) metalRaster->setVisible(!crystalSelected);
         if (crystalRaster) crystalRaster->setVisible(crystalSelected);
         TransparentWidget::step();
@@ -843,7 +847,7 @@ struct VesselWidget final : ModuleWidget {
             malletLink.rubFade = 0.f; // A new strike replaces the released rubbing mallet.
         else
             malletLink.rubFade = std::max(0.f, malletLink.rubFade - frameTime / .20f);
-        const bool crystalSelected = vessel && vessel->params[Vessel::BOWL_PARAM].getValue() >= .5f;
+        const bool crystalSelected = vesselUsesCrystalBowl(vessel);
         if (metalBowlRaster) metalBowlRaster->setVisible(!crystalSelected);
         if (crystalBowlRaster) crystalBowlRaster->setVisible(crystalSelected);
         ModuleWidget::step();
