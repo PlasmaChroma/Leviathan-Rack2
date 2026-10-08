@@ -11,7 +11,7 @@ struct TuneMessage {
     std::uint32_t magic = 0; // Valid only after the sender publishes.
     std::uint32_t version = kVersion;
     float velocity = 0.5f;
-    float speed = 0.4f;
+    float speed = 0.2f;
     float pressure = 2.5f;
     float sustain = 0.f;
     float imperfection = 1.f;

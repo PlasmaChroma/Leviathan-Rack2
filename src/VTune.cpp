@@ -1,4 +1,5 @@
 #include "VTune.hpp"
+#include "Vessel.hpp"
 #include "VesselExpanderProtocol.hpp"
 #include "vessel/PitchColorMap.hpp"
 
@@ -20,7 +21,7 @@ VTune::VTune() {
     for (int i = 0; i < vessel_pitch_color::count; ++i)
         configLight(CHAKRA_ROOT_LIGHT + i, vessel_pitch_color::names[i]);
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Strike velocity", "%", 0.f, 100.f);
-    configParam(SPEED_PARAM, 0.f, 2.f, .4f, "Rubbing speed", " rev/s");
+    configParam(SPEED_PARAM, 0.f, 2.f, .2f, "Rubbing speed", " rev/s");
     configParam(PRESSURE_PARAM, 0.f, 15.f, 2.5f, "Contact pressure", " N");
     configParam(SUSTAIN_PARAM, -2.f, 2.f, 0.f, "Sustain", "x", 2.f);
     configParam(IMPERFECTION_PARAM, 0.f, 2.f, 1.f, "Mode-pair imperfection");
@@ -28,7 +29,27 @@ VTune::VTune() {
     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
 }
 
+void VTune::adoptVesselSettings() {
+    Module* vessel = leftExpander.module;
+    if (!isVessel(vessel) || vessel->rightExpander.module != this) {
+        adoptedVessel = nullptr;
+        return;
+    }
+    if (adoptedVessel == vessel) return;
+    // Engine-side attachment handshake: adopt before publishing any controls.
+    const int sourceParams[] = {Vessel::VELOCITY_PARAM, Vessel::SPEED_PARAM,
+        Vessel::PRESSURE_PARAM, Vessel::DECAY_PARAM, Vessel::IMPERFECTION_PARAM,
+        Vessel::WIDTH_PARAM};
+    for (int i = 0; i < 6; ++i) {
+        auto* quantity = getParamQuantity(i);
+        params[i].setValue(finiteBound(vessel->params[sourceParams[i]].getValue(),
+            quantity->minValue, quantity->maxValue, quantity->defaultValue));
+    }
+    adoptedVessel = vessel;
+}
+
 void VTune::process(const ProcessArgs& args) {
+    adoptVesselSettings();
     updateBodyMapFrequency(args.sampleTime);
     Module* vessel = leftExpander.module;
     const bool linked = isVessel(vessel) && vessel->rightExpander.module == this;
@@ -43,7 +64,7 @@ void VTune::process(const ProcessArgs& args) {
     message->magic = vessel_expander::kMagic;
     message->version = vessel_expander::kVersion;
     message->velocity = finiteBound(params[VELOCITY_PARAM].getValue(), 0.f, 1.f, .5f);
-    message->speed = finiteBound(params[SPEED_PARAM].getValue(), 0.f, 2.f, .4f);
+    message->speed = finiteBound(params[SPEED_PARAM].getValue(), 0.f, 2.f, .2f);
     message->pressure = finiteBound(params[PRESSURE_PARAM].getValue(), 0.f, 15.f, 2.5f);
     message->sustain = finiteBound(params[SUSTAIN_PARAM].getValue(), -2.f, 2.f, 0.f);
     message->imperfection = finiteBound(params[IMPERFECTION_PARAM].getValue(), 0.f, 2.f, 1.f);

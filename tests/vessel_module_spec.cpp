@@ -173,6 +173,10 @@ void tuneConnectionFreshness() {
     host.model = &vesselModel; first.model = second.model = &tuneModel;
     host.params[Vessel::SPEED_PARAM].setValue(.9f);
     host.params[Vessel::PRESSURE_PARAM].setValue(8.f);
+    host.params[Vessel::VELOCITY_PARAM].setValue(.3f);
+    host.params[Vessel::DECAY_PARAM].setValue(-.5f);
+    host.params[Vessel::IMPERFECTION_PARAM].setValue(.6f);
+    host.params[Vessel::WIDTH_PARAM].setValue(.4f);
     run(host);
     auto connect = [&](VTune& tune) {
         host.setExpanderModule(&tune, 1);
@@ -192,6 +196,13 @@ void tuneConnectionFreshness() {
     };
     connect(first); first.setBypassed(true);
     first.processBypass(args); run(host, 100);
+    require(first.params[VTune::SPEED_PARAM].getValue() == .9f
+        && first.params[VTune::PRESSURE_PARAM].getValue() == 8.f
+        && first.params[VTune::VELOCITY_PARAM].getValue() == .3f
+        && first.params[VTune::SUSTAIN_PARAM].getValue() == -.5f
+        && first.params[VTune::IMPERFECTION_PARAM].getValue() == .6f
+        && first.params[VTune::WIDTH_PARAM].getValue() == .4f,
+        "bypassed attachment must adopt all six Vessel controls");
     require(host.params[Vessel::SPEED_PARAM].getValue() == .9f
         && host.params[Vessel::PRESSURE_PARAM].getValue() == 8.f
         && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f,
@@ -208,12 +219,21 @@ void tuneConnectionFreshness() {
     host.params[Vessel::SPEED_PARAM].setValue(1.1f);
     connect(second); run(host);
     require(host.params[Vessel::SPEED_PARAM].getValue() == 1.1f, "replacement accepted previous neighbor's message");
+    publish(second);
+    require(second.params[VTune::SPEED_PARAM].getValue() == 1.1f
+        && host.params[Vessel::SPEED_PARAM].getValue() == 1.1f,
+        "new expander must adopt Vessel before publishing");
     second.params[VTune::SPEED_PARAM].setValue(.6f); publish(second);
     detach(second); run(host);
     require(host.params[Vessel::SPEED_PARAM].getValue() == .6f, "detach lost last published controls");
+    second.params[VTune::SPEED_PARAM].setValue(1.8f);
     connect(second); run(host);
     require(host.params[Vessel::SPEED_PARAM].getValue() == .6f
         && host.lights[Vessel::VTUNE_READY_LIGHT].getBrightness() == 0.f, "reattach reused old publication");
+    publish(second);
+    require(second.params[VTune::SPEED_PARAM].getValue() == .6f
+        && host.params[Vessel::SPEED_PARAM].getValue() == .6f,
+        "reattachment must discard disconnected expander settings");
     detach(second);
     modelVessel = oldVesselModel; modelVTune = oldTuneModel;
     std::cout << "[PASS] Fresh expander publication, initial bypass, unbypass, replacement and reattachment\n";
@@ -232,6 +252,8 @@ void tuneExpander() {
         "retired pressure cable still changes rubbing");
     require(std::abs(standalone.audio.engine().rotationAngle()) > .05,
         "Rub gate with no intensity or expander must rotate using defaults");
+    require(standalone.rawEnergy.load() > .001f && !standalone.visualFault.load(),
+        "Rub gate alone must build useful resonance from silence with default crystal/Wood controls");
     Vessel host;
     VTune tune;
     Model vesselModel, tuneModel;
@@ -243,6 +265,9 @@ void tuneExpander() {
     tune.model = &tuneModel;
     host.rightExpander.module = &tune;
     tune.leftExpander.module = &host;
+
+    Module::ProcessArgs attachmentArgs; attachmentArgs.sampleRate = 48000; attachmentArgs.sampleTime = 1.f/48000.f;
+    tune.process(attachmentArgs); // Complete attachment before editing the expander.
 
     tune.params[VTune::VELOCITY_PARAM].setValue(0.f);
     tune.params[VTune::SPEED_PARAM].setValue(-1.25f);

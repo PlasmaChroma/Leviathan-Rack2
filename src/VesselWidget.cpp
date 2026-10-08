@@ -434,7 +434,7 @@ struct VesselMalletSelector final : app::ParamWidget {
     void onDoubleClick(const event::DoubleClick& e) override { e.consume(this); }
     void draw(const DrawArgs& args) override {
         auto* quantity = getParamQuantity();
-        const int selected = quantity ? clamp(int(std::round(quantity->getValue())), 0, 3) : 1;
+        const int selected = quantity ? clamp(int(std::round(quantity->getValue())), 0, 3) : 0;
         for (int i = 0; i < 4; ++i) {
             const auto r = cell(i);
             const bool active = selected == i;
@@ -585,13 +585,26 @@ struct VesselTuneSpawnButton final : TL1105 {
         TL1105::draw(args);
         const float cx = .5f * box.size.x;
         const float cy = .5f * box.size.y;
-        const float halfW = 2.8f, halfH = 3.3f;
-        const float offset = halfW / 3.f;
+        // Cache the six teeth so drawing only translates the outline.
+        static const std::array<Vec, 24> cogOutline = []() {
+            std::array<Vec, 24> points;
+            const float angles[] = {-20.f, -10.f, 10.f, 20.f};
+            for (int tooth = 0; tooth < 6; ++tooth) {
+                for (int corner = 0; corner < 4; ++corner) {
+                    const float angle = (-90.f + tooth * 60.f + angles[corner]) * float(M_PI / 180.0);
+                    const float radius = corner == 1 || corner == 2 ? 3.8f : 2.7f;
+                    points[tooth * 4 + corner] = Vec(radius * std::cos(angle), radius * std::sin(angle));
+                }
+            }
+            return points;
+        }();
         nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, cx - halfW + offset, cy - halfH);
-        nvgLineTo(args.vg, cx + halfW + offset, cy);
-        nvgLineTo(args.vg, cx - halfW + offset, cy + halfH);
+        nvgMoveTo(args.vg, cx + cogOutline[0].x, cy + cogOutline[0].y);
+        for (std::size_t i = 1; i < cogOutline.size(); ++i)
+            nvgLineTo(args.vg, cx + cogOutline[i].x, cy + cogOutline[i].y);
         nvgClosePath(args.vg);
+        nvgCircle(args.vg, cx, cy, 1.25f);
+        nvgPathWinding(args.vg, NVG_HOLE);
         nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
         nvgFill(args.vg);
     }

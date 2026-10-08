@@ -25,9 +25,11 @@ struct VTune final : Module {
     std::atomic<int> bodyMapMode {0};
     std::atomic<float> bodyMapOpacity {vtune_body::kDefaultOpacity};
     float bodyMapPublishElapsed = 1.f;
+    Module* adoptedVessel = nullptr;
 
     VTune();
     void process(const ProcessArgs& args) override;
+    void adoptVesselSettings();
     void updateBodyMapFrequency(float sampleTime);
     void processBypass(const ProcessArgs& args) override;
     void onExpanderChange(const ExpanderChangeEvent& e) override;

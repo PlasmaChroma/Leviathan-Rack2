@@ -34,6 +34,7 @@ void VTune::updateBodyMapFrequency(float sampleTime) {
 void VTune::onExpanderChange(const ExpanderChangeEvent& e) {
     Module::onExpanderChange(e);
     if (e.side == 0) {
+        adoptedVessel = nullptr;
         bodyFrequencyHz.store(0.f, std::memory_order_relaxed);
         bodyMapPublishElapsed = 1.f;
         for (int i = CHAKRA_ROOT_LIGHT; i < LIGHTS_LEN; ++i) lights[i].setBrightness(0.f);
@@ -41,6 +42,7 @@ void VTune::onExpanderChange(const ExpanderChangeEvent& e) {
 }
 
 void VTune::processBypass(const ProcessArgs&) {
+    adoptVesselSettings();
     for (int i = CHAKRA_ROOT_LIGHT; i < LIGHTS_LEN; ++i) lights[i].setBrightness(0.f);
     bodyFrequencyHz.store(0.f, std::memory_order_relaxed);
     bodyMapPublishElapsed = 1.f;
