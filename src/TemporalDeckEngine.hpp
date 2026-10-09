@@ -2,6 +2,7 @@
 
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
+#include "TemporalDeckScratchSmoothing.hpp"
 
 #include <algorithm>
 #include <array>
@@ -349,7 +350,6 @@ struct TemporalDeckEngine {
   static constexpr float kQuickSlipVelocityCapRatio = 64.0f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kManualTouchNowReleaseAssistSec = 0.100f;
-  static constexpr float kSlipBlendTime = 0.010f;
   static constexpr float kSlipBlendTimeMin = 0.004f;
   static constexpr float kSlipBlendTimeMax = 0.012f;
   static constexpr float kSlipNearNowBlendThresholdMs = 18.f;
@@ -578,10 +578,6 @@ struct TemporalDeckEngine {
   mutable int lastStreamLogicalIndex = -1;
   bool streamedSeekPending = false;
   double streamedSeekTarget = 0.0;
-  int streamedSeekCrossfadeRemaining = 0;
-  int streamedSeekCrossfadeLength = 1;
-  float streamedSeekCrossfadeFromLeft = 0.f;
-  float streamedSeekCrossfadeFromRight = 0.f;
   uint64_t streamedLoopStartFrame = 0u;
   uint64_t streamedLoopEndFrameExclusive = 1u;
   // Physical buffer index corresponding to logical sample frame 0. Loaded
@@ -597,6 +593,7 @@ struct TemporalDeckEngine {
   bool freezeState = false;
   bool reverseState = false;
   bool slipState = false;
+  bool scratchSmoothingEnabled = true;
   bool highQualityRateInterpolation = false;
   int scratchInterpolationMode = SCRATCH_INTERP_LAGRANGE6;
   int externalGatePosMode = EXTERNAL_GATE_POS_GLIDE;
@@ -609,6 +606,7 @@ struct TemporalDeckEngine {
   float slipCatchVelocity = 0.f;
   float sampleSlipVelocity = 0.f;
   float slipBlendRemaining = 0.f;
+  float slipBlendDuration = 0.f;
   double slipBlendStartReadHead = 0.0;
   double slipBlendStartLag = 0.0;
   double sampleSlipAnchorPos = 0.0;
@@ -666,6 +664,7 @@ struct TemporalDeckEngine {
   float scratchFlipTransientEnv = 0.f;
   float prevWetL = 0.f;
   float prevWetR = 0.f;
+  scratch_smoothing::State scratchSmoothing;
   float prevScratchOutL = 0.f;
   float prevScratchOutR = 0.f;
   float scratchDcInL = 0.f;
@@ -903,6 +902,7 @@ struct TemporalDeckEngine {
   }
 
   void completeSampleSeek(double targetFrame, bool crossfadeStream) {
+    scratchSmoothing.requestTransition(crossfadeStream);
     samplePlayhead = targetFrame;
     readHead = targetFrame;
     scratchLagSamples = 0.0;
@@ -911,24 +911,8 @@ struct TemporalDeckEngine {
     cancelSlipReturnState();
     streamedSeekPending = false;
     if (crossfadeStream) {
-      streamedSeekCrossfadeFromLeft = prevWetL;
-      streamedSeekCrossfadeFromRight = prevWetR;
-      streamedSeekCrossfadeLength = std::max(1, int(std::round(sampleRate * 0.005f)));
-      streamedSeekCrossfadeRemaining = streamedSeekCrossfadeLength;
       lastStreamLogicalIndex = -1;
     }
-  }
-
-  std::pair<float, float> applyStreamedSeekCrossfade(std::pair<float, float> wet) {
-    if (streamedSeekCrossfadeRemaining <= 0) {
-      return wet;
-    }
-    const float t = 1.f - float(streamedSeekCrossfadeRemaining) /
-      float(std::max(streamedSeekCrossfadeLength, 1));
-    wet.first = crossfade(streamedSeekCrossfadeFromLeft, wet.first, t);
-    wet.second = crossfade(streamedSeekCrossfadeFromRight, wet.second, t);
-    --streamedSeekCrossfadeRemaining;
-    return wet;
   }
 
   void bumpBufferGeneration() {
@@ -1078,7 +1062,6 @@ struct TemporalDeckEngine {
     lastStreamLogicalIndex = -1;
     streamedSeekPending = false;
     streamedSeekTarget = 0.0;
-    streamedSeekCrossfadeRemaining = 0;
     streamedLoopStartFrame = 0u;
     streamedLoopEndFrameExclusive = 1u;
     sampleStartIndex = 0;
@@ -1096,6 +1079,7 @@ struct TemporalDeckEngine {
     slipCatchVelocity = 0.f;
     sampleSlipVelocity = 0.f;
     slipBlendRemaining = 0.f;
+    slipBlendDuration = 0.f;
     slipBlendStartReadHead = 0.0;
     slipBlendStartLag = 0.0;
     sampleSlipAnchorPos = 0.0;
@@ -1148,6 +1132,7 @@ struct TemporalDeckEngine {
     scratchFlipTransientEnv = 0.f;
     prevWetL = 0.f;
     prevWetR = 0.f;
+    scratchSmoothing = {};
     prevScratchOutL = 0.f;
     prevScratchOutR = 0.f;
     scratchDcInL = 0.f;
@@ -1323,6 +1308,7 @@ struct TemporalDeckEngine {
     slipCatchVelocity = 0.f;
     sampleSlipVelocity = 0.f;
     slipBlendRemaining = 0.f;
+    slipBlendDuration = 0.f;
     slipBlendStartReadHead = readHead;
     slipBlendStartLag = 0.0;
     slipReturnOverrideTime = -1.f;
@@ -1422,6 +1408,7 @@ struct TemporalDeckEngine {
     if (slipReturnOverrideTime >= 0.f) {
       slipBlendRemaining *= 0.55f;
     }
+    slipBlendDuration = slipBlendRemaining;
     slipBlendStartReadHead = readHead;
     slipBlendStartLag = lagNow;
   }
@@ -1436,12 +1423,14 @@ struct TemporalDeckEngine {
     float transportVel = std::max(baseSpeed, 0.f) * sr;
 
     if (slipReturnOverrideTime < 0.f && slipReturnMode == SLIP_RETURN_INSTANT) {
+      scratchSmoothing.requestTransition();
       readHead = newestPos;
       cancelSlipReturnState();
       return true;
     }
 
     if (!slipBlendActive && lagNow <= 0.5) {
+      scratchSmoothing.requestTransition();
       readHead = newestPos;
       cancelSlipReturnState();
       return true;
@@ -2100,7 +2089,7 @@ struct TemporalDeckEngine {
     lastStreamRight = 0.f;
     lastStreamLogicalIndex = -1;
     streamedSeekPending = false;
-    streamedSeekCrossfadeRemaining = 0;
+    scratchSmoothing = {};
     sampleLoaded = diskBackedSample;
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
     sampleTransportPlaying = sampleLoaded;
@@ -2490,6 +2479,12 @@ struct TemporalDeckEngine {
     bool liveTouchUsesFrozenScratchModel = !sampleModeActive && manualTouchScratch;
     bool scratchModelTreatsAsFreeze = freezeState || sampleTouchUsesFrozenScratchModel || liveTouchUsesFrozenScratchModel;
     bool anyScratch = externalScratch || manualScratch;
+    // Distinguish hand/direct/scope/wheel/CV ownership even when S.GATE stays high.
+    using Source = scratch_smoothing::State::Source;
+    Source smoothingSource = manualTouchScratch ? (platterTouchHoldDirect ? Source::DirectHold :
+                                (scopeLagDragActive ? Source::Scope : Source::Hand))
+                                : (wheelScratch ? Source::Wheel : (externalScratch ? Source::ExternalCv : Source::None));
+    scratchSmoothing.trackSource(smoothingSource);
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
     manualTouchNowReleaseAssistRemaining = std::max(0.f, manualTouchNowReleaseAssistRemaining - dt);
@@ -2582,7 +2577,9 @@ struct TemporalDeckEngine {
       float readDeltaForTone = float(readHeadDelta(readHead, prevReadHead, sampleWindowEndPos));
       float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
       wet = applyCartridgeCharacter(wet, motionAmount, false);
-      wet = applyStreamedSeekCrossfade(wet);
+      prevScratchOutL = wet.first;
+      prevScratchOutR = wet.second;
+      wet = scratchSmoothing.process(wet, false, readDeltaForTone, dt, prevWetL, prevWetR, scratchSmoothingEnabled);
 
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
@@ -2597,8 +2594,6 @@ struct TemporalDeckEngine {
       prevScratchReadDelta = readDeltaForTone;
       prevWetL = wet.first;
       prevWetR = wet.second;
-      prevScratchOutL = wet.first;
-      prevScratchOutR = wet.second;
 
       if (fullyWet) {
         result.outL = wet.first;
@@ -2644,7 +2639,9 @@ struct TemporalDeckEngine {
 
       std::pair<float, float> wet = buffer.readCubic(readHead);
       wet = applyCartridgeCharacter(wet, 0.f, false);
-      wet = applyStreamedSeekCrossfade(wet);
+      prevScratchOutL = wet.first;
+      prevScratchOutR = wet.second;
+      wet = scratchSmoothing.process(wet, false, 1.0, dt, prevWetL, prevWetR, scratchSmoothingEnabled);
 
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
@@ -2658,8 +2655,6 @@ struct TemporalDeckEngine {
       prevScratchReadDelta = 1.f;
       prevWetL = wet.first;
       prevWetR = wet.second;
-      prevScratchOutL = wet.first;
-      prevScratchOutR = wet.second;
 
       float outL = fullyWet ? wet.first : (inL * (1.f - mix) + wet.first * mix);
       float outR = fullyWet ? wet.second : (inR * (1.f - mix) + wet.second * mix);
@@ -2720,6 +2715,9 @@ struct TemporalDeckEngine {
     }
 
     if (scratchGateHigh && !externalCvGateHigh) {
+      // Nonzero POS intentionally relocates the head on gate entry, even in
+      // glide mode. Bridge the audio discontinuity without changing that timing.
+      if (positionConnected) scratchSmoothing.requestTransition();
       externalCvAnchorLagSamples = currentLagFromNewest(newestPos);
       if (positionConnected) {
         // Gate-rise latches an anchor and applies the current POS offset
@@ -2746,6 +2744,7 @@ struct TemporalDeckEngine {
       slipBlendActive = false;
       slipCatchVelocity = 0.f;
       slipBlendRemaining = 0.f;
+      slipBlendDuration = 0.f;
       slipBlendStartReadHead = readHead;
       slipBlendStartLag = currentLagFromNewest(newestPos);
       nowCatchActive = false;
@@ -3131,7 +3130,13 @@ struct TemporalDeckEngine {
                                               SCRATCH_INTERP_COUNT - 1);
     deferColdStreamMovement(prevReadHead);
     double readDeltaForTone = readHeadDelta(readHead, prevReadHead, sampleWindowEndPos);
+    if (anyScratch) scratchSmoothing.trackMotion(readDeltaForTone);
+    float slipBlendProgress = slipBlendActive
+      ? (slipBlendRemaining <= dt ? 1.f : 1.f - clamp(slipBlendRemaining / std::max(slipBlendDuration, dt), 0.f, 1.f))
+      : 0.f;
+    float slipBlendWeight = slipBlendProgress * slipBlendProgress * (3.f - 2.f * slipBlendProgress);
     float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
+    if (slipBlendActive) motionAmount *= 1.f - slipBlendWeight;
     if (scratchReadPath) {
       // Preserve more buffer detail during scratching by reducing motion-driven
       // cartridge darkening.
@@ -3149,12 +3154,10 @@ struct TemporalDeckEngine {
     } else if (slipBlendActive) {
       std::pair<float, float> catchWet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);
       std::pair<float, float> liveWet = readLiveInterpolatedAt(newestPos, effectiveScratchInterpolation);
-      float blendProgress = 1.f - clamp(slipBlendRemaining / std::max(kSlipBlendTime, 1e-6f), 0.f, 1.f);
-      float theta = blendProgress * 0.5f * kPi;
-      float catchGain = std::cos(theta);
-      float liveGain = std::sin(theta);
-      wet.first = catchWet.first * catchGain + liveWet.first * liveGain;
-      wet.second = catchWet.second * catchGain + liveWet.second * liveGain;
+      // The two heads converge on the same signal: constant-sum blending
+      // avoids the equal-power gain swell when they become correlated.
+      wet.first = crossfade(catchWet.first, liveWet.first, slipBlendWeight);
+      wet.second = crossfade(catchWet.second, liveWet.second, slipBlendWeight);
       slipBlendRemaining = std::max(0.f, slipBlendRemaining - dt);
       if (slipBlendRemaining <= 0.f) {
         readHead = newestPos;
@@ -3167,7 +3170,6 @@ struct TemporalDeckEngine {
       wet = buffer.readCubic(readHead);
     }
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
-    wet = applyStreamedSeekCrossfade(wet);
     if (slipReadPath) {
       float slipSpeedNorm =
         clamp(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
@@ -3181,7 +3183,7 @@ struct TemporalDeckEngine {
       }
       slipDynLpStateL += (wet.first - slipDynLpStateL) * lpCoeff;
       slipDynLpStateR += (wet.second - slipDynLpStateR) * lpCoeff;
-      float lpMix = crossfade(kSlipDynamicLpMixLow, kSlipDynamicLpMixHigh, slipSpeedToneNorm);
+      float lpMix = crossfade(kSlipDynamicLpMixLow, kSlipDynamicLpMixHigh, slipSpeedToneNorm) * (1.f - slipBlendWeight);
       wet.first = crossfade(wet.first, slipDynLpStateL, lpMix);
       wet.second = crossfade(wet.second, slipDynLpStateR, lpMix);
     } else {
@@ -3208,8 +3210,8 @@ struct TemporalDeckEngine {
 
         float ultraSlowAmt = clamp((0.32f - std::fabs(readDeltaForTone)) / 0.32f, 0.f, 1.f);
         float smoothAmt = manualTouchScratch ? (0.08f * ultraSlowAmt) : (0.05f * ultraSlowAmt);
-        wet.first = crossfade(wet.first, prevWetL, smoothAmt);
-        wet.second = crossfade(wet.second, prevWetR, smoothAmt);
+        wet.first = crossfade(wet.first, prevScratchOutL, smoothAmt);
+        wet.second = crossfade(wet.second, prevScratchOutR, smoothAmt);
       } else {
         int deltaSign = (readDeltaForTone > 0.2f) ? 1 : ((readDeltaForTone < -0.2f) ? -1 : 0);
         if (deltaSign != 0 && prevScratchDeltaSign != 0 && deltaSign != prevScratchDeltaSign) {
@@ -3220,7 +3222,7 @@ struct TemporalDeckEngine {
           prevScratchDeltaSign = deltaSign;
         }
         // Derive transient from real signal edge change, not synthetic impulse.
-        float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
+        float detailMid = 0.5f * ((wet.first - prevScratchOutL) + (wet.second - prevScratchOutR));
         float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
         float transientBase = wheelScratch ? 0.06f : (manualTouchScratch ? 0.14f : 0.30f);
         float transient = detailMid * (transientBase * scratchFlipTransientEnv * transientMotion);
@@ -3258,8 +3260,8 @@ struct TemporalDeckEngine {
         if (manualScratch) {
           float grindAmt = clamp((1.55f - std::fabs(readDeltaForTone)) / 1.55f, 0.f, 1.f);
           float smoothAmt = 0.16f * grindAmt;
-          wet.first = crossfade(wet.first, prevWetL, smoothAmt);
-          wet.second = crossfade(wet.second, prevWetR, smoothAmt);
+          wet.first = crossfade(wet.first, prevScratchOutL, smoothAmt);
+          wet.second = crossfade(wet.second, prevScratchOutR, smoothAmt);
         }
       }
     } else {
@@ -3282,11 +3284,12 @@ struct TemporalDeckEngine {
       wet.first *= comp;
       wet.second *= comp;
     }
+    prevScratchOutL = wet.first;
+    prevScratchOutR = wet.second;
+    wet = scratchSmoothing.process(wet, anyScratch, readDeltaForTone, dt, prevWetL, prevWetR, scratchSmoothingEnabled);
     prevScratchReadDelta = readDeltaForTone;
     prevWetL = wet.first;
     prevWetR = wet.second;
-    prevScratchOutL = wet.first;
-    prevScratchOutR = wet.second;
     float outL = 0.f;
     float outR = 0.f;
     if (fullyWet) {

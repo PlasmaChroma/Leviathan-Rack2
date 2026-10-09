@@ -135,6 +135,7 @@ uint32_t applyPendingLiveSeekArc(temporaldeck::TemporalDeckEngine &engine, uint3
   double targetLag = clampd(double(arcNorm) * maxLag, 0.0, limitLag);
   double newestPos = engine.newestReadablePos();
   double targetRead = newestPos - targetLag;
+  engine.scratchSmoothing.requestTransition();
   engine.readHead = engine.buffer.wrapPosition(targetRead);
   engine.scratchLagSamples = targetLag;
   engine.scratchLagTargetSamples = targetLag;

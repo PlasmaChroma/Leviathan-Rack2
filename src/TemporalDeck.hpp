@@ -224,6 +224,8 @@ struct TemporalDeck final : Module {
   bool popScopeDragTraceEvent(ScopeDragTraceEvent *outEvent);
   uint32_t consumeScopeDragTraceDroppedCount();
 
+  bool isScratchSmoothingEnabled() const;
+  void setScratchSmoothingEnabled(bool enabled);
   bool isHighQualityRateInterpolationEnabled() const;
   void setHighQualityRateInterpolationEnabled(bool enabled);
   bool isHighQualityScratchInterpolationEnabled() const;

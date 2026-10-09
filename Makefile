@@ -125,6 +125,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
 	build/tests/temporaldeck_engine_spec \
+	build/tests/temporaldeck_settings_spec \
 	build/tests/temporaldeck_expander_preview_spec \
 	build/tests/spsc_latest_snapshot_spec \
 	build/tests/shared_svg_cache_spec \
@@ -816,6 +817,7 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
 	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
+	$(call run_rack_test_bin,build/tests/temporaldeck_settings_spec)
 	$(call run_test_bin,build/tests/temporaldeck_expander_preview_spec)
 	$(call run_test_bin,build/tests/spsc_latest_snapshot_spec)
 	$(call run_test_bin,build/tests/shared_svg_cache_spec)
@@ -1441,3 +1443,7 @@ test-chimera-sos: | build/tests
 
 build/tests/deepcache_theme_identity_spec: tests/deepcache_theme_identity_spec.cpp src/DeepcacheThemeIdentity.hpp src/theme/ThemeTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_identity_spec.cpp -o $@
+
+# Uses the same JSON helpers as Temporal Deck's module serialization.
+build/tests/temporaldeck_settings_spec: tests/temporaldeck_settings_spec.cpp src/TemporalDeckSettings.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

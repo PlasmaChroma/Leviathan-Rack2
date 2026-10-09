@@ -277,7 +277,7 @@ Result testEngineDefersColdSeekUntilResident() {
   stub.targetResident = true;
   engine.servicePendingStreamSeek();
   const bool completed = !engine.streamedSeekPending && engine.readHead == 800.0 &&
-                         engine.streamedSeekCrossfadeRemaining > 0;
+                         (engine.scratchSmoothing.transitionPending || engine.scratchSmoothing.transitionRemaining > 0.f);
   return {"Temporal Deck defers cold seeks and arms a 5 ms handoff",
           deferred && completed,
           "deferred=" + std::to_string(deferred) +
@@ -299,7 +299,7 @@ Result testEngineDefersColdScratchMovement() {
   stub.targetResident = true;
   engine.servicePendingStreamSeek();
   const bool handedOff = !engine.streamedSeekPending && engine.readHead == 800.0 &&
-                         engine.streamedSeekCrossfadeRemaining > 0;
+                         (engine.scratchSmoothing.transitionPending || engine.scratchSmoothing.transitionRemaining > 0.f);
   return {"Cold scratch movement holds then crossfades to resident audio",
           held && handedOff,
           "held=" + std::to_string(held) + " handedOff=" + std::to_string(handedOff)};

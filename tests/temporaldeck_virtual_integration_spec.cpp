@@ -465,8 +465,65 @@ TestResult testNegativeFreezeResetGestureAndTargets() {
 
 } // namespace
 
+TestResult testArcSeekAudioContinuity() {
+  bool pass = true;
+  float worstSmoothedJump = 0.f, rawJump = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    for (bool sample : {false, true}) {
+      for (bool enabled : {false, true}) {
+        Engine engine;
+        engine.reset(sr);
+        engine.scratchSmoothingEnabled = enabled;
+        std::vector<float> left(8192), right(8192);
+        for (int i = 0; i < 8192; ++i) {
+          left[i] = i < 4096 ? 2.f : -2.f;
+          right[i] = i < 4096 ? -1.f : 1.f;
+        }
+        if (sample) {
+          engine.installSample(left, right, 8192, true, false);
+          engine.sampleModeEnabled = true;
+          engine.sampleTransportPlaying = true;
+        } else {
+          for (int i = 0; i < 8192; ++i) engine.buffer.write(left[i], right[i]);
+          engine.readHead = engine.newestReadablePos();
+        }
+        auto in = makeDefaultInput(sr);
+        in.inL = -2.f;
+        in.inR = 1.f;
+        auto previous = engine.process(in);
+        uint32_t revision = 0;
+        for (int seek = 0; seek < 4; ++seek) {
+          float position = seek % 2 ? 0.75f : 0.25f;
+          if (sample) {
+            revision = temporaldeck_transport::applyPendingSampleSeek(engine, revision, revision + 1, position, 1.f);
+            pass = pass && std::fabs(engine.readHead - position * 8191.0) < 1e-5;
+          } else {
+            float arcPosition = float(position * 8000.0 / engine.maxLagFromKnob(1.f));
+            revision = temporaldeck_transport::applyPendingLiveSeekArc(engine, revision, revision + 1, arcPosition, 1.f);
+            double expectedLag = arcPosition * engine.maxLagFromKnob(1.f);
+            pass = pass && std::fabs(engine.currentLagFromNewest(engine.newestReadablePos()) - expectedLag) < 0.01;
+          }
+          auto next = engine.process(in);
+          float jump = std::max(std::fabs(next.outL - previous.outL), std::fabs(next.outR - previous.outR));
+          if (enabled) worstSmoothedJump = std::max(worstSmoothedJump, jump);
+          else rawJump = std::max(rawJump, jump);
+          // Include another click before the previous crossfade has finished.
+          int waitFrames = int(sr * (seek % 2 ? 0.006f : 0.001f));
+          for (int i = 0; i < waitFrames; ++i) next = engine.process(in);
+          previous = next;
+        }
+        pass = pass && engine.scratchSmoothing.transitionRemaining == 0.f;
+      }
+    }
+  }
+  pass = pass && worstSmoothedJump < 1e-5f && rawJump > 1.f;
+  return {"Arc seeks change position immediately with optional stereo continuity", pass,
+          "smoothedJump=" + std::to_string(worstSmoothedJump) + " rawJump=" + std::to_string(rawJump)};
+}
+
 int main() {
   std::vector<TestResult> tests;
+  tests.push_back(testArcSeekAudioContinuity());
   tests.push_back(testDragGesturePath());
   tests.push_back(testWheelScratchPath());
   tests.push_back(testScopeLagSoftHoldTracksLiveNow());

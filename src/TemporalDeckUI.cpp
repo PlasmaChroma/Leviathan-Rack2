@@ -4129,6 +4129,10 @@ struct TemporalDeckWidget : ModuleWidget {
                                            customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
         }
       }));
+      menu->addChild(createCheckMenuItem(
+        "Scratch smoothing", "",
+        [=]() { return module->isScratchSmoothingEnabled(); },
+        [=]() { module->setScratchSmoothingEnabled(!module->isScratchSmoothingEnabled()); }));
       menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::SCRATCH_INTERP_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(

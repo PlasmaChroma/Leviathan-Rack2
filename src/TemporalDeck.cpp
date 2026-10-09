@@ -1,6 +1,7 @@
 #include "TemporalDeckArcLights.hpp"
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
+#include "TemporalDeckSettings.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckFrameInput.hpp"
 #include "LongPlayStreamEngine.hpp"
@@ -1086,6 +1087,7 @@ struct TemporalDeck::Impl {
   bool expanderLagDragHoldAnchorActive = false;
   float expanderLagDragHoldAnchorSamples = 0.f;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
+  std::atomic<bool> scratchSmoothingEnabled{true};
   bool highQualityRateInterpolation = false;
   std::atomic<bool> platterTraceLoggingEnabled{false};
   std::atomic<bool> scopeDragTraceLoggingEnabled{false};
@@ -1391,6 +1393,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "freezeLatched", json_boolean(impl->transportControl.freezeLatched));
   json_object_set_new(root, "reverseLatched", json_boolean(impl->transportControl.reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
+  temporaldeck_settings::writeScratchSmoothing(root, impl->scratchSmoothingEnabled.load(std::memory_order_relaxed));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "highQualityRateInterpolation", json_boolean(impl->highQualityRateInterpolation));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
@@ -1421,6 +1424,8 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *freezeJ = json_object_get(root, "freezeLatched");
   json_t *reverseJ = json_object_get(root, "reverseLatched");
   json_t *slipJ = json_object_get(root, "slipLatched");
+  impl->scratchSmoothingEnabled.store(temporaldeck_settings::readScratchSmoothing(root),
+                                     std::memory_order_relaxed);
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *highQualityRateInterpJ = json_object_get(root, "highQualityRateInterpolation");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
@@ -1809,6 +1814,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->transportControl.prevFreezeGateHigh = false;
   }
 
+  impl->engine.scratchSmoothingEnabled = impl->scratchSmoothingEnabled.load(std::memory_order_relaxed);
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.highQualityRateInterpolation = impl->highQualityRateInterpolation;
   impl->engine.slipReturnMode = impl->transportControl.slipReturnMode;
@@ -2961,6 +2967,14 @@ bool TemporalDeck::popScopeDragTraceEvent(ScopeDragTraceEvent *outEvent) {
 
 uint32_t TemporalDeck::consumeScopeDragTraceDroppedCount() {
   return impl->scopeDragTraceDropped.exchange(0u, std::memory_order_acq_rel);
+}
+
+bool TemporalDeck::isScratchSmoothingEnabled() const {
+  return impl->scratchSmoothingEnabled.load(std::memory_order_relaxed);
+}
+
+void TemporalDeck::setScratchSmoothingEnabled(bool enabled) {
+  impl->scratchSmoothingEnabled.store(enabled, std::memory_order_relaxed);
 }
 
 bool TemporalDeck::isHighQualityRateInterpolationEnabled() const {

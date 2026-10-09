@@ -617,8 +617,418 @@ TestResult testSampleLoopBackwardScopeScrollDoesNotGetStuck() {
 
 } // namespace
 
+TestResult testScratchReleaseContinuity() {
+  bool pass = true;
+  float worstJump = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    for (bool sample : {false, true}) {
+      for (int gesture = 0; gesture < 3; ++gesture) {
+        Engine engine;
+        Engine reference;
+        engine.reset(sr);
+        reference.reset(sr);
+        auto in = makeDefaultInput(sr);
+        if (sample) {
+          std::vector<float> left(8192), right(8192);
+          for (int i = 0; i < 8192; ++i) {
+            left[i] = 3.f * std::sin(float(i) * 0.17f);
+            right[i] = 2.f * std::cos(float(i) * 0.11f);
+          }
+          engine.installSample(left, right, 8192, true, false);
+          reference.installSample(left, right, 8192, true, false);
+          engine.sampleModeEnabled = true;
+          reference.sampleModeEnabled = true;
+          engine.sampleTransportPlaying = true;
+          reference.sampleTransportPlaying = true;
+          engine.sampleLoopEnabled = true;
+          reference.sampleLoopEnabled = true;
+        }
+        for (int i = 0; i < 4096; ++i) {
+          in.inL = 3.f * std::sin(float(i) * 0.17f);
+          in.inR = 2.f * std::cos(float(i) * 0.11f);
+          engine.process(in);
+          reference.process(in);
+        }
+        in.platterTouched = gesture == 0;
+        in.wheelScratchHeld = gesture == 1;
+        in.scratchGate = gesture == 2;
+        in.scratchGateConnected = gesture == 2;
+        in.positionConnected = gesture == 2;
+        in.positionCv = -0.025f;
+        in.platterLagTarget = 1200.f;
+        in.platterGestureVelocity = -8000.f;
+        in.wheelDelta = gesture == 1 ? 500.f : 0.f;
+        auto previous = engine.process(in);
+        reference.process(in);
+        in.wheelDelta = 0.f;
+        for (int i = 0; i < 128; ++i) {
+          previous = engine.process(in);
+          reference.process(in);
+        }
+        in.platterTouched = false;
+        in.wheelScratchHeld = false;
+        in.scratchGate = false;
+        auto released = engine.process(in);
+        float jump = std::max(std::fabs(released.outL - previous.outL),
+                              std::fabs(released.outR - previous.outR));
+        worstJump = std::max(worstJump, jump);
+        pass = pass && jump < 1e-5f;
+        // Compare against identical transport with correction disabled: the tail
+        // must expire without moving the playhead or leaving a permanent filter.
+        reference.process(in);
+        reference.scratchSmoothing.transitionPending = false;
+        reference.scratchSmoothing.transitionRemaining = 0.f;
+        for (int i = 0; i < int(sr * 0.006f); ++i) {
+          released = engine.process(in);
+          auto raw = reference.process(in);
+          pass = pass && std::isfinite(released.outL) && std::isfinite(released.outR);
+          pass = pass && engine.readHead == reference.readHead;
+          if (i > int(sr * 0.005f)) {
+            pass = pass && std::fabs(released.outL - raw.outL) < 1e-5f &&
+                   std::fabs(released.outR - raw.outR) < 1e-5f;
+          }
+        }
+        engine.reset(sr);
+        pass = pass && engine.scratchSmoothing.transitionRemaining == 0.f && !engine.scratchSmoothing.transitionPending;
+      }
+    }
+  }
+  return {"Scratch release is continuous in stereo and correction expires", pass,
+          "worst release jump=" + std::to_string(worstJump)};
+}
+
+TestResult testStationaryScratchHold() {
+  bool pass = true;
+  float worstHoldTail = 0.f;
+  float worstResumeStep = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    for (bool sample : {false, true}) {
+      for (bool direct : {false, true}) {
+        Engine engine;
+        engine.reset(sr);
+        auto in = makeDefaultInput(sr);
+        in.inL = 1.f;
+        in.inR = -0.6f;
+        if (sample) {
+          std::vector<float> left(8192, 1.f), right(8192, -0.6f);
+          engine.installSample(left, right, 8192, true, false);
+          engine.sampleModeEnabled = true;
+          engine.sampleTransportPlaying = true;
+          engine.sampleLoopEnabled = true;
+        }
+        for (int i = 0; i < 4096; ++i) engine.process(in);
+        in.platterTouched = true;
+        in.platterTouchHoldDirect = direct;
+        in.platterLagTarget = 1200.f;
+        auto out = engine.process(in);
+        for (int i = 0; i < int(sr * 0.040f); ++i) out = engine.process(in);
+        float tail = std::max(std::fabs(out.outL), std::fabs(out.outR));
+        worstHoldTail = std::max(worstHoldTail, tail);
+        pass = pass && tail < 1e-5f && engine.scratchActive;
+        // Resume a held drag, then stop again and release into normal transport.
+        in.platterTouchHoldDirect = false;
+        in.platterMotionActive = true;
+        in.platterGestureVelocity = -8000.f;
+        in.platterLagTarget = 2200.f;
+        ++in.platterGestureRevision;
+        for (int i = 0; i < int(sr * 0.025f); ++i) {
+          in.platterLagTarget = float(engine.scratchLagSamples + 200.0);
+          ++in.platterGestureRevision;
+          auto next = engine.process(in);
+          worstResumeStep = std::max(worstResumeStep, std::max(std::fabs(next.outL - out.outL),
+                                                              std::fabs(next.outR - out.outR)));
+          out = next;
+        }
+        pass = pass && engine.scratchSmoothing.holdFade == 1.f && std::fabs(out.outL) > 0.1f;
+        in.platterMotionActive = false;
+        for (int i = 0; i < int(sr * 0.040f); ++i) out = engine.process(in);
+        pass = pass && std::fabs(out.outL) < 1e-5f;
+        in.platterTouched = false;
+        auto released = engine.process(in);
+        pass = pass && std::fabs(released.outL - out.outL) < 1e-5f;
+        for (int i = 0; i < int(sr * 0.010f); ++i) released = engine.process(in);
+        pass = pass && engine.scratchSmoothing.holdFade == 1.f && std::fabs(released.outL) > 0.1f;
+        engine.reset(sr);
+        pass = pass && engine.scratchSmoothing.holdFade == 1.f && engine.scratchSmoothing.stationaryTime == 0.f;
+      }
+    }
+  }
+  pass = pass && worstResumeStep < 0.05f;
+  return {"Stationary scratch fades out and resumes smoothly in live/sample modes", pass,
+          "holdTail=" + std::to_string(worstHoldTail) + " resumeStep=" + std::to_string(worstResumeStep)};
+}
+
+TestResult testScratchHoldPreservesMotion() {
+  Engine engine;
+  engine.reset(48000.f);
+  bool pass = true;
+  // Short direction reversals and very slow continuous travel must stay audible.
+  for (int i = 0; i < 48000; ++i) {
+    double delta = i % 480 < 96 ? 0.0 : ((i / 480) % 2 ? -0.002 : 0.002);
+    auto out = engine.scratchSmoothing.applyHold({1.f, -0.6f}, true, delta, 1.f / 48000.f);
+    pass = pass && out.first == 1.f && out.second == -0.6f;
+  }
+  return {"Brief reversals and slow moving scratches remain audible", pass, "2 ms pauses between slow gestures"};
+}
+
+TestResult testExternalGateEntryWithHeldPosition() {
+  bool pass = true;
+  float worstEntryJump = 0.f;
+  float worstEarlyStep = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    for (int mode : {Engine::EXTERNAL_GATE_POS_GLIDE, Engine::EXTERNAL_GATE_POS_MODULE_SYNC}) {
+      Engine engine;
+      engine.reset(sr);
+      engine.externalGatePosMode = mode;
+      engine.cartridgeCharacter = Engine::CARTRIDGE_CONCORDE_SCRATCH;
+      // A low-frequency stereo source makes a position jump obvious without
+      // confusing legitimate high-frequency waveform slopes with clicks.
+      for (int i = 0; i < int(sr * 10.f); ++i) {
+        engine.buffer.write(2.f * std::sin(i * 0.0011f), 1.5f * std::cos(i * 0.0017f));
+      }
+      engine.readHead = engine.newestReadablePos();
+      auto in = makeDefaultInput(sr);
+      in.slipButton = true;
+      in.scratchGateConnected = true;
+      in.positionConnected = true;
+      in.positionCv = -7.9962535f; // Captured Proc EOR rising edge, then halted POS.
+      auto out = engine.process(in);
+      for (int i = 0; i < 512; ++i) out = engine.process(in);
+      for (int repeat = 0; repeat < 3; ++repeat) {
+        in.scratchGate = true;
+        double before = engine.readHead;
+        auto next = engine.process(in);
+        float jump = std::max(std::fabs(next.outL - out.outL), std::fabs(next.outR - out.outR));
+        worstEntryJump = std::max(worstEntryJump, jump);
+        pass = pass && jump < 1e-5f && engine.readHead != before && engine.scratchActive;
+        out = next;
+        in.positionCv = -7.9960542f;
+        for (int i = 0; i < int(sr * 0.020f); ++i) {
+          next = engine.process(in);
+          worstEarlyStep = std::max(worstEarlyStep, std::max(std::fabs(next.outL - out.outL),
+                                                            std::fabs(next.outR - out.outR)));
+          pass = pass && std::isfinite(next.outL) && std::isfinite(next.outR);
+          out = next;
+        }
+        pass = pass && engine.scratchSmoothing.transitionRemaining == 0.f;
+        in.scratchGate = false;
+        for (int i = 0; i < int(sr * 0.010f); ++i) out = engine.process(in);
+      }
+    }
+  }
+  pass = pass && worstEarlyStep < 0.15f;
+  return {"Proc-style nonzero POS gate entry and hold are continuous", pass,
+          "entryJump=" + std::to_string(worstEntryJump) + " earlyStep=" + std::to_string(worstEarlyStep)};
+}
+
+TestResult testGestureSmoothingOption() {
+  bool pass = true;
+  float rawJump = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    Engine smooth, raw;
+    smooth.reset(sr);
+    raw.reset(sr);
+    raw.scratchSmoothingEnabled = false;
+    std::vector<float> left(8192), right(8192);
+    for (int i = 0; i < 8192; ++i) {
+      left[i] = i < 4096 ? 2.f : -2.f;
+      right[i] = i < 4096 ? -1.f : 1.f;
+    }
+    for (Engine* engine : {&smooth, &raw}) {
+      engine->installSample(left, right, 8192, true, false);
+      engine->sampleModeEnabled = true;
+      engine->sampleTransportPlaying = true;
+    }
+    auto in = makeDefaultInput(sr);
+    auto previous = smooth.process(in);
+    raw.process(in);
+    // Direct hand/scope reposition while still touched: gate never falls.
+    in.platterTouched = true;
+    in.platterTouchHoldDirect = true;
+    for (int gesture = 0; gesture < 4; ++gesture) {
+      in.scopeLagDragActive = (gesture % 2) != 0;
+      in.platterLagTarget = gesture % 2 ? 6000.f : 1000.f;
+      ++in.platterGestureRevision;
+      auto next = smooth.process(in);
+      auto unfiltered = raw.process(in);
+      pass = pass && std::fabs(next.outL - previous.outL) < 1e-5f;
+      rawJump = std::max(rawJump, std::fabs(unfiltered.outL - previous.outL));
+      pass = pass && smooth.readHead == raw.readHead;
+      for (int i = 0; i < int(sr * 0.025f); ++i) {
+        next = smooth.process(in);
+        unfiltered = raw.process(in);
+        pass = pass && smooth.readHead == raw.readHead;
+      }
+      pass = pass && std::fabs(next.outL) < 1e-5f && std::fabs(unfiltered.outL) > 1.f;
+      previous = next;
+    }
+    pass = pass && raw.scratchSmoothing.transitionRemaining == 0.f && raw.scratchSmoothing.holdFade == 1.f;
+    // Disabling in the middle of a fade must not leave a stale tail/mute.
+    smooth.scratchSmoothingEnabled = false;
+    auto unmuted = smooth.process(in);
+    pass = pass && std::fabs(unmuted.outL) > 1.f && smooth.scratchSmoothing.transitionRemaining == 0.f;
+    smooth.reset(sr);
+    pass = pass && smooth.scratchSmoothing.source == temporaldeck::scratch_smoothing::State::Source::None && smooth.scratchSmoothing.motionDirection == 0;
+  }
+  return {"Gesture smoothing is optional and preserves head timing", pass,
+          "unsmoothed jump=" + std::to_string(rawJump)};
+}
+
+TestResult testMotionTrackingPreservesSourceTransients() {
+  Engine engine;
+  engine.reset(48000.f);
+  engine.scratchSmoothing.trackSource(temporaldeck::scratch_smoothing::State::Source::Hand);
+  bool pass = true;
+  for (int i = 0; i < 1000; ++i) {
+    engine.scratchSmoothing.trackMotion(1.0);
+    std::pair<float, float> input = {i % 2 ? 5.f : -5.f, i % 3 ? -3.f : 3.f};
+    auto out = engine.scratchSmoothing.applyTransition(input, 1.f / 48000.f);
+    if (i > 200) pass = pass && out == input && !engine.scratchSmoothing.transitionPending;
+  }
+  // Reversal, stop, restart and a jump are motion events even with flat audio.
+  for (double delta : {-1.0, 0.0, 1.0, 10.0}) {
+    engine.scratchSmoothing.trackMotion(delta);
+    pass = pass && engine.scratchSmoothing.transitionPending;
+    engine.scratchSmoothing.applyTransition({0.f, 0.f}, 1.f / 48000.f);
+  }
+  return {"Motion tracking preserves source transients at steady speed", pass,
+          "full-scale impulses pass unchanged after the entry fade"};
+}
+
+TestResult testFullEngineSourceTransients() {
+  Engine smooth, raw;
+  smooth.reset(48000.f);
+  raw.reset(48000.f);
+  raw.scratchSmoothingEnabled = false;
+  std::vector<float> samples(4096);
+  for (int i = 0; i < 4096; ++i) samples[i] = i % 17 == 0 ? 5.f : (i % 2 ? -2.f : 2.f);
+  for (Engine* engine : {&smooth, &raw}) {
+    engine->installSample(samples, samples, 4096, true, false);
+    engine->sampleModeEnabled = true;
+    engine->sampleTransportPlaying = true;
+  }
+  auto in = makeDefaultInput(48000.f);
+  bool pass = true;
+  for (int i = 0; i < 2048; ++i) {
+    auto a = smooth.process(in), b = raw.process(in);
+    pass = pass && a.outL == b.outL && a.outR == b.outR;
+  }
+  // A gate without POS must not fade or otherwise touch ordinary playback.
+  in.scratchGateConnected = true;
+  in.scratchGate = true;
+  auto a = smooth.process(in), b = raw.process(in);
+  pass = pass && a.outL == b.outL && a.outR == b.outR &&
+         smooth.scratchSmoothing.transitionRemaining == 0.f;
+  return {"Full engine preserves source transients and ignores gate without POS", pass, "bit-identical On/Off output"};
+}
+
+TestResult testSlipBlendHandoff() {
+  bool pass = true;
+  float worstBoundaryStep = 0.f, worstDcDeviation = 0.f;
+  for (float sr : {44100.f, 48000.f, 96000.f}) {
+    for (bool quick : {false, true}) {
+      for (int mode : {Engine::SLIP_RETURN_SLOW, Engine::SLIP_RETURN_NORMAL}) {
+        for (bool tone : {false, true}) {
+          Engine engine;
+          engine.reset(sr);
+          engine.slipReturnMode = mode;
+          auto in = makeDefaultInput(sr);
+          in.slipButton = true;
+          int frame = 0;
+          auto input = [&]() {
+            in.inL = tone ? std::sin(frame * 0.007f) : 1.f;
+            in.inR = tone ? 0.6f * std::cos(frame * 0.009f) : -0.6f;
+            ++frame;
+          };
+          for (int i = 0; i < 4096; ++i) { input(); engine.process(in); }
+          double lag = sr * 0.002;
+          engine.readHead = engine.buffer.wrapPosition(engine.newestReadablePos() - lag);
+          engine.slipReturning = true;
+          engine.slipReturnOverrideTime = quick ? 0.1f : -1.f;
+          engine.startSlipBlend(lag, sr);
+          pass = pass && engine.slipBlendDuration == engine.slipBlendRemaining;
+          auto previous = engine.prevWetL;
+          bool completed = false;
+          for (int i = 0; i < int(sr * 0.03f); ++i) {
+            bool blending = engine.slipBlendActive;
+            input();
+            auto out = engine.process(in);
+            if (!tone) worstDcDeviation = std::max(worstDcDeviation, std::fabs(out.outL - 1.f));
+            if ((blending && !engine.slipBlendActive) || completed) {
+              worstBoundaryStep = std::max(worstBoundaryStep, std::fabs(out.outL - previous));
+            }
+            completed = completed || (blending && !engine.slipBlendActive);
+            previous = out.outL;
+          }
+          pass = pass && completed;
+        }
+      }
+    }
+  }
+  pass = pass && worstBoundaryStep < 0.025f && worstDcDeviation < 1e-4f;
+  return {"Live Slip reaches NOW without blend gain swell or endpoint step", pass,
+          "boundaryStep=" + std::to_string(worstBoundaryStep) + " dcDeviation=" + std::to_string(worstDcDeviation)};
+}
+
+TestResult testPreFadeScratchHistory() {
+  Engine a, b;
+  a.reset(48000.f); b.reset(48000.f);
+  b.scratchSmoothingEnabled = false;
+  std::vector<float> sample(8192);
+  for (int i = 0; i < 8192; ++i) sample[i] = std::sin(i * 0.017f);
+  for (Engine* engine : {&a, &b}) {
+    engine->installSample(sample, sample, 8192, true, false);
+    engine->sampleModeEnabled = true;
+    engine->sampleTransportPlaying = true;
+  }
+  auto in = makeDefaultInput(48000.f);
+  in.platterTouched = true;
+  in.platterTouchHoldDirect = true;
+  bool pass = true;
+  float audibleDifference = 0.f;
+  for (int i = 0; i < 2400; ++i) {
+    if (i % 240 == 0) { ++in.platterGestureRevision; in.platterLagTarget = 1000.f + i; }
+    auto x = a.process(in), y = b.process(in);
+    audibleDifference = std::max(audibleDifference, std::fabs(x.outL - y.outL));
+    pass = pass && a.prevScratchOutL == b.prevScratchOutL && a.prevScratchOutR == b.prevScratchOutR;
+  }
+  return {"Final fades do not feed back into scratch DSP history", pass && audibleDifference > 0.1f,
+          "audibleDifference=" + std::to_string(audibleDifference)};
+}
+
+TestResult testStreamTransitionOwnership() {
+  temporaldeck::scratch_smoothing::State state;
+  state.requestTransition();
+  state.applyTransition({2.f, -2.f}, 1.f / 48000.f, 1.f, -1.f);
+  state.requestTransition(true);
+  auto first = state.applyTransition({-2.f, 2.f}, 1.f / 48000.f, 1.f, -1.f, false);
+  bool pass = first.first == 1.f && first.second == -1.f;
+  int samples = 0;
+  while (state.transitionRemaining > 0.f && samples < 300) {
+    float remaining = state.transitionRemaining;
+    state.requestTransition(); // Gesture events cannot prolong stream recovery.
+    auto out = state.applyTransition({-2.f, 2.f}, 1.f / 48000.f, 0.f, 0.f, false);
+    pass = pass && state.transitionRemaining < remaining && std::isfinite(out.first);
+    ++samples;
+  }
+  pass = pass && samples >= 238 && samples <= 241 && !state.streamTransition;
+  auto out = state.applyTransition({-2.f, 2.f}, 1.f / 48000.f, 0.f, 0.f, false);
+  pass = pass && out.first == -2.f && out.second == 2.f;
+  return {"Stream recovery owns one finite fade even with smoothing Off", pass, "samples=" + std::to_string(samples)};
+}
+
 int main() {
   std::vector<TestResult> tests;
+  tests.push_back(testSlipBlendHandoff());
+  tests.push_back(testPreFadeScratchHistory());
+  tests.push_back(testStreamTransitionOwnership());
+  tests.push_back(testFullEngineSourceTransients());
+  tests.push_back(testGestureSmoothingOption());
+  tests.push_back(testMotionTrackingPreservesSourceTransients());
+  tests.push_back(testExternalGateEntryWithHeldPosition());
+  tests.push_back(testStationaryScratchHold());
+  tests.push_back(testScratchHoldPreservesMotion());
+  tests.push_back(testScratchReleaseContinuity());
   tests.push_back(testLiveModeWritesAdvance());
   tests.push_back(testSampleModeDisablesWrites());
   tests.push_back(testPreparedInstallSwapsStorageWithoutReallocation());
