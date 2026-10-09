@@ -1,6 +1,8 @@
 // Whole audio callback benchmark; keep before/after executables for paired runs.
 // Run serially without builds or other benchmarks. Includes controls/telemetry,
 // excludes Rack scheduling, GUI and driver. Debug timing is disabled.
+// --expander supplies a valid static V.Tune message to measure the linked
+// Vessel callback. It excludes V.Tune's own callback and Rack message flips.
 #include <context.hpp>
 #include <engine/Engine.hpp>
 #undef PRIVATE
@@ -23,7 +25,10 @@ static void hashFloat(std::uint64_t& hash, float value) {
     hash = (hash ^ bits) * UINT64_C(1099511628211);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    const bool expanderLinked = argc > 1 && std::strcmp(argv[1], "--expander") == 0;
+    Model tuneModel;
+    modelVTune = &tuneModel;
     rack::Context context; rack::contextSet(&context);
     int result = 0;
     {
@@ -36,6 +41,16 @@ int main() {
                 std::uint64_t hash = UINT64_C(14695981039346656037);
                 for (int repeat = 0; repeat < 3; ++repeat) {
                     Vessel m;
+                    Module expander;
+                    expander.model = &tuneModel;
+                    if (expanderLinked) {
+                        m.rightExpander.module = &expander;
+                        expander.leftExpander.module = &m;
+                        auto* message = static_cast<vessel_expander::TuneMessage*>(m.rightExpander.consumerMessage);
+                        *message = vessel_expander::TuneMessage{};
+                        message->magic = vessel_expander::kMagic;
+                        message->speed = .2f;
+                    }
                     m.params[Vessel::BOWL_PARAM].setValue(float(bowl));
                     m.params[Vessel::MALLET_PARAM].setValue(bowl ? 0.f : 1.f);
                     m.params[Vessel::SPEED_PARAM].setValue(.2f);

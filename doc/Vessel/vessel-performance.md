@@ -776,3 +776,53 @@ CPU-meter comparison were not performed in this pass.
 Build the reusable benchmark with
 `make -j10 build/tools/vessel_benchmark_active_module`. On Windows run its `.exe`
 with the installed Rack runtime directory first on PATH, as for Rack-linked tests.
+
+## Further active-use screening (2026-10-09)
+
+No additional production optimization was retained from this pass. The prior
+modal fusion/SSE2 implementation remains the baseline (revision
+`4e063cda49283c81378bc7e042ba6da6a67fec75`). Candidates were:
+
+- Contact-loop fusion: calculate free modal motion, tangential velocity and
+  tangential admittance in one loop, retaining each reduction's scalar order.
+- Prepared friction: validate the unchanged mallet descriptor at configuration
+  and reuse it for rubbing-only solves. Dynamic input checks, the uniqueness
+  certificate, divisions, analytic functions and solver tolerances remain intact.
+- Linked control reads: skip the six fallback reads/clamps immediately replaced
+  by a valid V.Tune message. Keep control cadence and retained-parameter writes.
+
+The first two were screened separately and together. Contact-only median changes
+across the 16 fixtures ranged from approximately 10% slower to 5% faster;
+contact plus caching ranged from 2.5% slower to 7.6% faster. A candidate retaining
+only caching and the control-read change was also built. These mixed results
+did not establish a broad benefit. The expander-read candidate was compared
+with and without that change while holding the engine candidate constant.
+
+Measurements use the same native Windows machine/compiler and callback harness
+as the preceding section, with three serial executable runs per main comparison
+and reversed ordering. A second set pinned the benchmark launcher/children to
+logical CPU 2 (affinity mask 4), then restored the launcher's affinity. Pinning
+did not stabilize results: individual case medians still changed sign, and some
+differences exceeded 20%. These results cannot distinguish small gains from
+host noise or code-layout effects, and should not be quoted as achieved speedups.
+No builds/tests were run concurrently with the timing passes.
+
+All compared audio/energy trace fingerprints matched the corresponding baseline.
+This is a screened behavioral comparison, not proof covering every possible
+patch. Candidate DSP and candidate-only tests were removed rather than promoting
+them on inconclusive timing. The local artifacts remain under
+`test-results/vessel-next-*`, `vessel-linked-*`, and `vessel-pinned-*`; the latest
+candidate patch is `test-results/vessel-next-candidates.patch`.
+
+Inspection also found that the FIR already uses symmetric taps, mirrored history
+and two-channel SSE2. No replacement FIR was implemented. Rack parameter setters
+are plain float stores; change-detection branches were not pursued. Cached
+reciprocal substitutions were not pursued because they change rounding.
+
+The retained benchmark addition is `--expander`, which supplies a static valid
+V.Tune message and measures Vessel's linked callback. It excludes V.Tune's own
+callback and Rack's message-flip scheduling. Run it with the Rack runtime first
+on PATH. Future investigation should obtain a stable sampled profile of active
+rubbing before investing in more small source-level rearrangements.
+After restoring production DSP, the native Windows `plugin.dll` build and full
+`test-vessel` suite passed; the retained benchmark target also compiled.
