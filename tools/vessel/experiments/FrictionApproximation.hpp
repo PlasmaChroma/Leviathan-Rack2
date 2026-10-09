@@ -52,4 +52,51 @@ inline double frictionApproximateNegativeSlopeBound(double load, const MalletDes
     return load*friction_tables::gaussianNegativeSlopeBound*(m.muS-m.muK)/m.weakeningVelocity
         +load*m.muS/m.regularizationVelocity*friction_tables::tanhNegativeSlopeBound;
 }
+// Isolate Gaussian lookup cost while preserving analytic tanh.
+inline FrictionValue frictionValueGaussianApproximate(double slip, double load, const MalletDescriptor& m) noexcept {
+    FrictionValue value;
+    if (load == 0.0) return value;
+    const double z = slip/m.weakeningVelocity;
+    const auto g = std::abs(z)<8
+        ? friction_approximation::lookup(friction_tables::gaussian,std::abs(z),128,1024)
+        : friction_approximation::Curve{0,0};
+    const double a = slip/m.regularizationVelocity;
+    const double t = std::abs(a)<20 ? std::tanh(a) : (a<0 ? -1. : 1.);
+    const double mu = m.muK+(m.muS-m.muK)*g.value;
+    const double slope = (slip<0 ? -1. : 1.)*g.derivative/m.weakeningVelocity*(m.muS-m.muK);
+    value.force = load*mu*t;
+    value.derivative = load*(slope*t+mu/m.regularizationVelocity*(1.-t*t));
+    return value;
+}
+
+// Prepared once per solve, not globally cached: an isolated arithmetic trial.
+// Multiplying by reciprocals changes rounding. Keep the analytic functions.
+struct FrictionReciprocals {
+    double weakening, regularization, deltaMu, muK;
+    explicit FrictionReciprocals(const MalletDescriptor& m) noexcept
+        : weakening(1./m.weakeningVelocity), regularization(1./m.regularizationVelocity),
+          deltaMu(m.muS-m.muK), muK(m.muK) {}
+    template<bool fastTanh = false>
+    FrictionValue evaluate(double slip, double load) const noexcept {
+        FrictionValue value;
+        if (load == 0.) return value;
+        const double z=slip*weakening, a=slip*regularization;
+        const double g=std::abs(z)<27 ? std::exp(-z*z) : 0.;
+        double t, dt;
+        if (fastTanh) {
+            const auto curve=std::abs(a)<20
+                ? friction_approximation::lookup(friction_tables::tanhCurve,std::abs(a),102.4,2048)
+                : friction_approximation::Curve{1,0};
+            t=a<0 ? -curve.value : curve.value; dt=curve.derivative;
+        } else {
+            t=std::abs(a)<20 ? std::tanh(a) : (a<0 ? -1. : 1.);
+            dt=1.-t*t;
+        }
+        const double mu=muK+deltaMu*g;
+        const double slope=g==0 ? 0. : -2.*z*weakening*deltaMu*g;
+        value.force=load*mu*t;
+        value.derivative=load*(slope*t+mu*regularization*dt);
+        return value;
+    }
+};
 } // namespace vessel

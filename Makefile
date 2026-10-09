@@ -530,8 +530,9 @@ build/tests/vtune_body_map_core_spec: tests/vtune_body_map_core_spec.cpp $(wildc
 test-vtune-body-map: build/tests/vtune_body_map_core_spec
 	python3 tools/vtune/generate_body_map_data.py --check
 	$(call run_test_bin,build/tests/vtune_body_map_core_spec)
-build/tests/vessel_module_spec: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/vessel_module_spec_fir109: VESSEL_MODULE_EXPERIMENT_FLAGS = -DVESSEL_EXPERIMENTAL_FIR109
+build/tests/vessel_module_spec build/tests/vessel_module_spec_fir109: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) $(VESSEL_MODULE_EXPERIMENT_FLAGS) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 test-vessel: build/tests/vessel_observer_configuration_spec build/tests/vessel_strike_gradient_spec build/tests/vessel_passive_tail_spec check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_host_rate_serial_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
 	$(call run_test_bin,build/tests/vessel_observer_configuration_spec)
 	$(call run_test_bin,build/tests/vessel_strike_gradient_spec)
@@ -1470,3 +1471,35 @@ build/tests/deepcache_theme_identity_spec: tests/deepcache_theme_identity_spec.c
 # Uses the same JSON helpers as Temporal Deck's module serialization.
 build/tests/temporaldeck_settings_spec: tests/temporaldeck_settings_spec.cpp src/TemporalDeckSettings.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+# Isolated shorter-filter experiment; production retains the 129-tap default.
+VESSEL_FIR109_SPECS := host_rate host_rate_serial dual_bowl passive_tail observer_configuration
+VESSEL_FIR109_TESTS := $(addprefix build/tests/vessel_,$(addsuffix _spec_fir109,$(VESSEL_FIR109_SPECS)))
+build/tests/vessel_host_rate_serial_spec_fir109: tests/vessel_host_rate_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DVESSEL_SERIAL_FIR -DVESSEL_EXPERIMENTAL_FIR109 -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tests/%_spec_fir109: tests/%_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DVESSEL_EXPERIMENTAL_FIR109 -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+.PHONY: test-vessel-fir109
+test-vessel-fir109: $(VESSEL_FIR109_TESTS) build/tests/vessel_module_spec_fir109
+	$(call run_test_bin,build/tests/vessel_host_rate_spec_fir109)
+	$(call run_test_bin,build/tests/vessel_host_rate_serial_spec_fir109)
+	$(call run_test_bin,build/tests/vessel_dual_bowl_spec_fir109)
+	$(call run_test_bin,build/tests/vessel_passive_tail_spec_fir109)
+	$(call run_test_bin,build/tests/vessel_observer_configuration_spec_fir109)
+	$(call run_rack_test_bin,build/tests/vessel_module_spec_fir109)
+build/tools/vessel_fir_capture build/tools/vessel_fir_capture_109: tools/vessel/fir_capture.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	@mkdir -p build/tools
+	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra $(if $(filter %_109,$@),-DVESSEL_EXPERIMENTAL_FIR109,) -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tools/vessel_benchmark_active_module_109: tools/vessel/benchmark_active_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	@mkdir -p build/tools
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -DVESSEL_EXPERIMENTAL_FIR109 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+# Work-count profiling is deliberately separate from uninstrumented timing.
+build/tools/vessel_contact_work build/tools/vessel_contact_work_profile: tools/vessel/profile_contact_work.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	@mkdir -p build/tools
+	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra $(if $(filter %_profile,$@),-DVESSEL_PROFILE_CONTACT_WORK,) -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tests/vessel_contact_work_spec: tests/vessel_contact_work_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DVESSEL_PROFILE_CONTACT_WORK -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+.PHONY: test-vessel-contact-work
+test-vessel-contact-work: build/tests/vessel_contact_work_spec
+	$(call run_test_bin,build/tests/vessel_contact_work_spec)

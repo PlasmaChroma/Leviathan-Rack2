@@ -1,4 +1,7 @@
 #include "HostRateAdapter.hpp"
+#if defined(VESSEL_EXPERIMENTAL_FIR109)
+#include "ExperimentalFir109.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +11,9 @@
 
 namespace vessel {
 StereoDecimator::StereoDecimator() noexcept {
+    #if defined(VESSEL_EXPERIMENTAL_FIR109)
+    coefficients_ = experimentalFir109;
+    #else
     constexpr unsigned center = (taps-1)/2;
     double sum = 0.0;
     for (unsigned i = 0; i <= center; ++i) {
@@ -18,6 +24,7 @@ StereoDecimator::StereoDecimator() noexcept {
         sum += coefficients_[i]*(i == center ? 1.0 : 2.0);
     }
     for (auto& c : coefficients_) c /= sum;
+    #endif
 }
 bool StereoDecimator::configure(unsigned factor) noexcept {
     if (factor != 1 && factor != 2 && factor != 4 && factor != 8) return false;

@@ -18,7 +18,8 @@ struct FrictionSolution {
 };
 
 // Analytic reference curve. Saturated tanh/Gaussian tails skip expensive math;
-// approximations in the adhesion region must first match this solver.
+// Production solveFriction uses PreparedFrictionLaw: analytic Gaussian and
+// monotone cubic tanh with a derivative from the same interpolant.
 FrictionValue frictionValue(double slip, double load, const MalletDescriptor& mallet) noexcept;
 double frictionNegativeSlopeBound(double load, const MalletDescriptor& mallet) noexcept;
 FrictionSolution solveFriction(double delta, double admittance, double load,

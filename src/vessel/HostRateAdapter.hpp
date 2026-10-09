@@ -8,12 +8,17 @@ enum class ProcessingQuality { Economy = 0, Balanced = 1, Reference = 2 };
 
 struct StereoSample { double left = 0.0, right = 0.0; };
 
-// Causal 2x stages, fixed storage. Each stage has a 129-tap symmetric
+// Causal 2x stages, fixed storage. By default each has a 129-tap symmetric
 // Blackman-windowed sinc: passband <=0.40 of its output rate, stopband
 // >=0.50. Response/latency are measured in vessel_host_rate_spec.
 class StereoDecimator {
 public:
+    // Offline experiment only; define consistently across all translation units.
+#if defined(VESSEL_EXPERIMENTAL_FIR109)
+    static constexpr unsigned taps = 109;
+#else
     static constexpr unsigned taps = 129;
+#endif
     StereoDecimator() noexcept;
     bool configure(unsigned factor) noexcept;
     void reset() noexcept;

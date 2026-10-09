@@ -18,7 +18,8 @@ bool close(double a, double b, double eps = 1e-10) { return std::abs(a-b) <= eps
 
 // Original branch-wrapped scalar kernel, independent of mirrored storage/SIMD.
 void originalFirEquivalence() {
-    struct Stage { std::array<StereoSample,129> samples {}; unsigned pos=0,phase=0; };
+    constexpr unsigned taps = StereoDecimator::taps, center = (taps-1)/2;
+    struct Stage { std::array<StereoSample,taps> samples {}; unsigned pos=0,phase=0; };
     std::mt19937 rng(71241); std::uniform_real_distribution<double> values(-10,10);
     double maxNormalizedError = 0.0;
     for (double scale : {1e-100, 1e-6, 1.0, 1e6, 1e100})
@@ -51,17 +52,17 @@ void originalFirEquivalence() {
             bool ready=true;auto expected=input;
             for (unsigned stage=0;stage<count;++stage) {
                 auto& s=stages[stage];s.samples[s.pos]=expected;const unsigned newest=s.pos;
-                if(++s.pos==129)s.pos=0;
+                if(++s.pos==taps)s.pos=0;
                 s.phase^=1;
                 if(s.phase) {ready=false;break;}
                 expected={};unsigned a=newest,b=s.pos;
-                for (unsigned i=0;i<64;++i) {
+                for (unsigned i=0;i<center;++i) {
                     expected.left+=fast.coefficient(i)*(s.samples[a].left+s.samples[b].left);
                     expected.right+=fast.coefficient(i)*(s.samples[a].right+s.samples[b].right);
-                    a=a==0?128:a-1;if(++b==129)b=0;
+                    a=a==0?taps-1:a-1;if(++b==taps)b=0;
                 }
-                expected.left+=fast.coefficient(64)*s.samples[a].left;
-                expected.right+=fast.coefficient(64)*s.samples[a].right;
+                expected.left+=fast.coefficient(center)*s.samples[a].left;
+                expected.right+=fast.coefficient(center)*s.samples[a].right;
             }
             require(fast.push(input,actual)==ready, "optimized FIR cadence differs");
             if (ready) {

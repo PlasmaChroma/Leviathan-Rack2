@@ -1,4 +1,5 @@
 #include "ContactSolver.hpp"
+#include "ContactWorkProfile.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -7,6 +8,7 @@ CoupledSolution solveContacts(double d0, double velocity, double vs0, double vt0
     double Yss, double Yst, double Ytt, double h,
     const MalletDescriptor& striker, const MalletDescriptor& rubber,
     double speed, double load, double previous) noexcept {
+    VESSEL_WORK(ContactWorkScope profileScope);
     CoupledSolution result;
     if (!validMallet(striker) || !std::isfinite(d0) || d0 < 0.0
         || !std::isfinite(velocity) || !std::isfinite(vs0) || !std::isfinite(vt0)
@@ -17,6 +19,7 @@ CoupledSolution solveContacts(double d0, double velocity, double vs0, double vt0
     const double freeCompression = d0+h*(velocity-vs0);
     unsigned innerIterations = 0;
     auto trial = [&](double force) {
+        VESSEL_WORK(++contactWork().outerTrials);
         CoupledSolution s;
         s.friction = solveFriction(speed-vt0-Yst*force, Ytt, load, rubber, previous);
         innerIterations = std::max(innerIterations, s.friction.iterations);
@@ -39,6 +42,7 @@ CoupledSolution solveContacts(double d0, double velocity, double vs0, double vt0
     double lo = 0.0, hi = std::max(1e-6, -zero.strike.residual);
     auto upper = trial(hi);
     for (unsigned i = 0; i < 24 && upper.friction.converged && upper.strike.residual < 0.0; ++i) {
+        VESSEL_WORK(++contactWork().bracketExpansions);
         hi *= 2.0; upper = trial(hi);
     }
     if (!upper.friction.converged || !std::isfinite(upper.strike.residual) || upper.strike.residual < 0.0) return result;
@@ -68,6 +72,8 @@ CoupledSolution solveContacts(double d0, double velocity, double vs0, double vt0
         const double effectiveA = A-af*Yst*Yst/(1.0+af*Ytt);
         const double derivative = 1.0+h*effectiveA*(std::max(0.0, elasticDerivative)+dampingDerivative);
         const double candidate = force-result.strike.residual/derivative;
+        VESSEL_WORK((i < 12 && std::isfinite(candidate) && candidate > lo && candidate < hi)
+            ? ++contactWork().outerNewton : ++contactWork().outerFallback);
         force = i < 12 && std::isfinite(candidate) && candidate > lo && candidate < hi ? candidate : 0.5*(lo+hi);
     }
     return result;

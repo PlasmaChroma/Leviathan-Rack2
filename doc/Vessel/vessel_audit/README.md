@@ -8,7 +8,53 @@ This bundle contains isolated candidate kernels, reproducible mathematical check
 
 The source already has substantial optimization: SSE2 active modal updates, fused state update/finite checks/pickups, cached small-angle contact-orbit rotations, a symmetric SSE2 stereo decimator, single-engine operation at zero binaural separation, and host-rate composition of eligible passive tails. These are baselines to retain, not new recommendations.
 
-## Recommended order
+## Current checkout reassessment — after the 109-tap trial
+
+The original bundle below is historical. Subsequent integrated work retained
+the four-accumulator 129-tap FIR, isolated-strike derivative caching, and
+observer-only configuration reuse. The coupled derivative was rejected after
+mixed/regressing callback measurements. The 109-tap filter remains experimental:
+small tested audio differences, but only 0.51–0.66% median whole-module savings,
+some regressions, and a +1.41 dB response change at 20 kHz on oversampled
+44.1 kHz paths. See [its validation report](../vessel_fir109_validation.md).
+
+Reinspection of the current source gives this order:
+
+| Priority | Remaining lead | Evidence and next decision gate |
+| --- | --- | --- |
+| Deferred | Matched-pole configuration transform | `ModalBank::configure` still computes the original exp/expm1/trig/hypot mapping. First measure full pitch-modulation callbacks and configuration cost; then compare the algebraic candidate independently. Target configuration spikes, not steady rubbing. |
+| Completed | Friction-law work and arithmetic | Profiling led to retained per-solve reciprocals and cubic tanh. Final full-callback medians improved 3.05% for ordinary rubbing and 16.85% for slow Felt, with one small ordinary regression. |
+| Deferred with retuning | Cache pitch-independent physical terms | Pitch-only updates still recompute split factors, masses, decay terms and contact footprint terms. Isolate this from the transform experiment; require correct invalidation for material/mallet morphs, decay, imperfection and rate changes. Preserve orbit resynchronization. |
+| Not retained | Gaussian Hermite lookup | Tested independently and with tanh; gains were weaker/mixed. Gaussian remains analytic. See the fast-friction report before repeating these trials. |
+
+The matched-pole standalone check was rerun locally: 20,020 configurations,
+maximum relative omega/sigma difference 8.23e-16 and maximum absolute inverseD
+difference 4.44e-16. This reproduces the original coefficient result; it does
+not yet measure integrated speed or prove trajectory equivalence. The current
+`setAdditionalDamping` path must remain coherent: `inverseD = Q/4` applies only
+to the base mapping, before extra damping. Compare mode frequency/T60, long
+tails, active-contact retuning, high-energy damping and transactional rejection
+against the original implementation before retaining a transform change.
+
+Prepared mallet validation and contact-loop fusion already had mixed or
+inconclusive **native Windows** results in [the earlier investigation](../vperf-10-9-26.md).
+Those tests did not exhaust reciprocal caching or coupled-contact preparation,
+but repeating the same variants without new profiling evidence is low priority.
+Likewise, defer 105-tap FIR work until shorter-filter tradeoffs are worthwhile;
+the 109-tap trial does not establish that 105 taps cannot help, but lowers its
+priority. Lower-rate mechanics remains a separate quality-mode investigation.
+
+Pitch/retuning optimization is now explicitly deferred: fixed tuning and free
+V/oct modulation remain supported, with retuning acoustics to be revisited
+separately. The first friction profiling pass is complete; see
+[the contact-work report](../vessel_contact_work_profile.md). Across 96 fixtures,
+Gaussian `exp` evaluation ran on every law call, while `tanh` use varied strongly
+with rubbing speed. Existing Newton convergence was efficient. The subsequent [fast-friction experiments](../vessel_fast_friction_validation.md)
+retained reciprocals plus cubic tanh after numerical and full-callback checks;
+Gaussian lookup remains offline.
+Keep counters out of timing builds and retain normal debug Process timing.
+
+## Original recommended order
 
 1. Establish an actual callback baseline, including timing distributions and total constitutive-law evaluations during overlapping strike/rub contacts.
 2. Preserve the existing 129-tap filter and try four independent accumulators. Cache invariant physical parameters and exact repeated products; split observer-only changes from full mechanical configuration.

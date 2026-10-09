@@ -1,7 +1,7 @@
 # Vessel performance plan
 
 Date: 2026-09-30  
-Status: the exact fused tail step is adopted; the rate selector remains a development experiment. Friction approximations remain offline; lower-rate fidelity is not yet approved.
+Status: the exact fused tail step is adopted; the rate selector remains a development experiment. Production now uses prepared reciprocals and cubic tanh; Gaussian lookup remains offline. Lower-rate fidelity is not yet approved.
 
 ## Objective
 
@@ -865,3 +865,67 @@ unverified.
 
 See [the strike and observer report](vessel_strike_and_observer_optimization.md)
 for scope, raw evidence locations, the coupled candidate decision and reproduction.
+
+## Experimental 109-tap FIR validation (2026-10-09)
+
+The 109-tap candidate remains behind `VESSEL_EXPERIMENTAL_FIR109`; production
+still uses 129 taps. Across 288 physical-pickup fixtures, delay-aligned RMS
+error was 0.00618% median / 0.04165% worst, with a 0.05209% worst peak error
+relative to reference peak. Internal-rate pickup trajectories matched exactly.
+The independent streaming convolution check stayed below 1.52e-15 of input
+peak. Candidate adapter/module tests and focused ASan/UBSan checks passed;
+the default Vessel suite and full Linux plugin build passed.
+
+Streaming FIR cost fell approximately 8–11%, but six paired whole-module runs
+showed only 0.51% median standalone savings and 0.66% with static V.Tune input,
+with some fixture regressions. At a 44.1 kHz host, 20 kHz gain changes by about
++1.41 dB in the transition band. These measurements justify keeping a testable
+candidate, not promoting it without a clearer benefit and sound decision.
+
+See [the validation report](vessel_fir109_validation.md) and
+[machine-readable results](vessel_fir109_results.json) for normalization,
+frequency/alias measurements, timing variability and reproduction.
+
+## Friction-work profiling (2026-10-09)
+
+Added compile-time offline counters, with no instrumentation in normal builds.
+Across 96 fixed-pitch fixtures at three rubbing speeds, 480 phase fingerprints
+matched between plain and instrumented runs. The matrix covered 12.67 million
+host frames and 85.62 million friction-law evaluations. Ordinary sustained solves
+averaged 1.18–2.02 evaluations; coupled overlap used about 4.7 inner solves per
+outer solve. No fallback steps or recovery faults occurred in these fixtures.
+
+Gaussian exp executed on every law evaluation. Sustained tanh use ranged from
+100% at slow rubbing to 2.82% at the middle speed and 0% at the fast speed.
+These are work counts, not CPU-time percentages. They motivate separate Gaussian
+and invariant-arithmetic benchmarks before another integrated optimization.
+Pitch/retuning optimization remains deferred. Dedicated accounting tests, the
+normal Vessel suite and full Linux build passed.
+
+See [the contact-work profile](vessel_contact_work_profile.md) for scope,
+limits, counter validation and reproduction.
+
+## Retained fast friction evaluation (2026-10-09)
+
+Production friction solves now cache velocity-scale reciprocals once per solve
+and evaluate tanh with a monotone cubic table whose derivative comes from the
+same interpolant. Gaussian weakening remains analytic. The original analytic
+law remains available as a reference and as a fallback for subnormal descriptor
+scales. Generated bounds protect the existing uniqueness check. Solver
+thresholds, bracketing, iteration limits, pitch behavior and the 129-tap filter
+are unchanged.
+
+Four fresh paired full-callback runs of the final implementation measured 3.05%
+median fixture savings in ordinary rubbing and 16.85% in slow Felt. One ordinary
+fixture had a -0.30% median regression; every slow-Felt median improved.
+All 16 production eight-second captures match the validated combined candidate
+byte for byte, and all 32 callback fingerprints match. Worst candidate waveform
+RMS error against the analytic control was 2.92e-8% of reference RMS.
+
+Candidate and normal Vessel suites, generated-table checks, counter tests,
+focused ASan/UBSan checks and the full Linux plugin link passed. Windows and
+listening remain unverified. The Gaussian-only and two-table candidates remain
+offline after weaker/mixed gains.
+
+See [the fast-friction report](vessel_fast_friction_validation.md) and
+[machine-readable results](vessel_fast_friction_results.json).
