@@ -35,6 +35,8 @@ public:
     void midpoint(double angleIncrement, ModalVector& tangent, ModalVector& inward,
                   bool includeNormal = true) noexcept;
     void finish() noexcept;
+    // Configuration-only footprint lookup, independent of pitch and angle.
+    double patchFactor(std::size_t pair, int order, double width) const noexcept;
 private:
     std::size_t pairs_ = 0;
     unsigned ticks_ = 0;
@@ -44,6 +46,8 @@ private:
     ModalVector tangentGains_ {};
     double cachedIncrement_ = 0.0;
     bool incrementCached_ = false;
+    std::array<double, maxPairs> patches_ {};
+    double cachedWidth_ = -1.0;
     void rotate() noexcept;
 };
 

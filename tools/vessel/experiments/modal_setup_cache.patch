@@ -1,0 +1,80 @@
+--- a/src/vessel/ModalBank.hpp
++++ b/src/vessel/ModalBank.hpp
+@@ -59,6 +59,13 @@
+     std::size_t count_ = 0;
+     double h_ = 1.0 / 192000.0;
+     double additionalSigma_ = 0.0;
++    // Keep setup-only storage after the audio-loop arrays. Keys are committed
++    // pair fields, decay, imperfection and timestep; rejection publishes none.
++    struct SetupTerms {
++        double split = 1.0, targetSigma = 0.0, radius = 0.0, decayNumerator = 0.0;
++    };
++    std::array<SetupTerms, maxModes> setup_ {};
++    double imperfection_ = 0.0, decay_ = 0.0;
+ };
+ 
+ // Small numerical loops are visible to the strict-math audio compiler;
+--- a/src/vessel/ModalBank.cpp
++++ b/src/vessel/ModalBank.cpp
+@@ -22,6 +22,7 @@
+     if (count_ && count_ != bowl.pairCount * 2) return false;
+     const double h = 1.0 / rate;
+     std::array<ModeCoefficients, maxModes> next {};
++    std::array<SetupTerms, maxModes> nextSetup {};
+     int previousOrder = 1;
+     for (std::size_t n = 0; n < bowl.pairCount; ++n) {
+         const auto& p = bowl.pairs[n];
+@@ -35,28 +36,47 @@
+         previousOrder = p.order;
+         for (std::size_t side = 0; side < 2; ++side) {
+             auto& c = next[2*n + side];
+-            const double split = std::exp2((side ? 1.0 : -1.0)*imperfection*p.splitCents/2400.0);
++            const auto j = 2*n + side;
++            const auto& old = coefficients_[j];
++            auto& terms = nextSetup[j];
++            terms.split = count_ && imperfection == imperfection_ && p.splitCents == pairs_[n].splitCents
++                ? setup_[j].split : std::exp2((side ? 1.0 : -1.0)*imperfection*p.splitCents/2400.0);
++            const double split = terms.split;
+             c.frequency = frequency*p.ratio*split;
+-            c.t60 = std::max(0.1, std::min(120.0, (side ? p.t60B : p.t60A)*decay));
++            const double descriptorT60 = side ? p.t60B : p.t60A;
++            c.t60 = count_ && decay == decay_ && descriptorT60 == (side ? pairs_[n].t60B : pairs_[n].t60A)
++                ? old.t60 : std::max(0.1, std::min(120.0, descriptorT60*decay));
+             c.mass = side ? p.massB : p.massA;
+             if (!positive(c.frequency) || c.frequency >= 0.40*rate) return false;
+-            const double targetSigma = log1000/c.t60;
+-            const double r = std::exp(-targetSigma*h);
++            if (count_ && c.t60 == old.t60 && h == h_) {
++                terms.targetSigma = setup_[j].targetSigma;
++                terms.radius = setup_[j].radius;
++                terms.decayNumerator = setup_[j].decayNumerator;
++            } else {
++                terms.targetSigma = log1000/c.t60;
++                terms.radius = std::exp(-terms.targetSigma*h);
++                terms.decayNumerator = -std::expm1(-2.0*terms.targetSigma*h);
++            }
++            const double targetSigma = terms.targetSigma;
++            const double r = terms.radius;
+             const double theta = 2.0*pi*c.frequency*h;
+             const double denominator = 1.0 + 2.0*r*std::cos(theta) + r*r;
+-            c.sigma = (2.0/h)*(-std::expm1(-2.0*targetSigma*h))/denominator;
++            c.sigma = (2.0/h)*terms.decayNumerator/denominator;
+             const double nu = (4.0/h)*r*std::sin(theta)/denominator;
+             c.omega = std::hypot(c.sigma, nu);
+             c.a = 0.5*h*c.omega;
+             c.inverseD = 1.0/(1.0 + h*c.sigma + c.a*c.a);
+             c.admittanceWeight = 0.5*h*c.inverseD;
+-            c.inverseRootMass = 1.0/std::sqrt(c.mass);
++            c.inverseRootMass = count_ && c.mass == old.mass ? old.inverseRootMass : 1.0/std::sqrt(c.mass);
+             const double omega0 = std::hypot(2.0*pi*c.frequency, targetSigma);
+             c.staticComplianceRatio = (omega0/c.omega)*(omega0/c.omega);
+             if (!positive(c.omega) || !positive(c.inverseD) || !std::isfinite(c.sigma)) return false;
+         }
+     }
+     coefficients_ = next;
++    setup_ = nextSetup;
++    imperfection_ = imperfection;
++    decay_ = decay;
+     for (std::size_t j = 0; j < bowl.pairCount*2; ++j) {
+         hotA_[j] = next[j].a;
+         hotInverseD_[j] = next[j].inverseD;

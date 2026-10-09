@@ -66,8 +66,7 @@ bool VesselEngine::prepareConfiguration(const BowlDescriptor& bowl, const Mallet
     double maxYtt = 0.0;
     for (std::size_t n = 0; n < bowl.pairCount; ++n) {
         const double order = bowl.pairs[n].order;
-        const double half = 0.5*order*mallet.patchWidth;
-        const double patch = std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
+        const double patch = orbit_.patchFactor(n, bowl.pairs[n].order, mallet.patchWidth);
         const auto& a = next.coefficients(2*n);
         const auto& b = next.coefficients(2*n+1);
         maxYtt += patch*patch/(order*order)*std::max(a.admittanceWeight/a.mass, b.admittanceWeight/b.mass);
@@ -79,6 +78,12 @@ bool VesselEngine::prepareConfiguration(const BowlDescriptor& bowl, const Mallet
 }
 void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
     const EngineSettings& settings, const PreparedConfiguration& prepared) noexcept {
+    // Pickup/latched strike ports depend on geometry and mass, not pitch or
+    // damping. Conservative descriptor equality also covers orientation and
+    // radiation changes during bowl morphs. Keep orbit resynchronization below.
+    const bool reusePorts = fastObserverConfiguration_ && bank_.size() && sameBowl(bowl, descriptor_);
+    const bool reuseObservers = reusePorts && settings.observerCenter == settings_.observerCenter
+        && settings.observerSeparation == settings_.observerSeparation;
     if (!prepared.reuseMechanics) {
         bank_ = prepared.bank;
         frictionCertificate_ = prepared.certificate;
@@ -90,11 +95,14 @@ void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDe
     orbit_.configure(bowl, bank_, mallet.patchWidth, rotationAngle_);
     settings_ = settings;
     mallet_ = mallet;
-    observerL_ = bank_.observer(settings.observerCenter-0.5*settings.observerSeparation);
-    observerR_ = bank_.observer(settings.observerCenter+0.5*settings.observerSeparation);
+    if (!reuseObservers) {
+        observerL_ = bank_.observer(settings.observerCenter-0.5*settings.observerSeparation);
+        observerR_ = bank_.observer(settings.observerCenter+0.5*settings.observerSeparation);
+    }
     // Mass changes alter the bowl port, while angle/footprint/contact potential
     // belong to the latched active striker. Compression remains continuous.
-    if (active_ && !prepared.reuseMechanics) strikePort_ = bank_.radialPort(activeAngle_, activeMallet_.patchWidth, true);
+    if (active_ && !prepared.reuseMechanics && !reusePorts)
+        strikePort_ = bank_.radialPort(activeAngle_, activeMallet_.patchWidth, true);
 }
 void VesselEngine::reset() noexcept {
     bank_.clear();

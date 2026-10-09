@@ -75,7 +75,7 @@ public:
     void setAuditEnabled(bool enabled) noexcept { audit_ = enabled; }
     // Oracle switch for offline equivalence checks; copied with the engine.
     void setFastTailEnabled(bool enabled) noexcept { fastTail_ = enabled; }
-    // Offline oracle switch: force full preparation for observer-only changes.
+    // Offline oracle switch: force full observer preparation and port rebuilds.
     void setObserverFastPathEnabled(bool enabled) noexcept { fastObserverConfiguration_ = enabled; }
     bool strike(double normalizedVelocity, double velocityScale = 1.0) noexcept;
     bool setRotation(bool engaged, double revolutionsPerSecond, double pressure) noexcept;

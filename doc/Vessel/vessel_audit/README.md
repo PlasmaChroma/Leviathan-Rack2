@@ -24,9 +24,10 @@ Reinspection of the current source gives this order:
 | --- | --- | --- |
 | Deferred | Matched-pole configuration transform | `ModalBank::configure` still computes the original exp/expm1/trig/hypot mapping. First measure full pitch-modulation callbacks and configuration cost; then compare the algebraic candidate independently. Target configuration spikes, not steady rubbing. |
 | Completed | Friction-law work and arithmetic | Profiling led to retained per-solve reciprocals and cubic tanh. Final full-callback medians improved 3.05% for ordinary rubbing and 16.85% for slow Felt, with one small ordinary regression. |
-| Deferred with retuning | Cache pitch-independent physical terms | Pitch-only updates still recompute split factors, masses, decay terms and contact footprint terms. Isolate this from the transform experiment; require correct invalidation for material/mallet morphs, decay, imperfection and rate changes. Preserve orbit resynchronization. |
+| Partially retained | Cache pitch-independent physical terms | Contact footprint and existing pickup/strike-vector reuse are retained. The larger split/decay/mass cache was exact but showed weaker/mixed whole-stream results and remains offline. Modal transforms and orbit synchronization are unchanged. |
 | Not retained | Gaussian Hermite lookup | Tested independently and with tanh; gains were weaker/mixed. Gaussian remains analytic. See the fast-friction report before repeating these trials. |
 | Not retained | Exact control/meter math caches | Byte-identical 256,000-frame trace, but final paired active-callback medians were +0.07% standalone and -0.23% with V.Tune. Patch remains offline; see [the control-math experiment](../vessel-performance.md#control-math-cache-experiment-2026-10-09-not-retained). |
+| Completed | Reuse settled contact geometry and pickup/strike ports | Exact footprint caching and reuse of existing vectors cut configuration-bearing callbacks by 23.28% and instrumented pitch-modulation streams by 3.40% median. Added 208 bytes per dual adapter. Larger modal caches remain offline; see [geometry reuse](../vessel-performance.md#retained-geometry-reuse-during-retuning-2026-10-09). |
 
 The matched-pole standalone check was rerun locally: 20,020 configurations,
 maximum relative omega/sigma difference 8.23e-16 and maximum absolute inverseD

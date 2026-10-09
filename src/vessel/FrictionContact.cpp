@@ -73,24 +73,31 @@ FrictionSolution solveFriction(double delta, double Y, double load,
     return result;
 }
 
+double ContactOrbit::patchFactor(std::size_t pair, int order, double width) const noexcept {
+    if (pair < pairs_ && orders_[pair] == order && cachedWidth_ == width) return patches_[pair];
+    const double half = 0.5*order*width;
+    return std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
+}
+
 void ContactOrbit::configure(const BowlDescriptor& bowl, const ModalBank& bank,
                              double width, double angle) noexcept {
-    pairs_ = bowl.pairCount;
     ticks_ = 0;
     incrementCached_ = false;
-    for (std::size_t n = 0; n < pairs_; ++n) {
+    for (std::size_t n = 0; n < bowl.pairCount; ++n) {
         const auto& p = bowl.pairs[n];
+        const double patch = patchFactor(n, p.order, width);
+        patches_[n] = patch;
         orders_[n] = p.order;
         const double beta = p.order*(angle-p.orientation);
         cosine_[n] = std::cos(beta);
         sine_[n] = std::sin(beta);
-        const double half = 0.5*p.order*width;
-        const double patch = std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
         gains_[2*n] = patch*bank.coefficients(2*n).inverseRootMass;
         gains_[2*n+1] = patch*bank.coefficients(2*n+1).inverseRootMass;
         tangentGains_[2*n] = gains_[2*n]/p.order;
         tangentGains_[2*n+1] = gains_[2*n+1]/p.order;
     }
+    pairs_ = bowl.pairCount;
+    cachedWidth_ = width;
 }
 void ContactOrbit::rotate() noexcept {
     for (std::size_t n = 0; n < pairs_; ++n) {

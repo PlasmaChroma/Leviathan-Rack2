@@ -983,3 +983,85 @@ useful module optimization. Do not approximate initialization-only math or
 already-cached values. Meter `log1p` remains analytic at roughly 200 Hz; it was
 not separately benchmarked. Gaussian and coupled-strike candidates retain their
 previous mixed/rejected status, and modal retuning remains deferred.
+
+## Retained geometry reuse during retuning (2026-10-09)
+
+This pass optimizes configuration dependencies without changing the retuning
+equations, timing, or orbit resynchronization. Two changes are now in production:
+
+- `ContactOrbit` retains each mode pair's contact-footprint factor, keyed by
+  mode order and mallet patch width. Both orbit setup and the configuration
+  uniqueness certificate reuse it. Width/order changes still evaluate the
+  original formula, including intermediate mallet-morph values.
+- `VesselEngine` reuses existing pickup vectors when the bowl descriptor and
+  observer angles are unchanged, and the active striker's latched port when
+  bowl geometry is unchanged. Pitch, decay and mallet-selection changes do not
+  invalidate these vectors unnecessarily. The conservative bowl comparison
+  includes every physical field; actual bowl changes rebuild them. The existing
+  offline observer-oracle switch also forces port rebuilding for comparison.
+
+Added persistent memory is **208 bytes per dual-bowl adapter** on this Linux
+x86-64 build (54,304 to 54,512 bytes), with no new allocations. Modal-bank storage
+and coefficient equations remain unchanged. Angle rotations and normalization
+phase are still resynchronized exactly as before.
+
+### Final measurements
+
+Four alternating-order process pairs, CPU 0, GCC 12.3, `-O3 -march=nehalem`,
+strict Vessel math, Intel Core Ultra 7 165H/Linux. No builds ran during timings.
+Each pitch run covers both bowls, Balanced/Reference, zero/33-Hz separation,
+and tail/rubbing: 16 fixtures, each with six repetitions and two identical lanes.
+V/oct alternates +/-0.1 octaves at the existing approximately 1-kHz control ticks;
+the existing pitch smoothing remains active.
+
+| Workload | Median fixture saving | Fixture median range |
+| --- | ---: | ---: |
+| Configuration-bearing callback during V/oct changes | **23.28%** | +16.60% to +27.88% |
+| Whole instrumented stream during V/oct changes | **3.40%** | -0.01% to +6.04% |
+| Steady-pitch active callback, standalone | 0.03% | -1.26% to +3.01% |
+| Steady-pitch active callback, static V.Tune | 0.66% | -3.75% to +4.18% |
+
+Configuration timing excludes control writes. Instrumented stream timing also
+includes the deterministic control driver, per-update timers, output checksum,
+and fault checks. Steady-active timing uses the existing process-only benchmark.
+These are Linux headless measurements, not a measured Windows/Rack CPU-meter
+reduction. The stable-pitch results are mixed and near neutral overall; the
+demonstrated benefit is configuration cost during modulation.
+
+### Correctness and discarded variants
+
+- The existing 256,000-frame capture matched the preserved baseline byte for
+  byte across two audio outputs and seven control/meter values per frame.
+  This includes moving pitch/separation/sustain, strikes, resets and four host
+  rates; no faults occurred. All pitch-run checksums and all 32 steady callback
+  fingerprints matched across every timing pair.
+- 144 cached/full observer trajectories and 35 dependency/rejection checks
+  passed, including every physical descriptor field, latched strikes, changed
+  angles and adjacent-rate band boundaries. The fresh-orbit test adds 1,000
+  exact comparisons across changing width, order, mass, angle and topology.
+- `make test-vessel` and the full Linux plugin link passed. The final focused
+  geometry test also passed after removing the unused modal-cache test from the
+  normal suite. Windows builds and live Rack measurement remain unverified.
+
+A larger modal cache for split factors, decay exponentials and inverse-root
+masses was tested but **not retained**. Its first layout saved 4.81% on
+configuration callbacks but regressed whole streams by 2.52%. Moving setup
+storage after hot arrays and combining it with footprint caching gave 11.21%
+configuration savings but only 0.49% stream savings. Footprint caching alone
+gave 3.45%/1.13%. The final footprint-plus-port-reuse choice gives the stronger
+result above with much less storage. These separately run variants are useful
+selection evidence, not additive cost attributions.
+
+The modal candidate passed 11,563 exact fresh-bank comparisons and 437
+transactional rejections. Its code and test remain offline in
+`tools/vessel/experiments/modal_setup_cache.patch` and
+`tools/vessel/experiments/modal_setup_cache_spec.cpp`; apply the patch only in a
+scratch checkout. It is not enabled in the normal build.
+
+Reproduce with preserved before/after `build/tools/vessel_benchmark_pitch_module`
+executables and `python3 tools/vessel/benchmark_setup_cache.py BASELINE CANDIDATE
+OUTPUT --cpu 0`. For steady workloads use `benchmark_control_math.py` with the
+before/after active-module benchmark binaries. Baseline commit:
+`9e123ca1b489ab1aa78214d4778941a02d6ebfe5`. Raw captures, executables and CSVs are in
+`build/vessel-dependency-cache/`. The retained variant is `geometry/`, and steady
+checks are in `steady/`. See [all candidate results](vessel_geometry_cache_results.json).

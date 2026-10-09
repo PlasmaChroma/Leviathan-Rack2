@@ -510,6 +510,8 @@ check-vessel-profiles:
 	python3 tools/vessel/generate_profiles.py --check
 build/tests/vessel_observer_configuration_spec: tests/vessel_observer_configuration_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
+build/tests/vessel_setup_cache_spec: tests/vessel_setup_cache_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_strike_gradient_spec: tests/vessel_strike_gradient_spec.cpp tests/vessel_contact_reference.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_engine_spec: tests/vessel_engine_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
@@ -533,7 +535,8 @@ test-vtune-body-map: build/tests/vtune_body_map_core_spec
 build/tests/vessel_module_spec_fir109: VESSEL_MODULE_EXPERIMENT_FLAGS = -DVESSEL_EXPERIMENTAL_FIR109
 build/tests/vessel_module_spec build/tests/vessel_module_spec_fir109: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) $(VESSEL_MODULE_EXPERIMENT_FLAGS) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-test-vessel: build/tests/vessel_observer_configuration_spec build/tests/vessel_strike_gradient_spec build/tests/vessel_passive_tail_spec check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_host_rate_serial_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
+test-vessel: build/tests/vessel_setup_cache_spec build/tests/vessel_observer_configuration_spec build/tests/vessel_strike_gradient_spec build/tests/vessel_passive_tail_spec check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_host_rate_serial_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
+	$(call run_test_bin,build/tests/vessel_setup_cache_spec)
 	$(call run_test_bin,build/tests/vessel_observer_configuration_spec)
 	$(call run_test_bin,build/tests/vessel_strike_gradient_spec)
 	$(call run_test_bin,build/tests/vessel_engine_spec)
@@ -578,6 +581,9 @@ build/tools/vessel_benchmark_active_module build/tools/vessel_benchmark_active_m
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_benchmark_observer_module: tools/vessel/benchmark_observer_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_pitch_module: tools/vessel/benchmark_pitch_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_benchmark_strike_module: tools/vessel/benchmark_strike_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
