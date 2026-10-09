@@ -26,6 +26,7 @@ Reinspection of the current source gives this order:
 | Completed | Friction-law work and arithmetic | Profiling led to retained per-solve reciprocals and cubic tanh. Final full-callback medians improved 3.05% for ordinary rubbing and 16.85% for slow Felt, with one small ordinary regression. |
 | Deferred with retuning | Cache pitch-independent physical terms | Pitch-only updates still recompute split factors, masses, decay terms and contact footprint terms. Isolate this from the transform experiment; require correct invalidation for material/mallet morphs, decay, imperfection and rate changes. Preserve orbit resynchronization. |
 | Not retained | Gaussian Hermite lookup | Tested independently and with tanh; gains were weaker/mixed. Gaussian remains analytic. See the fast-friction report before repeating these trials. |
+| Not retained | Exact control/meter math caches | Byte-identical 256,000-frame trace, but final paired active-callback medians were +0.07% standalone and -0.23% with V.Tune. Patch remains offline; see [the control-math experiment](../vessel-performance.md#control-math-cache-experiment-2026-10-09-not-retained). |
 
 The matched-pole standalone check was rerun locally: 20,020 configurations,
 maximum relative omega/sigma difference 8.23e-16 and maximum absolute inverseD

@@ -571,6 +571,9 @@ build/tools/vessel_benchmark_passive_module: tools/vessel/benchmark_passive_modu
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_benchmark_active_module_serial: VESSEL_BENCH_OPT_FLAGS += -DVESSEL_SERIAL_FIR
+build/tools/vessel_capture_control_math: tools/vessel/capture_control_math.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_benchmark_active_module build/tools/vessel_benchmark_active_module_serial: tools/vessel/benchmark_active_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

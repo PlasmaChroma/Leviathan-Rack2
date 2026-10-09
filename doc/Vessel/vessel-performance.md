@@ -929,3 +929,57 @@ offline after weaker/mixed gains.
 
 See [the fast-friction report](vessel_fast_friction_validation.md) and
 [machine-readable results](vessel_fast_friction_results.json).
+
+## Control-math cache experiment (2026-10-09; not retained)
+
+Auditing remaining exact math found repeated control-rate `expm1` (pitch and
+separation smoothing), `exp2` (pitch and sustain), and visual-rate `expm1`
+(meter smoothing). A one-entry cache trial removed repeated evaluations while
+retaining each original expression, including float `exp2` for sustain and
+double `exp2` for pitch. Elapsed-time keys handled strike-shortened intervals
+and changing sample rates. Initialization and already-cached math were left alone.
+
+The final candidate did **not** establish a useful active-callback improvement:
+
+| Full callback, 16 fixtures each | Median fixture saving | Fixture median range |
+| --- | ---: | ---: |
+| Standalone | 0.07% | -4.03% to +2.31% |
+| Static V.Tune connected | -0.23% | -6.13% to +1.34% |
+
+Four alternating-order pairs per mode, CPU 0, GCC 12.3 `-O3 -march=nehalem`,
+strict Vessel floating-point flags, Linux on Intel Core Ultra 7 165H. No builds
+ran during timing. Positive values mean lower callback time. These mixed small
+results do not establish a reliable speedup or a portable regression. Earlier
+exploratory timing was more favorable; only the final typed-cache implementation
+is represented in [the retained results](vessel_control_math_results.json).
+
+Correctness was stronger than the timing result: all 32 callback fingerprints
+matched. An additional 256,000-frame capture matched byte for byte across nine
+audio/control/meter float values per frame (2,304,000 values, zero measured
+difference). It exercised both bowls, Balanced/Reference quality, four changing
+host rates (44.1/48/96/32 kHz), moving pitch/separation/sustain, irregular control
+intervals from strikes, release and runtime resets. No faults occurred in that
+final corpus. An initial roughly 300-Hz full-velocity strike storm faulted in
+the unchanged baseline; the final trace uses velocity 0.2 and one strike every
+1,373 frames. This experiment does not resolve the baseline stress fault.
+
+The candidate passed `test-vessel` and full Linux plugin linking. Production
+was then restored and revalidated. No Windows build or listening trial was run;
+the exact comparison supports no sound change in the exercised cases.
+
+Reproduction: preserve `build/tools/vessel_benchmark_active_module` before and
+after applying `tools/vessel/experiments/control_math_cache.patch` **in a scratch
+checkout** based on `12d4c9a20ab03e99b3f342c92e3ea03a08e656b7`. Run
+`python3 tools/vessel/benchmark_control_math.py BASELINE CANDIDATE OUTPUT --cpu 0`.
+Build `build/tools/vessel_capture_control_math` on each side, pass an output
+filename to each executable, and compare the resulting binary files. The trace
+format is nine native float32 values per frame in the order listed in its source.
+Raw CSVs, preserved executables, and captures from this run are in
+`build/vessel-control-math/`; final timing is under `final/`.
+
+Decision: keep the patch offline, with no production caching or approximation
+from this trial. A lower-cost isolated function is insufficient evidence of a
+useful module optimization. Do not approximate initialization-only math or
+already-cached values. Meter `log1p` remains analytic at roughly 200 Hz; it was
+not separately benchmarked. Gaussian and coupled-strike candidates retain their
+previous mixed/rejected status, and modal retuning remains deferred.
