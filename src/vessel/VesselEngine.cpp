@@ -217,7 +217,15 @@ EngineFrame VesselEngine::step() noexcept {
     previousFriction_ = frame.frictionForce;
     if (audit_ && settings_.prescribedRadialLoad && !frame.fault)
         radialWork = h*load*(bank_.midpointVelocity(normal, free)+bank_.admittance(normal, force));
-    const auto modalAudit = bank_.commit(free, force, audit_);
+    ModalStepAudit modalAudit;
+    bool finiteState;
+    if (audit_) {
+        modalAudit = bank_.commit(free, force, true);
+        finiteState = bank_.finite();
+    } else {
+        finiteState = bank_.commitObserved(free, force, observerL_, observerR_,
+            frame.leftVelocity, frame.rightVelocity);
+    }
     if (orbitActive) {
         orbit_.finish();
         // Supported speed/rate bounds advance less than one turn per step.
@@ -249,13 +257,14 @@ EngineFrame VesselEngine::step() noexcept {
             frame.fault = true;
         }
     }
-    if (!bank_.finite() || !std::isfinite(compression_) || !std::isfinite(strikerVelocity_)) {
+    if (!finiteState || !std::isfinite(compression_) || !std::isfinite(strikerVelocity_)) {
         bank_.clear();
         active_ = false;
         compression_ = 0.0;
         strikerVelocity_ = 0.0;
         ++ledger_.nonfiniteResets;
         frame.fault = true;
+        frame.leftVelocity = frame.rightVelocity = 0.0;
         return frame;
     }
     if (audit_) {
@@ -270,8 +279,10 @@ EngineFrame VesselEngine::step() noexcept {
             +frictionLoss-handWork-radialWork;
         ledger_.maxStepResidual = std::max(ledger_.maxStepResidual, std::abs(frame.stepEnergyResidual));
     }
-    frame.leftVelocity = bank_.velocity(observerL_);
-    frame.rightVelocity = bank_.velocity(observerR_);
+    if (audit_) {
+        frame.leftVelocity = bank_.velocity(observerL_);
+        frame.rightVelocity = bank_.velocity(observerR_);
+    }
     if (!std::isfinite(frame.leftVelocity) || !std::isfinite(frame.rightVelocity)) {
         bank_.clear();
         active_ = false;

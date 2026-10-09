@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <random>
 #include <stdexcept>
 using namespace vessel;
 void require(bool okay,const char* message) {if(!okay)throw std::runtime_error(message);}
@@ -35,4 +36,43 @@ void curves() {
     }
     std::cout<<"[PASS] Dense force/derivative, monotonic slope certificate, dissipation and rounded lookup boundaries; max errors "<<forceError<<" N / "<<derivativeError<<" N/(m/s)\n";
 }
-int main(){try{curves();std::cout<<"Vessel friction approximation screen: 1 group PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}
+void observedCommit() {
+    std::mt19937 random(713);
+    std::uniform_real_distribution<double> value(-.1, .1);
+    for (const auto& bowl : seedBowls) for (double rate : {48000., 96000., 192000.}) {
+        ModalBank reference;
+        require(reference.configure(bowl, 220., 1., 1., rate), "modal fixture configuration");
+        reference.setAdditionalDamping(.125);
+        for (std::size_t j=0; j<reference.size(); ++j)
+            require(reference.setState(j,value(random),value(random)), "modal fixture state");
+        ModalBank candidate = reference;
+        const auto left = reference.observer(.2), right = reference.observer(.7);
+        for (int step=0; step<2000; ++step) {
+            const auto free = reference.freeMidpoint();
+            ModalVector force {};
+            for (std::size_t j=0; j<reference.size(); ++j) force[j] = value(random);
+            reference.commit(free,force);
+            double l=0, r=0;
+            require(candidate.commitObserved(free,force,left,right,l,r) == reference.finite(),
+                "fused commit validity mismatch");
+            require(l == reference.velocity(left) && r == reference.velocity(right),
+                "fused commit changes pickup arithmetic");
+            for (std::size_t j=0; j<reference.size(); ++j)
+                require(candidate.state(j).x == reference.state(j).x
+                    && candidate.state(j).y == reference.state(j).y,
+                    "fused commit changes modal state arithmetic");
+        }
+        for (double invalid : {std::numeric_limits<double>::infinity(),
+                -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+            for (std::size_t j=0; j<reference.size(); ++j) {
+                candidate = reference;
+                ModalVector force {}; force[j] = invalid;
+                double l=0,r=0;
+                require(!candidate.commitObserved(reference.freeMidpoint(),force,left,right,l,r),
+                    "fused commit misses nonfinite state");
+            }
+        }
+    }
+    std::cout << "[PASS] Fused active commit: exact states/pickups and nonfinite detection in every mode\n";
+}
+int main(){try{curves();observedCommit();std::cout<<"Vessel fast paths: 2 groups PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}

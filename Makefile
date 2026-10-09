@@ -556,6 +556,9 @@ build/tools/vessel_benchmark_passive_tail: tools/vessel/benchmark_passive_tail.c
 build/tools/vessel_benchmark_passive_module: tools/vessel/benchmark_passive_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_active_module: tools/vessel/benchmark_active_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_characterize: tools/vessel/characterize.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@

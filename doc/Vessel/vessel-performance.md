@@ -722,3 +722,57 @@ build/tools/vessel_benchmark_passive_module > build/vessel-passive-tail-integrat
 environment/source hashes, sanitizer output and the complete validation logs.
 The earlier offline prototype remains available for historical comparison;
 its paired reference explicitly disables the now-integrated composition path.
+
+## Active-contact modal fusion and SSE2 (2026-10-08)
+
+The non-audited active-contact path now combines modal commit, finite-state
+validation and both pickup projections. On SSE2 targets it updates two modes
+at a time in double precision. Each mode retains the scalar expression order,
+and each pickup sums modes in the original order. Other targets use the fused
+scalar loop. Audit calculations retain the existing reference path. Solver
+tolerances, sample rates, friction functions, control cadence and passive-tail
+composition are unchanged.
+
+Native Windows measurements: Intel Core i9-9900K, MSYS2 MinGW GCC 16.1.0,
+`-O3 -march=nehalem -fno-fast-math -fno-unsafe-math-optimizations`, Rack 2 Pro
+runtime, 48 kHz host. The baseline was built from revision
+`26bb55bbec4c49a6f526ef19415e746cb83cb282` before the modal edits. Retained
+executables were run serially, with no concurrent builds/tests: baseline,
+candidate, candidate, baseline, baseline, candidate (a preliminary scalar-only
+experiment also ran before the first SIMD candidate).
+
+`tools/vessel/benchmark_active_module.cpp` measures the complete headless
+`Vessel::process()` callback with debug timing disabled. Each case has three
+independently initialized repetitions with one second of warmup and one second
+of measurement. Below are medians of the three executable-run means. Rub speed
+is 0.2 rev/s, pressure 2.5 N, pitch C4. Coupled cases add a strike every 250 ms.
+
+| Crystal/Wood case | Internal rate | Before us/frame | After us/frame | Saving |
+| :--- | ---: | ---: | ---: | ---: |
+| Single, rub | 96 kHz | 0.6628 | 0.6325 | 4.58% |
+| Binaural 33 Hz, rub | 96 kHz | 1.2105 | 1.1530 | 4.75% |
+| Single, rub + strikes | 96 kHz | 0.6643 | 0.6397 | 3.71% |
+| Binaural 33 Hz, rub + strikes | 96 kHz | 1.2213 | 1.1680 | 4.37% |
+| Single, rub | 192 kHz | 1.3471 | 1.2799 | 4.98% |
+| Binaural 33 Hz, rub | 192 kHz | 2.4487 | 2.3787 | 2.86% |
+| Single, rub + strikes | 192 kHz | 1.3354 | 1.3200 | 1.16% |
+| Binaural 33 Hz, rub + strikes | 192 kHz | 2.4445 | 2.3304 | 4.67% |
+
+Eight matching Metal/Suede cases measured 0.43–6.22% savings. These small
+unpinned wall-clock differences are subject to scheduling and frequency noise;
+the smallest differences do not establish a reliable gain. They are not live
+Rack CPU-meter measurements or worst-case callback guarantees.
+
+All 16 cases across all six runs have identical output/energy fingerprints in
+separate untimed traces covering Rub release, strike re-entry and pitch changes.
+The fast-path regression compares every modal state and pickup exactly against
+the scalar commit over 2,000 randomized-force steps per bowl/rate, with extra
+damping, and injects NaN and both infinities into every mode to verify detection.
+Raw CSVs and the summary are in `test-results/vessel-active-*.csv` locally.
+The native Windows `plugin.dll` build and complete `test-vessel` suite passed,
+including the new exact-state and nonfinite regression. Live Rack audition and
+CPU-meter comparison were not performed in this pass.
+
+Build the reusable benchmark with
+`make -j10 build/tools/vessel_benchmark_active_module`. On Windows run its `.exe`
+with the installed Rack runtime directory first on PATH, as for Rack-linked tests.
