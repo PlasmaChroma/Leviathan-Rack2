@@ -1,4 +1,5 @@
 #include "StrikeContact.hpp"
+#include "StrikeGradient.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -37,6 +38,8 @@ StrikeSolution solveStrike(double d0, double velocity, double freeVelocity,
         || !std::isfinite(Yss) || Yss < 0.0 || !std::isfinite(h) || h <= 0.0) return result;
     const double A = Yss + h/(2.0*m.mass);
     const double freeCompression = d0 + h*(velocity-freeVelocity);
+    const StrikeGradient gradient(d0, m.stiffness);
+    StrikeGradientValue elastic;
     auto trial = [&](double force) {
         StrikeSolution s;
         s.force = force;
@@ -44,7 +47,8 @@ StrikeSolution solveStrike(double d0, double velocity, double freeVelocity,
         s.compressionVelocity = (s.compression-d0)/h;
         s.dampingForce = std::max(d0, s.compression) > 0.0
             ? m.loadingDamping*std::max(s.compressionVelocity, 0.0) : 0.0;
-        s.residual = force-strikeDiscreteGradient(d0, s.compression, m.stiffness)-s.dampingForce;
+        elastic = gradient.evaluate(s.compression);
+        s.residual = force-elastic.force-s.dampingForce;
         return s;
     };
     const auto atZero = trial(0.0);
@@ -66,15 +70,7 @@ StrikeSolution solveStrike(double d0, double velocity, double freeVelocity,
         else lo = force;
         double next = 0.5*(lo+hi);
         if (iteration < 16) {
-            const double delta = result.compression-d0;
-            double elasticDerivative;
-            if (std::abs(delta) < 1e-6*std::max(1e-12, std::max(d0, result.compression)))
-                elasticDerivative = 0.75*m.stiffness*std::sqrt(std::max(0.0, 0.5*(d0+result.compression)));
-            else {
-                const double instantaneous = result.compression > 0.0
-                    ? m.stiffness*result.compression*std::sqrt(result.compression) : 0.0;
-                elasticDerivative = (instantaneous-strikeDiscreteGradient(d0, result.compression, m.stiffness))/delta;
-            }
+            const double elasticDerivative = gradient.derivative(result.compression, elastic);
             const double dampingDerivative = result.compression > d0 ? m.loadingDamping/h : 0.0;
             const double derivative = 1.0+h*A*(std::max(0.0, elasticDerivative)+dampingDerivative);
             const double candidate = force-result.residual/derivative;

@@ -5,6 +5,27 @@
 #include <cmath>
 
 namespace vessel {
+namespace {
+// Compare physical fields explicitly: descriptors contain padding and metadata
+// pointers, so bytewise equality is neither necessary nor safe for this cache.
+bool sameBowl(const BowlDescriptor& a, const BowlDescriptor& b) noexcept {
+    if (a.rimRadius != b.rimRadius || a.pairCount != b.pairCount) return false;
+    for (std::size_t i=0; i<a.pairCount; ++i) {
+        const auto& x = a.pairs[i]; const auto& y = b.pairs[i];
+        if (x.order != y.order || x.ratio != y.ratio || x.splitCents != y.splitCents
+            || x.orientation != y.orientation || x.massA != y.massA || x.massB != y.massB
+            || x.t60A != y.t60A || x.t60B != y.t60B
+            || x.radiationA != y.radiationA || x.radiationB != y.radiationB) return false;
+    }
+    return true;
+}
+bool sameMallet(const MalletDescriptor& a, const MalletDescriptor& b) noexcept {
+    return a.mass == b.mass && a.stiffness == b.stiffness && a.exponent == b.exponent
+        && a.loadingDamping == b.loadingDamping && a.patchWidth == b.patchWidth
+        && a.muS == b.muS && a.muK == b.muK && a.weakeningVelocity == b.weakeningVelocity
+        && a.regularizationVelocity == b.regularizationVelocity;
+}
+}
 
 VesselEngine::VesselEngine() {
     configure(seedBowls[0], seedMallets[1], EngineSettings{}, 192000.0);
@@ -18,11 +39,25 @@ bool VesselEngine::configure(const BowlDescriptor& bowl, const MalletDescriptor&
 }
 bool VesselEngine::prepareConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
     const EngineSettings& settings, double rate, PreparedConfiguration& prepared) const noexcept {
+    prepared.reuseMechanics = false;
     if (!validMallet(mallet) || !std::isfinite(settings.strikeAngle)
         || !std::isfinite(settings.observerCenter) || !std::isfinite(settings.observerSeparation)
         || settings.observerSeparation < 0.0 || settings.observerSeparation > pi
         || settings.frequency < 20.0 || settings.frequency > 2000.0
         || settings.decayMultiplier < 0.25 || settings.decayMultiplier > 4.0) return false;
+    if (fastObserverConfiguration_ && bank_.size() && rate >= 32000.0 && rate <= 4000000.0
+        && bank_.timeStep() == 1.0/rate
+        && settings.frequency == settings_.frequency && settings.decayMultiplier == settings_.decayMultiplier
+        && settings.imperfection == settings_.imperfection && settings.strikeAngle == settings_.strikeAngle
+        && settings.prescribedRadialLoad == settings_.prescribedRadialLoad
+        && sameBowl(bowl,descriptor_) && sameMallet(mallet,mallet_)) {
+        // Coefficients depend on the rounded timestep, but the strict modal
+        // band limit depends on rate itself. Adjacent rates can share a timestep.
+        for (std::size_t j=0; j<bank_.size(); ++j)
+            if (bank_.coefficients(j).frequency >= .40*rate) return false;
+        prepared.reuseMechanics = true;
+        return true;
+    }
     auto& next = prepared.bank;
     next = bank_;
     if (!next.configure(bowl, settings.frequency, settings.decayMultiplier, settings.imperfection, rate)) return false;
@@ -44,10 +79,14 @@ bool VesselEngine::prepareConfiguration(const BowlDescriptor& bowl, const Mallet
 }
 void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDescriptor& mallet,
     const EngineSettings& settings, const PreparedConfiguration& prepared) noexcept {
-    bank_ = prepared.bank;
+    if (!prepared.reuseMechanics) {
+        bank_ = prepared.bank;
+        frictionCertificate_ = prepared.certificate;
+        controlAlpha_ = -std::expm1(-bank_.timeStep()/0.01);
+    }
     descriptor_ = bowl;
-    frictionCertificate_ = prepared.certificate;
-    controlAlpha_ = -std::expm1(-bank_.timeStep()/0.01);
+    // Keep the established orbit resynchronization even on the observer path:
+    // skipping it would change accumulated rotation rounding and tick phase.
     orbit_.configure(bowl, bank_, mallet.patchWidth, rotationAngle_);
     settings_ = settings;
     mallet_ = mallet;
@@ -55,7 +94,7 @@ void VesselEngine::applyConfiguration(const BowlDescriptor& bowl, const MalletDe
     observerR_ = bank_.observer(settings.observerCenter+0.5*settings.observerSeparation);
     // Mass changes alter the bowl port, while angle/footprint/contact potential
     // belong to the latched active striker. Compression remains continuous.
-    if (active_) strikePort_ = bank_.radialPort(activeAngle_, activeMallet_.patchWidth, true);
+    if (active_ && !prepared.reuseMechanics) strikePort_ = bank_.radialPort(activeAngle_, activeMallet_.patchWidth, true);
 }
 void VesselEngine::reset() noexcept {
     bank_.clear();

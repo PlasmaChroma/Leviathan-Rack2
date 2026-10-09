@@ -846,3 +846,22 @@ Windows and live Rack results are pending.
 
 See [the FIR experiment report](vessel_fir_optimization.md) for test bounds,
 measurement limitations, reproduction targets and local evidence.
+
+## Isolated strike and observer configuration (2026-10-09)
+
+Retained a cached, cancellation-free derivative in the isolated strike solver
+and reuse of mechanical coefficients/certificates for observer-only updates.
+The observer path preserves orbit resynchronization and filtered-tail handoff.
+The coupled derivative candidate passed numerical checks but was restored to
+the original solver after inconclusive or regressing callback measurements.
+
+On Linux/Core Ultra 7 165H, isolated solves measured 16.82% faster; continuing
+isolated-contact callbacks improved 4.22–7.35% across 32 fixtures. Width-update
+callbacks measured 32.46–49.89% faster, with exact paired outputs. Static-width
+steady-rubbing measurements did not establish a general speedup. The complete
+Vessel suite, new oracle/cache-key tests, focused ASan/UBSan checks (leak detection
+disabled), and full Linux plugin build passed. Windows and listening remain
+unverified.
+
+See [the strike and observer report](vessel_strike_and_observer_optimization.md)
+for scope, raw evidence locations, the coupled candidate decision and reproduction.
