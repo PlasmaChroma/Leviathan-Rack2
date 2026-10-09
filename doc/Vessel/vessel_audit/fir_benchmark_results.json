@@ -1,0 +1,12 @@
+{
+  "scope":"Standalone streaming FIR; not Vessel callback",
+  "same_filter_max_absolute_output_error":4.4408920985e-16,
+  "same_filter_relative_rms_error_db":-320.69436198,
+  "measurements_ns_per_stereo_output_frame":{
+    "original129_one_accumulator":{"min":39.77632,"median":46.540296,"max":64.22958},
+    "original129_four_accumulators":{"min":33.533596,"median":37.707936,"max":53.193334},
+    "equiripple105_four_accumulators":{"min":27.813094,"median":32.370468,"max":45.274154},
+    "equiripple93_four_accumulators":{"min":23.782464,"median":27.997018,"max":31.006152},
+    "equiripple109_four_accumulators":{"min":28.878602,"median":33.099148,"max":42.896618}
+  }
+}

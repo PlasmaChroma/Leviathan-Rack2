@@ -826,3 +826,23 @@ on PATH. Future investigation should obtain a stable sampled profile of active
 rubbing before investing in more small source-level rearrangements.
 After restoring production DSP, the native Windows `plugin.dll` build and full
 `test-vessel` suite passed; the retained benchmark target also compiled.
+
+
+## Four-accumulator output FIR (2026-10-09)
+
+The SSE2 streaming decimator now uses four independent accumulators with the
+existing 129 coefficients. The original serial SSE2 implementation remains
+available through `VESSEL_SERIAL_FIR` for exact oracle tests and paired callback
+benchmarks. The scalar fallback and mechanical reductions retain their order.
+
+On Linux/Core Ultra 7 165H, the actual decimator measured 13.9–18.1% faster at
+factors 2/4/8. Across six paired whole-module runs per mode, median per-fixture
+savings were 2.01% standalone and 1.27% with a static V.Tune message. One linked
+Metal/Suede fixture regressed 1.21%; small callback differences remain noisy.
+All 32 fixture audio/energy fingerprints matched. The complete Vessel suite,
+strict serial/scalar host-rate checks, ASan/UBSan host-rate checks (leak detection
+disabled for the ptrace environment), and full Linux plugin build passed.
+Windows and live Rack results are pending.
+
+See [the FIR experiment report](vessel_fir_optimization.md) for test bounds,
+measurement limitations, reproduction targets and local evidence.
