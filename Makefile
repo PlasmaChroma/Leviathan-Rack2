@@ -154,7 +154,6 @@ TEST_BINS_NON_RACK := \
 	build/tests/doorstop_contact_helix_compat_spec \
 	build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,) \
-	build/tests/sil_repair_spec \
 	build/tests/sil_limiter_peak_window_spec \
 	build/tests/bulkhead_geometry_spec \
 	build/tests/umi_engine_spec \
@@ -846,7 +845,6 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
 	$(call run_test_bin,build/tests/doorstop_helical_engine_spec)
 	$(call run_rack_test_bin,build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,))
 	$(call run_test_bin,build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,))
-	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/sil_limiter_peak_window_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 	$(call run_test_bin,build/tests/umi_engine_spec)
@@ -1059,9 +1057,6 @@ build/tests/temporaldeck_platter_input_spec: tests/temporaldeck_platter_input_sp
 
 build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.cpp src/TemporalDeckSamplePrep.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
-
-build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) $^ -o $@
 
 build/tests/sil_limiter_peak_window_spec: tests/sil_limiter_peak_window_spec.cpp src/SilLimiterPeakWindow.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@

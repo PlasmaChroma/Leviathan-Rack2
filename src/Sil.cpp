@@ -1,8 +1,6 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
-#include "SilRepairBuffer.hpp"
-#include "SilRepairKernel.hpp"
 #include "SilLimiterPeakWindow.hpp"
 #include "SilSpectrumSnapshot.hpp"
 #include "SpscLatestSnapshot.hpp"
@@ -113,7 +111,6 @@ struct Sil : Module {
 
 	enum ParamId {
 		MASTERING_ENABLED_PARAM,
-		REPAIR_ENABLED_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -135,9 +132,7 @@ struct Sil : Module {
 		GLUE_COMP_LIGHT,
 		STEREO_ENHANCE_LIGHT,
 		SATURATOR_LIGHT,
-		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
-		REPAIR_ENABLED_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -151,7 +146,6 @@ struct Sil : Module {
 
 	ColorScheme colorScheme = SCHEME_DEFAULT;
 	bool masteringEnabled = true;
-	bool repairEnabled = true;
 	float masteringMix = 1.f;
 
 	static constexpr int HISTOGRAM_BINS = 1000;
@@ -219,69 +213,6 @@ struct Sil : Module {
 	std::vector<float> bypassDelayL;
 	std::vector<float> bypassDelayR;
 	int bypassDelayWrite = 0;
-	sil::repair::RepairBuffer repairBuffer;
-	sil::repair::CandidateConfig repairCandidateConfig;
-	int repairLookaheadSamples = 1;
-	float micropeakActivity = 0.f;
-	float micropeakActivityAttackCoeff = 0.f;
-	float micropeakActivityReleaseCoeff = 0.f;
-	int micropeakActivityHoldSamples = 0;
-	float micropeakActivityHoldLevel = 0.f;
-	std::atomic<uint32_t> micropeakRepairCountL {0};
-	std::atomic<uint32_t> micropeakRepairCountR {0};
-	std::atomic<uint32_t> micropeakNearMissCount {0};
-	std::ofstream micropeakDebugFile;
-	std::string micropeakDebugPath;
-	uint64_t micropeakDebugSequence = 0;
-	double micropeakDebugStartSec = 0.0;
-	std::atomic<bool> micropeakDebugActive {false};
-	static constexpr uint32_t kMicropeakDebugQueueCapacity = 1024u;
-	struct MicropeakDebugEvent {
-		char eventType[16];
-		float sampleRate = 0.f;
-		int repairEnabled = 0;
-		int masteringEnabled = 0;
-		int lookaheadSamples = 0;
-		int candidateL = 0;
-		int candidateR = 0;
-		float depthL = 0.f;
-		float depthR = 0.f;
-		float repairedL = 0.f;
-		float repairedR = 0.f;
-		sil::repair::StereoWindows windows;
-		float l_peak = 0.f;
-		float l_near = 0.f;
-		float l_guard = 0.f;
-		float l_localMean = 0.f;
-		float l_neighborDrop = 0.f;
-		float l_isolation = 0.f;
-		float l_neighborRatio = 0.f;
-		float l_neighborShare = 0.f;
-		int l_passPeak = 0;
-		int l_passDrop = 0;
-		int l_passRatio = 0;
-		int l_passShare = 0;
-		int l_passIsolation = 0;
-		int l_localProminent = 0;
-		float r_peak = 0.f;
-		float r_near = 0.f;
-		float r_guard = 0.f;
-		float r_localMean = 0.f;
-		float r_neighborDrop = 0.f;
-		float r_isolation = 0.f;
-		float r_neighborRatio = 0.f;
-		float r_neighborShare = 0.f;
-		int r_passPeak = 0;
-		int r_passDrop = 0;
-		int r_passRatio = 0;
-		int r_passShare = 0;
-		int r_passIsolation = 0;
-		int r_localProminent = 0;
-	};
-	std::array<MicropeakDebugEvent, kMicropeakDebugQueueCapacity> micropeakDebugQueue;
-	std::atomic<uint32_t> micropeakDebugQueueWrite {0u};
-	std::atomic<uint32_t> micropeakDebugQueueRead {0u};
-	std::atomic<uint32_t> micropeakDebugDropped {0u};
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -327,8 +258,6 @@ struct Sil : Module {
 	float stereoSideGainReleaseCoeff = 0.f;
 	float limiterAttackCoeff = 0.f;
 	float limiterReleaseCoeff = 0.f;
-	float limiterRepairAttackCoeff = 0.f;
-	float limiterRepairReleaseCoeff = 0.f;
 	float limiterCeiling = 0.f;
 	float limiterMetricAttackCoeff = 0.f;
 	float limiterMetricReleaseCoeff = 0.f;
@@ -472,23 +401,6 @@ struct Sil : Module {
 		}
 	} saturator;
 
-	struct MicropeakDebugFeatures {
-		float peak = 0.f;
-		float near = 0.f;
-		float guard = 0.f;
-		float localMean = 0.f;
-		float neighborDrop = 0.f;
-		float isolation = 0.f;
-		float neighborRatio = 0.f;
-		float neighborShare = 0.f;
-		bool passPeak = false;
-		bool passDrop = false;
-		bool passRatio = false;
-		bool passShare = false;
-		bool passIsolation = false;
-		bool localProminent = false;
-	};
-
 	static constexpr float kLowBandCutoffHz = 120.f;
 	static constexpr float kLowBandCorrTauSec = 0.100f;
 	static constexpr float kLowBandSideAttackSec = 0.050f;
@@ -496,15 +408,6 @@ struct Sil : Module {
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
 	static constexpr float kAdaptiveSilenceVolts = 0.0012559432f;
-	static constexpr float kMicropeakActivityAttackSec = 0.015f;
-	static constexpr float kMicropeakActivityReleaseSec = 0.120f;
-	static constexpr float kMicropeakActivityHoldSec = 0.120f;
-	static constexpr float kMicropeakActivityHoldBrightness = 0.60f;
-	static constexpr float kMicropeakActivityRepeatBoost = 0.20f;
-	static constexpr float kMicropeakDebugNearPeakVolts = 1.0f;
-	static constexpr float kMicropeakDebugNearDropVolts = 0.20f;
-	static constexpr float kMicropeakDebugNearIsolationRatio = 1.8f;
-	static constexpr int kMicropeakHistorySamples = 2;
 	static constexpr float kMudLowHz = 180.f;
 	static constexpr float kMudHighHz = 520.f;
 	static constexpr float kMudCenterHz = 315.f;
@@ -601,12 +504,9 @@ struct Sil : Module {
 	static constexpr float kStereoSideGainReleaseSec = 1.200f;
 	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
-	static constexpr float kRepairLookaheadSeconds = 0.0005f;
 	static constexpr float kLimiterLookaheadSeconds = 0.0005f;
 	static constexpr float kMasteringCrossfadeSeconds = 0.010f;
 	static constexpr int kMaxLimiterLookaheadSamples = sil::LimiterPeakWindow::kMaximumLookaheadSamples;
-	static constexpr float kLimiterRepairKneeLeadDb = 0.75f;
-	static constexpr float kLimiterRepairKneeDepthDb = 0.20f;
 	static constexpr float kLimiterMetricAttackSec = 0.020f;
 	static constexpr float kLimiterMetricReleaseSec = 0.750f;
 	static constexpr float kLimiterMetricGrSec = 0.120f;
@@ -871,51 +771,24 @@ struct Sil : Module {
 		stereoSideGainReleaseCoeff = std::exp(-1.f / (kStereoSideGainReleaseSec * sr));
 		limiterAttackCoeff = std::exp(-1.f / (0.0005f * sr));
 		limiterReleaseCoeff = std::exp(-1.f / (0.080f * sr));
-		limiterRepairAttackCoeff = std::exp(-1.f / (0.00015f * sr));
-		limiterRepairReleaseCoeff = std::exp(-1.f / (0.120f * sr));
 		limiterCeiling = kAudioFullScaleV * std::pow(10.f, kLimiterCeilingDb / 20.f);
 		limiterMetricAttackCoeff = std::exp(-1.f / (kLimiterMetricAttackSec * sr));
 		limiterMetricReleaseCoeff = std::exp(-1.f / (kLimiterMetricReleaseSec * sr));
 		limiterMetricGrCoeff = std::exp(-1.f / (kLimiterMetricGrSec * sr));
-		micropeakActivityAttackCoeff = std::exp(-1.f / (kMicropeakActivityAttackSec * sr));
-		micropeakActivityReleaseCoeff = std::exp(-1.f / (kMicropeakActivityReleaseSec * sr));
 	}
 
-	int repairLookaheadSamplesForRate(float sampleRate) const {
-		int lookahead = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
-		return clamp(lookahead, 1, kMaxLimiterLookaheadSamples);
-	}
 	int limiterLookaheadSamplesForRate(float sampleRate) const {
 		int lookahead = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kLimiterLookaheadSeconds)));
 		return clamp(lookahead, 1, kMaxLimiterLookaheadSamples);
 	}
 
-	void initializeRepairPathStorage(float sampleRate) {
-		repairBuffer.configure(kMaxLimiterLookaheadSamples, kMicropeakHistorySamples);
-		repairLookaheadSamples = 0;
-		repairBuffer.setLookaheadSamples(0);
-		const int maxBypassBufferLength = (kMaxLimiterLookaheadSamples + kMaxLimiterLookaheadSamples);
-		bypassDelayL.assign(size_t(maxBypassBufferLength), 0.f);
-		bypassDelayR.assign(size_t(maxBypassBufferLength), 0.f);
-		bypassDelayWrite = 0;
-		micropeakActivity = 0.f;
-		micropeakActivityHoldSamples = 0;
-		micropeakActivityHoldLevel = 0.f;
-		(void)sampleRate;
-	}
-
-	void applyRepairLatencyModeNoAlloc(float sampleRate, bool repairMode) {
-		(void)repairMode;
-		const int requestedRepairLatency = repairLookaheadSamplesForRate(sampleRate);
+	void updateLimiterLatencyNoAlloc(float sampleRate) {
 		const int requestedLimiterLookahead = limiterLookaheadSamplesForRate(sampleRate);
-		if (requestedRepairLatency == repairLookaheadSamples
-			&& requestedLimiterLookahead == limiterLookaheadSamples) {
+		if (requestedLimiterLookahead == limiterLookaheadSamples) {
 			return;
 		}
-		repairLookaheadSamples = requestedRepairLatency;
 		limiterLookaheadSamples = requestedLimiterLookahead;
 		limiterLatencySamples = limiterLookaheadSamples;
-		repairBuffer.setLookaheadSamples(repairLookaheadSamples);
 		std::fill(bypassDelayL.begin(), bypassDelayL.end(), 0.f);
 		std::fill(bypassDelayR.begin(), bypassDelayR.end(), 0.f);
 		bypassDelayWrite = 0;
@@ -930,13 +803,6 @@ struct Sil : Module {
 		limiterTruePeakUpsamplerL.reset();
 		limiterTruePeakUpsamplerR.reset();
 		limiterPeakWindow.clear();
-		micropeakActivity = 0.f;
-		micropeakActivityHoldSamples = 0;
-		micropeakActivityHoldLevel = 0.f;
-	}
-
-	bool repairFeatureAvailable() const {
-		return isDragonKingDebugEnabled();
 	}
 
 		void initializeLimiterFastPathStorage() {
@@ -945,6 +811,9 @@ struct Sil : Module {
 			limiterLatencySamples = limiterLookaheadSamples;
 			limiterDelayL.assign(size_t(delayBufferLength), 0.f);
 			limiterDelayR.assign(size_t(delayBufferLength), 0.f);
+		bypassDelayL.assign(size_t(delayBufferLength), 0.f);
+		bypassDelayR.assign(size_t(delayBufferLength), 0.f);
+		bypassDelayWrite = 0;
 		limiterDelayWrite = 0;
 		limiterGain = 1.f;
 		limiterPrevSatL1 = 0.f;
@@ -1120,7 +989,6 @@ struct Sil : Module {
 		debugMetrics.assignInstanceId(gSilDebugInstanceCounter);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
-		configSwitch(REPAIR_ENABLED_PARAM, 0.f, 1.f, 1.f, "Repair", {"Disabled", "Enabled"});
 		configInput(INPUT_L_INPUT, "Left");
 		configInput(INPUT_R_INPUT, "Right");
 		configOutput(OUTPUT_L_OUTPUT, "Left");
@@ -1163,283 +1031,16 @@ struct Sil : Module {
 		stereoEnhance.midEq.setPeaking(initialSampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(initialSampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		initializeLimiterFastPathStorage();
-		initializeRepairPathStorage(initialSampleRate);
-		applyRepairLatencyModeNoAlloc(initialSampleRate, repairEnabled);
+		updateLimiterLatencyNoAlloc(initialSampleRate);
 	}
 
 	~Sil() {
 		teardownTimer.begin(id);
-		stopMicropeakDebugCapture();
 		delete spec.fft;
 	}
 
 	static std::string userDebugRootPath() {
 		return system::join(asset::user(), "Leviathan/Sil");
-	}
-
-	bool isMicropeakDebugCaptureActive() const {
-		return micropeakDebugActive.load(std::memory_order_relaxed);
-	}
-
-	std::string getMicropeakDebugPath() const {
-		return micropeakDebugPath;
-	}
-
-	void startMicropeakDebugCapture() {
-		if (!isDragonKingDebugEnabled()) {
-			return;
-		}
-		if (micropeakDebugActive.load(std::memory_order_relaxed)) {
-			return;
-		}
-
-		system::createDirectories(userDebugRootPath());
-		micropeakDebugPath = system::join(userDebugRootPath(), "micropeak_debug_" + std::to_string(std::time(nullptr)) + ".csv");
-		micropeakDebugFile.open(micropeakDebugPath);
-		if (!micropeakDebugFile.is_open()) {
-			WARN("Sil failed to open micropeak debug CSV: %s", micropeakDebugPath.c_str());
-			micropeakDebugPath.clear();
-			return;
-		}
-
-		micropeakDebugFile << std::setprecision(9);
-		micropeakDebugFile
-			<< "sequence,time_sec,event_type,sample_rate,repair_enabled,mastering_enabled,lookahead_samples,"
-			<< "candidate_l,candidate_r,depth_l,depth_r,repaired_l,repaired_r,"
-			<< "l_prev2,l_prev1,l_center,l_next1,l_next2,"
-			<< "r_prev2,r_prev1,r_center,r_next1,r_next2,"
-			<< "l_peak,l_near,l_guard,l_local_mean,l_neighbor_drop,l_isolation,l_neighbor_ratio,l_neighbor_share,"
-			<< "l_pass_peak,l_pass_drop,l_pass_ratio,l_pass_share,l_pass_isolation,l_local_prominent,"
-			<< "r_peak,r_near,r_guard,r_local_mean,r_neighbor_drop,r_isolation,r_neighbor_ratio,r_neighbor_share,"
-			<< "r_pass_peak,r_pass_drop,r_pass_ratio,r_pass_share,r_pass_isolation,r_local_prominent\n";
-		micropeakDebugStartSec = system::getTime();
-		micropeakDebugSequence = 0;
-		micropeakRepairCountL.store(0u, std::memory_order_relaxed);
-		micropeakRepairCountR.store(0u, std::memory_order_relaxed);
-		micropeakNearMissCount.store(0u, std::memory_order_relaxed);
-		micropeakDebugQueueRead.store(0u, std::memory_order_relaxed);
-		micropeakDebugQueueWrite.store(0u, std::memory_order_relaxed);
-		micropeakDebugDropped.store(0u, std::memory_order_relaxed);
-		micropeakDebugActive.store(true, std::memory_order_relaxed);
-		DEBUG("Sil started micropeak debug CSV: %s", micropeakDebugPath.c_str());
-	}
-
-	void stopMicropeakDebugCapture() {
-		drainMicropeakDebugQueueToCsv();
-		if (micropeakDebugFile.is_open()) {
-			micropeakDebugFile.close();
-		}
-		if (micropeakDebugActive.load(std::memory_order_relaxed)) {
-			DEBUG("Sil stopped micropeak debug CSV: %s", micropeakDebugPath.c_str());
-		}
-		micropeakDebugActive.store(false, std::memory_order_relaxed);
-	}
-
-	bool popMicropeakDebugEvent(MicropeakDebugEvent* outEvent) {
-		if (!outEvent) {
-			return false;
-		}
-		uint32_t read = micropeakDebugQueueRead.load(std::memory_order_relaxed);
-		uint32_t write = micropeakDebugQueueWrite.load(std::memory_order_acquire);
-		if (read == write) {
-			return false;
-		}
-		*outEvent = micropeakDebugQueue[size_t(read)];
-		micropeakDebugQueueRead.store((read + 1u) % kMicropeakDebugQueueCapacity, std::memory_order_release);
-		return true;
-	}
-
-	uint32_t consumeMicropeakDebugDroppedCount() {
-		return micropeakDebugDropped.exchange(0u, std::memory_order_acq_rel);
-	}
-
-	void toggleMicropeakDebugCapture() {
-		if (!isDragonKingDebugEnabled()) {
-			stopMicropeakDebugCapture();
-			return;
-		}
-		if (isMicropeakDebugCaptureActive()) {
-			stopMicropeakDebugCapture();
-		}
-		else {
-			startMicropeakDebugCapture();
-		}
-	}
-
-	void drainMicropeakDebugQueueToCsv() {
-		if (!micropeakDebugActive.load(std::memory_order_relaxed) || !micropeakDebugFile.is_open()) {
-			return;
-		}
-		const uint32_t dropped = consumeMicropeakDebugDroppedCount();
-		if (dropped > 0u) {
-			WARN("Sil micropeak debug dropped %u events (queue full)", dropped);
-		}
-		MicropeakDebugEvent event;
-		while (popMicropeakDebugEvent(&event)) {
-			const double timeSec = system::getTime() - micropeakDebugStartSec;
-			micropeakDebugFile
-				<< micropeakDebugSequence++ << ','
-				<< timeSec << ','
-				<< event.eventType << ','
-				<< event.sampleRate << ','
-				<< event.repairEnabled << ','
-				<< event.masteringEnabled << ','
-				<< event.lookaheadSamples << ','
-				<< event.candidateL << ','
-				<< event.candidateR << ','
-				<< event.depthL << ','
-				<< event.depthR << ','
-				<< event.repairedL << ','
-				<< event.repairedR << ','
-				<< event.windows.left.prev2 << ','
-				<< event.windows.left.prev1 << ','
-				<< event.windows.left.center << ','
-				<< event.windows.left.next1 << ','
-				<< event.windows.left.next2 << ','
-				<< event.windows.right.prev2 << ','
-				<< event.windows.right.prev1 << ','
-				<< event.windows.right.center << ','
-				<< event.windows.right.next1 << ','
-				<< event.windows.right.next2 << ','
-				<< event.l_peak << ','
-				<< event.l_near << ','
-				<< event.l_guard << ','
-				<< event.l_localMean << ','
-				<< event.l_neighborDrop << ','
-				<< event.l_isolation << ','
-				<< event.l_neighborRatio << ','
-				<< event.l_neighborShare << ','
-				<< event.l_passPeak << ','
-				<< event.l_passDrop << ','
-				<< event.l_passRatio << ','
-				<< event.l_passShare << ','
-				<< event.l_passIsolation << ','
-				<< event.l_localProminent << ','
-				<< event.r_peak << ','
-				<< event.r_near << ','
-				<< event.r_guard << ','
-				<< event.r_localMean << ','
-				<< event.r_neighborDrop << ','
-				<< event.r_isolation << ','
-				<< event.r_neighborRatio << ','
-				<< event.r_neighborShare << ','
-				<< event.r_passPeak << ','
-				<< event.r_passDrop << ','
-				<< event.r_passRatio << ','
-				<< event.r_passShare << ','
-				<< event.r_passIsolation << ','
-				<< event.r_localProminent << '\n';
-		}
-	}
-
-	MicropeakDebugFeatures measureMicropeakDebugFeatures(const sil::repair::Window5& w) const {
-		MicropeakDebugFeatures f;
-		const float absPrev2 = std::fabs(w.prev2);
-		const float absPrev1 = std::fabs(w.prev1);
-		const float absCenter = std::fabs(w.center);
-		const float absNext1 = std::fabs(w.next1);
-		const float absNext2 = std::fabs(w.next2);
-		const float maxNeighbor = std::max(absPrev1, absNext1);
-		const float maxSurround = std::max(maxNeighbor, std::max(absPrev2, absNext2));
-		const float minPeak = repairCandidateConfig.minPeakFullScale * kAudioFullScaleV;
-		const float minDrop = repairCandidateConfig.minNeighborDropFullScale * kAudioFullScaleV;
-
-		f.peak = absCenter;
-		f.near = maxNeighbor;
-		f.guard = std::max(absPrev2, absNext2);
-		f.localMean = 0.25f * (absPrev2 + absPrev1 + absNext1 + absNext2);
-		f.neighborDrop = absCenter - maxNeighbor;
-		f.isolation = absCenter / std::max(f.localMean, 1e-6f);
-		f.neighborRatio = absCenter / std::max(maxNeighbor, 1e-6f);
-		f.neighborShare = maxSurround / std::max(absCenter, 1e-6f);
-		f.passPeak = f.peak >= minPeak;
-		f.passDrop = f.neighborDrop >= minDrop;
-		f.passRatio = f.peak >= f.near * repairCandidateConfig.minNeighborRatio;
-		f.passShare = f.near <= f.peak * repairCandidateConfig.maxNeighborShare
-			&& f.guard <= f.peak * repairCandidateConfig.maxNeighborShare;
-		f.passIsolation = f.isolation >= repairCandidateConfig.minIsolationRatio;
-		f.localProminent = f.peak > f.near;
-		return f;
-	}
-
-	bool shouldLogMicropeakNearMiss(const MicropeakDebugFeatures& f, bool candidate) const {
-		if (candidate) {
-			return false;
-		}
-		if (!f.localProminent || f.peak < kMicropeakDebugNearPeakVolts) {
-			return false;
-		}
-		return f.neighborDrop >= kMicropeakDebugNearDropVolts
-			|| f.isolation >= kMicropeakDebugNearIsolationRatio;
-	}
-
-	void enqueueMicropeakDebugEvent(
-		float sampleRate,
-		const char* eventType,
-		const sil::repair::StereoWindows& windows,
-		const sil::repair::RepairDecision& repairL,
-		const sil::repair::RepairDecision& repairR,
-		bool candidateL,
-		bool candidateR,
-		const MicropeakDebugFeatures& featureL,
-		const MicropeakDebugFeatures& featureR
-	) {
-		if (!isDragonKingDebugEnabled()) {
-			return;
-		}
-		if (!micropeakDebugActive.load(std::memory_order_relaxed)) {
-			return;
-		}
-		MicropeakDebugEvent event;
-		std::snprintf(event.eventType, sizeof(event.eventType), "%s", eventType ? eventType : "event");
-		event.sampleRate = sampleRate;
-		event.repairEnabled = repairEnabled ? 1 : 0;
-		event.masteringEnabled = masteringEnabled ? 1 : 0;
-		event.lookaheadSamples = repairLookaheadSamples;
-		event.candidateL = candidateL ? 1 : 0;
-		event.candidateR = candidateR ? 1 : 0;
-		event.depthL = repairL.depth;
-		event.depthR = repairR.depth;
-		event.repairedL = repairL.repaired;
-		event.repairedR = repairR.repaired;
-		event.windows = windows;
-		event.l_peak = featureL.peak;
-		event.l_near = featureL.near;
-		event.l_guard = featureL.guard;
-		event.l_localMean = featureL.localMean;
-		event.l_neighborDrop = featureL.neighborDrop;
-		event.l_isolation = featureL.isolation;
-		event.l_neighborRatio = featureL.neighborRatio;
-		event.l_neighborShare = featureL.neighborShare;
-		event.l_passPeak = featureL.passPeak ? 1 : 0;
-		event.l_passDrop = featureL.passDrop ? 1 : 0;
-		event.l_passRatio = featureL.passRatio ? 1 : 0;
-		event.l_passShare = featureL.passShare ? 1 : 0;
-		event.l_passIsolation = featureL.passIsolation ? 1 : 0;
-		event.l_localProminent = featureL.localProminent ? 1 : 0;
-		event.r_peak = featureR.peak;
-		event.r_near = featureR.near;
-		event.r_guard = featureR.guard;
-		event.r_localMean = featureR.localMean;
-		event.r_neighborDrop = featureR.neighborDrop;
-		event.r_isolation = featureR.isolation;
-		event.r_neighborRatio = featureR.neighborRatio;
-		event.r_neighborShare = featureR.neighborShare;
-		event.r_passPeak = featureR.passPeak ? 1 : 0;
-		event.r_passDrop = featureR.passDrop ? 1 : 0;
-		event.r_passRatio = featureR.passRatio ? 1 : 0;
-		event.r_passShare = featureR.passShare ? 1 : 0;
-		event.r_passIsolation = featureR.passIsolation ? 1 : 0;
-		event.r_localProminent = featureR.localProminent ? 1 : 0;
-		uint32_t write = micropeakDebugQueueWrite.load(std::memory_order_relaxed);
-		uint32_t read = micropeakDebugQueueRead.load(std::memory_order_acquire);
-		uint32_t next = (write + 1u) % kMicropeakDebugQueueCapacity;
-		if (next == read) {
-			micropeakDebugDropped.fetch_add(1u, std::memory_order_relaxed);
-			return;
-		}
-		micropeakDebugQueue[size_t(write)] = event;
-		micropeakDebugQueueWrite.store(next, std::memory_order_release);
 	}
 
 	void onSampleRateChange(const SampleRateChangeEvent& e) override {
@@ -1468,17 +1069,13 @@ struct Sil : Module {
 		glue.reset();
 		saturator.reset(e.sampleRate);
 		initializeLimiterFastPathStorage();
-		initializeRepairPathStorage(e.sampleRate);
-		const bool repairActive = repairFeatureAvailable() && repairEnabled;
-		applyRepairLatencyModeNoAlloc(e.sampleRate, repairActive);
+		updateLimiterLatencyNoAlloc(e.sampleRate);
 	}
 
 	void process(const ProcessArgs& args) override {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > 0.5f;
-		repairEnabled = params[REPAIR_ENABLED_PARAM].getValue() > 0.5f;
-		const bool repairActive = repairFeatureAvailable() && repairEnabled;
 
 		const bool hasL = inputs[INPUT_L_INPUT].isConnected();
 		const bool hasR = inputs[INPUT_R_INPUT].isConnected();
@@ -1486,73 +1083,7 @@ struct Sil : Module {
 		const float rawR = inputs[INPUT_R_INPUT].getVoltage();
 		const float inL = hasL ? rawL : rawR;
 		const float inR = hasR ? rawR : rawL;
-		applyRepairLatencyModeNoAlloc(args.sampleRate, repairActive);
-
-		repairBuffer.push(inL, inR);
-		const sil::repair::StereoWindows windows = repairBuffer.readCurrentWindows();
-		float repairInputL = windows.left.center;
-		float repairInputR = windows.right.center;
-		float repairLedTarget = 0.f;
-		if (repairActive) {
-			const bool candidateL = sil::repair::detectCandidate(windows.left, repairCandidateConfig, kAudioFullScaleV);
-			const bool candidateR = sil::repair::detectCandidate(windows.right, repairCandidateConfig, kAudioFullScaleV);
-			const sil::repair::RepairDecision repairL = sil::repair::repairCenterLinear(windows.left, candidateL);
-			const sil::repair::RepairDecision repairR = sil::repair::repairCenterLinear(windows.right, candidateR);
-			const bool debugCaptureActive = isDragonKingDebugEnabled()
-				&& micropeakDebugActive.load(std::memory_order_relaxed);
-			MicropeakDebugFeatures debugFeatureL;
-			MicropeakDebugFeatures debugFeatureR;
-			if (debugCaptureActive) {
-				debugFeatureL = measureMicropeakDebugFeatures(windows.left);
-				debugFeatureR = measureMicropeakDebugFeatures(windows.right);
-			}
-			const bool repairHit = candidateL || candidateR;
-			if (repairHit) {
-				if (debugCaptureActive) {
-					enqueueMicropeakDebugEvent(args.sampleRate, "repair", windows, repairL, repairR, candidateL, candidateR, debugFeatureL, debugFeatureR);
-				}
-				if (candidateL) {
-					micropeakRepairCountL.fetch_add(1u, std::memory_order_relaxed);
-				}
-				if (candidateR) {
-					micropeakRepairCountR.fetch_add(1u, std::memory_order_relaxed);
-				}
-				const bool repeatedDuringHold = micropeakActivityHoldSamples > 0;
-				micropeakActivityHoldSamples = std::max(1, int(std::round(args.sampleRate * kMicropeakActivityHoldSec)));
-				const float depthL = repairL.depth;
-				const float depthR = repairR.depth;
-				const float eventLevel = clamp(std::max(std::max(depthL, depthR), kMicropeakActivityHoldBrightness), 0.f, 1.f);
-				micropeakActivityHoldLevel = repeatedDuringHold
-					? clamp(std::max(micropeakActivityHoldLevel, eventLevel) + kMicropeakActivityRepeatBoost, 0.f, 1.f)
-					: eventLevel;
-				repairLedTarget = micropeakActivityHoldLevel;
-				repairInputL = repairL.repaired;
-				repairInputR = repairR.repaired;
-			}
-			else {
-				const bool logNearMiss = debugCaptureActive
-					&& (shouldLogMicropeakNearMiss(debugFeatureL, candidateL)
-						|| shouldLogMicropeakNearMiss(debugFeatureR, candidateR));
-				if (logNearMiss) {
-					micropeakNearMissCount.fetch_add(1u, std::memory_order_relaxed);
-					enqueueMicropeakDebugEvent(args.sampleRate, "near_miss", windows, repairL, repairR, candidateL, candidateR, debugFeatureL, debugFeatureR);
-				}
-					repairInputL = windows.left.center;
-					repairInputR = windows.right.center;
-				}
-			}
-		if (micropeakActivityHoldSamples > 0) {
-			micropeakActivityHoldSamples--;
-			repairLedTarget = std::max(repairLedTarget, micropeakActivityHoldLevel);
-		}
-		else {
-			micropeakActivityHoldLevel = 0.f;
-		}
-		const float micropeakCoeff =
-			(repairLedTarget > micropeakActivity) ? micropeakActivityAttackCoeff : micropeakActivityReleaseCoeff;
-		micropeakActivity = repairLedTarget + micropeakCoeff * (micropeakActivity - repairLedTarget);
-
-		const int bypassDelayLen = std::max(1, repairLookaheadSamples + limiterLookaheadSamples);
+		const int bypassDelayLen = std::max(1, limiterLookaheadSamples);
 		const float delayedInL = bypassDelayL[size_t(bypassDelayWrite)];
 		const float delayedInR = bypassDelayR[size_t(bypassDelayWrite)];
 		bypassDelayL[size_t(bypassDelayWrite)] = inL;
@@ -1561,18 +1092,18 @@ struct Sil : Module {
 
 		// Low-band mono recovery below 120 Hz:
 		// preserve coherent bass stereo, progressively collapse risky low side content.
-		lowpassL1.process(repairInputL);
+		lowpassL1.process(inL);
 		float lowL = lowpassL1.lowpass();
 		lowpassL2.process(lowL);
 		lowL = lowpassL2.lowpass();
 
-		lowpassR1.process(repairInputR);
+		lowpassR1.process(inR);
 		float lowR = lowpassR1.lowpass();
 		lowpassR2.process(lowR);
 		lowR = lowpassR2.lowpass();
 
-		const float highL = repairInputL - lowL;
-		const float highR = repairInputR - lowR;
+		const float highL = inL - lowL;
+		const float highR = inR - lowR;
 		const float lowMid = 0.5f * (lowL + lowR);
 		const float lowSide = 0.5f * (lowL - lowR);
 
@@ -2032,33 +1563,10 @@ struct Sil : Module {
 			limiterDelayR[size_t(limiterDelayWrite)] = saturatedR;
 			limiterDelayWrite = (limiterDelayWrite + 1) % delayLen;
 
-			float desiredGain = 1.f;
-			if (repairEnabled) {
-				const float kneeStart = limiterCeiling * std::pow(10.f, -kLimiterRepairKneeLeadDb / 20.f);
-				if (detectorPeak > limiterCeiling && detectorPeak > 1e-9f) {
-					desiredGain = limiterCeiling / detectorPeak;
-				}
-				else if (detectorPeak > kneeStart) {
-					const float t = clamp(
-						(detectorPeak - kneeStart) / std::max(limiterCeiling - kneeStart, 1e-9f),
-						0.f,
-						1.f
-					);
-					const float kneeDb = -kLimiterRepairKneeDepthDb * (t * t);
-					desiredGain = std::pow(10.f, kneeDb / 20.f);
-				}
-			}
-			else {
-				desiredGain = (detectorPeak > limiterCeiling && detectorPeak > 1e-9f) ? (limiterCeiling / detectorPeak) : 1.f;
-			}
-			if (desiredGain < limiterGain) {
-				const float attackCoeff = repairEnabled ? limiterRepairAttackCoeff : limiterAttackCoeff;
-				limiterGain = desiredGain + attackCoeff * (limiterGain - desiredGain);
-			}
-			else {
-				const float releaseCoeff = repairEnabled ? limiterRepairReleaseCoeff : limiterReleaseCoeff;
-				limiterGain = desiredGain + releaseCoeff * (limiterGain - desiredGain);
-			}
+			const float desiredGain = (detectorPeak > limiterCeiling && detectorPeak > 1e-9f)
+				? limiterCeiling / detectorPeak : 1.f;
+			const float gainCoeff = desiredGain < limiterGain ? limiterAttackCoeff : limiterReleaseCoeff;
+			limiterGain = desiredGain + gainCoeff * (limiterGain - desiredGain);
 			outL = delayedL * limiterGain;
 			outR = delayedR * limiterGain;
 			const float finalPeak = std::max(std::fabs(outL), std::fabs(outR));
@@ -2108,9 +1616,7 @@ struct Sil : Module {
 			lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, lightDt);
 			lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, lightDt);
 			lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, lightDt);
-			lights[MICROPEAK_LIGHT].setSmoothBrightness(repairActive ? micropeakActivity : 0.f, lightDt);
 			lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, lightDt);
-			lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairActive ? 0.5f : 0.f, lightDt);
 		}
 
 		// Update histogram (Waveform)
@@ -2170,7 +1676,6 @@ struct Sil : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "colorScheme", json_integer(colorScheme));
 		json_object_set_new(rootJ, "masteringEnabled", json_boolean(masteringEnabled));
-		json_object_set_new(rootJ, "repairEnabled", json_boolean(repairEnabled));
 		return rootJ;
 	}
 
@@ -2181,11 +1686,6 @@ struct Sil : Module {
 		if (masteringEnabledJ) {
 			masteringEnabled = json_is_true(masteringEnabledJ);
 			params[MASTERING_ENABLED_PARAM].setValue(masteringEnabled ? 1.f : 0.f);
-		}
-		json_t* repairEnabledJ = json_object_get(rootJ, "repairEnabled");
-		if (repairEnabledJ) {
-			repairEnabled = json_is_true(repairEnabledJ);
-			params[REPAIR_ENABLED_PARAM].setValue(repairEnabled ? 1.f : 0.f);
 		}
 	}
 };
@@ -2872,30 +2372,6 @@ struct SilStageHistoryWidget : TransparentWidget {
 	}
 };
 
-struct MicropeakRepairCountWidget : TransparentWidget {
-	Sil* module = nullptr;
-	Vec textPosPx;
-
-	void draw(const DrawArgs& args) override {
-		if (!module || !isDragonKingDebugEnabled() || !APP || !APP->window || !APP->window->uiFont) {
-			return;
-		}
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, 9.0f);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-
-		char label[40];
-		const uint32_t countL = module->micropeakRepairCountL.load(std::memory_order_relaxed);
-		const uint32_t countR = module->micropeakRepairCountR.load(std::memory_order_relaxed);
-		std::snprintf(label, sizeof(label), "Micropeak Smoothing - L : %u R : %u", countL, countR);
-
-		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
-		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
-		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
-		nvgText(args.vg, textPosPx.x, textPosPx.y, label, nullptr);
-	}
-};
-
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
@@ -3134,9 +2610,7 @@ struct SilWidget : ModuleWidget {
 		Vec glueCompLightPos(48.f, 49.2f);
 		Vec stereoEnhanceLightPos(48.f, 50.0f);
 		Vec saturatorLightPos(48.f, 50.8f);
-		Vec micropeakLightPos(69.506f, 50.048f);
 		Vec masteringButtonPos(48.f, 53.f);
-		Vec repairButtonPos(48.f, 56.f);
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
 			Vec pointMm;
@@ -3157,9 +2631,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
 		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
-		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
-		applyPointOverride("REPAIR_ENABLED_PARAM", &repairButtonPos);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
@@ -3170,11 +2642,6 @@ struct SilWidget : ModuleWidget {
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT
 		));
-		if (isDragonKingDebugEnabled()) {
-			addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-				mm2px(repairButtonPos), module, Sil::REPAIR_ENABLED_PARAM, Sil::REPAIR_ENABLED_LIGHT
-			));
-		}
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
@@ -3183,17 +2650,6 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
-		if (isDragonKingDebugEnabled()) {
-			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
-		}
-
-		if (isDragonKingDebugEnabled()) {
-			MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
-			micropeakCount->box.size = box.size;
-			micropeakCount->module = module;
-			micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 2.7f, micropeakLightPos.y));
-			addChild(micropeakCount);
-		}
 
 		SilStageHistoryWidget* chainLedReadout = new SilStageHistoryWidget;
 		chainLedReadout->module = module;
@@ -3242,10 +2698,6 @@ struct SilWidget : ModuleWidget {
 		}
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		refreshCoordinator.histogramRefreshedThisStep = false;
-		Sil* sil = dynamic_cast<Sil*>(module);
-		if (sil) {
-			sil->drainMicropeakDebugQueueToCsv();
-		}
 		ModuleWidget::step();
 		if (measurePerf) {
 			latestStepUs = debug_terminal::elapsedUsSince(stepStart);
@@ -3309,7 +2761,6 @@ struct SilWidget : ModuleWidget {
 			}
 		));
 		if (isDragonKingDebugEnabled()) {
-			const bool debugActive = sil->isMicropeakDebugCaptureActive();
 			menu->addChild(new MenuSeparator());
 			menu->addChild(createMenuLabel("Debug"));
 			menu->addChild(createCheckMenuItem(
@@ -3327,16 +2778,7 @@ struct SilWidget : ModuleWidget {
 				menu->addChild(createMenuLabel(
 					std::string(timingLogActive ? "Writing: " : "Last log: ") + timingLogPath));
 			}
-			menu->addChild(createMenuItem(
-				debugActive ? "Close Sil micropeak CSV" : "Begin Sil micropeak CSV",
-				debugActive ? "Active" : "",
-				[=]() {
-					sil->toggleMicropeakDebugCapture();
-				}
-			));
-			if (debugActive) {
-				menu->addChild(createMenuLabel(sil->getMicropeakDebugPath()));
-			}
+
 		}
 	}
 };
