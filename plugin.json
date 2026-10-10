@@ -320,6 +320,14 @@
         "Expander"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Strand",
+      "name": "Strand",
+      "description": "Dual independent zero-crossing pseudo-cycle interleaver.",
+      "tags": ["Effect", "Distortion"],
+      "capabilities": {"polyphony": 1},
+      "hidden": false
     }
   ]
 }

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="15.24mm" height="128.5mm" viewBox="0 0 15.24 128.5">
+ <g id="theme_background" inkscape:label="Theme background"><rect width="15.24" height="128.5" fill="#000000"/></g>
+ <g id="panel_graphics">
+  <g id="glass_input">
+   <rect id="inputs_a" x="1.2" y="19" width="12.84" height="26" rx="2" fill="#5740bf" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33"/>
+   <rect id="inputs_b" x="1.2" y="52" width="12.84" height="26" rx="2" fill="#5740bf" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33"/>
+  </g>
+  <g id="glass_output">
+   <rect id="outputs_c" x="1.2" y="85" width="12.84" height="26" rx="2" fill="#1cccd9" fill-opacity="0.5" stroke="#1cccd9" stroke-opacity="0.5" stroke-width="0.2" opacity="0.33"/>
+  </g>
+ </g>
+ <g id="labels" font-family="DejaVu Sans" text-anchor="middle" fill="#dbefed">
+  <text x="7.62" y="12" font-size="2.8">STRAND</text>
+  <g id="theme_text_input">
+   <text x="7.62" y="18" font-size="2.8">A</text><text x="7.62" y="51" font-size="2.8">B</text>
+   <text x="7.62" y="32" font-size="1.7">L / M</text><text x="7.62" y="46.5" font-size="1.7">R</text>
+   <text x="7.62" y="65" font-size="1.7">L / M</text><text x="7.62" y="79.5" font-size="1.7">R</text>
+  </g>
+  <g id="theme_text_output">
+   <text x="7.62" y="84" font-size="2.8">C</text>
+   <text x="7.62" y="98" font-size="1.7">L</text><text x="7.62" y="112.5" font-size="1.7">R</text>
+  </g>
+ </g>
+ <g id="components" inkscape:label="components" style="display:none">
+  <rect id="BRANDING_WAVE_SOLO_RASTER" x="1.08626" y="123.3819" width="13.06748" height="5.1181"/>
+  <circle id="A_L" cx="7.62" cy="25" r="1"/><circle id="A_R" cx="7.62" cy="39" r="1"/>
+  <circle id="B_L" cx="7.62" cy="58" r="1"/><circle id="B_R" cx="7.62" cy="72" r="1"/>
+  <circle id="C_L" cx="7.62" cy="91" r="1"/><circle id="C_R" cx="7.62" cy="105" r="1"/>
+ </g>
+</svg>

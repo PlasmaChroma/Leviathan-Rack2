@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="15.24mm" height="128.5mm" viewBox="0 0 15.24 128.5">
+  <g id="panel_graphics">
+    <g id="glass_input" data-theme-runtime-substrate="neutral">
+      <rect id="inputs_a" x="1.2" y="19" width="12.84" height="26" rx="2" fill="#000000" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33" />
+      <rect id="inputs_b" x="1.2" y="52" width="12.84" height="26" rx="2" fill="#000000" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33" />
+    </g>
+    <g id="glass_output" data-theme-runtime-substrate="neutral">
+      <rect id="outputs_c" x="1.2" y="85" width="12.84" height="26" rx="2" fill="#000000" fill-opacity="0.5" stroke="#1cccd9" stroke-opacity="0.5" stroke-width="0.2" opacity="0.33" />
+    </g>
+  </g>
+  <g id="components" inkscape:label="components" style="display:none">
+    <rect id="BRANDING_WAVE_SOLO_RASTER" x="1.08626" y="123.3819" width="13.06748" height="5.1181" />
+    <circle id="A_L" cx="7.62" cy="25" r="1" />
+    <circle id="A_R" cx="7.62" cy="39" r="1" />
+    <circle id="B_L" cx="7.62" cy="58" r="1" />
+    <circle id="B_R" cx="7.62" cy="72" r="1" />
+    <circle id="C_L" cx="7.62" cy="91" r="1" />
+    <circle id="C_R" cx="7.62" cy="105" r="1" />
+  </g>
+</svg>

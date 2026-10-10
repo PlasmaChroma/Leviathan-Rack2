@@ -73,6 +73,7 @@ build/src/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/src/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cpp)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/strand_engine_spec \
 	build/tests/tiamat_events_spec \
 	build/tests/tiamat_corrupt_spec \
 	build/tests/tiamat_buffer_spec \
@@ -776,7 +777,7 @@ test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
 test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
-test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal
+test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal test-strand
 	$(call run_rack_test_bin,build/tests/tiamat_module_spec)
 	$(call run_rack_test_bin,build/tests/tiamat_runtime_spec)
 	$(call run_rack_test_bin,build/tests/tiamat_rate_bridge_spec)
@@ -1507,3 +1508,17 @@ build/tests/vessel_contact_work_spec: tests/vessel_contact_work_spec.cpp $(VESSE
 .PHONY: test-vessel-contact-work
 test-vessel-contact-work: build/tests/vessel_contact_work_spec
 	$(call run_test_bin,build/tests/vessel_contact_work_spec)
+
+# Strand keeps non-finite input checks valid under the global audio flags.
+build/src/Strand.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+
+build/tests/strand_engine_spec: tests/strand_engine_spec.cpp src/StrandEngine.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -o $@
+
+.PHONY: test-strand
+test-strand: build/tests/strand_engine_spec build/tests/strand_module_spec
+	$(call run_test_bin,build/tests/strand_engine_spec)
+	$(call run_rack_test_bin,build/tests/strand_module_spec)
+
+build/tests/strand_module_spec: tests/strand_module_spec.cpp src/Strand.hpp src/StrandEngine.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-unused-parameter -D_USE_MATH_DEFINES -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -o $@

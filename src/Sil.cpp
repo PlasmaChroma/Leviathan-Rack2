@@ -1,7 +1,9 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "SilLimiterPeakWindow.hpp"
+#include "SilLevelMeter.hpp"
 #include "SilSpectrumSnapshot.hpp"
 #include "SpscLatestSnapshot.hpp"
 #include "DebugTerminalMetrics.hpp"
@@ -202,6 +204,7 @@ struct Sil : Module {
 	};
 	SpectrumBinMapEntry specBinMap[SPEC_FREQ_BINS];
 
+	sil::StereoLevelMeter levelMeter;
 	dsp::ClockDivider specDivider;
 	dsp::ClockDivider lightDivider;
 	float limiterGain = 1.f;
@@ -1032,6 +1035,7 @@ struct Sil : Module {
 		stereoEnhance.sideEq.setPeaking(initialSampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		initializeLimiterFastPathStorage();
 		updateLimiterLatencyNoAlloc(initialSampleRate);
+		levelMeter.configure(initialSampleRate);
 	}
 
 	~Sil() {
@@ -1070,6 +1074,7 @@ struct Sil : Module {
 		saturator.reset(e.sampleRate);
 		initializeLimiterFastPathStorage();
 		updateLimiterLatencyNoAlloc(e.sampleRate);
+		levelMeter.configure(e.sampleRate);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1602,6 +1607,7 @@ struct Sil : Module {
 		const float audibleL = bypassL + masteringMix * (outL - bypassL);
 		const float audibleR = bypassR + masteringMix * (outR - bypassR);
 
+		levelMeter.process(audibleL, audibleR, hasL || hasR);
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
 		outputs[OUTPUT_L_OUTPUT].setVoltage(audibleL);
@@ -2372,6 +2378,50 @@ struct SilStageHistoryWidget : TransparentWidget {
 	}
 };
 
+struct SilHorizontalMeter : TransparentWidget {
+    Sil* module = nullptr;
+    bool dbfs = false;
+    bool connected = false;
+    float levels[2] = {};
+    void step() override {
+        TransparentWidget::step();
+        connected = module && module->levelMeter.connected.load(std::memory_order_relaxed);
+        for (int j=0;j<2;++j) {
+            float target=0.f;
+            if(connected) {
+                const float measure=dbfs ? module->levelMeter.peaks[j].load(std::memory_order_relaxed)
+                    : module->levelMeter.power[j].load(std::memory_order_relaxed);
+                const float db=dbfs ? 20.f*std::log10(measure+1e-12f)
+                    : -.691f+10.f*std::log10(measure+1e-12f);
+                target=clamp((db+60.f)/60.f,0.f,1.f);
+            }
+            levels[j]+=(target-levels[j])*(target>levels[j] ? .42f : .075f);
+        }
+    }
+    void draw(const DrawArgs& args) override {
+        const float labelWidth=mm2px(22.f);
+        const float x=labelWidth, w=box.size.x-x, h=box.size.y;
+        nvgBeginPath(args.vg); nvgRect(args.vg,x,0.f,w,h);
+        nvgFillColor(args.vg,nvgRGB(7,10,15)); nvgFill(args.vg);
+        nvgStrokeWidth(args.vg,1.f); nvgStrokeColor(args.vg,nvgRGBA(174,132,255,96)); nvgStroke(args.vg);
+        const float inset=1.25f, gap=1.f, lane=(h-2.f*inset-gap)*.5f;
+        for(int j=0;j<2;++j) {
+            const float y=inset+j*(lane+gap);
+            nvgBeginPath(args.vg); nvgRect(args.vg,x+inset,y,(w-2.f*inset)*levels[j],lane);
+            nvgFillPaint(args.vg,nvgLinearGradient(args.vg,x+inset,y,x+w-inset,y,
+                nvgRGB(122,92,255),nvgRGB(28,204,217))); nvgFill(args.vg);
+        }
+        if(APP && APP->window && APP->window->uiFont) {
+            char text[32];
+            if(connected) std::snprintf(text,sizeof(text),"%s  %.1f",dbfs ? "dBFS" : "LUFS",std::max(levels[0],levels[1])*60.f-60.f);
+            else std::snprintf(text,sizeof(text),"%s  --",dbfs ? "dBFS" : "LUFS");
+            nvgFontFaceId(args.vg,APP->window->uiFont->handle); nvgFontSize(args.vg,9.5f);
+            nvgTextAlign(args.vg,NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE); nvgFillColor(args.vg,color::WHITE);
+            nvgText(args.vg,0.f,h*.5f,text,nullptr);
+        }
+    }
+};
+
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
@@ -2529,11 +2579,19 @@ struct SilWidget : ModuleWidget {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Sil", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
-		setPanel(visual_assets::createThemedPanel(asset::plugin(pluginInstance, "res/sil.panel.svg"), this));
-		addChild(visual_assets::createThemedPanelLabelsWidget(
-			nullptr, "res/sil.theme-text-input.svg",
-			"res/sil.theme-text-output.svg", box.size, this));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/sil.panel.svg");
+		visual_assets::addFractalGlassOverlay(
+			this, splitPanel.panelPath(), splitPanel.panelSurfaceEffectWidget());
+		splitPanel.addThemedLabels("res/sil.labels.svg",
+			"res/sil.theme-text-input.svg", "res/sil.theme-text-output.svg");
 		visual_assets::addPerfectWavePanelBranding(this, panelPath);
+		{
+			math::Rect logoRectMm(Vec(34.44015f, 119.43102f), Vec(32.71933f, 12.24054f));
+			panel_svg::loadRectFromSvgMm(
+				panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &logoRectMm);
+			addChild(visual_assets::createAspectFitRasterImageWidget(
+				"res/icon/Leviathan_Logo_S2.png", logoRectMm));
+		}
 		previewBuildTimer.markPanelDone();
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -2634,6 +2692,15 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
+        for(int i=0;i<2;++i) {
+            math::Rect rectMm(Vec(11.7f,88.f+i*6.f),Vec(78.f,4.5f));
+            panel_svg::loadRectFromSvgMm(panelPath,i==0 ? "LUFS_METER" : "DBFS_METER",&rectMm);
+            auto* meter=new SilHorizontalMeter;
+            meter->module=module; meter->dbfs=i==1;
+            meter->box.pos=mm2px(rectMm.pos); meter->box.size=mm2px(rectMm.size);
+            addChild(meter);
+        }
+
 
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
