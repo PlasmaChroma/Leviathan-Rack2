@@ -38,8 +38,28 @@ DISTRIBUTABLES += $(filter-out $(RES_EXCLUDES),$(RES_FILES))
 DISTRIBUTABLES += $(wildcard LICENSE*)
 DISTRIBUTABLES += $(wildcard presets)
 
+# Public builds retain the Rack SDK CPU baseline. Local builds may opt in with
+# make NATIVE_CPU=1. Never distribute a native build as a portable release.
+# Force recompilation when switching modes: make -B plugin.dll NATIVE_CPU=0
+# (use the corresponding plugin target on other platforms).
+NATIVE_CPU ?= 0
+ifneq ($(NATIVE_CPU),0)
+ifneq ($(NATIVE_CPU),1)
+$(error NATIVE_CPU must be 0 or 1)
+endif
+endif
+ifeq ($(NATIVE_CPU),1)
+# Deferred until the SDK has selected ARCH_ARM64 / ARCH_X64. EXTRA_FLAGS are
+# appended after its baseline flags. Existing math policies remain unchanged.
+EXTRA_FLAGS += $(if $(ARCH_ARM64),-mcpu=native,-march=native -mtune=native)
+endif
+
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
+# On ARM, the SDK's explicit -march otherwise overrides -mcpu's native ISA.
+ifeq ($(NATIVE_CPU)$(ARCH_ARM64),11)
+FLAGS := $(filter-out -march=armv8-a+fp+simd,$(FLAGS))
+endif
 
 # Premium validation uses Pro's bootstrap and identity with the CURRENT shared
 # Bifurx sources. Nothing is installed or written into the Pro source checkout.

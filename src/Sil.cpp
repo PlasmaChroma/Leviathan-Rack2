@@ -2104,72 +2104,8 @@ struct SpectrumWidget : TransparentWidget {
 		// invalidates the cache, so an offscreen Sil does not perform UI FFT work.
 		if (module && !isRightChannel) module->updateSpectrumDisplayFromLatestSnapshot();
 		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
-		auto rgbToHsv = [](const NVGcolor& c, float& h, float& s, float& v) {
-			const float r = clamp(c.r, 0.f, 1.f);
-			const float g = clamp(c.g, 0.f, 1.f);
-			const float b = clamp(c.b, 0.f, 1.f);
-			const float mx = std::max(r, std::max(g, b));
-			const float mn = std::min(r, std::min(g, b));
-			const float d = mx - mn;
-			v = mx;
-			s = (mx <= 1e-6f) ? 0.f : (d / mx);
-			if (d <= 1e-6f) {
-				h = 0.f;
-				return;
-			}
-			if (mx == r) {
-				h = std::fmod(((g - b) / d), 6.f);
-			}
-			else if (mx == g) {
-				h = ((b - r) / d) + 2.f;
-			}
-			else {
-				h = ((r - g) / d) + 4.f;
-			}
-			h *= 60.f;
-			if (h < 0.f) h += 360.f;
-		};
-		auto hsvToRgb = [](float h, float s, float v, float a) {
-			h = std::fmod(h, 360.f);
-			if (h < 0.f) h += 360.f;
-			s = clamp(s, 0.f, 1.f);
-			v = clamp(v, 0.f, 1.f);
-			const float c = v * s;
-			const float x = c * (1.f - std::fabs(std::fmod(h / 60.f, 2.f) - 1.f));
-			const float m = v - c;
-			float rp = 0.f, gp = 0.f, bp = 0.f;
-			if (h < 60.f) {
-				rp = c; gp = x; bp = 0.f;
-			}
-			else if (h < 120.f) {
-				rp = x; gp = c; bp = 0.f;
-			}
-			else if (h < 180.f) {
-				rp = 0.f; gp = c; bp = x;
-			}
-			else if (h < 240.f) {
-				rp = 0.f; gp = x; bp = c;
-			}
-			else if (h < 300.f) {
-				rp = x; gp = 0.f; bp = c;
-			}
-			else {
-				rp = c; gp = 0.f; bp = x;
-			}
-			return nvgRGBAf(rp + m, gp + m, bp + m, clamp(a, 0.f, 1.f));
-		};
-		auto shiftForSide = [&](const NVGcolor& base) {
-			float h = 0.f, s = 0.f, v = 0.f;
-			rgbToHsv(base, h, s, v);
-			const float shiftedHue = h + 42.f;
-			const float shiftedSat = clamp(s * 0.92f + 0.08f, 0.f, 1.f);
-			const float shiftedVal = clamp(v * 0.92f + 0.05f, 0.f, 1.f);
-			return hsvToRgb(shiftedHue, shiftedSat, shiftedVal, base.a);
-		};
-		const NVGcolor sideLow = shiftForSide(colors.low);
-		const NVGcolor sideHigh = shiftForSide(colors.high);
-		const NVGcolor channelLow = isRightChannel ? sideLow : colors.low;
-		const NVGcolor channelHigh = isRightChannel ? sideHigh : colors.high;
+		const NVGcolor channelLow = colors.low;
+		const NVGcolor channelHigh = colors.high;
 
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
@@ -2399,17 +2335,18 @@ struct SilHorizontalMeter : TransparentWidget {
         }
     }
     void draw(const DrawArgs& args) override {
+        const SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
         const float labelWidth=mm2px(22.f);
         const float x=labelWidth, w=box.size.x-x, h=box.size.y;
         nvgBeginPath(args.vg); nvgRect(args.vg,x,0.f,w,h);
-        nvgFillColor(args.vg,nvgRGB(7,10,15)); nvgFill(args.vg);
-        nvgStrokeWidth(args.vg,1.f); nvgStrokeColor(args.vg,nvgRGBA(174,132,255,96)); nvgStroke(args.vg);
+        nvgFillColor(args.vg,colors.bg); nvgFill(args.vg);
+        nvgStrokeWidth(args.vg,1.f); nvgStrokeColor(args.vg,colors.divider); nvgStroke(args.vg);
         const float inset=1.25f, gap=1.f, lane=(h-2.f*inset-gap)*.5f;
         for(int j=0;j<2;++j) {
             const float y=inset+j*(lane+gap);
             nvgBeginPath(args.vg); nvgRect(args.vg,x+inset,y,(w-2.f*inset)*levels[j],lane);
             nvgFillPaint(args.vg,nvgLinearGradient(args.vg,x+inset,y,x+w-inset,y,
-                nvgRGB(122,92,255),nvgRGB(28,204,217))); nvgFill(args.vg);
+                colors.low,colors.high)); nvgFill(args.vg);
         }
         if(APP && APP->window && APP->window->uiFont) {
             char text[32];
