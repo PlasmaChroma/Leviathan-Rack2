@@ -113,6 +113,7 @@ struct Sil : Module {
 
 	enum ParamId {
 		MASTERING_ENABLED_PARAM,
+		SAT_LIMIT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -515,7 +516,6 @@ struct Sil : Module {
 	static constexpr float kLimiterMetricGrSec = 0.120f;
 	static constexpr float kLimiterTriggerDb = 0.10f;
 	static constexpr float kSaturatorTargetPreLimiterDb = -0.50f;
-	static constexpr float kSatMaxMakeupDb = 3.25f;
 	static constexpr float kSatMaxDrive = 1.60f;
 	static constexpr float kSatMinDrive = 1.0f;
 	static constexpr float kSatLimiterSeekBoostDb = 0.75f;
@@ -992,6 +992,7 @@ struct Sil : Module {
 		debugMetrics.assignInstanceId(gSilDebugInstanceCounter);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
+		configParam(SAT_LIMIT_PARAM, 1.f, 6.f, 1.f, "Saturator maximum added gain", " dB");
 		configInput(INPUT_L_INPUT, "Left");
 		configInput(INPUT_R_INPUT, "Right");
 		configOutput(OUTPUT_L_OUTPUT, "Left");
@@ -1464,6 +1465,7 @@ struct Sil : Module {
 				saturator.currentBinPeak = 0.f;
 			}
 
+			const float maxMakeupDb = clamp(params[SAT_LIMIT_PARAM].getValue(), 1.f, 6.f);
 			if (saturator.updateDivider.process()) {
 				const float recentLoudPeak = std::max(saturatorEstimateRecentPeakPercentile(), 1e-6f);
 				const float recentPeakNorm = clamp(recentLoudPeak / kAudioFullScaleV, 1e-6f, 4.f);
@@ -1471,7 +1473,7 @@ struct Sil : Module {
 				float desiredMakeupDb = clamp(
 					kSaturatorTargetPreLimiterDb - recentPeakDb,
 					0.f,
-					kSatMaxMakeupDb
+					maxMakeupDb
 					);
 				const float limiterUnderEngaged = 1.f - clamp(
 					saturator.limiterEngagement / std::max(kSatLimiterTargetEngagement, 1e-6f),
@@ -1488,7 +1490,7 @@ struct Sil : Module {
 						kSatLimiterSeekBoostDb * limiterUnderEngaged -
 						kSatLimiterGrBackoffDb * limiterOverworked,
 					0.f,
-					kSatMaxMakeupDb
+					maxMakeupDb
 				);
 				const float desiredDrive = clamp(
 					1.f + desiredMakeupDb * 0.18f,
@@ -1498,7 +1500,8 @@ struct Sil : Module {
 				const float updateSeconds = float(kSatUpdateDivision) / std::max(args.sampleRate, 1.f);
 				const float makeupTau = (desiredMakeupDb > saturator.makeupDb) ? kSatMakeupAttackSec : kSatMakeupReleaseSec;
 				const float makeupCoeff = std::exp(-updateSeconds / std::max(1e-3f, makeupTau));
-				saturator.makeupDb = desiredMakeupDb + makeupCoeff * (saturator.makeupDb - desiredMakeupDb);
+				saturator.makeupDb = std::min(maxMakeupDb,
+					desiredMakeupDb + makeupCoeff * (saturator.makeupDb - desiredMakeupDb));
 				const float driveTau = (desiredDrive > saturator.drive) ? kSatDriveAttackSec : kSatDriveReleaseSec;
 				const float driveCoeff = std::exp(-updateSeconds / std::max(1e-3f, driveTau));
 				saturator.drive = desiredDrive + driveCoeff * (saturator.drive - desiredDrive);
@@ -1527,7 +1530,7 @@ struct Sil : Module {
 				saturatedL = shape(enhancedL);
 				saturatedR = shape(enhancedR);
 			}
-			const float makeupActivity = clamp(saturator.makeupDb / kSatMaxMakeupDb, 0.f, 1.f);
+			const float makeupActivity = clamp(saturator.makeupDb / maxMakeupDb, 0.f, 1.f);
 			const float driveActivity = clamp(
 				(drive - kSatMinDrive) / std::max(kSatMaxDrive - kSatMinDrive, 1e-6f),
 				0.f,
@@ -2593,10 +2596,11 @@ struct SilWidget : ModuleWidget {
 				spectrumRectPx, sw, SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA);
 		}
 
-		Vec inputLPos(26.f, 118.f);
-		Vec inputRPos(42.f, 118.f);
-		Vec outputLPos(58.f, 118.f);
-		Vec outputRPos(74.f, 118.f);
+		Vec inputLPos(14.f, 112.4f);
+		Vec inputRPos(30.f, 112.4f);
+		Vec outputLPos(71.6f, 112.4f);
+		Vec outputRPos(87.6f, 112.4f);
+		Vec satLimitPos(50.8f, 112.4f);
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec impactAirLightPos(48.f, 46.8f);
@@ -2618,6 +2622,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("INPUT_R_INPUT", &inputRPos);
 		applyPointOverride("OUTPUT_L_OUTPUT", &outputLPos);
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
+		applyPointOverride("SAT_LIMIT_PARAM", &satLimitPos);
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("IMPACT_AIR_LIGHT", &impactAirLightPos);
@@ -2643,6 +2648,7 @@ struct SilWidget : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
+		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(satLimitPos), module, Sil::SAT_LIMIT_PARAM));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT
 		));

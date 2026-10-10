@@ -66,17 +66,18 @@
   </g>
   <g id="panel_graphics" inkscape:label="Input and Output Fields">
     <g id="glass_input" inkscape:label="Input Box" data-theme-runtime-substrate="neutral">
-      <rect id="frame_inputs" x="1850" y="10300" width="3000" height="1900" rx="185" ry="185" fill="#000000" fill-opacity="1" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45" />
+      <rect id="frame_inputs" x="650" y="10300" width="3000" height="1900" rx="185" ry="185" fill="#000000" fill-opacity="1" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45" />
     </g>
     <g id="glass_output" inkscape:label="Output Box" data-theme-runtime-substrate="neutral">
-      <rect id="frame_outputs" x="5050" y="10300" width="3100" height="1900" rx="185" ry="185" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45" />
+      <rect id="frame_outputs" x="6410" y="10300" width="3100" height="1900" rx="185" ry="185" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45" />
     </g>
   </g>
   <g id="components" style="display:inline">
-    <circle id="INPUT_L_INPUT" cx="2600" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="INPUT_R_INPUT" cx="4200" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="OUTPUT_L_OUTPUT" cx="5800" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="OUTPUT_R_OUTPUT" cx="7400" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="SAT_LIMIT_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="INPUT_L_INPUT" cx="1400" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="INPUT_R_INPUT" cx="3000" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="OUTPUT_L_OUTPUT" cx="7160" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="OUTPUT_R_OUTPUT" cx="8760" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
     <circle id="LIMITER_ACTIVE_LIGHT" cx="1170" cy="8070" r="70" style="fill:#44ff00;fill-opacity:1" />
     <circle id="LOW_RECOVERY_LIGHT" cx="1170" cy="5004.7998" r="70" style="fill:#44ff00;fill-opacity:1" />
     <circle id="IMPACT_AIR_LIGHT" cx="1170" cy="5442.6855" r="70" style="fill:#44ff00;fill-opacity:1" />

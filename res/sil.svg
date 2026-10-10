@@ -345,7 +345,7 @@
    inkscape:label="Input Box">
       <rect
    id="frame_inputs"
-   x="1850"
+   x="650"
    y="10300"
    width="3000"
    height="1900"
@@ -363,7 +363,7 @@
    inkscape:label="Output Box">
       <rect
    id="frame_outputs"
-   x="5050"
+   x="6410"
    y="10300"
    width="3100"
    height="1900"
@@ -379,8 +379,8 @@
   </g>
 <g xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:ns2="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" id="labels" inkscape:groupmode="layer" inkscape:label="Labels" style="display:inline">
   <g id="theme_text_input" inkscape:label="Input Text">
-    <text id="INPUT_L_LABEL" x="2600" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
-    <text id="INPUT_R_LABEL" x="4200" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
+    <text id="INPUT_L_LABEL" x="1400" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
+    <text id="INPUT_R_LABEL" x="3000" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
     <text id="LIMITER_LABEL" x="1430.0005" y="8171.0356" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
       <tspan ns2:role="line" id="tspan21" x="1430.0005" y="8171.0356">Limit -1.0 dBTP</tspan>
     </text>
@@ -410,9 +410,10 @@
     </text>
   </g>
   <g id="theme_text_output" inkscape:label="Output Text">
-    <text id="OUTPUT_L_LABEL" x="5800" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
-    <text id="OUTPUT_R_LABEL" x="7400" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
+    <text id="OUTPUT_L_LABEL" x="7160" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
+    <text id="OUTPUT_R_LABEL" x="8760" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
   </g>
+  <text id="SAT_LIMIT_LABEL" x="5080" y="12060" style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">SAT LIM</text>
   <text id="reworked_module_title_text" x="5079.9966" y="447.27814" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347" xml:space="preserve">
     <tspan ns2:role="line" id="tspan1" style="fill:url(#linearGradient500)" x="5079.9966" y="447.27814">Sil</tspan>
   </text>
@@ -422,24 +423,24 @@
 </g>
 <g
    id="components"
-   style="display:inline"><circle
+   style="display:inline"><circle id="SAT_LIMIT_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_L_INPUT"
-     cx="2600"
+     cx="1400"
      cy="11240"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_R_INPUT"
-     cx="4200"
+     cx="3000"
      cy="11240"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_L_OUTPUT"
-     cx="5800"
+     cx="7160"
      cy="11240"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_R_OUTPUT"
-     cx="7400"
+     cx="8760"
      cy="11240"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle

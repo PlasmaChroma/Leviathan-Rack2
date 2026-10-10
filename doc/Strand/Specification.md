@@ -4,27 +4,22 @@ Status: initial implementation, pending listening evaluation. Strand is intended
 
 ## Purpose
 
-Strand interleaves captured waveform pseudo-cycles from sources A and B. Each output lane plays one completed A pseudo-cycle, then one completed B pseudo-cycle, continuously selecting the most recent completed capture at each handoff. Both sources continue capturing throughout playback.
+Strand interleaves captured waveform pseudo-cycles from sources A and B into a single mono output C. The module plays one completed A pseudo-cycle, then one completed B pseudo-cycle, continuously selecting the most recent completed capture at each handoff. Both sources continue capturing throughout playback.
 
-The two lanes operate independently. They can process a stereo pair or serve as two independent mono interleavers. There is no shared stereo crossing detector, phase alignment, or synchronized switching. Stereo input may consequently change its spatial relationship through processing.
+Strand is a pure mono module (2 inputs, 1 output). For stereo processing, two Strand modules can be used.
 
 ## Panel and routing
 
-Six audio jacks are proposed, with no controls required for the core operation:
+Three audio jacks are arranged vertically in 3 HP, with no controls required for the core operation:
 
 | Source A | Source B | Output |
 | --- | --- | --- |
-| A L / Mono | B L / Mono | C L |
-| A R | B R | C R |
+| A | B | C |
 
-- Left lane: interleave A L and B L.
-- Right lane: interleave A R and B R.
-- When only one jack in a source pair is patched, duplicate that input into both lanes. This applies independently to A and B, including right-only patching.
-- When both jacks in a source pair are patched, use their respective signals without cross-lane analysis.
-- When both pairs are mono, both outputs must produce identical results; detector and playback initialization must be deterministic.
+- Interleave captured cycles from input A and input B into output C.
+- When only one input is patched, repeat captures from that active source until the second source connects.
 - Output connection state does not influence capture or playback.
-
-Panel arrangement and optional activity lights remain to be designed. Each input reads channel 1; the two physical lanes are the scope of this specification.
+- Inputs read channel 1 (monophonic); output produces a monophonic stream.
 
 ## Pseudo-cycle definition
 
@@ -114,14 +109,14 @@ Initial capture bounds are specified below. Bounds prevent unbounded storage and
 - Maximum capture duration is 100 ms (a 10 Hz natural-cycle threshold), bounded additionally by 65,534 samples at high host rates. Timeout completion publishes a forced segment and begins the next capture at that exact boundary. Playback uses the same bounded durations, so each A/B segment lasts at most 100 ms.
 - Forced endpoints fade to/from zero over 0.5 ms, shortened to at most one quarter of the segment duration (and proportionally shortened when the storage cap shortens the maximum duration). This envelope only applies to forced boundaries; natural crossing boundaries retain fractional interpolation. It is not an overlapping crossfade.
 - Minimum accepted pseudo-cycle duration is two samples. No amplitude hysteresis is applied initially; strict excursions and explicit plateau handling qualify crossings.
-- The panel has six vertically arranged jacks in 3 HP, with A, B, and C pair labels.
+- The panel has three vertically arranged jacks in 3 HP, with A, B, and C labels.
 
 ## Implementation validation (2026-10-10)
 
 - Native MINGW64 `plugin.dll` build/link passed.
 - Native `test-fast` passed with the installed Rack2Pro runtime.
 - Dedicated engine tests cover fractional boundaries and duration carry, capture refresh, immutable playback, mono determinism, zero plateaus, non-finite inputs, DC, and forced timeout.
-- Rack-linked module tests cover six-port configuration, left-only/right-only normalization, independent lanes, disconnection, reset, and sample-rate changes.
+- Rack-linked module tests cover three-port configuration, single-source playback, disconnection, reset, and sample-rate changes.
 - Master panel artwork was rendered and inspected; split assets and the anchor atlas were regenerated. Runtime panel inspection and listening evaluation remain outstanding.
 
 ### Forced timeout validation
@@ -130,4 +125,4 @@ Native Strand engine and Rack-linked tests and the Windows plugin link passed af
 
 ## Panel styling
 
-All six jacks use the shared Magitek2 input/output components. A and B use the standard purple input glass fields, and C uses the cyan output glass field, with the shared themed glass overlay. The panel has no screws. The standard solo wave branding sits at the bottom, using the same placement as Doorstop.
+All three jacks use the shared Magitek2 input/output components. A and B use the standard purple input glass fields, and C uses the cyan output glass field, with the shared themed glass overlay. The panel has no screws. The standard solo wave branding sits at the bottom, using the same placement as Doorstop.
