@@ -17,6 +17,9 @@ public:
         ProcessingQuality quality = ProcessingQuality::Reference) noexcept;
     void reset() noexcept;
     void setAuditEnabled(bool enabled) noexcept;
+    void setObserverFastPathEnabled(bool enabled) noexcept {
+        left_.setObserverFastPathEnabled(enabled); right_.setObserverFastPathEnabled(enabled);
+    }
     // Reference switch for offline equivalence/timing. Disabling a live tail
     // uses the same immediate-contact handoff as a new strike.
     void setComposedTailEnabled(bool enabled) noexcept;

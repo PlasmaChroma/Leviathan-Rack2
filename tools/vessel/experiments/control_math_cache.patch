@@ -1,0 +1,140 @@
+diff --git a/src/Vessel.cpp b/src/Vessel.cpp
+index d8b082fd..797f1c68 100644
+--- a/src/Vessel.cpp
++++ b/src/Vessel.cpp
+@@ -164,11 +164,11 @@ void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune)
+     intensityStartSpeed = vessel::rubIntensityMaximumSpeed(currentBowl, currentMallet, .8);
+     const double target = bound(safeValue(params[PITCH_PARAM].getValue())+safeValue(inputs[VOCT_INPUT].getVoltage())
+         +safeValue(params[FINE_PARAM].getValue())/1200, std::log2(20.0/261.625565), std::log2(2000.0/261.625565));
+-    pitchOctaves += -std::expm1(-dt/.0015)*(target-pitchOctaves);
++    pitchOctaves += -pitchSmoothing.get(dt)*(target-pitchOctaves);
+     if (std::abs(target-pitchOctaves) < 1e-7) pitchOctaves = target;
+     vessel::EngineSettings next = applied;
+-    next.frequency = std::max(20.0, std::min(2000.0, 261.625565*std::exp2(pitchOctaves)));
+-    next.decayMultiplier = std::exp2(tune.sustain);
++    next.frequency = std::max(20.0, std::min(2000.0, 261.625565*pitchConversion.get(pitchOctaves)));
++    next.decayMultiplier = sustainConversion.get(tune.sustain);
+     next.imperfection = tune.imperfection;
+     next.observerSeparation = vessel::pi/6*tune.width;
+     if (next.frequency != applied.frequency || next.decayMultiplier != applied.decayMultiplier
+@@ -176,7 +176,7 @@ void Vessel::updateControls(double dt, const vessel_expander::TuneMessage& tune)
+     applied = next;
+     const double separationTarget = bound(params[BINAURAL_PARAM].getValue(), 0, 33);
+     const double previousSeparation = separationHz;
+-    separationHz += -std::expm1(-dt/.01)*(separationTarget-separationHz);
++    separationHz += -separationSmoothing.get(dt)*(separationTarget-separationHz);
+     if (std::abs(separationTarget-separationHz) < 1e-6) separationHz = separationTarget;
+     if (previousSeparation != separationHz) needsConfigure = true;
+ }
+@@ -273,7 +273,7 @@ void Vessel::process(const ProcessArgs& args) {
+     if (visualElapsed >= .005 || controls.strikeEvent || fault) {
+         const double energy = sleeping ? audio.meanEnergy() : frame.bowlEnergy;
+         const double target = vessel::energyMeterPosition(energy);
+-        meter = float(vessel::smoothEnergyMeter(meter, target, visualElapsed));
++        meter = float(meter-meterSmoothing.get(visualElapsed)*(target-meter));
+         if (sleeping) meter = 0.f;
+         visualEnergy.store(meter, std::memory_order_relaxed); rawEnergy.store(float(energy), std::memory_order_relaxed);
+         leftEnergy.store(float(audio.engine().bowl().energy()), std::memory_order_relaxed);
+diff --git a/src/Vessel.hpp b/src/Vessel.hpp
+index dbab59dc..ef23e51e 100644
+--- a/src/Vessel.hpp
++++ b/src/Vessel.hpp
+@@ -5,6 +5,7 @@
+ #include "VesselExpanderProtocol.hpp"
+ #include "vessel/DualBowlAdapter.hpp"
+ #include "vessel/RubIntensity.hpp"
++#include "vessel/CachedControlMath.hpp"
+ #include <atomic>
+ 
+ struct Vessel final : Module {
+@@ -60,6 +61,9 @@ private:
+     double bowlBlend = 1.0, malletBlend = 1.0;
+     double pitchOctaves = 0.0, controlElapsed = 0.001, visualElapsed = 0.0;
+     double separationHz = 0.0;
++    vessel::CachedExp2<double> pitchConversion;
++    vessel::CachedExp2<float> sustainConversion;
++    vessel::CachedSmoothingExponent pitchSmoothing {.0015}, separationSmoothing {.01}, meterSmoothing {.15};
+     double intensityMaximumSpeed = 0.0;
+     double intensitySlipScale = 1.2, startIntensitySlipScale = 1.2;
+     vessel::RubIntensityPlayer intensityPlayer;
+diff --git a/tests/vessel_fast_paths_spec.cpp b/tests/vessel_fast_paths_spec.cpp
+index 32794f27..1bd718bf 100644
+--- a/tests/vessel_fast_paths_spec.cpp
++++ b/tests/vessel_fast_paths_spec.cpp
+@@ -1,6 +1,7 @@
+ #include "vessel/HostRateAdapter.hpp"
+ #include "vessel/SeedProfiles.hpp"
+ #include "vessel/PreparedFrictionLaw.hpp"
++#include "vessel/CachedControlMath.hpp"
+ #include "../tools/vessel/experiments/FrictionApproximation.hpp"
+ #include <algorithm>
+ #include <cmath>
+@@ -100,4 +101,29 @@ void observedCommit() {
+     }
+     std::cout << "[PASS] Fused active commit: exact states/pickups and nonfinite detection in every mode\n";
+ }
+-int main(){try{curves();subnormalPreparation();observedCommit();std::cout<<"Vessel fast paths: 3 groups PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}
++void controlMath() {
++    for (double seconds : {.0015, .01, .15}) {
++        CachedSmoothingExponent cache(seconds);
++        for (double rate : {32000., 44100., 48000., 88200., 96000., 192000.}) {
++            double elapsed = 0;
++            for (int i = 0; i < 10000; ++i) {
++                elapsed += double(float(1./rate));
++                if (elapsed >= .005 || i%137 == 0) {
++                    for (int repeat = 0; repeat < 3; ++repeat)
++                        require(cache.get(elapsed) == std::expm1(-elapsed/seconds), "cached smoothing changed value");
++                    elapsed = 0;
++                }
++            }
++        }
++        require(cache.get(0) == std::expm1(0.), "zero elapsed time");
++    }
++    CachedExp2<double> cache;
++    CachedExp2<float> floatCache;
++    for (int i = -10000; i <= 10000; ++i)
++        for (int repeat = 0; repeat < 3; ++repeat) {
++            require(cache.get(i/1000.) == std::exp2(i/1000.), "cached exp2 changed value");
++            require(floatCache.get(i/1000.f) == std::exp2(i/1000.f), "cached float exp2 changed value");
++        }
++    std::cout << "[PASS] Exact cached control math across changing rates, event intervals and repeated inputs\n";
++}
++int main(){try{curves();subnormalPreparation();observedCommit();controlMath();std::cout<<"Vessel fast paths: 4 groups PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}
+diff --git a/src/vessel/CachedControlMath.hpp b/src/vessel/CachedControlMath.hpp
+new file mode 100644
+index 00000000..fa807147
+--- /dev/null
++++ b/src/vessel/CachedControlMath.hpp
+@@ -0,0 +1,32 @@
++#pragma once
++#include <cmath>
++#include <limits>
++
++namespace vessel {
++
++// One-entry caches for control-rate math. Keep the original expressions and
++// recalculate on every changed input; there is no quantization or rate change.
++template <typename T>
++class CachedExp2 {
++public:
++    T get(T input) noexcept {
++        if (input != input_) { input_ = input; value_ = std::exp2(input); }
++        return value_;
++    }
++private:
++    T input_ = std::numeric_limits<T>::quiet_NaN(), value_ = 0;
++};
++
++class CachedSmoothingExponent {
++public:
++    explicit CachedSmoothingExponent(double seconds) noexcept : seconds_(seconds) {}
++    double get(double dt) noexcept {
++        if (dt != dt_) { dt_ = dt; value_ = std::expm1(-dt/seconds_); }
++        return value_;
++    }
++private:
++    const double seconds_;
++    double dt_ = -1, value_ = 0; // Callers provide nonnegative elapsed time.
++};
++
++} // namespace vessel

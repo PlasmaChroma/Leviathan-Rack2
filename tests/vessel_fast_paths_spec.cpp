@@ -1,5 +1,6 @@
 #include "vessel/HostRateAdapter.hpp"
 #include "vessel/SeedProfiles.hpp"
+#include "vessel/PreparedFrictionLaw.hpp"
 #include "../tools/vessel/experiments/FrictionApproximation.hpp"
 #include <algorithm>
 #include <cmath>
@@ -9,9 +10,18 @@
 #include <stdexcept>
 using namespace vessel;
 void require(bool okay,const char* message) {if(!okay)throw std::runtime_error(message);}
+FrictionValue reciprocalCurve(double slip, double load, const MalletDescriptor& m) {
+    return FrictionReciprocals(m).evaluate(slip,load);
+}
+FrictionValue reciprocalTanhCurve(double slip, double load, const MalletDescriptor& m) {
+    return FrictionReciprocals(m).evaluate<true>(slip,load);
+}
+FrictionValue productionCurve(double slip, double load, const MalletDescriptor& m) {
+    return PreparedFrictionLaw(m).evaluate(slip,load);
+}
 void curves() {
     double forceError=0,derivativeError=0;
-    for(auto evaluate:{frictionValueApproximate,frictionValueTanhApproximate})
+    for(auto evaluate:{frictionValueApproximate,frictionValueTanhApproximate,frictionValueGaussianApproximate,reciprocalCurve,reciprocalTanhCurve,productionCurve})
     for(const auto& m:seedMallets)for(double load:{.1,2.5,15.})for(bool narrow:{false,true})
     for(int i=0;i<=100000;++i) {
         const double slip=(narrow?m.regularizationVelocity*20:m.weakeningVelocity*8)*(2.*i/100000-1);
@@ -28,13 +38,28 @@ void curves() {
             require(std::abs(finite-b.derivative)<1e-5*std::max(1.,std::abs(b.derivative)),"derivative inconsistent with force curve");
         }
     }
-    for(auto evaluate:{frictionValueApproximate,frictionValueTanhApproximate})
+    for(auto evaluate:{frictionValueApproximate,frictionValueTanhApproximate,frictionValueGaussianApproximate,reciprocalCurve,reciprocalTanhCurve,productionCurve})
     for(const auto& m:seedMallets)for(double edge:{8*m.weakeningVelocity,20*m.regularizationVelocity})
     for(double slip:{std::nextafter(edge,0.),edge,std::nextafter(edge,std::numeric_limits<double>::infinity()),-std::nextafter(edge,0.)}) {
         const auto f=evaluate(slip,15,m);
         require(std::isfinite(f.force)&&std::isfinite(f.derivative),"table boundary");
     }
     std::cout<<"[PASS] Dense force/derivative, monotonic slope certificate, dissipation and rounded lookup boundaries; max errors "<<forceError<<" N / "<<derivativeError<<" N/(m/s)\n";
+}
+void subnormalPreparation() {
+    auto m=seedMallets[1];
+    for (double scale : {std::numeric_limits<double>::denorm_min(), .5*std::numeric_limits<double>::min()})
+    for (bool regularization : {false,true}) {
+        m=seedMallets[1];
+        (regularization ? m.regularizationVelocity : m.weakeningVelocity)=scale;
+        PreparedFrictionLaw prepared(m);
+        for (double slip : {0.,scale,-scale, .1}) {
+            const auto a=frictionValue(slip,1e-308,m), b=prepared.evaluate(slip,1e-308);
+            require(a.force==b.force || (std::isnan(a.force)&&std::isnan(b.force)),"subnormal force fallback");
+            require(a.derivative==b.derivative || (std::isnan(a.derivative)&&std::isnan(b.derivative)),"subnormal derivative fallback");
+        }
+    }
+    std::cout << "[PASS] Subnormal descriptor scales preserve analytic evaluation\n";
 }
 void observedCommit() {
     std::mt19937 random(713);
@@ -75,4 +100,4 @@ void observedCommit() {
     }
     std::cout << "[PASS] Fused active commit: exact states/pickups and nonfinite detection in every mode\n";
 }
-int main(){try{curves();observedCommit();std::cout<<"Vessel fast paths: 2 groups PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}
+int main(){try{curves();subnormalPreparation();observedCommit();std::cout<<"Vessel fast paths: 3 groups PASS\n";}catch(const std::exception& e){std::cerr<<"[FAIL] "<<e.what()<<'\n';return 1;}}

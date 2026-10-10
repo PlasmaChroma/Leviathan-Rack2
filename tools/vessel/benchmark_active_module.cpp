@@ -10,6 +10,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
@@ -26,7 +28,24 @@ static void hashFloat(std::uint64_t& hash, float value) {
 }
 
 int main(int argc, char** argv) {
-    const bool expanderLinked = argc > 1 && std::strcmp(argv[1], "--expander") == 0;
+    bool expanderLinked = false;
+    float speed = .2f;
+    float pressure = 2.5f;
+    int selectedMallet = -1;
+    for (int i=1; i<argc; ++i) {
+        if (std::strcmp(argv[i], "--expander") == 0) expanderLinked = true;
+        else if (std::strcmp(argv[i], "--speed") == 0 && i+1<argc) {
+            char* end = nullptr; speed = std::strtof(argv[++i], &end);
+            if (end==argv[i] || *end || !std::isfinite(speed) || speed<0 || speed>2) return 2;
+        } else if (std::strcmp(argv[i], "--pressure") == 0 && i+1<argc) {
+            char* end = nullptr; pressure = std::strtof(argv[++i], &end);
+            if (end==argv[i] || *end || !std::isfinite(pressure) || pressure<0 || pressure>15) return 2;
+        } else if (std::strcmp(argv[i], "--mallet") == 0 && i+1<argc) {
+            char* end = nullptr; const long value = std::strtol(argv[++i], &end, 10);
+            if (end==argv[i] || *end || value<0 || value>3) return 2;
+            selectedMallet = int(value);
+        } else return 2;
+    }
     Model tuneModel;
     modelVTune = &tuneModel;
     rack::Context context; rack::contextSet(&context);
@@ -34,7 +53,7 @@ int main(int argc, char** argv) {
     {
         rack::engine::Engine engine; context.engine = &engine;
         try {
-            std::cout << "bowl,quality,separation,coupled,mean_us,fingerprint\n" << std::setprecision(10);
+            std::cout << "bowl,quality,separation,coupled,mean_us,fingerprint,mallet,speed,pressure\n" << std::setprecision(10);
             for (int bowl : {1, 0}) for (int quality : {1, 2})
             for (float separation : {0.f, 33.f}) for (bool coupled : {false, true}) {
                 double elapsed = 0;
@@ -49,11 +68,13 @@ int main(int argc, char** argv) {
                         auto* message = static_cast<vessel_expander::TuneMessage*>(m.rightExpander.consumerMessage);
                         *message = vessel_expander::TuneMessage{};
                         message->magic = vessel_expander::kMagic;
-                        message->speed = .2f;
+                        message->speed = speed;
+                        message->pressure = pressure;
                     }
                     m.params[Vessel::BOWL_PARAM].setValue(float(bowl));
-                    m.params[Vessel::MALLET_PARAM].setValue(bowl ? 0.f : 1.f);
-                    m.params[Vessel::SPEED_PARAM].setValue(.2f);
+                    m.params[Vessel::MALLET_PARAM].setValue(selectedMallet>=0 ? float(selectedMallet) : bowl ? 0.f : 1.f);
+                    m.params[Vessel::SPEED_PARAM].setValue(speed);
+                    m.params[Vessel::PRESSURE_PARAM].setValue(pressure);
                     m.params[Vessel::BINAURAL_PARAM].setValue(separation);
                     m.requestedQuality.store(quality);
                     m.inputs[Vessel::ROTATE_INPUT].channels = 1;
@@ -85,7 +106,8 @@ int main(int argc, char** argv) {
                     }
                 }
                 std::cout << bowl << ',' << quality << ',' << separation << ',' << coupled << ','
-                    << elapsed*1e6/(3*48000) << ',' << hash << std::endl;
+                    << elapsed*1e6/(3*48000) << ',' << hash << ','
+                    << (selectedMallet>=0 ? selectedMallet : bowl ? 0 : 1) << ',' << speed << ',' << pressure << std::endl;
             }
         } catch (const std::exception& e) { std::cerr << e.what() << '\n'; result = 1; }
         context.engine = nullptr;

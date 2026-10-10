@@ -1,0 +1,598 @@
+{
+  "pairs": 4,
+  "cpu": 0,
+  "binary_sha256": {
+    "baseline": "75e443ba78ce6191670aada2703c4e2168af624c1ee7dc2c6811041cb3147240",
+    "candidate": "442868d894d551957a1658d21a1fa697ad5d8164990909e63ece12de93df2aaf"
+  },
+  "ordinary": {
+    "median_saving_percent": 0.07010816613889082,
+    "min_saving_percent": -4.033237649987775,
+    "max_saving_percent": 2.3091816349529672,
+    "rows": [
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.6748822851191725,
+        "paired_savings_percent": [
+          4.090567223866703,
+          2.5429352663939753,
+          -0.7802984846291272,
+          0.8068293038443697
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.0355691828136337,
+        "paired_savings_percent": [
+          2.840805703457927,
+          1.4271732854406638,
+          -2.6680288028989363,
+          0.6439650801866037
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 2.3091816349529672,
+        "paired_savings_percent": [
+          8.229669503911952,
+          1.2518488927039217,
+          1.8885934943901561,
+          2.729769775515778
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.2110515893727414,
+        "paired_savings_percent": [
+          10.358852151620567,
+          0.05860922073237518,
+          0.8363940160304506,
+          1.5857091627150322
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.2614442199972764,
+        "paired_savings_percent": [
+          1.293741521114733,
+          -2.7164731941338394,
+          1.2291469188798199,
+          2.0588371930748584
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 2.217326690217786,
+        "paired_savings_percent": [
+          3.452563825125743,
+          1.0494001016802756,
+          0.661388371352778,
+          3.385253278755296
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.05230362636671204,
+        "paired_savings_percent": [
+          1.2043468435549487,
+          -0.0020872400590787876,
+          -4.6023259935525695,
+          -0.1025200126743453
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.0799249097139354,
+        "paired_savings_percent": [
+          0.2558087823464339,
+          -0.4156586017743047,
+          -6.404354553928959,
+          2.2094425925043515
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.20698439343257435,
+        "paired_savings_percent": [
+          -0.3092551373231167,
+          -0.104713649542032,
+          -4.781329354023889,
+          3.991112759546489
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -2.282611632324838,
+        "paired_savings_percent": [
+          -1.1725528056390155,
+          -2.5765445948001897,
+          -7.052945742722838,
+          -1.9886786698494863
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -2.18357723917586,
+        "paired_savings_percent": [
+          -1.814256173465112,
+          -2.403400586643767,
+          -6.261233497886365,
+          -1.9637538917079533
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -4.033237649987775,
+        "paired_savings_percent": [
+          -4.643169969329342,
+          -1.3529643399083469,
+          -10.338062915691726,
+          -3.423305330646209
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 0.19251995864449367,
+        "paired_savings_percent": [
+          3.569319487552458,
+          0.15728105297673212,
+          -6.261060142868291,
+          0.22775886431225523
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -1.4169038418702151,
+        "paired_savings_percent": [
+          -2.8411548383048713,
+          0.007347154564441016,
+          -5.728702390099505,
+          4.42371517088489
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 0.37238787845477184,
+        "paired_savings_percent": [
+          -4.7205792711204175,
+          0.9231601743015849,
+          -0.17838441739204125,
+          4.04089048384132
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.5212490972271278,
+        "paired_savings_percent": [
+          -2.898408137003705,
+          0.7365714996959261,
+          -0.3983565601819672,
+          -0.6441416342722883
+        ]
+      }
+    ]
+  },
+  "expander": {
+    "median_saving_percent": -0.22949718359531468,
+    "min_saving_percent": -6.132975811354685,
+    "max_saving_percent": 1.341241623786077,
+    "rows": [
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -1.15484361910147,
+        "paired_savings_percent": [
+          -2.352443841424967,
+          4.068269715028883,
+          -7.676392800078968,
+          0.042756603222027234
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.28017805647934657,
+        "paired_savings_percent": [
+          -1.9518146953344973,
+          4.0949355691355045,
+          -10.383008994946884,
+          1.391458582375804
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -6.132975811354685,
+        "paired_savings_percent": [
+          1.738579420126396,
+          1.8148388219178746,
+          -14.004531042835765,
+          -20.891950954407722
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -1.035781580048123,
+        "paired_savings_percent": [
+          1.2021025428006316,
+          0.4530879313614733,
+          -2.524651091457719,
+          -71.66843080041826
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -4.508868828977564,
+        "paired_savings_percent": [
+          -1.1441276106872067,
+          4.10899019045845,
+          -7.8736100472679205,
+          -25.01454248623356
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.6956086259654992,
+        "paired_savings_percent": [
+          0.31416354350580766,
+          2.4098866898421223,
+          -11.310323081327711,
+          -1.705380795436806
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.341241623786077,
+        "paired_savings_percent": [
+          0.509706149953626,
+          2.7933117037103217,
+          2.172777097618528,
+          -3.140283236737229
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "1",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "0",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.1925893806306542,
+        "paired_savings_percent": [
+          5.464623222706033,
+          -1.032798154800263,
+          2.2731153699416806,
+          0.11206339131962784
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 1.0190287181594315,
+        "paired_savings_percent": [
+          -0.3588407054927689,
+          2.968866701278916,
+          2.396898141811632,
+          -0.9262512270753254
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.9310323693223155,
+        "paired_savings_percent": [
+          -1.5769876850212583,
+          0.020755950912998422,
+          -0.6550065843557329,
+          -1.207058154288898
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.09310171984546756,
+        "paired_savings_percent": [
+          0.8544324855942698,
+          -1.0406359252852049,
+          1.0653354400950499,
+          -1.4539497436115933
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "1",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 0.2055150686736673,
+        "paired_savings_percent": [
+          1.6172827607527251,
+          -0.13991279125300515,
+          0.5509429286003398,
+          -1.224894280928912
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": 0.8643383172378949,
+        "paired_savings_percent": [
+          -0.7539850165449558,
+          1.3552597673548217,
+          1.599815008197225,
+          0.3734168671209681
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "0",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.0032026267523854735,
+        "paired_savings_percent": [
+          -0.4350652124924581,
+          0.23874612503296255,
+          -0.01861398998659336,
+          0.012208736481822413
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "0",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.1788163107112828,
+        "paired_savings_percent": [
+          1.9117473891124503,
+          -0.19339333838233053,
+          -0.16423928304023505,
+          -0.9126723050702834
+        ]
+      },
+      {
+        "fixture": {
+          "bowl": "0",
+          "quality": "2",
+          "separation": "33",
+          "coupled": "1",
+          "mallet": "1",
+          "speed": "0.200000003",
+          "pressure": "2.5"
+        },
+        "median_saving_percent": -0.5948774053210815,
+        "paired_savings_percent": [
+          7.189034639808489,
+          -1.1342303203956794,
+          -0.05552449024648354,
+          -1.7276650012865824
+        ]
+      }
+    ]
+  }
+}

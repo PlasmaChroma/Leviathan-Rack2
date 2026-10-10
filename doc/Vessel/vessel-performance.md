@@ -1,7 +1,7 @@
 # Vessel performance plan
 
 Date: 2026-09-30  
-Status: the exact fused tail step is adopted; the rate selector remains a development experiment. Friction approximations remain offline; lower-rate fidelity is not yet approved.
+Status: the exact fused tail step is adopted; the rate selector remains a development experiment. Production now uses prepared reciprocals and cubic tanh; Gaussian lookup remains offline. Lower-rate fidelity is not yet approved.
 
 ## Objective
 
@@ -826,3 +826,242 @@ on PATH. Future investigation should obtain a stable sampled profile of active
 rubbing before investing in more small source-level rearrangements.
 After restoring production DSP, the native Windows `plugin.dll` build and full
 `test-vessel` suite passed; the retained benchmark target also compiled.
+
+
+## Four-accumulator output FIR (2026-10-09)
+
+The SSE2 streaming decimator now uses four independent accumulators with the
+existing 129 coefficients. The original serial SSE2 implementation remains
+available through `VESSEL_SERIAL_FIR` for exact oracle tests and paired callback
+benchmarks. The scalar fallback and mechanical reductions retain their order.
+
+On Linux/Core Ultra 7 165H, the actual decimator measured 13.9–18.1% faster at
+factors 2/4/8. Across six paired whole-module runs per mode, median per-fixture
+savings were 2.01% standalone and 1.27% with a static V.Tune message. One linked
+Metal/Suede fixture regressed 1.21%; small callback differences remain noisy.
+All 32 fixture audio/energy fingerprints matched. The complete Vessel suite,
+strict serial/scalar host-rate checks, ASan/UBSan host-rate checks (leak detection
+disabled for the ptrace environment), and full Linux plugin build passed.
+Windows and live Rack results are pending.
+
+See [the FIR experiment report](vessel_fir_optimization.md) for test bounds,
+measurement limitations, reproduction targets and local evidence.
+
+## Isolated strike and observer configuration (2026-10-09)
+
+Retained a cached, cancellation-free derivative in the isolated strike solver
+and reuse of mechanical coefficients/certificates for observer-only updates.
+The observer path preserves orbit resynchronization and filtered-tail handoff.
+The coupled derivative candidate passed numerical checks but was restored to
+the original solver after inconclusive or regressing callback measurements.
+
+On Linux/Core Ultra 7 165H, isolated solves measured 16.82% faster; continuing
+isolated-contact callbacks improved 4.22–7.35% across 32 fixtures. Width-update
+callbacks measured 32.46–49.89% faster, with exact paired outputs. Static-width
+steady-rubbing measurements did not establish a general speedup. The complete
+Vessel suite, new oracle/cache-key tests, focused ASan/UBSan checks (leak detection
+disabled), and full Linux plugin build passed. Windows and listening remain
+unverified.
+
+See [the strike and observer report](vessel_strike_and_observer_optimization.md)
+for scope, raw evidence locations, the coupled candidate decision and reproduction.
+
+## Experimental 109-tap FIR validation (2026-10-09)
+
+The 109-tap candidate remains behind `VESSEL_EXPERIMENTAL_FIR109`; production
+still uses 129 taps. Across 288 physical-pickup fixtures, delay-aligned RMS
+error was 0.00618% median / 0.04165% worst, with a 0.05209% worst peak error
+relative to reference peak. Internal-rate pickup trajectories matched exactly.
+The independent streaming convolution check stayed below 1.52e-15 of input
+peak. Candidate adapter/module tests and focused ASan/UBSan checks passed;
+the default Vessel suite and full Linux plugin build passed.
+
+Streaming FIR cost fell approximately 8–11%, but six paired whole-module runs
+showed only 0.51% median standalone savings and 0.66% with static V.Tune input,
+with some fixture regressions. At a 44.1 kHz host, 20 kHz gain changes by about
++1.41 dB in the transition band. These measurements justify keeping a testable
+candidate, not promoting it without a clearer benefit and sound decision.
+
+See [the validation report](vessel_fir109_validation.md) and
+[machine-readable results](vessel_fir109_results.json) for normalization,
+frequency/alias measurements, timing variability and reproduction.
+
+## Friction-work profiling (2026-10-09)
+
+Added compile-time offline counters, with no instrumentation in normal builds.
+Across 96 fixed-pitch fixtures at three rubbing speeds, 480 phase fingerprints
+matched between plain and instrumented runs. The matrix covered 12.67 million
+host frames and 85.62 million friction-law evaluations. Ordinary sustained solves
+averaged 1.18–2.02 evaluations; coupled overlap used about 4.7 inner solves per
+outer solve. No fallback steps or recovery faults occurred in these fixtures.
+
+Gaussian exp executed on every law evaluation. Sustained tanh use ranged from
+100% at slow rubbing to 2.82% at the middle speed and 0% at the fast speed.
+These are work counts, not CPU-time percentages. They motivate separate Gaussian
+and invariant-arithmetic benchmarks before another integrated optimization.
+Pitch/retuning optimization remains deferred. Dedicated accounting tests, the
+normal Vessel suite and full Linux build passed.
+
+See [the contact-work profile](vessel_contact_work_profile.md) for scope,
+limits, counter validation and reproduction.
+
+## Retained fast friction evaluation (2026-10-09)
+
+Production friction solves now cache velocity-scale reciprocals once per solve
+and evaluate tanh with a monotone cubic table whose derivative comes from the
+same interpolant. Gaussian weakening remains analytic. The original analytic
+law remains available as a reference and as a fallback for subnormal descriptor
+scales. Generated bounds protect the existing uniqueness check. Solver
+thresholds, bracketing, iteration limits, pitch behavior and the 129-tap filter
+are unchanged.
+
+Four fresh paired full-callback runs of the final implementation measured 3.05%
+median fixture savings in ordinary rubbing and 16.85% in slow Felt. One ordinary
+fixture had a -0.30% median regression; every slow-Felt median improved.
+All 16 production eight-second captures match the validated combined candidate
+byte for byte, and all 32 callback fingerprints match. Worst candidate waveform
+RMS error against the analytic control was 2.92e-8% of reference RMS.
+
+Candidate and normal Vessel suites, generated-table checks, counter tests,
+focused ASan/UBSan checks and the full Linux plugin link passed. Windows and
+listening remain unverified. The Gaussian-only and two-table candidates remain
+offline after weaker/mixed gains.
+
+See [the fast-friction report](vessel_fast_friction_validation.md) and
+[machine-readable results](vessel_fast_friction_results.json).
+
+## Control-math cache experiment (2026-10-09; not retained)
+
+Auditing remaining exact math found repeated control-rate `expm1` (pitch and
+separation smoothing), `exp2` (pitch and sustain), and visual-rate `expm1`
+(meter smoothing). A one-entry cache trial removed repeated evaluations while
+retaining each original expression, including float `exp2` for sustain and
+double `exp2` for pitch. Elapsed-time keys handled strike-shortened intervals
+and changing sample rates. Initialization and already-cached math were left alone.
+
+The final candidate did **not** establish a useful active-callback improvement:
+
+| Full callback, 16 fixtures each | Median fixture saving | Fixture median range |
+| --- | ---: | ---: |
+| Standalone | 0.07% | -4.03% to +2.31% |
+| Static V.Tune connected | -0.23% | -6.13% to +1.34% |
+
+Four alternating-order pairs per mode, CPU 0, GCC 12.3 `-O3 -march=nehalem`,
+strict Vessel floating-point flags, Linux on Intel Core Ultra 7 165H. No builds
+ran during timing. Positive values mean lower callback time. These mixed small
+results do not establish a reliable speedup or a portable regression. Earlier
+exploratory timing was more favorable; only the final typed-cache implementation
+is represented in [the retained results](vessel_control_math_results.json).
+
+Correctness was stronger than the timing result: all 32 callback fingerprints
+matched. An additional 256,000-frame capture matched byte for byte across nine
+audio/control/meter float values per frame (2,304,000 values, zero measured
+difference). It exercised both bowls, Balanced/Reference quality, four changing
+host rates (44.1/48/96/32 kHz), moving pitch/separation/sustain, irregular control
+intervals from strikes, release and runtime resets. No faults occurred in that
+final corpus. An initial roughly 300-Hz full-velocity strike storm faulted in
+the unchanged baseline; the final trace uses velocity 0.2 and one strike every
+1,373 frames. This experiment does not resolve the baseline stress fault.
+
+The candidate passed `test-vessel` and full Linux plugin linking. Production
+was then restored and revalidated. No Windows build or listening trial was run;
+the exact comparison supports no sound change in the exercised cases.
+
+Reproduction: preserve `build/tools/vessel_benchmark_active_module` before and
+after applying `tools/vessel/experiments/control_math_cache.patch` **in a scratch
+checkout** based on `12d4c9a20ab03e99b3f342c92e3ea03a08e656b7`. Run
+`python3 tools/vessel/benchmark_control_math.py BASELINE CANDIDATE OUTPUT --cpu 0`.
+Build `build/tools/vessel_capture_control_math` on each side, pass an output
+filename to each executable, and compare the resulting binary files. The trace
+format is nine native float32 values per frame in the order listed in its source.
+Raw CSVs, preserved executables, and captures from this run are in
+`build/vessel-control-math/`; final timing is under `final/`.
+
+Decision: keep the patch offline, with no production caching or approximation
+from this trial. A lower-cost isolated function is insufficient evidence of a
+useful module optimization. Do not approximate initialization-only math or
+already-cached values. Meter `log1p` remains analytic at roughly 200 Hz; it was
+not separately benchmarked. Gaussian and coupled-strike candidates retain their
+previous mixed/rejected status, and modal retuning remains deferred.
+
+## Retained geometry reuse during retuning (2026-10-09)
+
+This pass optimizes configuration dependencies without changing the retuning
+equations, timing, or orbit resynchronization. Two changes are now in production:
+
+- `ContactOrbit` retains each mode pair's contact-footprint factor, keyed by
+  mode order and mallet patch width. Both orbit setup and the configuration
+  uniqueness certificate reuse it. Width/order changes still evaluate the
+  original formula, including intermediate mallet-morph values.
+- `VesselEngine` reuses existing pickup vectors when the bowl descriptor and
+  observer angles are unchanged, and the active striker's latched port when
+  bowl geometry is unchanged. Pitch, decay and mallet-selection changes do not
+  invalidate these vectors unnecessarily. The conservative bowl comparison
+  includes every physical field; actual bowl changes rebuild them. The existing
+  offline observer-oracle switch also forces port rebuilding for comparison.
+
+Added persistent memory is **208 bytes per dual-bowl adapter** on this Linux
+x86-64 build (54,304 to 54,512 bytes), with no new allocations. Modal-bank storage
+and coefficient equations remain unchanged. Angle rotations and normalization
+phase are still resynchronized exactly as before.
+
+### Final measurements
+
+Four alternating-order process pairs, CPU 0, GCC 12.3, `-O3 -march=nehalem`,
+strict Vessel math, Intel Core Ultra 7 165H/Linux. No builds ran during timings.
+Each pitch run covers both bowls, Balanced/Reference, zero/33-Hz separation,
+and tail/rubbing: 16 fixtures, each with six repetitions and two identical lanes.
+V/oct alternates +/-0.1 octaves at the existing approximately 1-kHz control ticks;
+the existing pitch smoothing remains active.
+
+| Workload | Median fixture saving | Fixture median range |
+| --- | ---: | ---: |
+| Configuration-bearing callback during V/oct changes | **23.28%** | +16.60% to +27.88% |
+| Whole instrumented stream during V/oct changes | **3.40%** | -0.01% to +6.04% |
+| Steady-pitch active callback, standalone | 0.03% | -1.26% to +3.01% |
+| Steady-pitch active callback, static V.Tune | 0.66% | -3.75% to +4.18% |
+
+Configuration timing excludes control writes. Instrumented stream timing also
+includes the deterministic control driver, per-update timers, output checksum,
+and fault checks. Steady-active timing uses the existing process-only benchmark.
+These are Linux headless measurements, not a measured Windows/Rack CPU-meter
+reduction. The stable-pitch results are mixed and near neutral overall; the
+demonstrated benefit is configuration cost during modulation.
+
+### Correctness and discarded variants
+
+- The existing 256,000-frame capture matched the preserved baseline byte for
+  byte across two audio outputs and seven control/meter values per frame.
+  This includes moving pitch/separation/sustain, strikes, resets and four host
+  rates; no faults occurred. All pitch-run checksums and all 32 steady callback
+  fingerprints matched across every timing pair.
+- 144 cached/full observer trajectories and 35 dependency/rejection checks
+  passed, including every physical descriptor field, latched strikes, changed
+  angles and adjacent-rate band boundaries. The fresh-orbit test adds 1,000
+  exact comparisons across changing width, order, mass, angle and topology.
+- `make test-vessel` and the full Linux plugin link passed. The final focused
+  geometry test also passed after removing the unused modal-cache test from the
+  normal suite. Windows builds and live Rack measurement remain unverified.
+
+A larger modal cache for split factors, decay exponentials and inverse-root
+masses was tested but **not retained**. Its first layout saved 4.81% on
+configuration callbacks but regressed whole streams by 2.52%. Moving setup
+storage after hot arrays and combining it with footprint caching gave 11.21%
+configuration savings but only 0.49% stream savings. Footprint caching alone
+gave 3.45%/1.13%. The final footprint-plus-port-reuse choice gives the stronger
+result above with much less storage. These separately run variants are useful
+selection evidence, not additive cost attributions.
+
+The modal candidate passed 11,563 exact fresh-bank comparisons and 437
+transactional rejections. Its code and test remain offline in
+`tools/vessel/experiments/modal_setup_cache.patch` and
+`tools/vessel/experiments/modal_setup_cache_spec.cpp`; apply the patch only in a
+scratch checkout. It is not enabled in the normal build.
+
+Reproduce with preserved before/after `build/tools/vessel_benchmark_pitch_module`
+executables and `python3 tools/vessel/benchmark_setup_cache.py BASELINE CANDIDATE
+OUTPUT --cpu 0`. For steady workloads use `benchmark_control_math.py` with the
+before/after active-module benchmark binaries. Baseline commit:
+`9e123ca1b489ab1aa78214d4778941a02d6ebfe5`. Raw captures, executables and CSVs are in
+`build/vessel-dependency-cache/`. The retained variant is `geometry/`, and steady
+checks are in `steady/`. See [all candidate results](vessel_geometry_cache_results.json).

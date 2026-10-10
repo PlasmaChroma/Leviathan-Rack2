@@ -1,4 +1,7 @@
 #include "HostRateAdapter.hpp"
+#if defined(VESSEL_EXPERIMENTAL_FIR109)
+#include "ExperimentalFir109.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +11,9 @@
 
 namespace vessel {
 StereoDecimator::StereoDecimator() noexcept {
+    #if defined(VESSEL_EXPERIMENTAL_FIR109)
+    coefficients_ = experimentalFir109;
+    #else
     constexpr unsigned center = (taps-1)/2;
     double sum = 0.0;
     for (unsigned i = 0; i <= center; ++i) {
@@ -18,6 +24,7 @@ StereoDecimator::StereoDecimator() noexcept {
         sum += coefficients_[i]*(i == center ? 1.0 : 2.0);
     }
     for (auto& c : coefficients_) c /= sum;
+    #endif
 }
 bool StereoDecimator::configure(unsigned factor) noexcept {
     if (factor != 1 && factor != 2 && factor != 4 && factor != 8) return false;
@@ -49,7 +56,27 @@ bool StereoDecimator::pushStage(Stage& stage, const StereoSample& input, StereoS
     static_assert(sizeof(StereoSample) == 2*sizeof(double)
         && offsetof(StereoSample, right) == sizeof(double), "packed stereo FIR lanes");
     __m128d sum = _mm_setzero_pd();
-    for (unsigned i = 0; i < (taps-1)/2; ++i) {
+    unsigned i = 0;
+#if !defined(VESSEL_SERIAL_FIR)
+    // Independent chains hide add latency. Only the output observer is
+    // reassociated; the mechanical/contact reductions retain their order.
+    // VESSEL_SERIAL_FIR keeps the original SSE2 order for strict tests/benchmarks.
+    __m128d sum1 = sum, sum2 = sum, sum3 = sum;
+    for (; i+3 < (taps-1)/2; i += 4) {
+        const auto term = [&](unsigned offset) {
+            const __m128d pair = _mm_add_pd(_mm_loadu_pd(&(newer-offset)->left),
+                                           _mm_loadu_pd(&(older+offset)->left));
+            return _mm_mul_pd(_mm_set1_pd(coefficients_[i+offset]), pair);
+        };
+        sum = _mm_add_pd(sum, term(0));
+        sum1 = _mm_add_pd(sum1, term(1));
+        sum2 = _mm_add_pd(sum2, term(2));
+        sum3 = _mm_add_pd(sum3, term(3));
+        newer -= 4; older += 4;
+    }
+    sum = _mm_add_pd(_mm_add_pd(sum, sum1), _mm_add_pd(sum2, sum3));
+#endif
+    for (; i < (taps-1)/2; ++i) {
         const __m128d pair = _mm_add_pd(_mm_loadu_pd(&newer->left), _mm_loadu_pd(&older->left));
         sum = _mm_add_pd(sum, _mm_mul_pd(_mm_set1_pd(coefficients_[i]), pair));
         --newer; ++older;

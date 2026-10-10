@@ -1,4 +1,6 @@
 #include "FrictionContact.hpp"
+#include "ContactWorkProfile.hpp"
+#include "PreparedFrictionLaw.hpp"
 #include "StrikeContact.hpp"
 
 #include <algorithm>
@@ -7,12 +9,17 @@
 namespace vessel {
 
 FrictionValue frictionValue(double slip, double load, const MalletDescriptor& m) noexcept {
+    VESSEL_WORK(++contactWork().friction().lawEvaluations);
     FrictionValue value;
     if (load == 0.0) return value;
     const double z = slip/m.weakeningVelocity;
+    VESSEL_WORK(contactWork().friction().gaussianCore += std::abs(z) < 1.0);
+    VESSEL_WORK(contactWork().friction().gaussianTail += std::abs(z) >= 8.0 && std::abs(z) < 27.0);
+    VESSEL_WORK(contactWork().friction().expEvaluations += std::abs(z) < 27.0);
     const double weakening = std::abs(z) < 27.0 ? std::exp(-z*z) : 0.0;
     const double mu = m.muK+(m.muS-m.muK)*weakening;
     const double a = slip/m.regularizationVelocity;
+    VESSEL_WORK(contactWork().friction().tanhEvaluations += std::abs(a) < 20.0);
     const double t = std::abs(a) < 20.0 ? std::tanh(a) : (a < 0.0 ? -1.0 : 1.0);
     const double slope = weakening == 0.0 ? 0.0 : -2.0*z/m.weakeningVelocity*(m.muS-m.muK)*weakening;
     value.force = load*mu*t;
@@ -20,31 +27,36 @@ FrictionValue frictionValue(double slip, double load, const MalletDescriptor& m)
     return value;
 }
 double frictionNegativeSlopeBound(double load, const MalletDescriptor& m) noexcept {
-    return load*0.8577638849607068*(m.muS-m.muK)/m.weakeningVelocity;
+    return preparedFrictionNegativeSlopeBound(load,m);
 }
 FrictionSolution solveFriction(double delta, double Y, double load,
                                const MalletDescriptor& m, double previous) noexcept {
+    VESSEL_WORK(++contactWork().friction().solves);
     FrictionSolution result;
     if (!validMallet(m) || !std::isfinite(delta) || !std::isfinite(Y) || Y < 0.0
         || !std::isfinite(load) || load < 0.0 || !std::isfinite(previous)
         || Y*frictionNegativeSlopeBound(load, m) > 0.9) return result;
     if (load == 0.0) {
+        VESSEL_WORK(++contactWork().friction().zeroLoad);
+        VESSEL_WORK(++contactWork().friction().converged);
         result.slip = delta;
         result.converged = true;
         return result;
     }
+    const PreparedFrictionLaw prepared(m);
     double lo = -load*m.muS, hi = load*m.muS;
     double force = std::max(lo, std::min(hi, previous));
     const double tolerance = 1e-12+1e-11*std::max(1.0, hi);
     for (unsigned i = 0; i < 80; ++i) {
         result.force = force;
         result.slip = delta-Y*force;
-        const auto law = frictionValue(result.slip, load, m);
+        const auto law = prepared.evaluate(result.slip, load);
         result.derivative = law.derivative;
         result.residual = force-law.force;
         result.iterations = i+1;
         if (!std::isfinite(result.residual) || !std::isfinite(result.derivative)) return result;
         if (std::abs(result.residual) <= tolerance) {
+            VESSEL_WORK(++contactWork().friction().converged);
             result.converged = true;
             return result;
         }
@@ -53,30 +65,39 @@ FrictionSolution solveFriction(double delta, double Y, double load,
         const double candidate = force-result.residual/(1.0+Y*law.derivative);
         // Bound Newton's work near sharp adhesion transitions. A merely
         // in-bracket step can crawl along a bracket edge indefinitely.
+        VESSEL_WORK((i < 12 && std::isfinite(candidate) && candidate > lo && candidate < hi)
+            ? ++contactWork().friction().newton : ++contactWork().friction().fallback);
         force = i < 12 && std::isfinite(candidate) && candidate > lo && candidate < hi
             ? candidate : 0.5*(lo+hi);
     }
     return result;
 }
 
+double ContactOrbit::patchFactor(std::size_t pair, int order, double width) const noexcept {
+    if (pair < pairs_ && orders_[pair] == order && cachedWidth_ == width) return patches_[pair];
+    const double half = 0.5*order*width;
+    return std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
+}
+
 void ContactOrbit::configure(const BowlDescriptor& bowl, const ModalBank& bank,
                              double width, double angle) noexcept {
-    pairs_ = bowl.pairCount;
     ticks_ = 0;
     incrementCached_ = false;
-    for (std::size_t n = 0; n < pairs_; ++n) {
+    for (std::size_t n = 0; n < bowl.pairCount; ++n) {
         const auto& p = bowl.pairs[n];
+        const double patch = patchFactor(n, p.order, width);
+        patches_[n] = patch;
         orders_[n] = p.order;
         const double beta = p.order*(angle-p.orientation);
         cosine_[n] = std::cos(beta);
         sine_[n] = std::sin(beta);
-        const double half = 0.5*p.order*width;
-        const double patch = std::abs(half) < 1e-8 ? 1.0-half*half/6.0 : std::sin(half)/half;
         gains_[2*n] = patch*bank.coefficients(2*n).inverseRootMass;
         gains_[2*n+1] = patch*bank.coefficients(2*n+1).inverseRootMass;
         tangentGains_[2*n] = gains_[2*n]/p.order;
         tangentGains_[2*n+1] = gains_[2*n+1]/p.order;
     }
+    pairs_ = bowl.pairCount;
+    cachedWidth_ = width;
 }
 void ContactOrbit::rotate() noexcept {
     for (std::size_t n = 0; n < pairs_; ++n) {

@@ -50,7 +50,7 @@ bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescript
         transitionIncrement_ = 1.0/(0.005*rate);
         hostRate_ = rate;
     }
-    tailHistoryFrames_=(128*(nextFactor-1)+nextFactor)/nextFactor;
+    tailHistoryFrames_=((StereoDecimator::taps-1)*(nextFactor-1)+nextFactor)/nextFactor;
     dualMixIncrement_ = 1.0/(.05*rate*nextFactor);
     if (wakeRight) { rightActive_ = true; if (initial) dualMix_ = 1.0; }
     centerFrequency_ = center; separationHz_ = separation;

@@ -18,33 +18,69 @@ bool close(double a, double b, double eps = 1e-10) { return std::abs(a-b) <= eps
 
 // Original branch-wrapped scalar kernel, independent of mirrored storage/SIMD.
 void originalFirEquivalence() {
-    struct Stage { std::array<StereoSample,129> samples {}; unsigned pos=0,phase=0; };
+    constexpr unsigned taps = StereoDecimator::taps, center = (taps-1)/2;
+    struct Stage { std::array<StereoSample,taps> samples {}; unsigned pos=0,phase=0; };
     std::mt19937 rng(71241); std::uniform_real_distribution<double> values(-10,10);
+    double maxNormalizedError = 0.0;
+    for (double scale : {1e-100, 1e-6, 1.0, 1e6, 1e100})
     for (unsigned factor : {1u,2u,4u,8u}) {
         StereoDecimator fast; require(fast.configure(factor), "optimized FIR setup");
         std::array<Stage,3> stages {};
         const unsigned count=factor==8?3:factor==4?2:factor==2?1:0;
-        for (unsigned sample=0;sample<10000;++sample) {
-            StereoSample input,actual;input.left=values(rng);input.right=values(rng);
+        double coefficientNorm = 0.0;
+        for (unsigned i=0; i<StereoDecimator::taps; ++i)
+            coefficientNorm += std::abs(fast.coefficient(i));
+        // Absolute, input-scaled bound remains meaningful at cancellation/nulls.
+        // Allow 64 eps per stage, amplified by the cascade's coefficient L1 norm.
+        const double tolerance = 64*std::numeric_limits<double>::epsilon()*10*scale
+            *count*std::pow(coefficientNorm, count);
+        for (unsigned sample=0;sample<16000;++sample) {
+            StereoSample input,actual;
+            if (sample < 4000) { input.left=values(rng); input.right=values(rng); }
+            else if (sample < 6000) { input.left=10; input.right=-3; }
+            else if (sample < 8000) { input.left=sample%2 ? 10 : -10; input.right=-input.left; }
+            else if (sample < 10000) { input.left=sample%257 == 0 ? 10 : 0; }
+            else if (sample < 12000) {
+                input.left=10*std::cos(.49*pi*sample);
+                input.right=10*std::sin(.4*pi*sample);
+            }
+            else if (sample < 14000) {
+                input.left=sample%2 ? 10 : -10+1e-12;
+                input.right=values(rng)*1e-12;
+            }
+            input.left *= scale; input.right *= scale;
             bool ready=true;auto expected=input;
             for (unsigned stage=0;stage<count;++stage) {
                 auto& s=stages[stage];s.samples[s.pos]=expected;const unsigned newest=s.pos;
-                if(++s.pos==129)s.pos=0;
+                if(++s.pos==taps)s.pos=0;
                 s.phase^=1;
                 if(s.phase) {ready=false;break;}
                 expected={};unsigned a=newest,b=s.pos;
-                for (unsigned i=0;i<64;++i) {
+                for (unsigned i=0;i<center;++i) {
                     expected.left+=fast.coefficient(i)*(s.samples[a].left+s.samples[b].left);
                     expected.right+=fast.coefficient(i)*(s.samples[a].right+s.samples[b].right);
-                    a=a==0?128:a-1;if(++b==129)b=0;
+                    a=a==0?taps-1:a-1;if(++b==taps)b=0;
                 }
-                expected.left+=fast.coefficient(64)*s.samples[a].left;
-                expected.right+=fast.coefficient(64)*s.samples[a].right;
+                expected.left+=fast.coefficient(center)*s.samples[a].left;
+                expected.right+=fast.coefficient(center)*s.samples[a].right;
             }
             require(fast.push(input,actual)==ready, "optimized FIR cadence differs");
-            if(ready)require(actual.left==expected.left && actual.right==expected.right, "optimized FIR differs from original scalar kernel");
+            if (ready) {
+                const double error = std::max(std::abs(actual.left-expected.left),
+                                              std::abs(actual.right-expected.right));
+                require(std::isfinite(actual.left) && std::isfinite(actual.right), "nonfinite FIR output");
+                maxNormalizedError = std::max(maxNormalizedError, error/(10*scale));
+#if defined(VESSEL_SERIAL_FIR) || defined(VESSEL_SCALAR_FIR) || !defined(__SSE2__)
+                require(actual.left==expected.left && actual.right==expected.right,
+                        "strict FIR differs from original scalar kernel");
+#else
+                require(error <= tolerance, "four-accumulator FIR exceeds rounding bound");
+#endif
+            }
         }
+        (void)tolerance; // Strict builds use exact equality instead.
     }
+    std::cout << "  FIR maximum error/input peak=" << maxNormalizedError << '\n';
 }
 
 void frequencyResponseAndLatency() {
