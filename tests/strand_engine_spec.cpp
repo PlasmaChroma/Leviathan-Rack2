@@ -39,13 +39,14 @@ int main() {
         c.samples[0] = 1.f; c.samples[1] = -1.f; c.samples[2] = -.5f;
         lane->sources[i].latest = 0;
     }
-    for (int t = 1; t <= 31000; ++t) {
+    for (int t = 1; t <= 48000; ++t) {
         lane->process(0.f, 0.f);
         double phase = std::fmod(double(t), 7.75);
         int expected = phase < 3.25 ? 0 : 1;
         assert(lane->playing == expected);
         assert(std::abs(lane->position - (expected == 0 ? phase : phase - 3.25)) < 1e-9);
     }
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 96000.f / 7.75f) < 1.f);
     // Selected storage stays untouched through capture refreshes.
     lane->reset(48000.);
     for (int t = 0; t < 120; ++t) lane->process(wave(t, 13, 2.f), wave(t, 19, 4.f));
@@ -65,6 +66,7 @@ int main() {
     lane->reset(48000.);
     for (int t = 0; t < 6000; ++t) assert(lane->process(1.f, 0.f) == 0.f);
     assert(lane->sources[0].latest == -1);
+    assert(lane->playbackFreqTracker.getFrequency() == 0.f);
     lane->process(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity());
     assert(lane->playing == -1);
     // Zero plateaus need a negative excursion and an intervening fall.
@@ -111,11 +113,16 @@ int main() {
     float f1 = lane->freqTrackers[1].getFrequency();
     assert(std::abs(f0 - 480.f) < 2.5f);
     assert(std::abs(f1 - 240.f) < 2.5f);
-    // Next 1 second with silence: updates to 0 Hz:
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 320.f) < 3.f);
+    // Freeze publications: input silence must not hide retained playback.
+    for (auto& source : lane->sources) source.writing = -1;
+    // Next 1 second with silence: input trackers update to 0 Hz:
     for (int t = 48000; t < 96000; ++t) {
         lane->process(0.f, 0.f);
     }
     assert(lane->freqTrackers[0].getFrequency() == 0.f);
     assert(lane->freqTrackers[1].getFrequency() == 0.f);
+    // Captured cycles still play, even though the input trackers report silence.
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 320.f) < 1.f);
     std::cout << "Strand engine tests passed\n";
 }

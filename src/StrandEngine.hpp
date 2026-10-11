@@ -67,6 +67,33 @@ struct FrequencyTracker {
     }
 };
 
+// Output reports completed playback segments per elapsed second, including
+// forced capture segments and repeats of a retained publication.
+struct PlaybackFrequencyTracker {
+    int completed = 0;
+    double sampleTimer = 0., sampleRate = 48000.;
+    std::atomic<float> displayFreq{0.f};
+
+    void reset(double rate) {
+        completed = 0;
+        sampleTimer = 0.;
+        sampleRate = std::max(1., rate);
+        displayFreq.store(0.f, std::memory_order_relaxed);
+    }
+    void onCycle() { ++completed; }
+    void step() {
+        sampleTimer += 1.;
+        if (sampleTimer >= sampleRate) {
+            displayFreq.store(float(completed * sampleRate / sampleTimer), std::memory_order_relaxed);
+            sampleTimer = 0.;
+            completed = 0;
+        }
+    }
+    float getFrequency() const {
+        return displayFreq.load(std::memory_order_relaxed);
+    }
+};
+
 struct Cycle {
     std::vector<float> samples = std::vector<float>(capacity);
     int count = 0;
@@ -154,6 +181,7 @@ struct Source {
 struct Lane {
     std::array<Source, 2> sources;
     std::array<FrequencyTracker, 2> freqTrackers;
+    PlaybackFrequencyTracker playbackFreqTracker;
     int playing = -1;
     double position = 0., tick = 0., limit = 4800.;
     double sampleRate = 48000.;
@@ -163,6 +191,7 @@ struct Lane {
         limit = std::min(rate * .1, double(capacity - 2));
         for (auto& s : sources) { s.pinned = -1; s.reset(); }
         for (auto& ft : freqTrackers) ft.reset(rate);
+        playbackFreqTracker.reset(rate);
     }
     void select() {
         int next = playing < 0 ? 0 : 1 - playing;
@@ -179,6 +208,7 @@ struct Lane {
             double remaining = sources[playing].cycles[sources[playing].pinned].duration - position;
             if (delta > remaining) {
                 delta -= remaining;
+                playbackFreqTracker.onCycle();
                 select();
             }
             if (playing >= 0) position += delta;
@@ -233,8 +263,12 @@ struct Lane {
         tick += 1.;
         freqTrackers[0].step();
         freqTrackers[1].step();
-        if (playing >= 0 && position >= sources[playing].cycles[sources[playing].pinned].duration) select();
+        if (playing >= 0 && position >= sources[playing].cycles[sources[playing].pinned].duration) {
+            playbackFreqTracker.onCycle();
+            select();
+        }
         if (playing < 0) select();
+        playbackFreqTracker.step();
         return playing < 0 ? 0.f : sources[playing].cycles[sources[playing].pinned].at(position);
     }
 };

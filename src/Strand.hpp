@@ -62,12 +62,7 @@ struct Strand : Module {
         if (portDisplayIndex == DISP_INPUT_A) return lane.freqTrackers[0].getFrequency();
         if (portDisplayIndex == DISP_INPUT_B) return lane.freqTrackers[1].getFrequency();
         if (portDisplayIndex == DISP_OUTPUT_C) {
-            float fa = lane.freqTrackers[0].getFrequency();
-            float fb = lane.freqTrackers[1].getFrequency();
-            if (fa > 0.05f && fb > 0.05f) return (fa + fb) * 0.5f;
-            if (fa > 0.05f) return fa;
-            if (fb > 0.05f) return fb;
-            return 0.f;
+            return lane.playbackFreqTracker.getFrequency();
         }
         return 0.f;
     }

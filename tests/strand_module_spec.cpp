@@ -23,18 +23,18 @@ int main() {
         }
     }
     assert(hadNonZero);
-    // Frequency statistics: period 48 -> 1000 Hz, period 96 -> 500 Hz, output average -> 750 Hz
+    // Two playback cycles per 144 samples -> approximately 666.7 cycles/sec.
     float fa = m.getFrequency(Strand::DISP_INPUT_A);
     float fb = m.getFrequency(Strand::DISP_INPUT_B);
     float fc = m.getFrequency(Strand::DISP_OUTPUT_C);
     assert(std::abs(fa - 1000.f) < 5.f);
     assert(std::abs(fb - 500.f) < 5.f);
-    assert(std::abs(fc - 750.f) < 5.f);
+    assert(std::abs(fc - 666.6667f) < 2.f);
 
     // Single source: disconnect B, keep A. Playback should continue using A, output freq should equal A.
     m.inputs[Strand::B_INPUT].channels = 0;
     bool aOnlyActive = false;
-    for (int t = 0; t < 2000; ++t) {
+    for (int t = 0; t < 96000; ++t) {
         m.inputs[Strand::A_INPUT].setVoltage(wave(t, 48));
         m.process(args);
         if (std::abs(m.outputs[Strand::C_OUTPUT].getVoltage()) > 0.1f) {
@@ -48,9 +48,13 @@ int main() {
     for (auto& input : m.inputs) input.channels = 0;
     for (int t = 0; t < 100; ++t) m.process(args);
     assert(m.outputs[Strand::C_OUTPUT].getVoltage() == 0.f);
+    // Allow a complete silent reporting window after the final pinned cycle.
+    for (int t = 0; t < 96000; ++t) m.process(args);
+    assert(m.getFrequency(Strand::DISP_OUTPUT_C) == 0.f);
     rack::engine::Module::SampleRateChangeEvent rate{}; rate.sampleRate = 96000.f;
     m.onSampleRateChange(rate);
     assert(m.lane.limit == 9600. && m.lane.playing == -1);
+    assert(m.getFrequency(Strand::DISP_OUTPUT_C) == 0.f);
     rack::engine::Module::ResetEvent reset{}; m.onReset(reset);
     assert(m.lane.limit == 9600. && m.connected[0] == -1);
     std::cout << "Strand Rack module tests passed\n";
