@@ -2,19 +2,17 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
-#include "theme/ThemedTextWidget.hpp"
 
-struct StrandFrequencyDisplayWidget : leviathan::theme::ThemedTextWidget<Widget> {
+struct StrandFrequencyDisplayWidget : widget::TransparentWidget {
     Strand* strandModule = nullptr;
     int portIndex = 0;
-    std::shared_ptr<Font> font = nullptr;
     float lastFreq = -999.f;
     char cachedText[32] = "---";
 
     StrandFrequencyDisplayWidget(Strand* m, int port) : strandModule(m), portIndex(port) {}
 
     void step() override {
-        leviathan::theme::ThemedTextWidget<Widget>::step();
+        widget::TransparentWidget::step();
         float freq = strandModule ? strandModule->getFrequency(portIndex) : 0.f;
         if (std::abs(freq - lastFreq) > 0.01f || (freq == 0.f && lastFreq != 0.f)) {
             lastFreq = freq;
@@ -35,13 +33,10 @@ struct StrandFrequencyDisplayWidget : leviathan::theme::ThemedTextWidget<Widget>
     }
 
     void draw(const DrawArgs& args) override {
-        if (!font && APP && APP->window) {
-            font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
-        }
-        int fontHandle = font ? font->handle : ((APP && APP->window && APP->window->uiFont) ? APP->window->uiFont->handle : -1);
+        int fontHandle = (APP && APP->window && APP->window->uiFont) ? APP->window->uiFont->handle : -1;
         if (fontHandle < 0) return;
 
-        float fontSize = 8.5f;
+        float fontSize = 9.5f;
         nvgFontSize(args.vg, fontSize);
         nvgFontFaceId(args.vg, fontHandle);
         float bounds[4];
@@ -52,8 +47,7 @@ struct StrandFrequencyDisplayWidget : leviathan::theme::ThemedTextWidget<Widget>
             nvgFontSize(args.vg, fontSize);
         }
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        NVGcolor col = (portIndex < 2) ? inputTextColor : outputTextColor;
-        nvgFillColor(args.vg, col);
+        nvgFillColor(args.vg, nvgRGB(255, 255, 255));
         nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f + 0.5f, cachedText, nullptr);
     }
 };
@@ -76,7 +70,7 @@ struct StrandWidget : ModuleWidget {
         }
 
         const char* freqIds[] = {"FREQ_A", "FREQ_B", "FREQ_C"};
-        const float freqYs[] = {36.f, 70.f, 104.f};
+        const float freqYs[] = {39.5f, 73.5f, 107.5f};
         for (int i = 0; i < 3; ++i) {
             math::Rect rMm(Vec(1.2f, freqYs[i]), Vec(12.84f, 5.f));
             panel_svg::loadRectFromSvgMm(panel.panelPath(), freqIds[i], &rMm);

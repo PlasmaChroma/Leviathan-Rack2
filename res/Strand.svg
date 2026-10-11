@@ -87,42 +87,6 @@
          stroke-width="0.2"
          opacity="0.33" />
     </g>
-    <g
-       id="readout_capsules">
-      <rect
-         id="freq_bg_a"
-         x="1.2"
-         y="39.499996"
-         width="12.84"
-         height="5"
-         rx="1.5"
-         fill="#141126"
-         stroke="#5740bf"
-         stroke-width="0.2"
-         opacity="0.6" />
-      <rect
-         id="freq_bg_b"
-         x="1.2"
-         y="73.499947"
-         width="12.84"
-         height="5"
-         rx="1.5"
-         fill="#141126"
-         stroke="#5740bf"
-         stroke-width="0.2"
-         opacity="0.6" />
-      <rect
-         id="freq_bg_c"
-         x="1.2"
-         y="107.5"
-         width="12.84"
-         height="5"
-         rx="1.5"
-         fill="#0d1b22"
-         stroke="#1cccd9"
-         stroke-width="0.2"
-         opacity="0.6" />
-    </g>
   </g>
   <g
      id="labels"
@@ -184,19 +148,19 @@
     <rect
        id="FREQ_A"
        x="1.2"
-       y="36"
+       y="39.5"
        width="12.84"
        height="5" />
     <rect
        id="FREQ_B"
        x="1.2"
-       y="70"
+       y="73.5"
        width="12.84"
        height="5" />
     <rect
        id="FREQ_C"
        x="1.2"
-       y="104"
+       y="107.5"
        width="12.84"
        height="5" />
   </g>

@@ -9,19 +9,14 @@
     <g id="glass_output" data-theme-runtime-substrate="neutral">
       <rect id="outputs_c" x="1.2" y="87.836807" width="12.84" height="19" rx="2" fill="#000000" fill-opacity="0.5" stroke="#1cccd9" stroke-opacity="0.5" stroke-width="0.2" opacity="0.33" />
     </g>
-    <g id="readout_capsules">
-      <rect id="freq_bg_a" x="1.2" y="39.499996" width="12.84" height="5" rx="1.5" fill="#141126" stroke="#5740bf" stroke-width="0.2" opacity="0.6" />
-      <rect id="freq_bg_b" x="1.2" y="73.499947" width="12.84" height="5" rx="1.5" fill="#141126" stroke="#5740bf" stroke-width="0.2" opacity="0.6" />
-      <rect id="freq_bg_c" x="1.2" y="107.5" width="12.84" height="5" rx="1.5" fill="#0d1b22" stroke="#1cccd9" stroke-width="0.2" opacity="0.6" />
-    </g>
   </g>
   <g id="components" inkscape:label="components" style="display:none">
     <rect id="BRANDING_WAVE_SOLO_RASTER" x="1.08626" y="123.3819" width="13.06748" height="5.1181" />
     <circle id="A" cx="7.62" cy="30" r="1" />
     <circle id="B" cx="7.62" cy="64" r="1" />
     <circle id="C" cx="7.62" cy="98" r="1" />
-    <rect id="FREQ_A" x="1.2" y="36" width="12.84" height="5" />
-    <rect id="FREQ_B" x="1.2" y="70" width="12.84" height="5" />
-    <rect id="FREQ_C" x="1.2" y="104" width="12.84" height="5" />
+    <rect id="FREQ_A" x="1.2" y="39.5" width="12.84" height="5" />
+    <rect id="FREQ_B" x="1.2" y="73.5" width="12.84" height="5" />
+    <rect id="FREQ_C" x="1.2" y="107.5" width="12.84" height="5" />
   </g>
 </svg>
