@@ -33,8 +33,8 @@ Vessel::Vessel() {
     rightExpander.producerMessage = &tuneMessages[0];
     rightExpander.consumerMessage = &tuneMessages[1];
     configParam(PITCH_PARAM, std::log2(20.f/261.625565f), std::log2(2000.f/261.625565f), 0.f,
-        "Basic bowl frequency", " Hz", 2.f, 261.625565f);
-    configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tuning", " cents");
+        "Hz", "", 2.f, 261.625565f);
+    configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine", " cents");
     configParam(VELOCITY_PARAM, 0.f, 1.f, .5f, "Hit velocity", "%", 0.f, 100.f);
     configButton(STRIKE_PARAM, "Hit bowl");
     getParamQuantity(STRIKE_PARAM)->randomizeEnabled = false;
