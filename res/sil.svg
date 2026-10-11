@@ -249,7 +249,7 @@
    inkscape:document-units="mm"
    inkscape:zoom="3.3736828"
    inkscape:cx="182.88619"
-   inkscape:cy="337.76145"
+   inkscape:cy="242.90962"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -389,14 +389,24 @@
    id="INPUT_L_LABEL"
    x="1400"
    y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">L</text>
     <text
    id="INPUT_R_LABEL"
    x="3000"
    y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">R</text>
+    <text
+   id="LUFS_LABEL"
+   x="1080"
+   y="9126.0352"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff">LUFS</text>
+    <text
+   id="DBFS_LABEL"
+   x="1080"
+   y="9726.0352"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff">dBFS</text>
     <text
    id="LIMITER_LABEL"
    x="1430.0005"
@@ -494,17 +504,24 @@
    y="7730.8916">Saturator</tspan>
     </text>
     <text
-   id="mastering_lbl"
-   x="5540"
-   y="4484.6934"
+   id="side_lbl"
+   x="7305.4961"
+   y="4304.6934"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
-   xml:space="preserve">
-      <tspan
-   sodipodi:role="line"
-   id="tspan5"
-   x="5540"
-   y="4484.6934">Mastering</tspan>
-    </text>
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan11"
+     x="7305.4961"
+     y="4304.6934">Side</tspan></text><text
+   id="mid_lbl"
+   x="2323.7324"
+   y="4311.0439"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan8"
+     x="2323.7324"
+     y="4311.0439">Mid</tspan></text>
   </g>
   <g
    id="theme_text_output"
@@ -513,20 +530,20 @@
    id="OUTPUT_L_LABEL"
    x="7160"
    y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">L</text>
     <text
    id="OUTPUT_R_LABEL"
    x="8760"
    y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">R</text>
   </g>
   <text
    id="BOOST_LABEL"
    x="5080"
    y="12060"
-   style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">BOOST</text>
+   style="font-size:282.222px;font-family:Sans;font-weight:normal;text-anchor:middle;fill:#ffffff;-inkscape-font-specification:'Sans, Normal';font-style:normal;font-stretch:normal;font-variant:normal;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">BOOST</text>
   <text
    id="reworked_module_title_text"
    x="5079.9966"

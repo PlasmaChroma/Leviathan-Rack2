@@ -2358,7 +2358,7 @@ struct SilHorizontalMeter : TransparentWidget {
     }
     void draw(const DrawArgs& args) override {
         const SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
-        const float labelWidth=mm2px(22.f);
+        const float labelWidth=mm2px(18.f);
         const float x=labelWidth, w=box.size.x-x, h=box.size.y;
         nvgBeginPath(args.vg); nvgRect(args.vg,x,0.f,w,h);
         nvgFillColor(args.vg,colors.bg); nvgFill(args.vg);
@@ -2372,11 +2372,15 @@ struct SilHorizontalMeter : TransparentWidget {
         }
         if(APP && APP->window && APP->window->uiFont) {
             char text[32];
-            if(connected) std::snprintf(text,sizeof(text),"%s  %.1f",dbfs ? "dBFS" : "LUFS",std::max(levels[0],levels[1])*60.f-60.f);
-            else std::snprintf(text,sizeof(text),"%s  --",dbfs ? "dBFS" : "LUFS");
-            nvgFontFaceId(args.vg,APP->window->uiFont->handle); nvgFontSize(args.vg,9.5f);
-            nvgTextAlign(args.vg,NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE); nvgFillColor(args.vg,color::WHITE);
-            nvgText(args.vg,0.f,h*.5f,text,nullptr);
+            // Unit labels live in the panel SVG, matching the effect-name typography.
+            if(connected) std::snprintf(text,sizeof(text),"%.1f",std::max(levels[0],levels[1])*60.f-60.f);
+            else std::snprintf(text,sizeof(text),"--");
+            // Match Proc's frequency readout size and contrast.
+            nvgFontFaceId(args.vg,APP->window->uiFont->handle); nvgFontSize(args.vg,11.5f);
+            nvgTextAlign(args.vg,NVG_ALIGN_RIGHT|NVG_ALIGN_MIDDLE);
+            const float textX=labelWidth-mm2px(2.f), textY=h*.5f;
+            nvgFillColor(args.vg,nvgRGBA(255,255,255,255));
+            nvgText(args.vg,textX,textY,text,nullptr);
         }
     }
 };
@@ -2703,14 +2707,14 @@ struct SilWidget : ModuleWidget {
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT);
 		static_cast<SmallGoldApertureLight*>(masteringButton->getLight())->setBaseColor(nvgRGB(255, 118, 24));
 		addParam(masteringButton);
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(midEnhanceLightPos), module, Sil::MID_ENHANCE_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(midEnhanceLightPos), module, Sil::MID_ENHANCE_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
+		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
 
 		SilStageHistoryWidget* chainLedReadout = new SilStageHistoryWidget;
 		chainLedReadout->module = module;
