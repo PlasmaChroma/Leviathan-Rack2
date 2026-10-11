@@ -73,7 +73,7 @@
     </g>
   </g>
   <g id="components" style="display:inline">
-    <circle id="SAT_LIMIT_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="BOOST_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
     <circle id="INPUT_L_INPUT" cx="1400" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
     <circle id="INPUT_R_INPUT" cx="3000" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
     <circle id="OUTPUT_L_OUTPUT" cx="7160" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />

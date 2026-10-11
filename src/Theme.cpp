@@ -593,20 +593,33 @@ struct ThemePasteButton final : LeviathanIconButton {
 		destroyTooltip();
 	}
 	void draw(const DrawArgs& args) override {
-		LeviathanIconButton::draw(args);
-		if (errorStartedAt < 0.0) return;
-		const double elapsed = system::getTime() - errorStartedAt;
-		if (elapsed >= 1.2) {
-			errorStartedAt = -1.0;
-			return;
+		if (errorStartedAt >= 0.0) {
+			constexpr double pulseDuration = 0.6;
+			constexpr int pulseCount = 2;
+			const double elapsed = system::getTime() - errorStartedAt;
+			if (elapsed >= pulseDuration * pulseCount) {
+				errorStartedAt = -1.0;
+			}
+			else if (elapsed >= 0.0) {
+				const float phase = float(elapsed / pulseDuration - int(elapsed / pulseDuration));
+				// Two smooth blooms, with zero intensity and slope at each boundary.
+				const float arch = 4.f * phase * (1.f - phase);
+				const float intensity = arch * arch;
+				const float centerX = box.size.x * 0.5f;
+				const float centerY = box.size.y * 0.5f;
+				const float controlRadius = std::max(box.size.x, box.size.y) * 0.5f;
+				const float bloomRadius = controlRadius + 7.f + 3.f * intensity;
+				const NVGpaint bloom = nvgRadialGradient(args.vg, centerX, centerY,
+					controlRadius * 0.55f, bloomRadius,
+					nvgRGBA(255, 65, 65, int(180.f * intensity)), nvgRGBA(255, 65, 65, 0));
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, centerX, centerY, bloomRadius);
+				nvgFillPaint(args.vg, bloom);
+				nvgFill(args.vg);
+			}
 		}
-		if (elapsed < 0.0 || int(elapsed / 0.2) % 2 != 0) return;
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, box.size.x * 0.5f, box.size.y * 0.5f,
-			std::max(box.size.x, box.size.y) * 0.5f + 2.f);
-		nvgStrokeWidth(args.vg, 2.f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 45, 45, 255));
-		nvgStroke(args.vg);
+		// Draw the control over the full circular glow so it blooms from underneath.
+		LeviathanIconButton::draw(args);
 	}
 };
 

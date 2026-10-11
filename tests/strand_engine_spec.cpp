@@ -46,7 +46,7 @@ int main() {
         assert(lane->playing == expected);
         assert(std::abs(lane->position - (expected == 0 ? phase : phase - 3.25)) < 1e-9);
     }
-    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 96000.f / 7.75f) < 1.f);
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 48000.f / 7.75f) < 1.f);
     // Selected storage stays untouched through capture refreshes.
     lane->reset(48000.);
     for (int t = 0; t < 120; ++t) lane->process(wave(t, 13, 2.f), wave(t, 19, 4.f));
@@ -113,7 +113,7 @@ int main() {
     float f1 = lane->freqTrackers[1].getFrequency();
     assert(std::abs(f0 - 480.f) < 2.5f);
     assert(std::abs(f1 - 240.f) < 2.5f);
-    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 320.f) < 3.f);
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 160.f) < 3.f);
     // Freeze publications: input silence must not hide retained playback.
     for (auto& source : lane->sources) source.writing = -1;
     // Next 1 second with silence: input trackers update to 0 Hz:
@@ -123,6 +123,6 @@ int main() {
     assert(lane->freqTrackers[0].getFrequency() == 0.f);
     assert(lane->freqTrackers[1].getFrequency() == 0.f);
     // Captured cycles still play, even though the input trackers report silence.
-    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 320.f) < 1.f);
+    assert(std::abs(lane->playbackFreqTracker.getFrequency() - 160.f) < 1.f);
     std::cout << "Strand engine tests passed\n";
 }

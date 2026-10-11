@@ -67,8 +67,8 @@ struct FrequencyTracker {
     }
 };
 
-// Output reports completed playback segments per elapsed second, including
-// forced capture segments and repeats of a retained publication.
+// Output reports completed playback sequences per elapsed second: A+B when
+// alternating, or each cycle when only one source has a publication.
 struct PlaybackFrequencyTracker {
     int completed = 0;
     double sampleTimer = 0., sampleRate = 48000.;
@@ -201,6 +201,13 @@ struct Lane {
         if (playing >= 0) sources[playing].pinned = sources[playing].latest;
         position = 0.;
     }
+    void completePlaybackCycle() {
+        // B closes an A+B sequence. With no alternate publication, each
+        // completed cycle closes the single-source sequence instead.
+        if (playing == 1 || sources[1].latest < 0)
+            playbackFreqTracker.onCycle();
+        select();
+    }
     void advance(double delta) {
         if (playing < 0) select();
         // Accepted cycles are >= 2 samples, so at most one boundary per sample.
@@ -208,8 +215,7 @@ struct Lane {
             double remaining = sources[playing].cycles[sources[playing].pinned].duration - position;
             if (delta > remaining) {
                 delta -= remaining;
-                playbackFreqTracker.onCycle();
-                select();
+                completePlaybackCycle();
             }
             if (playing >= 0) position += delta;
         }
@@ -264,8 +270,7 @@ struct Lane {
         freqTrackers[0].step();
         freqTrackers[1].step();
         if (playing >= 0 && position >= sources[playing].cycles[sources[playing].pinned].duration) {
-            playbackFreqTracker.onCycle();
-            select();
+            completePlaybackCycle();
         }
         if (playing < 0) select();
         playbackFreqTracker.step();

@@ -113,7 +113,7 @@ struct Sil : Module {
 
 	enum ParamId {
 		MASTERING_ENABLED_PARAM,
-		SAT_LIMIT_PARAM,
+		BOOST_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -209,6 +209,10 @@ struct Sil : Module {
 	dsp::ClockDivider specDivider;
 	dsp::ClockDivider lightDivider;
 	float limiterGain = 1.f;
+	float boostGain = 1.f;
+	float boostTargetGain = 1.f;
+	float boostLastDb = 0.f;
+	float boostSmoothingCoeff = 0.f;
 	std::vector<float> limiterDelayL;
 	std::vector<float> limiterDelayR;
 	int limiterDelayWrite = 0;
@@ -516,6 +520,7 @@ struct Sil : Module {
 	static constexpr float kLimiterMetricGrSec = 0.120f;
 	static constexpr float kLimiterTriggerDb = 0.10f;
 	static constexpr float kSaturatorTargetPreLimiterDb = -0.50f;
+	static constexpr float kSatMaxMakeupDb = 3.25f;
 	static constexpr float kSatMaxDrive = 1.60f;
 	static constexpr float kSatMinDrive = 1.0f;
 	static constexpr float kSatLimiterSeekBoostDb = 0.75f;
@@ -746,6 +751,7 @@ struct Sil : Module {
 
 	void updateDynamicsCoefficients(float sampleRate) {
 		const float sr = std::max(sampleRate, 1.f);
+		boostSmoothingCoeff = std::exp(-1.f / (0.010f * sr));
 		lowBandCorrCoeff = std::exp(-1.f / (kLowBandCorrTauSec * sr));
 		lowBandSideAttackCoeff = std::exp(-1.f / (kLowBandSideAttackSec * sr));
 		lowBandSideReleaseCoeff = std::exp(-1.f / (kLowBandSideReleaseSec * sr));
@@ -992,7 +998,7 @@ struct Sil : Module {
 		debugMetrics.assignInstanceId(gSilDebugInstanceCounter);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
-		configParam(SAT_LIMIT_PARAM, 1.f, 6.f, 1.f, "Saturator maximum added gain", " dB");
+		configParam(BOOST_PARAM, 0.f, 6.f, 0.f, "Boost", " dB");
 		configInput(INPUT_L_INPUT, "Left");
 		configInput(INPUT_R_INPUT, "Right");
 		configOutput(OUTPUT_L_OUTPUT, "Left");
@@ -1082,6 +1088,14 @@ struct Sil : Module {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > 0.5f;
+
+		const float boostDb = clamp(params[BOOST_PARAM].getValue(), 0.f, 6.f);
+		if (boostDb != boostLastDb) {
+			boostLastDb = boostDb;
+			boostTargetGain = dsp::exp2_taylor5(boostDb / 6.020599913f);
+		}
+		boostGain = boostTargetGain + boostSmoothingCoeff * (boostGain - boostTargetGain);
+		if (std::fabs(boostGain - boostTargetGain) < 1e-4f) boostGain = boostTargetGain;
 
 		const bool hasL = inputs[INPUT_L_INPUT].isConnected();
 		const bool hasR = inputs[INPUT_R_INPUT].isConnected();
@@ -1465,7 +1479,7 @@ struct Sil : Module {
 				saturator.currentBinPeak = 0.f;
 			}
 
-			const float maxMakeupDb = clamp(params[SAT_LIMIT_PARAM].getValue(), 1.f, 6.f);
+			const float maxMakeupDb = kSatMaxMakeupDb;
 			if (saturator.updateDivider.process()) {
 				const float recentLoudPeak = std::max(saturatorEstimateRecentPeakPercentile(), 1e-6f);
 				const float recentPeakNorm = clamp(recentLoudPeak / kAudioFullScaleV, 1e-6f, 4.f);
@@ -1571,13 +1585,15 @@ struct Sil : Module {
 			limiterDelayR[size_t(limiterDelayWrite)] = saturatedR;
 			limiterDelayWrite = (limiterDelayWrite + 1) % delayLen;
 
-			const float desiredGain = (detectorPeak > limiterCeiling && detectorPeak > 1e-9f)
-				? limiterCeiling / detectorPeak : 1.f;
+			// Apply the same boost to the lookahead envelope and delayed audio.
+			const float boostedDetectorPeak = detectorPeak * boostGain;
+			const float desiredGain = (boostedDetectorPeak > limiterCeiling)
+				? limiterCeiling / boostedDetectorPeak : 1.f;
 			const float gainCoeff = desiredGain < limiterGain ? limiterAttackCoeff : limiterReleaseCoeff;
 			limiterGain = desiredGain + gainCoeff * (limiterGain - desiredGain);
 			float appliedLimiterGain = limiterGain;
-			outL = delayedL * limiterGain;
-			outR = delayedR * limiterGain;
+			outL = delayedL * boostGain * limiterGain;
+			outR = delayedR * boostGain * limiterGain;
 			const float finalPeak = std::max(std::fabs(outL), std::fabs(outR));
 			if (finalPeak > limiterCeiling && finalPeak > 1e-9f) {
 				const float guardGain = limiterCeiling / finalPeak;
@@ -1585,6 +1601,8 @@ struct Sil : Module {
 				outL *= guardGain;
 				outR *= guardGain;
 			}
+			// Adaptive mastering follows the unboosted signal so it cannot undo
+			// the user boost. Audio and reduction indication use the real limiter gain.
 			const float detectorPeakDbTp = toDbFsSafe(detectorPeak);
 			const float limiterDemandDb = std::max(0.f, detectorPeakDbTp - kLimiterCeilingDb);
 			const float triggeredNow = (limiterDemandDb >= kLimiterTriggerDb) ? 1.f : 0.f;
@@ -1699,6 +1717,7 @@ struct Sil : Module {
 	}
 };
 
+#ifndef SIL_HEADLESS_TEST
 struct SilColors {
 	NVGcolor low;
 	NVGcolor high;
@@ -2362,16 +2381,16 @@ struct SilHorizontalMeter : TransparentWidget {
     }
 };
 
-struct SilSatLimitReadout : TransparentWidget {
+struct SilBoostReadout : TransparentWidget {
     Sil* module = nullptr;
-    int displayedTenths = 10;
-    char text[16] = "+1.0 dB";
+    int displayedTenths = 0;
+    char text[16] = "+0.0 dB";
 
     void step() override {
         TransparentWidget::step();
-        const float limitDb = module
-            ? clamp(module->params[Sil::SAT_LIMIT_PARAM].getValue(), 1.f, 6.f) : 1.f;
-        const int tenths = int(std::round(limitDb * 10.f));
+        const float boostDb = module
+            ? clamp(module->params[Sil::BOOST_PARAM].getValue(), 0.f, 6.f) : 0.f;
+        const int tenths = int(std::round(boostDb * 10.f));
         if (tenths != displayedTenths) {
             displayedTenths = tenths;
             std::snprintf(text, sizeof(text), "+%.1f dB", float(tenths) * 0.1f);
@@ -2626,7 +2645,7 @@ struct SilWidget : ModuleWidget {
 		Vec inputRPos(30.f, 112.4f);
 		Vec outputLPos(71.6f, 112.4f);
 		Vec outputRPos(87.6f, 112.4f);
-		Vec satLimitPos(50.8f, 112.4f);
+		Vec boostPos(50.8f, 112.4f);
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec impactAirLightPos(48.f, 46.8f);
@@ -2648,7 +2667,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("INPUT_R_INPUT", &inputRPos);
 		applyPointOverride("OUTPUT_L_OUTPUT", &outputLPos);
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
-		applyPointOverride("SAT_LIMIT_PARAM", &satLimitPos);
+		applyPointOverride("BOOST_PARAM", &boostPos);
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("IMPACT_AIR_LIGHT", &impactAirLightPos);
@@ -2674,12 +2693,12 @@ struct SilWidget : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
-		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(satLimitPos), module, Sil::SAT_LIMIT_PARAM));
-        auto* satLimitReadout = new SilSatLimitReadout;
-        satLimitReadout->module = module;
-        satLimitReadout->box.size = mm2px(Vec(18.f, 3.5f));
-        satLimitReadout->box.pos = mm2px(satLimitPos.minus(Vec(9.f, 11.15f)));
-        addChild(satLimitReadout);
+		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(boostPos), module, Sil::BOOST_PARAM));
+        auto* boostReadout = new SilBoostReadout;
+        boostReadout->module = module;
+        boostReadout->box.size = mm2px(Vec(18.f, 3.5f));
+        boostReadout->box.pos = mm2px(boostPos.minus(Vec(9.f, 11.15f)));
+        addChild(boostReadout);
 		auto* masteringButton = createLightParamCentered<SmallGoldApertureButton>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT);
 		static_cast<SmallGoldApertureLight*>(masteringButton->getLight())->setBaseColor(nvgRGB(255, 118, 24));
@@ -2826,3 +2845,5 @@ struct SilWidget : ModuleWidget {
 };
 
 Model* modelSil = createModel<Sil, SilWidget>("Sil");
+
+#endif // SIL_HEADLESS_TEST

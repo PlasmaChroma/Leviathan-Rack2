@@ -141,7 +141,6 @@
       "description": "Automatic mastering module.",
       "tags": [
         "Dynamics",
-        "Distortion",
         "EQ"
       ],
       "hidden": false
@@ -294,7 +293,7 @@
     {
       "slug": "Vessel",
       "name": "Vessel",
-      "description": "Tunable struck and friction-excited singing bowl with stereo observation. Crystal is an uncalibrated prototype.",
+      "description": "Tunable struck and friction-excited singing bowl with stereo observation.",
       "tags": [
         "Physical modeling",
         "Synth voice"

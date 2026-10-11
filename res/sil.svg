@@ -523,10 +523,10 @@
    xml:space="preserve">R</text>
   </g>
   <text
-   id="SAT_LIMIT_LABEL"
+   id="BOOST_LABEL"
    x="5080"
    y="12060"
-   style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">SAT LIM</text>
+   style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">BOOST</text>
   <text
    id="reworked_module_title_text"
    x="5079.9966"
@@ -556,7 +556,7 @@
 <g
    id="components"
    style="display:inline"><circle
-     id="SAT_LIMIT_PARAM"
+     id="BOOST_PARAM"
      cx="5080"
      cy="11240"
      r="140"
