@@ -1,12 +1,72 @@
 #pragma once
 #include <array>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
 namespace strand {
 // Three slots per source: capture, latest publication, and pinned playback.
 constexpr int capacity = 65536;
+
+struct FrequencyTracker {
+    double sumFreq = 0.;
+    int count = 0;
+    double sampleTimer = 0.;
+    double sampleRate = 48000.;
+    std::atomic<float> displayFreq{0.f};
+
+    FrequencyTracker() {
+        reset(48000.);
+    }
+
+    FrequencyTracker(const FrequencyTracker& other) {
+        *this = other;
+    }
+
+    FrequencyTracker& operator=(const FrequencyTracker& other) {
+        if (this != &other) {
+            sumFreq = other.sumFreq;
+            count = other.count;
+            sampleTimer = other.sampleTimer;
+            sampleRate = other.sampleRate;
+            displayFreq.store(other.displayFreq.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        }
+        return *this;
+    }
+
+    void reset(double rate) {
+        sumFreq = 0.;
+        count = 0;
+        sampleTimer = 0.;
+        sampleRate = std::max(1.0, rate);
+        displayFreq.store(0.f, std::memory_order_relaxed);
+    }
+
+    void onCycle(double duration, double rate) {
+        if (duration > 0.) {
+            double f = rate / duration;
+            sumFreq += f;
+            count++;
+        }
+    }
+
+    void step() {
+        sampleTimer += 1.;
+        if (sampleTimer >= sampleRate) {
+            sampleTimer -= sampleRate;
+            float freq = (count > 0) ? float(sumFreq / double(count)) : 0.f;
+            displayFreq.store(freq, std::memory_order_relaxed);
+            sumFreq = 0.;
+            count = 0;
+        }
+    }
+
+    float getFrequency() const {
+        return displayFreq.load(std::memory_order_relaxed);
+    }
+};
+
 struct Cycle {
     std::vector<float> samples = std::vector<float>(capacity);
     int count = 0;
@@ -54,13 +114,18 @@ struct Source {
         if (x < 0.f) negative = true;
         return alpha;
     }
-    void rise(double time, double limit, bool forced = false) {
+    double rise(double time, double limit, bool forced = false) {
+        double acceptedDuration = 0.;
         if (writing >= 0) {
             Cycle& c = cycles[writing];
             c.duration = time - c.start;
             c.forcedEnd = forced;
-            if ((fell || c.forcedStart || forced) && c.count > 0 && c.duration >= 2. && c.duration <= limit)
+            if ((fell || c.forcedStart || forced) && c.count > 0 && c.duration >= 2. && c.duration <= limit) {
                 latest = writing;
+                if (!forced) {
+                    acceptedDuration = c.duration;
+                }
+            }
         }
         writing = -1;
         for (int i = 0; i < 3; ++i)
@@ -72,6 +137,7 @@ struct Source {
         c.forcedEnd = false;
         c.fade = limit * .005; // 0.5 ms at the ordinary 100 ms capture cap.
         fell = false;
+        return acceptedDuration;
     }
     void append(float x, double time, double limit) {
         if (writing >= 0) {
@@ -87,12 +153,16 @@ struct Source {
 };
 struct Lane {
     std::array<Source, 2> sources;
+    std::array<FrequencyTracker, 2> freqTrackers;
     int playing = -1;
     double position = 0., tick = 0., limit = 4800.;
+    double sampleRate = 48000.;
     void reset(double rate) {
+        sampleRate = rate;
         playing = -1; position = tick = 0.;
         limit = std::min(rate * .1, double(capacity - 2));
         for (auto& s : sources) { s.pinned = -1; s.reset(); }
+        for (auto& ft : freqTrackers) ft.reset(rate);
     }
     void select() {
         int next = playing < 0 ? 0 : 1 - playing;
@@ -153,11 +223,16 @@ struct Lane {
                 source.cycles[source.writing].start + limit > tick + event.alpha)) continue;
             advance(event.alpha - elapsed);
             elapsed = event.alpha;
-            source.rise(tick + elapsed, limit, event.forced);
+            double accepted = source.rise(tick + elapsed, limit, event.forced);
+            if (accepted > 0.) {
+                freqTrackers[event.source].onCycle(accepted, sampleRate);
+            }
         }
         advance(1. - elapsed);
         for (int i = 0; i < 2; ++i) sources[i].append(values[i], tick + 1., limit);
         tick += 1.;
+        freqTrackers[0].step();
+        freqTrackers[1].step();
         if (playing >= 0 && position >= sources[playing].cycles[sources[playing].pinned].duration) select();
         if (playing < 0) select();
         return playing < 0 ? 0.f : sources[playing].cycles[sources[playing].pinned].at(position);

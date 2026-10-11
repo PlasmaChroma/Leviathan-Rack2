@@ -21,6 +21,15 @@ Three audio jacks are arranged vertically in 3 HP, with no controls required for
 - Output connection state does not influence capture or playback.
 - Inputs read channel 1 (monophonic); output produces a monophonic stream.
 
+## Frequency statistics display
+
+Below each port on the module panel, a real-time text readout displays frequency statistics:
+- **Input A**: Average frequency of accepted pseudo-cycles over the past second.
+- **Input B**: Average frequency of accepted pseudo-cycles over the past second.
+- **Output C**: Combined average frequency over the past second. When both inputs are active, shows `(freqA + freqB) / 2`. When only one input is active, displays that active input's frequency.
+
+Statistics are tracked over a rolling 1-second window partitioned into 20 sub-buckets (50 ms each) updated deterministically in the DSP loop. Disconnecting an input immediately resets its tracker, displaying `---`.
+
 ## Pseudo-cycle definition
 
 A pseudo-cycle begins at a rising zero crossing, passes through a falling crossing, and ends at the next rising zero crossing. The end crossing is also the start of the next capture. The falling crossing arms completion; zero plateaus must not generate extra crossings.
@@ -123,6 +132,12 @@ Initial capture bounds are specified below. Bounds prevent unbounded storage and
 
 Native Strand engine and Rack-linked tests and the Windows plugin link passed after adding forced 100 ms boundaries. Slow-input tests verify bounded published durations and ongoing A/B switching; timeout endpoint tests verify zero termination and the fade.
 
-## Panel styling
+## Panel styling and frequency readouts
 
-All three jacks use the shared Magitek2 input/output components. A and B use the standard purple input glass fields, and C uses the cyan output glass field, with the shared themed glass overlay. The panel has no screws. The standard solo wave branding sits at the bottom, using the same placement as Doorstop.
+All three jacks use the shared Magitek2 input/output components with a 34 mm vertical pitch. A and B use the standard purple input glass fields, and C uses the cyan output glass field, with the shared themed glass overlay. The panel has no screws. The standard solo wave branding sits at the bottom, using the same placement as Doorstop.
+
+Directly below each jack, a compact frequency readout capsule displays real-time statistics:
+- **Input A & B**: Average frequency of accepted natural pseudo-cycles accumulated over a 1.0-second interval, updated at 1 Hz. Forced timeout boundaries are excluded.
+- **Output C**: Combined arithmetic mean of both inputs `(f_A + f_B) / 2` when both are active; when only one input is patched/active, it displays that active source's frequency; when inactive, it displays `---`.
+- **Display Update Rate**: Data is accumulated over each 1.0-second window and published at 1 Hz. The UI widget caches formatted text and redraws without per-frame string formatting overhead. Cable disconnection immediately clears the port readout to `---`.
+

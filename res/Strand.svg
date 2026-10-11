@@ -1,28 +1,203 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="15.24mm" height="128.5mm" viewBox="0 0 15.24 128.5">
- <g id="theme_background" inkscape:label="Theme background"><rect width="15.24" height="128.5" fill="#000000"/></g>
- <g id="panel_graphics">
-  <g id="glass_input">
-   <rect id="inputs_a" x="1.2" y="25" width="12.84" height="18" rx="2" fill="#5740bf" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33"/>
-   <rect id="inputs_b" x="1.2" y="59" width="12.84" height="18" rx="2" fill="#5740bf" fill-opacity="0.52" stroke="#5740bf" stroke-width="0.2" opacity="0.33"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="15.24mm"
+   height="128.5mm"
+   viewBox="0 0 15.24 128.5"
+   version="1.1"
+   id="svg4"
+   sodipodi:docname="Strand.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs4" />
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="28.93349"
+     inkscape:cy="242.83465"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <g
+     id="theme_background"
+     inkscape:label="Theme background">
+    <rect
+       width="15.24"
+       height="128.5"
+       fill="#000000"
+       id="rect1" />
   </g>
-  <g id="glass_output">
-   <rect id="outputs_c" x="1.2" y="93" width="12.84" height="18" rx="2" fill="#1cccd9" fill-opacity="0.5" stroke="#1cccd9" stroke-opacity="0.5" stroke-width="0.2" opacity="0.33"/>
+  <g
+     id="panel_graphics">
+    <g
+       id="glass_input">
+      <rect
+         id="inputs_a"
+         x="1.2"
+         y="19.799999"
+         width="12.84"
+         height="19"
+         rx="2"
+         fill="#5740bf"
+         fill-opacity="0.52"
+         stroke="#5740bf"
+         stroke-width="0.2"
+         opacity="0.33" />
+      <rect
+         id="inputs_b"
+         x="1.2"
+         y="53.799995"
+         width="12.84"
+         height="19"
+         rx="2"
+         fill="#5740bf"
+         fill-opacity="0.52"
+         stroke="#5740bf"
+         stroke-width="0.2"
+         opacity="0.33" />
+    </g>
+    <g
+       id="glass_output">
+      <rect
+         id="outputs_c"
+         x="1.2"
+         y="87.836807"
+         width="12.84"
+         height="19"
+         rx="2"
+         fill="#1cccd9"
+         fill-opacity="0.5"
+         stroke="#1cccd9"
+         stroke-opacity="0.5"
+         stroke-width="0.2"
+         opacity="0.33" />
+    </g>
+    <g
+       id="readout_capsules">
+      <rect
+         id="freq_bg_a"
+         x="1.2"
+         y="39.499996"
+         width="12.84"
+         height="5"
+         rx="1.5"
+         fill="#141126"
+         stroke="#5740bf"
+         stroke-width="0.2"
+         opacity="0.6" />
+      <rect
+         id="freq_bg_b"
+         x="1.2"
+         y="73.499947"
+         width="12.84"
+         height="5"
+         rx="1.5"
+         fill="#141126"
+         stroke="#5740bf"
+         stroke-width="0.2"
+         opacity="0.6" />
+      <rect
+         id="freq_bg_c"
+         x="1.2"
+         y="107.5"
+         width="12.84"
+         height="5"
+         rx="1.5"
+         fill="#0d1b22"
+         stroke="#1cccd9"
+         stroke-width="0.2"
+         opacity="0.6" />
+    </g>
   </g>
- </g>
- <g id="labels" font-family="DejaVu Sans" text-anchor="middle" fill="#dbefed">
-  <text x="7.62" y="12" font-size="2.8">STRAND</text>
-  <g id="theme_text_input">
-   <text x="7.62" y="23" font-size="2.8">A</text>
-   <text x="7.62" y="57" font-size="2.8">B</text>
+  <g
+     id="labels"
+     font-family="DejaVu Sans"
+     text-anchor="middle"
+     fill="#dbefed">
+    <text
+       x="7.6199999"
+       y="4.0736876"
+       font-size="2.6px"
+       id="text1">STRAND</text>
+    <g
+       id="theme_text_input">
+      <text
+         x="7.62"
+         y="19"
+         font-size="2.6"
+         id="text2">A</text>
+      <text
+         x="7.62"
+         y="53"
+         font-size="2.6"
+         id="text3">B</text>
+    </g>
+    <g
+       id="theme_text_output">
+      <text
+         x="7.62"
+         y="87"
+         font-size="2.6"
+         id="text4">C</text>
+    </g>
   </g>
-  <g id="theme_text_output">
-   <text x="7.62" y="91" font-size="2.8">C</text>
+  <g
+     id="components"
+     inkscape:label="components"
+     style="display:none">
+    <rect
+       id="BRANDING_WAVE_SOLO_RASTER"
+       x="1.08626"
+       y="123.3819"
+       width="13.06748"
+       height="5.1181" />
+    <circle
+       id="A"
+       cx="7.62"
+       cy="30"
+       r="1" />
+    <circle
+       id="B"
+       cx="7.62"
+       cy="64"
+       r="1" />
+    <circle
+       id="C"
+       cx="7.62"
+       cy="98"
+       r="1" />
+    <rect
+       id="FREQ_A"
+       x="1.2"
+       y="36"
+       width="12.84"
+       height="5" />
+    <rect
+       id="FREQ_B"
+       x="1.2"
+       y="70"
+       width="12.84"
+       height="5" />
+    <rect
+       id="FREQ_C"
+       x="1.2"
+       y="104"
+       width="12.84"
+       height="5" />
   </g>
- </g>
- <g id="components" inkscape:label="components" style="display:none">
-  <rect id="BRANDING_WAVE_SOLO_RASTER" x="1.08626" y="123.3819" width="13.06748" height="5.1181"/>
-  <circle id="A" cx="7.62" cy="34" r="1"/>
-  <circle id="B" cx="7.62" cy="68" r="1"/>
-  <circle id="C" cx="7.62" cy="102" r="1"/>
- </g>
 </svg>

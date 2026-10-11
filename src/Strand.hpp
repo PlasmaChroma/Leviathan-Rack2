@@ -42,6 +42,7 @@ struct Strand : Module {
             int connState = isConn ? 1 : 0;
             if (connState != connected[s]) {
                 lane.sources[s].reset();
+                lane.freqTrackers[s].reset(sampleRate);
                 connected[s] = connState;
             }
             if (isConn) {
@@ -50,5 +51,24 @@ struct Strand : Module {
         }
         outputs[C_OUTPUT].setChannels(1);
         outputs[C_OUTPUT].setVoltage(lane.process(v[0], v[1]));
+    }
+    enum PortDisplayId {
+        DISP_INPUT_A = 0,
+        DISP_INPUT_B = 1,
+        DISP_OUTPUT_C = 2
+    };
+
+    float getFrequency(int portDisplayIndex) const {
+        if (portDisplayIndex == DISP_INPUT_A) return lane.freqTrackers[0].getFrequency();
+        if (portDisplayIndex == DISP_INPUT_B) return lane.freqTrackers[1].getFrequency();
+        if (portDisplayIndex == DISP_OUTPUT_C) {
+            float fa = lane.freqTrackers[0].getFrequency();
+            float fb = lane.freqTrackers[1].getFrequency();
+            if (fa > 0.05f && fb > 0.05f) return (fa + fb) * 0.5f;
+            if (fa > 0.05f) return fa;
+            if (fb > 0.05f) return fb;
+            return 0.f;
+        }
+        return 0.f;
     }
 };

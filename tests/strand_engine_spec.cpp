@@ -95,5 +95,27 @@ int main() {
         }
     }
     assert(forcedCount > 0 && switches >= 6);
+    // Frequency tracking tests over accepted pseudo-cycles (1 Hz accumulation).
+    lane->reset(48000.);
+    for (int t = 0; t < 24000; ++t) {
+        lane->process(wave(t, 100, 2.f), wave(t, 200, 3.f));
+    }
+    // Before 1 second finishes, accumulator is still gathering:
+    assert(lane->freqTrackers[0].getFrequency() == 0.f);
+    assert(lane->freqTrackers[1].getFrequency() == 0.f);
+    for (int t = 24000; t < 48000; ++t) {
+        lane->process(wave(t, 100, 2.f), wave(t, 200, 3.f));
+    }
+    // Exactly 1 second finished: 1 Hz published values:
+    float f0 = lane->freqTrackers[0].getFrequency();
+    float f1 = lane->freqTrackers[1].getFrequency();
+    assert(std::abs(f0 - 480.f) < 2.5f);
+    assert(std::abs(f1 - 240.f) < 2.5f);
+    // Next 1 second with silence: updates to 0 Hz:
+    for (int t = 48000; t < 96000; ++t) {
+        lane->process(0.f, 0.f);
+    }
+    assert(lane->freqTrackers[0].getFrequency() == 0.f);
+    assert(lane->freqTrackers[1].getFrequency() == 0.f);
     std::cout << "Strand engine tests passed\n";
 }

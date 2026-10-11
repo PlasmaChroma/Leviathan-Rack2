@@ -248,8 +248,8 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="3.3736828"
-   inkscape:cx="190.29649"
-   inkscape:cy="153.68961"
+   inkscape:cx="182.88619"
+   inkscape:cy="337.76145"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -345,85 +345,222 @@
    inkscape:label="Input Box">
       <rect
    id="frame_inputs"
-   x="650"
-   y="10300"
-   width="3000"
-   height="1900"
-   rx="185"
-   ry="185"
+   x="648.55597"
+   y="10538.557"
+   width="3001.9146"
+   height="1662.8877"
+   rx="185.11812"
+   ry="161.91278"
    fill="#5740bf"
    fill-opacity="1"
    opacity="0.33"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="45" />
+   stroke-width="42.1121" />
     </g>
     <g
    id="glass_output"
    inkscape:label="Output Box">
       <rect
    id="frame_outputs"
-   x="6410"
-   y="10300"
-   width="3100"
-   height="1900"
-   rx="185"
-   ry="185"
+   x="6409.5127"
+   y="10538.557"
+   width="3101.9329"
+   height="1662.8882"
+   rx="185.11531"
+   ry="161.9128"
    fill="#1cccd9"
    fill-opacity="0.5"
    opacity="0.33"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="45" />
+   stroke-width="42.1116" />
     </g>
   </g>
-<g xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:ns2="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" id="labels" inkscape:groupmode="layer" inkscape:label="Labels" style="display:inline">
-  <g id="theme_text_input" inkscape:label="Input Text">
-    <text id="INPUT_L_LABEL" x="1400" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
-    <text id="INPUT_R_LABEL" x="3000" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
-    <text id="LIMITER_LABEL" x="1430.0005" y="8171.0356" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan21" x="1430.0005" y="8171.0356">Limit -1.0 dBTP</tspan>
+<g
+   id="labels"
+   inkscape:groupmode="layer"
+   inkscape:label="Labels"
+   style="display:inline">
+  <g
+   id="theme_text_input"
+   inkscape:label="Input Text">
+    <text
+   id="INPUT_L_LABEL"
+   x="1400"
+   y="12060"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve">L</text>
+    <text
+   id="INPUT_R_LABEL"
+   x="3000"
+   y="12060"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve">R</text>
+    <text
+   id="LIMITER_LABEL"
+   x="1430.0005"
+   y="8171.0356"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan21"
+   x="1430.0005"
+   y="8171.0356">Limit -1.0 dBTP</tspan>
     </text>
-    <text id="lfmr_label" x="1425.7673" y="5078.1772" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan44" x="1425.7673" y="5078.1772">Low Freq Mono</tspan>
+    <text
+   id="lfmr_label"
+   x="1425.7673"
+   y="5078.1772"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan44"
+   x="1425.7673"
+   y="5078.1772">Low Freq Mono</tspan>
     </text>
-    <text id="remove_mud_lbl" x="1425.7673" y="5979.3486" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan6" x="1425.7673" y="5979.3486">Remove Mud</tspan>
+    <text
+   id="remove_mud_lbl"
+   x="1425.7673"
+   y="5979.3486"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan6"
+   x="1425.7673"
+   y="5979.3486">Remove Mud</tspan>
     </text>
-    <text id="remove_mud_lbl-7" x="1425.7673" y="6421.4678" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan10" x="1425.7673" y="6421.4678">Mid Lift</tspan>
+    <text
+   id="remove_mud_lbl-7"
+   x="1425.7673"
+   y="6421.4678"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan10"
+   x="1425.7673"
+   y="6421.4678">Mid Lift</tspan>
     </text>
-    <text id="remove_mud_lbl-1" x="1425.7673" y="5518.3208" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan9" x="1425.7673" y="5518.3208">Impact Air</tspan>
+    <text
+   id="remove_mud_lbl-1"
+   x="1425.7673"
+   y="5518.3208"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan9"
+   x="1425.7673"
+   y="5518.3208">Impact Air</tspan>
     </text>
-    <text id="Glue_Compressor" x="1432.5402" y="6829.7202" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan7" x="1432.5402" y="6829.7202">Glue Compressor</tspan>
+    <text
+   id="Glue_Compressor"
+   x="1432.5402"
+   y="6829.7202"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan7"
+   x="1432.5402"
+   y="6829.7202">Glue Compressor</tspan>
     </text>
-    <text id="stereo_enhance_lbl" x="1437.6206" y="7293.0059" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan3" x="1437.6206" y="7293.0059">Stereo Enhance</tspan>
+    <text
+   id="stereo_enhance_lbl"
+   x="1437.6206"
+   y="7293.0059"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan3"
+   x="1437.6206"
+   y="7293.0059">Stereo Enhance</tspan>
     </text>
-    <text id="saturator_lbl" x="1432.5402" y="7730.8916" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan4" x="1432.5402" y="7730.8916">Saturator</tspan>
+    <text
+   id="saturator_lbl"
+   x="1432.5402"
+   y="7730.8916"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan4"
+   x="1432.5402"
+   y="7730.8916">Saturator</tspan>
     </text>
-    <text id="mastering_lbl" x="2151.687" y="4484.6934" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff" xml:space="preserve">
-      <tspan ns2:role="line" id="tspan5" x="2151.687" y="4484.6934">Mastering</tspan>
+    <text
+   id="mastering_lbl"
+   x="5540"
+   y="4484.6934"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:start;display:inline;fill:#ffffff"
+   xml:space="preserve">
+      <tspan
+   sodipodi:role="line"
+   id="tspan5"
+   x="5540"
+   y="4484.6934">Mastering</tspan>
     </text>
   </g>
-  <g id="theme_text_output" inkscape:label="Output Text">
-    <text id="OUTPUT_L_LABEL" x="7160" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">L</text>
-    <text id="OUTPUT_R_LABEL" x="8760" y="12060" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">R</text>
+  <g
+   id="theme_text_output"
+   inkscape:label="Output Text">
+    <text
+   id="OUTPUT_L_LABEL"
+   x="7160"
+   y="12060"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve">L</text>
+    <text
+   id="OUTPUT_R_LABEL"
+   x="8760"
+   y="12060"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=500';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 500;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve">R</text>
   </g>
-  <text id="SAT_LIMIT_LABEL" x="5080" y="12060" style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">SAT LIM</text>
-  <text id="reworked_module_title_text" x="5079.9966" y="447.27814" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347" xml:space="preserve">
-    <tspan ns2:role="line" id="tspan1" style="fill:url(#linearGradient500)" x="5079.9966" y="447.27814">Sil</tspan>
+  <text
+   id="SAT_LIMIT_LABEL"
+   x="5080"
+   y="12060"
+   style="font-size:282.222px;font-family:Rubik;font-weight:500;text-anchor:middle;fill:#ffffff">SAT LIM</text>
+  <text
+   id="reworked_module_title_text"
+   x="5079.9966"
+   y="447.27814"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   xml:space="preserve">
+    <tspan
+   sodipodi:role="line"
+   id="tspan1"
+   style="fill:url(#linearGradient500)"
+   x="5079.9966"
+   y="447.27814">Sil</tspan>
   </text>
-  <text id="reworked_module_description" x="5079.9966" y="815.19421" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">
-    <tspan ns2:role="line" id="tspan2" x="5079.9966" y="815.19421">mastering engine</tspan>
+  <text
+   id="reworked_module_description"
+   x="5079.9966"
+   y="815.19421"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve">
+    <tspan
+   sodipodi:role="line"
+   id="tspan2"
+   x="5079.9966"
+   y="815.19421">mastering engine</tspan>
   </text>
 </g>
 <g
    id="components"
-   style="display:inline"><circle id="SAT_LIMIT_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" /><circle
+   style="display:inline"><circle
+     id="SAT_LIMIT_PARAM"
+     cx="5080"
+     cy="11240"
+     r="140"
+     style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_L_INPUT"
      cx="1400"
      cy="11240"
@@ -485,7 +622,7 @@
      r="70"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="MASTERING_ENABLED_PARAM"
-     cx="1740"
+     cx="5080"
      cy="4390.0083"
      r="95"
      style="fill:#44ff00;fill-opacity:1" /></g>
@@ -508,9 +645,21 @@
    height="1465.5801"
    x="5107.2124"
    y="2541.4993" />
-<g id="meter_anchors" style="display:none">
-  <rect id="LUFS_METER" x="1170" y="8800" width="7800" height="450" />
-  <rect id="DBFS_METER" x="1170" y="9400" width="7800" height="450" />
+<g
+   id="meter_anchors"
+   style="display:none">
+  <rect
+   id="LUFS_METER"
+   x="1170"
+   y="8800"
+   width="7800"
+   height="450" />
+  <rect
+   id="DBFS_METER"
+   x="1170"
+   y="9400"
+   width="7800"
+   height="450" />
 </g>
 <g
    id="perfect_wave_raster_anchors"

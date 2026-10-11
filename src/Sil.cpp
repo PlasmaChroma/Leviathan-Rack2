@@ -1575,11 +1575,13 @@ struct Sil : Module {
 				? limiterCeiling / detectorPeak : 1.f;
 			const float gainCoeff = desiredGain < limiterGain ? limiterAttackCoeff : limiterReleaseCoeff;
 			limiterGain = desiredGain + gainCoeff * (limiterGain - desiredGain);
+			float appliedLimiterGain = limiterGain;
 			outL = delayedL * limiterGain;
 			outR = delayedR * limiterGain;
 			const float finalPeak = std::max(std::fabs(outL), std::fabs(outR));
 			if (finalPeak > limiterCeiling && finalPeak > 1e-9f) {
 				const float guardGain = limiterCeiling / finalPeak;
+				appliedLimiterGain *= guardGain;
 				outL *= guardGain;
 				outR *= guardGain;
 			}
@@ -1591,11 +1593,9 @@ struct Sil : Module {
 			limiterTriggerEma = triggeredNow + trigCoeff * (limiterTriggerEma - triggeredNow);
 			limiterRecentGrDb = limiterDemandDb + limiterMetricGrCoeff * (limiterRecentGrDb - limiterDemandDb);
 
-			// Hybrid indicator for the -1.0 dBTP safety stage:
-			// subtle glow near ceiling, strong brightness when limiting demand is real.
-			const float ceilingProximity = softKnee01(detectorPeakDbTp, kLimiterCeilingDb - 3.f, 6.f);
-			const float limitingActivity = std::sqrt(clamp(limiterDemandDb / 1.5f, 0.f, 1.f));
-			limiterLed = clamp(std::max(0.25f * ceilingProximity, limitingActivity), 0.f, 1.f);
+			// Show the fraction of amplitude actually removed, including the safety
+			// guard. The history percentage uses this same smoothed light value.
+			limiterLed = clamp(1.f - appliedLimiterGain, 0.f, 1.f);
 		}
 		const float bypassL = delayedInL;
 		const float bypassR = delayedInR;
@@ -2362,6 +2362,32 @@ struct SilHorizontalMeter : TransparentWidget {
     }
 };
 
+struct SilSatLimitReadout : TransparentWidget {
+    Sil* module = nullptr;
+    int displayedTenths = 10;
+    char text[16] = "+1.0 dB";
+
+    void step() override {
+        TransparentWidget::step();
+        const float limitDb = module
+            ? clamp(module->params[Sil::SAT_LIMIT_PARAM].getValue(), 1.f, 6.f) : 1.f;
+        const int tenths = int(std::round(limitDb * 10.f));
+        if (tenths != displayedTenths) {
+            displayedTenths = tenths;
+            std::snprintf(text, sizeof(text), "+%.1f dB", float(tenths) * 0.1f);
+        }
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (!APP || !APP->window || !APP->window->uiFont) return;
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 10.f);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, color::WHITE);
+        nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, text, nullptr);
+    }
+};
+
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
@@ -2609,7 +2635,7 @@ struct SilWidget : ModuleWidget {
 		Vec glueCompLightPos(48.f, 49.2f);
 		Vec stereoEnhanceLightPos(48.f, 50.0f);
 		Vec saturatorLightPos(48.f, 50.8f);
-		Vec masteringButtonPos(48.f, 53.f);
+		Vec masteringButtonPos(50.8f, 43.9f);
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
 			Vec pointMm;
@@ -2649,9 +2675,15 @@ struct SilWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
 		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(satLimitPos), module, Sil::SAT_LIMIT_PARAM));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT
-		));
+        auto* satLimitReadout = new SilSatLimitReadout;
+        satLimitReadout->module = module;
+        satLimitReadout->box.size = mm2px(Vec(18.f, 3.5f));
+        satLimitReadout->box.pos = mm2px(satLimitPos.minus(Vec(9.f, 11.15f)));
+        addChild(satLimitReadout);
+		auto* masteringButton = createLightParamCentered<SmallGoldApertureButton>(
+			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT);
+		static_cast<SmallGoldApertureLight*>(masteringButton->getLight())->setBaseColor(nvgRGB(255, 118, 24));
+		addParam(masteringButton);
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
