@@ -228,6 +228,8 @@ def render_label_mask(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=90.0,
         )
         if result.returncode != 0 or not output.is_file():
