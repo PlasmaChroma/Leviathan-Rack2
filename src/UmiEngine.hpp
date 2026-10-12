@@ -8,9 +8,10 @@
 namespace umi {
 
 struct Ball {
+	static constexpr float DEFAULT_RADIUS = 18.f;
 	Vec2 pos;
 	Vec2 vel;
-	float radius = 18.f;
+	float radius = DEFAULT_RADIUS;
 	float age = 0.f;
 	float lowSpeedTime = 0.f;
 	std::uint32_t id = 0;
@@ -56,6 +57,19 @@ public:
 	std::uint32_t getSeed() const { return seed; }
 
 private:
+	static constexpr int COLLIDER_GRID_COLUMNS = 10;
+	static constexpr int COLLIDER_GRID_ROWS = 14;
+	static constexpr int COLLIDER_GRID_CELL_COUNT =
+		COLLIDER_GRID_COLUMNS * COLLIDER_GRID_ROWS;
+	static constexpr int MAX_COLLIDERS_PER_CELL = 32;
+
+	struct ColliderCell {
+		std::array<std::uint8_t, MAX_COLLIDERS_PER_CELL> pegIndices {};
+		std::array<std::uint8_t, MAX_COLLIDERS_PER_CELL> segmentIndices {};
+		std::uint8_t pegCount = 0;
+		std::uint8_t segmentCount = 0;
+	};
+
 	struct Rng {
 		std::uint32_t state = 1u;
 		void reset(std::uint32_t newState);
@@ -72,12 +86,21 @@ private:
 	int activeCount = 0;
 	int capacity = 32;
 	bool replaceOldest = false;
+	std::array<ColliderCell, COLLIDER_GRID_CELL_COUNT> colliderGrid {};
+	bool colliderGridValid = false;
+	float sinkMinY = 0.f;
+	float sinkMaxY = 0.f;
 
 	int findFreeSlot() const;
 	int findOldestSlot() const;
 	void deactivate(int slot);
+	void rebuildColliderGrid();
+	int colliderCellIndex(Vec2 pos) const;
+	bool spawnPositionClear(Vec2 pos, float radius, int ignoredSlot) const;
+	bool findBurstSpawnPosition(float preferredX, int ignoredSlot, Vec2* position) const;
 	void collideBallWithPeg(Ball& ball, const Peg& peg, float restitution, int colliderIndex);
 	void collideBallWithSegment(Ball& ball, const Segment& segment, float restitution, int colliderIndex);
+	void collideBalls(Ball& first, Ball& second, float restitution);
 };
 
 } // namespace umi

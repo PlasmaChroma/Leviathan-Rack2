@@ -69,6 +69,25 @@ void applyFreezeGateEdge(TransportControlState &state, bool freezeGateHigh) {
   }
 }
 
+bool consumeFreezeNegativeReset(TransportControlState &state, bool connected, float voltage) {
+  if (!connected) {
+    state.freezeNegativeResetArmed = true;
+    state.freezeNegativeHoldActive = false;
+    return false;
+  }
+  if (voltage >= -0.5f) {
+    state.freezeNegativeResetArmed = true;
+    state.freezeNegativeHoldActive = false;
+    return false;
+  }
+  if (voltage <= -1.f && state.freezeNegativeResetArmed) {
+    state.freezeNegativeResetArmed = false;
+    state.freezeNegativeHoldActive = true;
+    return true;
+  }
+  return false;
+}
+
 void applyAutoFreezeRequest(TransportControlState &state, bool autoFreezeRequested, bool freezeGateHigh) {
   if (autoFreezeRequested && !state.freezeLatched && !freezeGateHigh) {
     state.freezeLatched = true;
@@ -90,12 +109,7 @@ uint32_t applyPendingSampleSeek(temporaldeck::TemporalDeckEngine &engine, uint32
     double sampleWindowEndPos = sampleEndPos * double(std::max(0.f, std::min(bufferKnob, 1.f)));
     // Arc seek maps to full sample time and then clamps to active window end.
     double targetFrame = clampd(double(seekNorm) * sampleEndPos, 0.0, sampleWindowEndPos);
-    engine.samplePlayhead = targetFrame;
-    engine.readHead = targetFrame;
-    engine.scratchLagSamples = 0.0;
-    engine.scratchLagTargetSamples = 0.0;
-    engine.nowCatchActive = false;
-    engine.cancelSlipReturnState();
+    engine.requestSampleSeekTarget(targetFrame);
   }
 
   return pendingRevision;

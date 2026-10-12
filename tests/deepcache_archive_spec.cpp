@@ -113,6 +113,38 @@ bool writeOversizedKeyIndex(const std::string& path) {
 	return static_cast<bool>(stream);
 }
 
+bool writeSingleEntryIndex(const std::string& path,
+	                       const std::string& key,
+	                       const std::string& fingerprint) {
+	std::ofstream stream(path.c_str(), std::ios::binary | std::ios::trunc);
+	const char magic[8] = {'L', 'V', 'D', 'C', 'I', 'D', 'X', '1'};
+	const std::uint32_t version = 1;
+	const std::uint32_t count = 1;
+	const std::uint32_t keyLength = static_cast<std::uint32_t>(key.size());
+	const std::uint32_t fingerprintLength =
+		static_cast<std::uint32_t>(fingerprint.size());
+	const std::uint64_t offset = 0;
+	const std::uint64_t length = 22;
+	const std::uint64_t checksum = 0;
+	const std::uint32_t width = 1;
+	const std::uint32_t height = 1;
+	stream.write(magic, sizeof(magic));
+	stream.write(reinterpret_cast<const char*>(&version), sizeof(version));
+	stream.write(reinterpret_cast<const char*>(&count), sizeof(count));
+	stream.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
+	stream.write(key.data(), key.size());
+	stream.write(reinterpret_cast<const char*>(&fingerprintLength),
+	             sizeof(fingerprintLength));
+	stream.write(fingerprint.data(), fingerprint.size());
+	stream.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
+	stream.write(reinterpret_cast<const char*>(&length), sizeof(length));
+	stream.write(reinterpret_cast<const char*>(&checksum), sizeof(checksum));
+	stream.write(reinterpret_cast<const char*>(&width), sizeof(width));
+	stream.write(reinterpret_cast<const char*>(&height), sizeof(height));
+	stream.flush();
+	return static_cast<bool>(stream);
+}
+
 bool createSizedFile(const std::string& path, std::uint64_t size) {
 	if (size == 0)
 		return false;
@@ -228,7 +260,7 @@ int main() {
 		std::string volatileCommit;
 		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit); }) ||
 		    volatileCommit != "one" || contender.packBytes() != contenderPackBytes ||
-		    contender.hotCompressedBytes() <= contender.packBytes()) {
+		    contender.hotCompressedBytes() == 0) {
 			std::cerr << "[FAIL] read-only QOI write was not kept strictly in memory\n";
 			return 1;
 		}
@@ -456,6 +488,206 @@ int main() {
 			return 1;
 		}
 	}
+
+	// A cache backend that failed before startup must apply backpressure. Saying
+	// it can accept writes would let the UI retain an entire library of RGBA
+	// previews even though none can ever be committed.
+	{
+		deepcache::DeepcacheArchiveWorker unavailable;
+		unavailable.markUnavailable(7);
+		if (unavailable.canAcceptWrite()) {
+			std::cerr << "[FAIL] unavailable archive accepted raster work\n";
+			return 1;
+		}
+	}
+
+	// Candidate-size admission allows one bounded preview above the aggregate
+	// queue threshold when empty, but rejects anything above the single-preview
+	// ceiling. The UI retains a bounded retry if admission later changes.
+	const std::string admissionDirectory = directory + "-admission";
+	removeDirectory(admissionDirectory);
+	makeDirectory(admissionDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(admissionDirectory, {{"admission-model", "fp-admission", "plugin-admission"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; }) ||
+		    !worker.canAcceptWrite(1) ||
+		    !worker.canAcceptWrite(64u * 1024u * 1024u + 1u) ||
+		    worker.canAcceptWrite(128u * 1024u * 1024u + 1u)) {
+			std::cerr << "[FAIL] archive candidate-size admission was inconsistent\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(admissionDirectory);
+
+	// A sparse pack larger than the former 512 MB ceiling must be handled through
+	// its indexed span without allocating or reading the whole file. Its invalid
+	// payload is discarded and the owning worker can accept a normal replacement.
+	const std::string oversizedPackDirectory = directory + "-oversized-pack";
+	removeDirectory(oversizedPackDirectory);
+	makeDirectory(oversizedPackDirectory);
+	if (!writeSingleEntryIndex(oversizedPackDirectory + "/index-v1.bin",
+	                           "oversized-model", "fp-oversized") ||
+	    !createSizedFile(oversizedPackDirectory + "/previews-v1.pack",
+	                     513ull * 1024ull * 1024ull)) {
+		std::cerr << "[FAIL] could not prepare oversized pack test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(oversizedPackDirectory,
+		             {{"oversized-model", "fp-oversized", "plugin-oversized"}});
+		if (!waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY &&
+			       worker.packBytes() == 0;
+		})) {
+			std::cerr << "[FAIL] oversized pack was not reset safely\n";
+			return 1;
+		}
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "oversized-model";
+		replacement.fingerprint = "fp-oversized";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
+		if (!worker.enqueue(std::move(replacement)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] archive did not recover after oversized pack reset\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(oversizedPackDirectory);
+
+	// Extremely wide modules may exceed the former 8192-pixel dimension at
+	// 200% cache resolution even though their total bitmap is modest.
+	const std::string wideDirectory = directory + "-wide";
+	removeDirectory(wideDirectory);
+	makeDirectory(wideDirectory);
+	const std::vector<std::uint8_t> widePixels = pixels(9000, 1, 41);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(wideDirectory, {{"wide-model", "fp-wide", "plugin-wide"}});
+		deepcache::PreviewWrite wide;
+		wide.cacheKey = "wide-model";
+		wide.fingerprint = "fp-wide";
+		wide.width = 9000;
+		wide.height = 1;
+		wide.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(widePixels);
+		if (!worker.enqueue(std::move(wide)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] wide preview did not persist\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(wideDirectory, {{"wide-model", "fp-wide", "plugin-wide"}});
+		if (!waitUntil([&]() {
+			return worker.state() != deepcache::DatabaseState::LOADING;
+		})) {
+			std::cerr << "[FAIL] wide preview reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool restored = worker.tryPopDecoded(preview) &&
+			preview.width == 9000 && preview.height == 1 &&
+			preview.rgba == widePixels;
+		worker.shutdown();
+		if (!restored) {
+			std::cerr << "[FAIL] wide preview did not round-trip\n";
+			return 1;
+		}
+	}
+	removeDirectory(wideDirectory);
+
+	// Startup reads small append-only holes sequentially. A superseded middle
+	// record must be skipped without disturbing either neighboring live QOI.
+	const std::string fragmentedDirectory = directory + "-fragmented";
+	removeDirectory(fragmentedDirectory);
+	makeDirectory(fragmentedDirectory);
+	const std::vector<std::uint8_t> gapPixelsA = pixels(13, 9, 51);
+	const std::vector<std::uint8_t> gapPixelsB = pixels(13, 9, 52);
+	const std::vector<std::uint8_t> gapPixelsB2 = pixels(13, 9, 53);
+	const std::vector<std::uint8_t> gapPixelsC = pixels(13, 9, 54);
+	const std::vector<deepcache::ArchiveWantedEntry> fragmentedWanted = {
+		{"gap-a", "fp-a", "plugin-gap"},
+		{"gap-b", "fp-b", "plugin-gap"},
+		{"gap-c", "fp-c", "plugin-gap"}
+	};
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		const std::vector<std::pair<std::string, const std::vector<std::uint8_t>*>> initial = {
+			{"gap-a", &gapPixelsA}, {"gap-b", &gapPixelsB}, {"gap-c", &gapPixelsC}
+		};
+		for (const auto& item : initial) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = item.first;
+			write.fingerprint = item.first == "gap-a" ? "fp-a" :
+			                    item.first == "gap-b" ? "fp-b" : "fp-c";
+			write.width = 13;
+			write.height = 9;
+			write.rgba =
+				std::make_shared<const std::vector<std::uint8_t>>(*item.second);
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] fragmented archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 3; })) {
+			std::cerr << "[FAIL] fragmented archive was not populated\n";
+			return 1;
+		}
+		std::string committedKey;
+		while (worker.tryPopCommitted(committedKey)) {}
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "gap-b";
+		replacement.fingerprint = "fp-b";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(gapPixelsB2);
+		if (!worker.enqueue(std::move(replacement)) ||
+		    !waitUntil([&]() {
+			    while (worker.tryPopCommitted(committedKey)) {
+				    if (committedKey == "gap-b")
+					    return true;
+			    }
+			    return false;
+		    })) {
+			std::cerr << "[FAIL] fragmented archive replacement was not appended\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] fragmented archive reload did not finish\n";
+			return 1;
+		}
+		bool restoredA = false;
+		bool restoredB = false;
+		bool restoredC = false;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			restoredA = restoredA || (preview.cacheKey == "gap-a" && preview.rgba == gapPixelsA);
+			restoredB = restoredB || (preview.cacheKey == "gap-b" && preview.rgba == gapPixelsB2);
+			restoredC = restoredC || (preview.cacheKey == "gap-c" && preview.rgba == gapPixelsC);
+		}
+		worker.shutdown();
+		if (!restoredA || !restoredB || !restoredC) {
+			std::cerr << "[FAIL] sequential gap read disturbed a live preview\n";
+			return 1;
+		}
+	}
+	removeDirectory(fragmentedDirectory);
 
 	// A live panel-theme rebuild changes the fingerprint without changing the
 	// model cache key. The replacement must persist under the new fingerprint.

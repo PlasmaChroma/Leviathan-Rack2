@@ -99,6 +99,11 @@ void Engine::updateSampleRateCoefficients() {
 	lightDecay = safeExpDecay(tuning.strikeLightDecaySeconds, sampleTime);
 	thumpDecayGamma = LN_1000 / std::max(tuning.thumpDecayT60Seconds, 1e-4f);
 	dcPole = std::exp(-2.f * PI * std::max(tuning.dcBlockerCutoffHz, 0.1f) * sampleTime);
+	antiThumpPole = std::exp(
+		-2.f * PI * std::max(tuning.antiThumpCutoffHz, 0.1f) * sampleTime);
+	antiThumpDecay = std::exp(
+		-LN_1000 * sampleTime
+			/ std::max(tuning.antiThumpDecayT60Seconds, 1e-4f));
 
 	const float maxCutoff = 0.45f * sampleRate;
 	const float softCutoff = std::min(tuning.softImpactCutoffHz, maxCutoff);
@@ -191,6 +196,9 @@ void Engine::clearDynamicState() {
 	quietTime = 0.f;
 	dcPreviousInput = 0.f;
 	dcPreviousOutput = 0.f;
+	antiThumpEnvelope = 0.f;
+	antiThumpPreviousInput.fill(0.f);
+	antiThumpPreviousOutput.fill(0.f);
 	contactPhase = 0.f;
 	contactSignal = 0.f;
 	contactBodySignal = 0.f;
@@ -263,7 +271,21 @@ SoundModel Engine::chooseStrikeModel() {
 	if (soundModel != SoundModel::ProbabilisticMix) {
 		return soundModel;
 	}
-	return static_cast<SoundModel>(nextModelRandom() % 4u);
+	// Map the full 32-bit random range into percentage buckets. Classic is
+	// intentionally less common, with its former six percentage points shared
+	// equally by the other three models.
+	const std::uint32_t bucket = std::uint32_t(
+		(std::uint64_t(nextModelRandom()) * 100u) >> 32);
+	if (bucket < 19u) {
+		return SoundModel::Classic;
+	}
+	if (bucket < 46u) {
+		return SoundModel::CoupledBody;
+	}
+	if (bucket < 73u) {
+		return SoundModel::CoilContact;
+	}
+	return SoundModel::DispersiveSpring;
 }
 
 float Engine::limitCandidateVelocity(float candidateVelocity) const {
@@ -304,6 +326,13 @@ void Engine::strike(float normalizedVelocity) {
 		+ tuning.maximumStrikeModalBoost * maximumForceBlend;
 	const float impactBoost = 1.f
 		+ tuning.maximumStrikeImpactBoost * maximumForceBlend;
+	const float antiThumpRange = std::max(
+		tuning.antiThumpFullShaped - tuning.antiThumpOnsetShaped, 1e-4f);
+	const float antiThumpLinear = clampf(
+		(shaped - tuning.antiThumpOnsetShaped) / antiThumpRange, 0.f, 1.f);
+	const float antiThumpBlend =
+		antiThumpLinear * antiThumpLinear * (3.f - 2.f * antiThumpLinear);
+	antiThumpEnvelope = std::max(antiThumpEnvelope, antiThumpBlend);
 	if (strikeModel == SoundModel::DispersiveSpring) {
 		const float waveStrength = signedShaped
 			* (0.65f + 0.75f * shaped * shaped) * impulseBoost;
@@ -597,6 +626,20 @@ float Engine::processImpact() {
 	return strikeNoise + thump;
 }
 
+float Engine::processAntiThump(float input) {
+	float filtered = input;
+	for (int stage = 0; stage < int(antiThumpPreviousInput.size()); ++stage) {
+		const float output = filtered - antiThumpPreviousInput[stage]
+			+ antiThumpPole * antiThumpPreviousOutput[stage];
+		antiThumpPreviousInput[stage] = filtered;
+		antiThumpPreviousOutput[stage] = output;
+		filtered = output;
+	}
+	const float amount = clampf(antiThumpEnvelope, 0.f, 1.f);
+	antiThumpEnvelope *= antiThumpDecay;
+	return lerpf(input, filtered, amount);
+}
+
 float Engine::processDcBlocker(float input) {
 	const float output = input - dcPreviousInput + dcPole * dcPreviousOutput;
 	dcPreviousInput = input;
@@ -608,6 +651,8 @@ bool Engine::allFinite() const {
 	if (!std::isfinite(displacement) || !std::isfinite(springVelocity)
 		|| !std::isfinite(acceleration) || !std::isfinite(strikeLightEnvelope)
 		|| !std::isfinite(dcPreviousInput) || !std::isfinite(dcPreviousOutput)
+		|| !std::isfinite(antiThumpEnvelope)
+		|| !std::isfinite(antiThumpPole) || !std::isfinite(antiThumpDecay)
 		|| !std::isfinite(impact.noiseEnvelope) || !std::isfinite(impact.noiseBrightness)
 		|| !std::isfinite(impact.noiseLowpass) || !std::isfinite(impact.noiseLowReject)
 		|| !std::isfinite(impact.thumpPosition) || !std::isfinite(impact.thumpVelocity)
@@ -633,6 +678,12 @@ bool Engine::allFinite() const {
 	}
 	for (float state : waveguideAllpassState) {
 		if (!std::isfinite(state)) {
+			return false;
+		}
+	}
+	for (int stage = 0; stage < int(antiThumpPreviousInput.size()); ++stage) {
+		if (!std::isfinite(antiThumpPreviousInput[stage])
+			|| !std::isfinite(antiThumpPreviousOutput[stage])) {
 			return false;
 		}
 	}
@@ -673,7 +724,7 @@ Frame Engine::process(float requestedSampleTime) {
 		return {};
 	}
 
-	const float body = processSpring();
+	const float body = processAntiThump(processSpring());
 	const float contact = processCoilContact();
 	const float waveguide = processDispersiveSpring();
 	const float modal = processModes();

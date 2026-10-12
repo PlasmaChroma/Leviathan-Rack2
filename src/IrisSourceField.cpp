@@ -178,7 +178,8 @@ bool loadSourceFieldQoi(const std::string& path, SourceField* out, std::string* 
   source.channels = kCanonicalSourceChannels;
   source.bitDepth = kCanonicalSourceBitDepth;
   const size_t byteCount = size_t(source.width) * size_t(source.height) * 3u;
-  source.rgb8.assign(decoded.get(), decoded.get() + byteCount);
+  const uint8_t* decodedBytes = decoded.get();
+  source.rgb8.assign(decodedBytes, decodedBytes + byteCount);
   if (!source.valid()) {
     return failWith("Decoded QOI source field is invalid", error);
   }

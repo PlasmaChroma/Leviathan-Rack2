@@ -263,7 +263,9 @@ struct UndertowWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/undertow.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/undertow.labels.svg");
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    splitPanel.addCompactLeviathanLogoBranding();
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();
@@ -277,7 +279,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addFineKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addSmallKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
@@ -287,7 +289,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addTinyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;

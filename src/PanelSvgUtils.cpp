@@ -1002,8 +1002,12 @@ bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, ma
 
 	PanelAnchorLookupResult anchor;
 	if (lookupPanelAnchor(svgPath, rectId, &anchor) && anchor.hasRect) {
-		outRect->pos = Vec(anchor.x * 0.01f, anchor.y * 0.01f);
-		outRect->size = Vec(anchor.width * 0.01f, anchor.height * 0.01f);
+		outRect->pos = Vec(
+			anchor.x * anchor.unitToMmScale,
+			anchor.y * anchor.unitToMmScale);
+		outRect->size = Vec(
+			anchor.width * anchor.unitToMmScale,
+			anchor.height * anchor.unitToMmScale);
 		return true;
 	}
 
@@ -1297,13 +1301,9 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 
 	PanelAnchorLookupResult anchor;
 	if (lookupPanelAnchor(svgPath, elementId, &anchor) && anchor.hasCenter) {
-		*outPointMm = Vec(anchor.cx * 0.01f, anchor.cy * 0.01f);
-		return true;
-	}
-
-	Vec centerMm;
-	if (loadCircleFromSvg(svgPath, elementId, &centerMm, nullptr, 0.01f)) {
-		*outPointMm = centerMm;
+		*outPointMm = Vec(
+			anchor.cx * anchor.unitToMmScale,
+			anchor.cy * anchor.unitToMmScale);
 		return true;
 	}
 
@@ -1311,6 +1311,7 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 	if (!loadSvgText(svgPath, &svgText)) {
 		return false;
 	}
+	const float unitScale = parseSvgUserUnitToMmScale(svgText);
 
 	const std::string escapedId = escapeRegexLiteral(elementId);
 	const std::regex elementRegex(
@@ -1325,7 +1326,8 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 
 	float cxMm = 0.f;
 	float cyMm = 0.f;
-	if (parseAttrScaled(elementTag, "cx", 0.01f, &cxMm) && parseAttrScaled(elementTag, "cy", 0.01f, &cyMm)) {
+	if (parseAttrScaled(elementTag, "cx", unitScale, &cxMm)
+		&& parseAttrScaled(elementTag, "cy", unitScale, &cyMm)) {
 		*outPointMm = Vec(cxMm, cyMm);
 		return true;
 	}
@@ -1334,10 +1336,10 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 	float yMm = 0.f;
 	float wMm = 0.f;
 	float hMm = 0.f;
-	if (parseAttrScaled(elementTag, "x", 0.01f, &xMm)
-		&& parseAttrScaled(elementTag, "y", 0.01f, &yMm)
-		&& parseAttrScaled(elementTag, "width", 0.01f, &wMm)
-		&& parseAttrScaled(elementTag, "height", 0.01f, &hMm)) {
+	if (parseAttrScaled(elementTag, "x", unitScale, &xMm)
+		&& parseAttrScaled(elementTag, "y", unitScale, &yMm)
+		&& parseAttrScaled(elementTag, "width", unitScale, &wMm)
+		&& parseAttrScaled(elementTag, "height", unitScale, &hMm)) {
 		*outPointMm = Vec(xMm + 0.5f * wMm, yMm + 0.5f * hMm);
 		return true;
 	}

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,20 @@ bool writeTextFile(const std::string& path, const std::string& text) {
   }
   out << text;
   return out.good();
+}
+
+bool readTextFile(const std::string& path, std::string* out) {
+  if (!out) {
+    return false;
+  }
+  std::ifstream in(path.c_str(), std::ios::in);
+  if (!in.good()) {
+    return false;
+  }
+  out->assign(
+    std::istreambuf_iterator<char>(in),
+    std::istreambuf_iterator<char>());
+  return in.good() || in.eof();
 }
 
 bool nearlyEqual(float a, float b, float eps = 1e-6f) {
@@ -190,28 +205,211 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
   math::Rect progress;
   math::Rect framebufferProgress;
   math::Rect databaseStatus;
+  math::Rect soloWave;
+  math::Rect sourceSoloWave;
+  math::Rect excludedWave;
   const bool readyOk = panel_svg::loadPointFromSvgMm("res/Deepcache.panel.svg", "ready_light", &ready);
   const bool progressOk = panel_svg::loadRectFromSvgMm("res/Deepcache.panel.svg", "progress", &progress);
   const bool framebufferProgressOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "framebuffer_progress", &framebufferProgress);
   const bool databaseStatusOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "database_status", &databaseStatus);
+  const bool soloWaveOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.panel.svg", "BRANDING_WAVE_SOLO_RASTER", &soloWave);
+  const bool sourceSoloWaveOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.svg", "BRANDING_WAVE_SOLO_RASTER", &sourceSoloWave);
+  const bool pairedWavesExcluded =
+    !panel_svg::loadRectFromSvgMm(
+      "res/Deepcache.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excludedWave)
+    && !panel_svg::loadRectFromSvgMm(
+      "res/Deepcache.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &excludedWave);
+  std::string labelsText;
+  const bool labelsOk = readTextFile("res/Deepcache.labels.svg", &labelsText);
+  const size_t logoPos = labelsText.find("id=\"reworked_LEVIATHAN_LOGO\"");
+  const size_t logoEnd = logoPos == std::string::npos
+    ? std::string::npos : labelsText.find("/>", logoPos);
+  const size_t logoHiddenPos = logoPos == std::string::npos
+    ? std::string::npos : labelsText.find("display:none", logoPos);
+  const bool logoHidden = labelsOk
+    && logoPos != std::string::npos
+    && logoEnd != std::string::npos
+    && logoHiddenPos != std::string::npos
+    && logoHiddenPos < logoEnd;
   const bool pass = readyOk && progressOk && framebufferProgressOk && databaseStatusOk
+    && soloWaveOk && sourceSoloWaveOk && pairedWavesExcluded && logoHidden
     && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 107.59958f, 1e-4f)
     && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f, 1e-4f)
     && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f, 1e-4f)
     && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.199771f, 1e-4f)
     && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f, 1e-4f)
     && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 72.600005f, 1e-4f)
-    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f);
-  return {"Deepcache anchors use 1/100mm component coordinates", pass,
+    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f)
+    && nearlyEqual(soloWave.pos.x, 3.62626f, 1e-4f)
+    && nearlyEqual(soloWave.pos.x + soloWave.size.x * 0.5f, 10.16f, 1e-4f)
+    && nearlyEqual(soloWave.pos.y + soloWave.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(soloWave.size.x, 13.06748f, 1e-4f)
+    && nearlyEqual(soloWave.size.y, 5.11810f, 1e-4f)
+    && nearlyEqual(sourceSoloWave.pos.x, soloWave.pos.x, 1e-4f)
+    && nearlyEqual(sourceSoloWave.pos.y, soloWave.pos.y, 1e-4f)
+    && nearlyEqual(sourceSoloWave.size.x, soloWave.size.x, 1e-4f)
+    && nearlyEqual(sourceSoloWave.size.y, soloWave.size.y, 1e-4f);
+  return {"Deepcache anchors and solo branding use repository units", pass,
           "ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
             " progress=" + std::to_string(progress.pos.x) + "," + std::to_string(progress.pos.y) +
             " progress_sz=" + std::to_string(progress.size.x) + "," + std::to_string(progress.size.y) +
             " fb_progress=" + std::to_string(framebufferProgress.pos.x) + "," + std::to_string(framebufferProgress.pos.y) +
             " fb_progress_sz=" + std::to_string(framebufferProgress.size.x) + "," + std::to_string(framebufferProgress.size.y) +
             " db_status=" + std::to_string(databaseStatus.pos.x) + "," + std::to_string(databaseStatus.pos.y) +
-            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y)};
+            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y) +
+            " solo=" + std::to_string(soloWave.pos.x) + "," + std::to_string(soloWave.pos.y) +
+            " solo_sz=" + std::to_string(soloWave.size.x) + "," + std::to_string(soloWave.size.y) +
+            " logoHidden=" + std::to_string(logoHidden ? 1 : 0)};
+}
+
+TestResult testDoorstopSoloBrandingFitsThreeHp() {
+  math::Rect panelWave;
+  math::Rect sourceWave;
+  math::Rect excludedWave;
+  const bool panelOk = panel_svg::loadRectFromSvgMm(
+    "res/doorstop.panel.svg", "BRANDING_WAVE_SOLO_RASTER", &panelWave);
+  const bool sourceOk = panel_svg::loadRectFromSvgMm(
+    "res/doorstop.svg", "BRANDING_WAVE_SOLO_RASTER", &sourceWave);
+  const bool pairedWavesExcluded =
+    !panel_svg::loadRectFromSvgMm(
+      "res/doorstop.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excludedWave)
+    && !panel_svg::loadRectFromSvgMm(
+      "res/doorstop.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &excludedWave);
+  const bool pass = panelOk && sourceOk && pairedWavesExcluded
+    && nearlyEqual(panelWave.pos.x, 1.08626f, 1e-4f)
+    && nearlyEqual(panelWave.pos.x + panelWave.size.x * 0.5f, 7.62f, 1e-4f)
+    && nearlyEqual(panelWave.pos.y + panelWave.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(panelWave.size.x, 13.06748f, 1e-4f)
+    && nearlyEqual(panelWave.size.y, 5.11810f, 1e-4f)
+    && nearlyEqual(sourceWave.pos.x, panelWave.pos.x, 1e-4f)
+    && nearlyEqual(sourceWave.pos.y, panelWave.pos.y, 1e-4f)
+    && nearlyEqual(sourceWave.size.x, panelWave.size.x, 1e-4f)
+    && nearlyEqual(sourceWave.size.y, panelWave.size.y, 1e-4f);
+  return {"Doorstop solo branding fits centered within three HP", pass,
+          "solo=" + std::to_string(panelWave.pos.x) + "," +
+            std::to_string(panelWave.pos.y) +
+            " solo_sz=" + std::to_string(panelWave.size.x) + "," +
+            std::to_string(panelWave.size.y)};
+}
+
+TestResult testTemporalDeckBrandingRasterAnchors() {
+  math::Rect left;
+  math::Rect right;
+  std::vector<panel_svg::SvgPathMatch> labelPaths;
+  const bool leftOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &left);
+  const bool rightOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &right);
+  const bool labelsOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
+    "res/deck.labels.svg", "labels", &labelPaths);
+  const auto branding = std::find_if(
+    labelPaths.begin(), labelPaths.end(), [](const panel_svg::SvgPathMatch& path) {
+      return path.id == "Leviathan_Branding";
+    });
+  const bool pass = leftOk && rightOk && labelsOk && branding != labelPaths.end()
+    && nearlyEqual(left.pos.x, 21.89610f, 1e-4f)
+    && nearlyEqual(right.pos.x, 66.63674f, 1e-4f)
+    && nearlyEqual(left.pos.y, right.pos.y, 1e-4f)
+    && nearlyEqual(left.size.x, right.size.x, 1e-4f)
+    && nearlyEqual(left.size.y, right.size.y, 1e-4f)
+    && nearlyEqual(left.size.y, branding->bounds.size.y, 1e-4f)
+    && nearlyEqual(left.pos.y + left.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f);
+  return {"Temporal Deck branding raster anchors are paired", pass,
+          "left=" + std::to_string(left.pos.x) + "," + std::to_string(left.pos.y) +
+            " right=" + std::to_string(right.pos.x) + "," + std::to_string(right.pos.y) +
+            " size=" + std::to_string(left.size.x) + "," + std::to_string(left.size.y) +
+            " logoHeight=" + (branding == labelPaths.end()
+              ? std::string("missing") : std::to_string(branding->bounds.size.y))};
+}
+
+TestResult testPerfectWaveBrandingDeploymentContract() {
+  struct PanelContract {
+    const char* path;
+    float widthMm;
+    bool hasLeft;
+    bool hasRight;
+  };
+  const PanelContract panels[] = {
+    {"res/deck.panel.svg", 101.6f, true, true},
+    {"res/deck.svg", 101.6f, true, true},
+    {"res/bifurx.panel.svg", 71.12f, true, true},
+    {"res/bifurx.svg", 71.12f, true, true},
+    {"res/crownstep.panel.svg", 91.44f, true, true},
+    {"res/crownstep.svg", 91.44f, true, true},
+    {"res/wyrm.panel.svg", 71.12f, true, true},
+    {"res/wyrm.svg", 71.12f, true, true},
+    {"res/proc.panel.svg", 40.64f, true, false},
+    {"res/proc.svg", 40.64f, true, false},
+    {"res/iris.panel.svg", 60.96f, true, true},
+    {"res/iris.svg", 60.96f, true, true},
+    {"res/nautiloid.panel.svg", 101.6f, true, true},
+    {"res/nautiloid.svg", 101.6f, true, true},
+    {"res/undertow.panel.svg", 40.64f, true, false},
+    {"res/undertow.svg", 40.64f, true, false},
+    {"res/bulkhead.svg", 81.28f, true, true},
+    {"res/chronomaw.svg", 203.2f, true, true},
+    {"res/sil.svg", 101.6f, true, true},
+    {"res/tdscope.svg", 40.64f, true, false},
+  };
+
+  bool pass = true;
+  int anchorCount = 0;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    math::Rect left;
+    math::Rect right;
+    const bool leftOk = panel_svg::loadRectFromSvgMm(
+      panel.path, "BRANDING_WAVE_LEFT_RASTER", &left);
+    const bool rightOk = panel_svg::loadRectFromSvgMm(
+      panel.path, "BRANDING_WAVE_RIGHT_RASTER", &right);
+    bool panelPass = leftOk == panel.hasLeft && rightOk == panel.hasRight;
+    auto validAnchor = [&](const math::Rect& rect) {
+      return nearlyEqual(rect.size.x, 13.06748f, 1e-4f)
+        && nearlyEqual(rect.size.y, 5.11810f, 1e-4f)
+        && nearlyEqual(rect.pos.y + rect.size.y, 128.5f, 1e-4f)
+        && rect.pos.x >= -1e-4f
+        && rect.pos.x + rect.size.x <= panel.widthMm + 1e-4f;
+    };
+    if (leftOk) {
+      panelPass = panelPass && validAnchor(left);
+      anchorCount++;
+    }
+    if (rightOk) {
+      panelPass = panelPass && validAnchor(right);
+      anchorCount++;
+    }
+    if (leftOk && rightOk) {
+      panelPass = panelPass
+        && nearlyEqual(
+          left.pos.x + right.pos.x + left.size.x,
+          panel.widthMm,
+          5e-4f);
+    }
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    pass = pass && panelPass;
+  }
+
+  math::Rect excluded;
+  const bool fluxPanelExcluded = !panel_svg::loadRectFromSvgMm(
+    "res/flux.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excluded);
+  const bool fluxSourceExcluded = !panel_svg::loadRectFromSvgMm(
+    "res/flux.svg", "BRANDING_WAVE_LEFT_RASTER", &excluded);
+  pass = pass && fluxPanelExcluded && fluxSourceExcluded;
+
+  return {"Perfect Wave branding deployment contract", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
+            " anchors=" + std::to_string(anchorCount) +
+            " fluxExcluded=" + std::to_string(
+              fluxPanelExcluded && fluxSourceExcluded ? 1 : 0) +
+            (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
 }
 
 TestResult testBifurxGlassPathParses() {
@@ -245,6 +443,9 @@ int main() {
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
+  tests.push_back(testDoorstopSoloBrandingFitsThreeHp());
+  tests.push_back(testTemporalDeckBrandingRasterAnchors());
+  tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;

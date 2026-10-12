@@ -29,6 +29,11 @@ constexpr float AUDIO_TANH_LUT_SCALE =
 
 extern const std::array<float, AUDIO_TANH_LUT_INTERVALS + 1> audioTanhLut;
 
+constexpr int AUDIO_SINE_LUT_INTERVALS = 2048;
+constexpr float AUDIO_SINE_LUT_SCALE = float(AUDIO_SINE_LUT_INTERVALS);
+
+extern const std::array<float, AUDIO_SINE_LUT_INTERVALS + 1> audioSineLut;
+
 } // namespace detail
 
 // High-accuracy approximation of mathematical tanh() for audio-rate DSP.
@@ -46,6 +51,39 @@ inline float tanhAudio(float x) {
 		+ (detail::audioTanhLut[index + 1] - detail::audioTanhLut[index])
 			* fraction;
 	return std::copysign(value, x);
+}
+
+// Linear-interpolated sine for a phase expressed in complete cycles. The hot
+// Puffy/FRENZY caller guarantees cycles in [-2, 2], allowing truncation after a
+// fixed positive offset instead of floor(), fmod(), division, or transcendental
+// math in the audio path.
+inline float sinCyclesAudioBounded(float cycles) {
+	const float shifted = cycles + 2.f;
+	const int wholeCycles = int(shifted);
+	const float wrapped = shifted - float(wholeCycles);
+	const float scaled = wrapped * detail::AUDIO_SINE_LUT_SCALE;
+	const int index = int(scaled);
+	const float fraction = scaled - float(index);
+	return detail::audioSineLut[index]
+		+ (detail::audioSineLut[index + 1] - detail::audioSineLut[index])
+			* fraction;
+}
+
+// Triangle wave for a phase expressed in complete cycles. Like the bounded
+// sine helper above, Puffy guarantees cycles in [-2, 2], so wrapping needs no
+// floor(), fmod(), division, lookup, or transcendental math. The wave crosses
+// zero with a positive slope at each whole cycle.
+inline float triangleCyclesAudioBounded(float cycles) {
+	const float shifted = cycles + 2.f;
+	const int wholeCycles = int(shifted);
+	const float wrapped = shifted - float(wholeCycles);
+	if (wrapped < 0.25f) {
+		return 4.f * wrapped;
+	}
+	if (wrapped < 0.75f) {
+		return 2.f - 4.f * wrapped;
+	}
+	return 4.f * wrapped - 4.f;
 }
 
 // Compatibility alias: existing callers retain the established rational curve.

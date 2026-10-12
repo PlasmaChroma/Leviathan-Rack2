@@ -6,7 +6,7 @@
    width="101.6mm"
    id="svg1713"
    sodipodi:docname="deck.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -24,14 +24,14 @@
      inkscape:document-units="mm"
      showgrid="false"
      inkscape:zoom="1.7378081"
-     inkscape:cx="54.666565"
-     inkscape:cy="439.34655"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:cx="208.5961"
+     inkscape:cy="191.6207"
+     inkscape:window-width="1920"
+     inkscape:window-height="1043"
+     inkscape:window-x="3840"
+     inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="glass"
+     inkscape:current-layer="svg1713"
      inkscape:showpageshadow="2"
      inkscape:deskcolor="#d1d1d1" />
   <defs
@@ -250,7 +250,7 @@
        sodipodi:nodetypes="cc" />
     <g
        id="waves_layer"
-       style="display:inline;opacity:0.5"
+       style="display:none;opacity:0.5"
        transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">
       <g
          id="branding_wave_left"
@@ -363,6 +363,12 @@
        r="1.45"
        style="fill:#ff00ff;fill-opacity:1" />
     <circle
+       cx="98.949997"
+       cy="24.415501"
+       id="LONGPLAY_CACHE_STATUS_LIGHT"
+       r="1.45"
+       style="fill:#c148ff;fill-opacity:1" />
+    <circle
        cx="45.665001"
        cy="112.89996"
        id="POSITION_CV"
@@ -440,6 +446,24 @@
        id="TD_SCOPE_SPAWN"
        r="1.9"
        style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
+    <rect
+       x="21.896099"
+       y="123.3819"
+       width="13.06748"
+       height="5.1181002"
+       id="BRANDING_WAVE_LEFT_RASTER" />
+    <rect
+       x="66.636742"
+       y="123.3819"
+       width="13.06748"
+       height="5.1181002"
+       id="BRANDING_WAVE_RIGHT_RASTER" />
+    <rect
+       x="34.440151"
+       y="118.43102"
+       width="32.71933"
+       height="12.24054"
+       id="BRANDING_LEVIATHAN_LOGO_RASTER" />
   </g>
   <g
      id="custom_anchors"
@@ -670,7 +694,7 @@
          y="7.9925327">scratch deck • audio buffer • delay • sampler</tspan></text>
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:inline;opacity:1;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:0.750001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:none;opacity:1;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:0.750001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        x="39.636703"
        y="127.32526"
        id="Leviathan_Branding"><tspan

@@ -1,75 +1,373 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-     width="15.24mm" height="128.5mm" viewBox="0 0 1524 12850"
-     preserveAspectRatio="xMidYMid" id="doorstop-source">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#12151b"/>
-      <stop offset="0.52" stop-color="#090b10"/>
-      <stop offset="1" stop-color="#050609"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="15.24mm"
+   height="128.5mm"
+   viewBox="0 0 1524 12850"
+   preserveAspectRatio="xMidYMid"
+   id="doorstop-source"
+   version="1.1"
+   sodipodi:docname="doorstop.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview26"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="6.842932"
+     inkscape:cx="19.874522"
+     inkscape:cy="204.80987"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="doorstop-source"
+     showgrid="false" />
+  <defs
+     id="defs13">
+    <linearGradient
+       id="bg"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#12151b"
+         id="stop1" />
+      <stop
+         offset="0.52"
+         stop-color="#090b10"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#050609"
+         id="stop3" />
     </linearGradient>
-    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#7457d8" stop-opacity="0.75"/>
-      <stop offset="0.5" stop-color="#34d9e7" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#7457d8" stop-opacity="0.75"/>
+    <linearGradient
+       id="edge"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="0">
+      <stop
+         offset="0"
+         stop-color="#7457d8"
+         stop-opacity="0.75"
+         id="stop4" />
+      <stop
+         offset="0.5"
+         stop-color="#34d9e7"
+         stop-opacity="0.95"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#7457d8"
+         stop-opacity="0.75"
+         id="stop6" />
     </linearGradient>
-    <radialGradient id="plate" cx="0.35" cy="0.25" r="0.9">
-      <stop offset="0" stop-color="#d5dbe0"/>
-      <stop offset="0.42" stop-color="#727b84"/>
-      <stop offset="1" stop-color="#242a31"/>
+    <radialGradient
+       id="plate"
+       cx="653.4"
+       cy="6919"
+       r="651.59998"
+       fx="653.4"
+       fy="6919"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#e5edf1"
+         id="stop7" />
+      <stop
+         offset="0.32"
+         stop-color="#8b959d"
+         id="stop8" />
+      <stop
+         offset="0.72"
+         stop-color="#343b43"
+         id="stop9" />
+      <stop
+         offset="1"
+         stop-color="#11151a"
+         id="stop10" />
     </radialGradient>
+    <linearGradient
+       id="chamberEdge"
+       x1="219.8595"
+       y1="404.7312"
+       x2="219.8595"
+       y2="3384.052"
+       gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)"
+       gradientUnits="userSpaceOnUse"
+       xlink:href="#linearGradient22">
+      <stop
+         offset="0"
+         stop-color="#7a5cff"
+         stop-opacity="0.82"
+         id="stop11"
+         style="stop-color:#7a5cff;stop-opacity:1;" />
+      <stop
+         offset="1"
+         stop-color="#1cccd9"
+         stop-opacity="0.70"
+         id="stop13"
+         style="stop-color:#1cccd9;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient67"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-5344.8155,-883.02065)"
+       x1="5793.2271"
+       y1="1480.5731"
+       x2="6451.4136"
+       y2="1483.1567" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
   </defs>
-
-  <g id="panel_art" inkscape:groupmode="layer" inkscape:label="Panel artwork">
-    <rect width="1524" height="12850" fill="url(#bg)"/>
-    <rect x="42" y="35" width="1440" height="12780" rx="90"
-          fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="24"/>
-    <path d="M165 690 H1359" stroke="url(#edge)" stroke-width="34" stroke-linecap="round"/>
-    <path d="M110 8700 H1414" stroke="#35d7e4" stroke-opacity="0.28"
-          stroke-width="22" stroke-linecap="round"/>
-
-    <rect x="158" y="850" width="1208" height="6400" rx="170"
-          fill="#28303a" fill-opacity="0.13" stroke="#ffffff"
-          stroke-opacity="0.045" stroke-width="18"/>
-    <circle cx="762" cy="7200" r="395" fill="#030508" opacity="0.8"/>
-    <circle cx="762" cy="7100" r="350" fill="url(#plate)"
-            stroke="#e8f4f7" stroke-opacity="0.32" stroke-width="24"/>
-    <circle cx="762" cy="7100" r="155" fill="#171c22" stroke="#05070a" stroke-width="28"/>
-    <circle cx="762" cy="7100" r="62" fill="#080a0d"/>
-
-    <g opacity="0.35">
-      <path d="M290 9000 H1234" stroke="#7659e0" stroke-width="20"/>
-      <path d="M290 10400 H1234" stroke="#4d89d8" stroke-width="20"/>
-      <path d="M290 11800 H1234" stroke="#35d7e4" stroke-width="20"/>
+  <g
+     id="panel_art"
+     inkscape:label="Panel artwork">
+    <rect
+       width="1524"
+       height="12850"
+       fill="url(#bg)"
+       id="rect13"
+       x="0"
+       y="0" />
+    <g
+       id="glass"
+       inkscape:label="glass">
+      <rect
+         id="inputs"
+         x="110"
+         y="8080"
+         width="1304"
+         height="2750"
+         rx="150"
+         fill="#5740bf"
+         fill-opacity="0.52"
+         stroke="#b8a7ff"
+         stroke-opacity="0.16"
+         stroke-width="20"
+         style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
+      <rect
+         id="outputs"
+         x="110"
+         y="10910"
+         width="1304"
+         height="1210"
+         rx="150"
+         fill="#1cccd9"
+         fill-opacity="0.5"
+         stroke="#a8fbff"
+         stroke-opacity="0.18"
+         stroke-width="20"
+         style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
+    </g>
+    <rect
+       x="82"
+       y="12530"
+       width="1360"
+       height="264"
+       rx="70"
+       fill="#030407"
+       stroke="#ffffff"
+       stroke-opacity="0.05"
+       stroke-width="12"
+       id="rect21"
+       style="display:none" />
+    <g
+       id="mount_plate"
+       style="display:inline"
+       transform="translate(0,-650.03707)">
+      <rect
+         x="109.28201"
+         y="1700.3191"
+         width="1305.436"
+         height="5880.3989"
+         rx="170.18721"
+         fill="#05070a"
+         stroke="url(#chamberEdge)"
+         stroke-width="22.564"
+         id="rect16"
+         style="display:inline;stroke:url(#chamberEdge);fill:none" />
+      <rect
+         x="145.32166"
+         y="1732.105"
+         width="1233.3567"
+         height="5816.8271"
+         rx="144.15857"
+         fill="none"
+         stroke="#ffffff"
+         stroke-opacity="0.055"
+         stroke-width="13.1623"
+         id="rect17"
+         style="display:inline" />
+      <circle
+         cx="762"
+         cy="7200"
+         r="420"
+         fill="#020305"
+         opacity="0.9"
+         id="circle18" />
+      <circle
+         cx="762"
+         cy="7100"
+         r="350"
+         fill="url(#plate)"
+         stroke="#e8f4f7"
+         stroke-opacity="0.32"
+         stroke-width="24"
+         id="circle19"
+         style="fill:url(#plate)" />
+      <circle
+         cx="762"
+         cy="7100"
+         r="155"
+         fill="#171c22"
+         stroke="#05070a"
+         stroke-width="28"
+         id="circle20" />
+      <circle
+         cx="762"
+         cy="7100"
+         r="62"
+         fill="#080a0d"
+         id="circle21" />
     </g>
   </g>
-
-  <g id="components" inkscape:groupmode="layer" inkscape:label="Component anchors"
+  <g
+     id="components"
+     inkscape:label="Component anchors"
      style="display:none">
-    <circle id="SPRING_BASE" cx="762" cy="7100" r="50"/>
-    <circle id="STRIKE_LIGHT" cx="762" cy="8050" r="80"/>
-    <rect id="MANUAL_HIT_REGION" x="110" y="1730" width="1304" height="5380"/>
-    <circle id="TRIG_INPUT" cx="762" cy="9300" r="220"/>
-    <circle id="VELOCITY_INPUT" cx="762" cy="10700" r="220"/>
-    <circle id="AUDIO_OUTPUT" cx="762" cy="12100" r="220"/>
+    <circle
+       id="SPRING_BASE"
+       cx="762"
+       cy="6449.9629"
+       r="50" />
+    <rect
+       id="ENERGY_METER"
+       x="70.000008"
+       y="7220"
+       width="1384"
+       height="306.42072"
+       style="fill:#b06161;fill-opacity:1;stroke-width:1.2769" />
+    <rect
+       id="MANUAL_HIT_REGION"
+       x="110"
+       y="1041.0212"
+       width="1304"
+       height="5883.064" />
+    <circle
+       id="TRIG_INPUT"
+       cx="762"
+       cy="8544.9893"
+       r="220" />
+    <circle
+       id="VELOCITY_INPUT"
+       cx="762"
+       cy="9944.9893"
+       r="220" />
+    <circle
+       id="AUDIO_OUTPUT"
+       cx="762"
+       cy="11330"
+       r="220" />
+    <rect
+       id="BRANDING_WAVE_SOLO_RASTER"
+       x="108.626"
+       y="12338.190"
+       width="1306.748"
+       height="511.810" />
   </g>
-
-  <g id="labels" inkscape:groupmode="layer" inkscape:label="Labels"
-     text-anchor="middle" font-family="sans-serif">
-    <g fill="none" stroke-linecap="round">
-      <path d="M338 410 H1186" stroke="#ffffff" stroke-opacity="0.13" stroke-width="18"/>
-      <path d="M338 8350 H1186" stroke="#ffffff" stroke-opacity="0.09" stroke-width="14"/>
-    </g>
-    <text x="762" y="545" fill="#e0ebf1" fill-opacity="0.88"
-          font-size="205" font-weight="600" letter-spacing="12">DOORSTOP</text>
-    <text x="762" y="8880" fill="#73cee0" fill-opacity="0.80"
-          font-size="150" font-weight="600" letter-spacing="8">TRIG</text>
-    <text x="762" y="10280" fill="#73cee0" fill-opacity="0.80"
-          font-size="150" font-weight="600" letter-spacing="8">VEL</text>
-    <text x="762" y="11680" fill="#ac80ec" fill-opacity="0.86"
-          font-size="150" font-weight="600" letter-spacing="8">OUT</text>
-    <text x="762" y="12715" fill="#ffffff" fill-opacity="0.42"
-          font-size="105" font-weight="500" letter-spacing="7">LEVIATHAN</text>
+  <g
+     id="labels"
+     inkscape:label="Labels"
+     text-anchor="middle"
+     font-family="sans-serif"
+     style="display:inline">
+    <text
+       id="reworked_module_title_text"
+       x="751.41693"
+       y="452.52466"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient67);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan26"
+         style="fill:url(#linearGradient67)"
+         x="751.41693"
+         y="452.52466">DS</tspan></text>
+    <text
+       id="reworked_module_description"
+       x="762"
+       y="815.24359"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan27"
+         x="762"
+         y="815.24359">phys. model</tspan></text>
+    <text
+       x="762"
+       y="9185.0098"
+       fill="#e0eef6"
+       font-size="105px"
+       font-weight="600"
+       letter-spacing="18"
+       id="text24"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
+    <text
+       x="753.95654"
+       y="7849.1284"
+       fill="#e0eef6"
+       font-size="105px"
+       font-weight="600"
+       letter-spacing="18"
+       id="en-label"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:18;display:inline;fill:#e0eef6"><tspan
+         sodipodi:role="line"
+         id="tspan28"
+         x="762.95654"
+         y="7849.1284">ENERGY</tspan></text>
+    <text
+       x="762"
+       y="10585.011"
+       fill="#e0eef6"
+       font-size="105px"
+       font-weight="600"
+       letter-spacing="18"
+       id="text25"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
+    <text
+       x="762"
+       y="11970.025"
+       fill="#e1f6f7"
+       font-size="105px"
+       font-weight="600"
+       letter-spacing="18"
+       id="text26"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">OUT</text>
   </g>
 </svg>

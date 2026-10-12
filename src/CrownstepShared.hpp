@@ -181,7 +181,7 @@ struct Crownstep : Module {
 	uint64_t lastAiSearchLegalMoveGenerations = 0;
 	uint64_t lastAiSearchCutoffs = 0;
 	bool quantizationEnabled = true;
-	bool pitchBipolarEnabled = false;
+	bool pitchBipolarEnabled = true;
 	bool melodicBiasEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
@@ -280,6 +280,7 @@ struct Crownstep : Module {
 	bool dispatchAiRequestIfIdle();
 
 	void setGameMode(int mode, bool startFreshGame);
+	void applyGameSetupAndStartNewGame(int requestedGameMode, int requestedPlayerMode);
 
 	void resetMoveAnimation();
 	void beginMoveAnimation(const Move& move, const BoardState& beforeBoard, int moverSide);

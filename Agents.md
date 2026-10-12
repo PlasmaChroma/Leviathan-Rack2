@@ -22,6 +22,8 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - We have an established pattern that allows placement of Rack components dynamically using the components layer in the SVG and helper functions.  See PanelSvgUtils for information.
 
+- For modules that use split panel assets, `res/<Module>.svg` is the editable master and source of truth. Do not edit the generated `res/<Module>.panel.svg` or `res/<Module>.labels.svg` files directly. Make panel artwork, section-field, label, and hidden component-anchor changes in the master SVG, then regenerate the runtime assets with `python3 tools/split_svg_labels.py res/<Module>.svg --overwrite`. If SVG contents or anchors changed, also run `make generate-panel-anchor-atlas` so runtime anchor lookup and asset hashes remain current.
+
 - Performance is king. In hot audio/UI paths, prefer fast math approximations, lookup tables, cached values, and perceptually stable approximations over absolute numerical precision. Expensive transcendental functions (`sin`, `cos`, `sqrt`, `pow`, `exp`, etc.) should be avoided per sample unless there is a clear audible or correctness reason.
 
 - When precision and speed trade off, assume speed is the priority for this project unless the code is offline tooling, tests, serialization, or a one-time setup path.

@@ -425,6 +425,44 @@ TestResult testEdgeLiveScratchLimitDoesNotFreezeBufferGrowth() {
             " c=" + std::to_string(c.accessibleLag) + " d=" + std::to_string(d.accessibleLag)};
 }
 
+TestResult testNegativeFreezeResetGestureAndTargets() {
+  TransportControlState state;
+  const bool idle = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, 0.f);
+  const bool firstCrossing = temporaldeck_transport::consumeFreezeNegativeReset(state, true, -1.1f);
+  const bool firstCrossingHoldsFreeze = state.freezeNegativeHoldActive;
+  const bool heldDoesNotRepeat = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -2.f) &&
+                                 state.freezeNegativeHoldActive;
+  const bool partialRiseDoesNotRearm = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -0.75f) &&
+                                       state.freezeNegativeHoldActive;
+  const bool rearmRise = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -0.4f);
+  const bool rearmRiseReleasesFreeze = !state.freezeNegativeHoldActive;
+  const bool secondCrossing = temporaldeck_transport::consumeFreezeNegativeReset(state, true, -1.f);
+
+  VirtualRig sampleRig;
+  sampleRig.installRampSample(200);
+  sampleRig.engine.readHead = 120.0;
+  sampleRig.engine.samplePlayhead = 120.0;
+  sampleRig.engine.resetReadPositionToSampleStartOrLiveNow();
+  const bool sampleReset = sampleRig.engine.readHead == 0.0 && sampleRig.engine.samplePlayhead == 0.0;
+
+  VirtualRig liveRig;
+  liveRig.fillLive(64);
+  liveRig.engine.readHead = liveRig.engine.buffer.wrapPosition(liveRig.engine.newestReadablePos() - 20.0);
+  liveRig.engine.scratchLagSamples = 20.0;
+  const double expectedNow = liveRig.engine.newestReadablePos();
+  liveRig.engine.resetReadPositionToSampleStartOrLiveNow();
+  const bool liveReset = std::fabs(liveRig.engine.readHead - expectedNow) < 1e-9 &&
+                         liveRig.engine.scratchLagSamples == 0.0;
+
+  const bool pass = idle && firstCrossing && firstCrossingHoldsFreeze && heldDoesNotRepeat &&
+                    partialRiseDoesNotRearm && rearmRise && rearmRiseReleasesFreeze &&
+                    secondCrossing && sampleReset && liveReset;
+  return {"Negative Freeze crossing resets once and holds Freeze until return threshold", pass,
+          "crossings=" + std::to_string(int(firstCrossing)) + "/" +
+            std::to_string(int(secondCrossing)) + " sample=" +
+            std::to_string(int(sampleReset)) + " live=" + std::to_string(int(liveReset))};
+}
+
 } // namespace
 
 int main() {
@@ -440,6 +478,7 @@ int main() {
   tests.push_back(testEdgeQuickSlipOneShotSemantics());
   tests.push_back(testEdgeSampleSeekDuringTransportStateChanges());
   tests.push_back(testEdgeLiveScratchLimitDoesNotFreezeBufferGrowth());
+  tests.push_back(testNegativeFreezeResetGestureAndTargets());
 
   int failed = 0;
   std::cout << "TemporalDeck Virtual Integration Spec\n";

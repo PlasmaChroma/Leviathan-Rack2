@@ -104,10 +104,10 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 	std::shared_ptr<Svg> rotateIconNormal;
 	std::shared_ptr<Svg> rotateIconHighlighted;
 
-	explicit BulkheadRoomCanvasWidget(Bulkhead* module) : module(module) {
-		rotateIconNormal = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
-		rotateIconHighlighted = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
-	}
+	explicit BulkheadRoomCanvasWidget(Bulkhead* module)
+		: module(module)
+		, rotateIconNormal(Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg")))
+		, rotateIconHighlighted(Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"))) {}
 
 	Vec rackMouseToLocal() const {
 		Vec localPos = APP->scene->rack->getMousePos().minus(box.pos);
@@ -453,6 +453,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	PreviewBuildLogTimer previewBuildTimer("Bulkhead", module);
 	const std::string panelPath = asset::plugin(pluginInstance, "res/bulkhead.svg");
 	setPanel(createPanel(panelPath));
+	visual_assets::addPerfectWavePanelBranding(this, panelPath);
 	previewBuildTimer.markPanelDone();
 	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 
@@ -469,7 +470,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	auto addKnob = [&](int paramId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;
 		loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(posMm), module, paramId));
+		addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
 	};
 	auto addInputPort = [&](int inputId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;

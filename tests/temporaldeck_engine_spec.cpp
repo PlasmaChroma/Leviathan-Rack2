@@ -577,6 +577,44 @@ TestResult testSampleBoundedSincLutMatchesDirectReference() {
           "maxErrL=" + std::to_string(maxAbsErrL) + " maxErrR=" + std::to_string(maxAbsErrR)};
 }
 
+TestResult testSampleLoopBackwardScopeScrollDoesNotGetStuck() {
+  Engine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleRate = 48000.f;
+  const int frames = 48000;
+  installRampSample(engine, frames);
+  engine.sampleLoopEnabled = true;
+
+  double maxLag = double(frames - 1);
+  double clampedPastStart = engine.clampLag(maxLag + 100.0, maxLag);
+  bool wrapsPastStart = std::fabs(clampedPastStart - 99.0) < 1e-3;
+
+  float errorWrapped = engine.lagErrorToTarget(10.f, float(maxLag - 10.f), float(maxLag));
+  bool errorCorrect = std::fabs(errorWrapped - 21.f) < 1e-3f;
+
+  Engine::FrameInput in = makeDefaultInput(48000.f);
+  in.scopeLagDragActive = true;
+  in.scopeLagDragSoftHold = false;
+  in.platterMotionActive = true;
+
+  // Simulate continuous backward scroll (increasing lag towards maxLag, then wrapping past maxLag to 0)
+  float currentLagTarget = float(maxLag) - 20.f;
+  for (int step = 0; step < 10; ++step) {
+    in.platterGestureRevision++;
+    currentLagTarget = float(engine.clampLag(currentLagTarget + 10.f, maxLag));
+    in.platterLagTarget = currentLagTarget;
+    in.platterGestureVelocity = -100.f; // backward gesture
+    engine.process(in);
+  }
+
+  bool notStuck = std::isfinite(engine.readHead) && engine.readHead >= 0.0 && engine.readHead <= maxLag;
+
+  bool pass = wrapsPastStart && errorCorrect && notStuck;
+  return {"Backward scope scroll in sample loop mode wraps cleanly across boundaries", pass,
+          "wrapsPastStart=" + std::to_string(wrapsPastStart) + " errorCorrect=" + std::to_string(errorCorrect) +
+              " notStuck=" + std::to_string(notStuck)};
+}
+
 } // namespace
 
 int main() {
@@ -596,6 +634,7 @@ int main() {
   tests.push_back(testConvertWrappedLiveWindowUsesLogicalSampleOrder());
   tests.push_back(testSincLutMatchesDirectWindowedSincReference());
   tests.push_back(testSampleBoundedSincLutMatchesDirectReference());
+  tests.push_back(testSampleLoopBackwardScopeScrollDoesNotGetStuck());
 
   int failed = 0;
   std::cout << "TemporalDeck Engine Spec\n";

@@ -38,12 +38,15 @@ extern Model* modelDeepcache;
 extern Model* modelUmi;
 extern Model* modelDoorstop;
 extern Model* modelChromatide;
+extern Model* modelPuffy;
+extern Model* modelMandelwake;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
-// Runtime feature flags loaded from `res/dragonking.txt`.
+// Runtime feature flags loaded from Rack's user directory at
+// `Leviathan/dragonking.txt`.
 bool isDragonKingDebugEnabled();
 bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isCrownstepAddMoveEnabled();
@@ -52,6 +55,7 @@ bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
+bool isPuffyDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();

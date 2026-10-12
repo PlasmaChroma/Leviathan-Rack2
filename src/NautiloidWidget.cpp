@@ -146,7 +146,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   ~NautiloidGlPreview() override {
     if (module) {
-      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(false, false);
     }
     releaseGlResources(false);
   }
@@ -155,7 +155,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     OpenGlWidget::onContextDestroy(e);
     releaseGlResources(true);
     if (module) {
-      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(false, false);
     }
   }
 
@@ -496,7 +496,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       currentModeReady = modePrograms[size_t(module->fractalMode)].ready;
     }
     if (module) {
-      module->debugGpuPreviewAvailable.store(effectiveActive && currentModeReady, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(effectiveActive && currentModeReady);
     }
     bool dirty = false;
     if (effectiveActive != lastEffectiveActive) {
@@ -531,13 +531,11 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
     if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady(mode)) {
       if (module) {
-        module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+        module->setGpuPreviewAvailable(false);
       }
       return;
     }
-    if (module) {
-      module->debugGpuPreviewAvailable.store(true, std::memory_order_relaxed);
-    }
+    module->setGpuPreviewAvailable(true);
 
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
     const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
@@ -638,6 +636,21 @@ struct NautiloidDisplay final : OpaqueWidget {
     }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
   }
 
   Vec currentLocalMousePos() const {
@@ -861,6 +874,21 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
     }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
   }
 
   void step() override {
@@ -1122,8 +1150,8 @@ struct NautiloidZoomSlider final : ui::Slider {
   float lastDrawZoomAmount = -1.f;
   Vec lastDrawSize;
 
-  NautiloidZoomSlider() {
-    handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LeviathanSliderHandle.svg"));
+  NautiloidZoomSlider()
+    : handleSvg(Svg::load(asset::plugin(pluginInstance, "res/icon/LuminSliderHandle.svg"))) {
     handleLight = new NautiloidZoomHandleLight;
     handleLightNaturalSize = handleLight->box.size;
     if (handleLight->fb) {
@@ -1170,17 +1198,13 @@ struct NautiloidZoomSlider final : ui::Slider {
       module && module->zoomRateCvConnected.load(std::memory_order_relaxed);
     const float cvSpeed =
       cvConnected ? module->zoomRateCvNorm.load(std::memory_order_relaxed) : 0.f;
-    bool xVelocityConnected = false;
-    bool yVelocityConnected = false;
     float xVelocity = 0.f;
     float yVelocity = 0.f;
     if (module) {
-      xVelocityConnected = module->xVelocityCvConnected.load(std::memory_order_relaxed);
-      yVelocityConnected = module->yVelocityCvConnected.load(std::memory_order_relaxed);
-      if (xVelocityConnected) {
+      if (module->xVelocityCvConnected.load(std::memory_order_relaxed)) {
         xVelocity = module->xVelocityCvNorm.load(std::memory_order_relaxed);
       }
-      if (yVelocityConnected) {
+      if (module->yVelocityCvConnected.load(std::memory_order_relaxed)) {
         yVelocity = module->yVelocityCvNorm.load(std::memory_order_relaxed);
       }
     }
@@ -1457,8 +1481,8 @@ struct NautiloidZoomReadout final : TransparentWidget {
   explicit NautiloidZoomReadout(Nautiloid* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    if (!module) return;
-    const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
+    const float zoom = module ? float(module->fractalZoom) : 0.f;
+    const float pct = 100.f * clamp(zoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
     const std::string text = string::f("Zoom: %.3f%%", pct);
 
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
@@ -1478,9 +1502,10 @@ struct NautiloidPositionReadout final : TransparentWidget {
   explicit NautiloidPositionReadout(Nautiloid* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    if (!module) return;
-    float xPct = 100.f * clamp(float(double(module->fractalCenterX) / MAX_CENTER), -1.f, 1.f);
-    float yPct = 100.f * clamp(float(double(module->fractalCenterY) / MAX_CENTER), -1.f, 1.f);
+    const double centerX = module ? double(module->fractalCenterX) : 0.0;
+    const double centerY = module ? double(module->fractalCenterY) : 0.0;
+    float xPct = 100.f * clamp(float(centerX / MAX_CENTER), -1.f, 1.f);
+    float yPct = 100.f * clamp(float(centerY / MAX_CENTER), -1.f, 1.f);
     if (std::abs(xPct) < 0.0005f)
       xPct = 0.f;
     if (std::abs(yPct) < 0.0005f)
@@ -1690,7 +1715,10 @@ struct NautiloidWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/nautiloid.labels.svg");
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    splitPanel.addPerfectWaveBranding();
+    splitPanel.addCompactLeviathanLogoBranding();
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
@@ -1867,7 +1895,7 @@ struct NautiloidWidget final : ModuleWidget {
       [naut]() {
         const bool current = naut->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
         naut->debugGpuPreviewEnabled.store(!current, std::memory_order_relaxed);
-        naut->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+        naut->setGpuPreviewAvailable(false);
       }));
     menu->addChild(createMenuLabel(nautiloidDebugLogPath()));
   }

@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <iosfwd>
 #include <mutex>
 #include <memory>
 #include <string>
@@ -37,7 +38,7 @@ struct DecodedPreview {
 	std::string cacheKey;
 	std::string fingerprint;
 	// Zero identifies the initial archive load. Later values identify the
-	// graphics-context generation that requested an in-memory QOI re-decode.
+	// graphics-context generation that requested an indexed QOI re-decode.
 	std::uint64_t decodeGeneration = 0;
 	int width = 0;
 	int height = 0;
@@ -65,15 +66,16 @@ public:
 	DeepcacheArchiveWorker(const DeepcacheArchiveWorker&) = delete;
 	DeepcacheArchiveWorker& operator=(const DeepcacheArchiveWorker&) = delete;
 
-	void start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted);
+	void start(const std::string& directory, const std::vector<ArchiveWantedEntry>& wanted);
 	void markUnavailable(int errorCode);
 	bool enqueue(PreviewWrite write);
 	void discardPendingWrites();
 	bool canAcceptWrite() const;
+	bool canAcceptWrite(std::size_t byteCount) const;
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
-	// Re-decodes an already validated entry from the hot in-memory QOI pack.
-	// This never performs disk I/O and is safe for read-only archive workers.
+	// Re-decodes an already validated entry from its bounded on-disk pack span.
+	// The archive worker owns the I/O and read-only workers may use it safely.
 	bool requestDecode(const std::string& cacheKey, std::uint64_t decodeGeneration);
 	void discardPendingDecodes();
 	// Reports a successful append/index commit so the UI can release the source
@@ -93,7 +95,7 @@ public:
 	int targetPluginCount() const { return targetPluginCount_.load(std::memory_order_relaxed); }
 	std::uint64_t packBytes() const { return packBytes_.load(std::memory_order_relaxed); }
 	std::uint64_t hotCompressedBytes() const {
-		return packBytes_.load(std::memory_order_relaxed) + volatileBytes_.load(std::memory_order_relaxed);
+		return volatileBytes_.load(std::memory_order_relaxed);
 	}
 	int errorCode() const { return errorCode_.load(std::memory_order_relaxed); }
 
@@ -133,7 +135,11 @@ private:
 	bool compactArchive();
 	bool resetArchive();
 	bool shouldCompactArchive() const;
-	bool readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes);
+	bool readPackRange(std::uint64_t offset, std::uint64_t length,
+	                   std::vector<std::uint8_t>& bytes) const;
+	bool readPackRange(std::istream& input, std::uint64_t offset,
+	                   std::uint64_t length, std::vector<std::uint8_t>& bytes,
+	                   std::uint64_t& nextOffset) const;
 	bool loadIndex(const std::string& path);
 	bool saveIndexAtomically();
 	bool canceled() const { return stopping_.load(std::memory_order_relaxed); }
@@ -151,7 +157,6 @@ private:
 	std::unordered_map<std::string, Entry> entries_;
 	std::unordered_set<std::string> readyKeys_;
 	std::unordered_set<std::string> readyPlugins_;
-	std::vector<std::uint8_t> packedBytes_;
 
 	mutable std::mutex mutex_;
 	std::condition_variable condition_;

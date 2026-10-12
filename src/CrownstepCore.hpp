@@ -88,7 +88,12 @@ static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
 static constexpr float PITCH_RANGE_PARAM_MIN_MULTIPLIER = 0.25f;
 static constexpr float PITCH_RANGE_PARAM_FULL_MULTIPLIER = 1.f;
 static constexpr float PITCH_RANGE_PARAM_MAX_MULTIPLIER = 3.f;
-static constexpr float PITCH_RANGE_PARAM_DEFAULT = 0.5f;
+static constexpr float PITCH_RANGE_DEFAULT_SEMITONES = 24.f;
+static constexpr float PITCH_RANGE_PARAM_DEFAULT =
+	0.5f * (
+		PITCH_RANGE_DEFAULT_SEMITONES / float(BOARD_SIZE - 1)
+		- PITCH_RANGE_PARAM_MIN_MULTIPLIER)
+	/ (PITCH_RANGE_PARAM_FULL_MULTIPLIER - PITCH_RANGE_PARAM_MIN_MULTIPLIER);
 
 struct Move {
 	int originIndex = -1;

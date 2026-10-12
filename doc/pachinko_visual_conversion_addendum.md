@@ -615,7 +615,7 @@ Then export:
 
 ```text
 panel_base@4x.png
-panel_base@2x.png
+panel_base_2x.png
 panel_base@1x.png      optional
 ```
 

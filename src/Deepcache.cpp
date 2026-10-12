@@ -5,6 +5,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <app/ModuleWidget.hpp>
@@ -59,9 +60,26 @@ struct DeepcacheWarmRenderHost;
 
 enum class FramebufferWarmResult {
 	READY,
+	PENDING_ASSET,
 	RETRY,
 	FAILED
 };
+
+bool fractalOverlaysReadyForCapture(widget::Widget* root) {
+	if (!root) return true;
+	std::deque<widget::Widget*> queue;
+	queue.push_back(root);
+	while (!queue.empty()) {
+		widget::Widget* current = queue.front();
+		queue.pop_front();
+		if (auto* overlay =
+				dynamic_cast<visual_assets::FractalGlassOverlay*>(current)) {
+			if (!overlay->isReadyForCapture()) return false;
+		}
+		for (widget::Widget* child : current->children) queue.push_back(child);
+	}
+	return true;
+}
 
 void releaseFramebuffers(widget::Widget* root) {
 	if (!root)
@@ -607,6 +625,7 @@ public:
 		restoreDecodeRequestedIndices_.clear();
 		restoreUploadQueuedIndices_.clear();
 		persistentUploadQueue_.clear();
+		archiveWriteRetryQueue_.clear();
 		pendingUploadBytes_ = 0;
 		graphicsContextLost_ = false;
 		graphicsRestoreScheduled_ = false;
@@ -640,6 +659,7 @@ public:
 		state_ = deepcache::CacheState::STOPPING;
 		publish();
 		worker_.shutdown();
+		archiveWriteRetryQueue_.clear();
 		archive_.shutdown();
 		activeGeneration_ = 0;
 		browser_ = nullptr;
@@ -815,6 +835,15 @@ public:
 		drainArchiveCommits();
 		drainArchiveDecoded();
 		publishDatabase();
+		if (archive_.state() == deepcache::DatabaseState::ERROR) {
+			startRequested_ = false;
+			if (activeGeneration_ != 0)
+				worker_.cancel(activeGeneration_);
+			activeGeneration_ = 0;
+			if (state_ != deepcache::CacheState::ERROR)
+				setState(deepcache::CacheState::ERROR);
+			return;
+		}
 		if (startRequested_ && archiveReadyForPlanning()) {
 			startRequested_ = false;
 			start();
@@ -926,9 +955,11 @@ public:
 	}
 
 	void warmFramebuffers() {
+		drainArchiveWriteRetries();
 		scheduleGraphicsRestore();
 		uploadPersistentImages();
-		if (stopped_ || !browser_ || framebufferWarmQueue_.empty()) {
+		if (stopped_ || !browser_ || !archiveWriteRetryQueue_.empty() ||
+		    framebufferWarmQueue_.empty()) {
 			finishIfComplete();
 			return;
 		}
@@ -936,7 +967,7 @@ public:
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
-			if (!archive_.canAcceptWrite())
+			if (!archiveWriteRetryQueue_.empty() || !archive_.canAcceptWrite())
 				break;
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
@@ -967,7 +998,7 @@ public:
 							write.width = width;
 							write.height = height;
 							write.rgba = pixels;
-							archive_.enqueue(std::move(write));
+							submitArchiveWrite(std::move(write));
 						}
 						if (isDisplayEligible(request.first)) {
 							result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
@@ -984,7 +1015,11 @@ public:
 			}
 			const double durationMs = (system::getTime() - startedAt) * 1000.0;
 			processedThisFrame++;
-			if (result == FramebufferWarmResult::RETRY && request.second < 3) {
+			const int retryLimit =
+				result == FramebufferWarmResult::PENDING_ASSET ? 120 : 3;
+			if ((result == FramebufferWarmResult::RETRY ||
+					result == FramebufferWarmResult::PENDING_ASSET) &&
+				request.second < retryLimit) {
 				request.second++;
 				framebufferWarmQueue_.push_back(request);
 			}
@@ -1044,7 +1079,8 @@ private:
 	void finishIfComplete() {
 		if (state_ != deepcache::CacheState::WARMING || constructionCompleted_ < constructionTarget_ ||
 		    worker_.pendingRequestCount(activeGeneration_) != 0 || completed_ < total_ ||
-		    !warmTrackedGeneration_.empty() || !rehydrationPendingIndices_.empty())
+		    !warmTrackedGeneration_.empty() || !rehydrationPendingIndices_.empty() ||
+		    !archiveWriteRetryQueue_.empty())
 			return;
 		if (isDragonKingDebugEnabled()) {
 			const double elapsedMs = (system::getTime() - warmingStartedAt_) * 1000.0;
@@ -1093,7 +1129,32 @@ private:
 	bool archiveReadyForPlanning() const {
 		const deepcache::DatabaseState databaseState = archive_.state();
 		return databaseState != deepcache::DatabaseState::LOADING &&
-		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty();
+		       databaseState != deepcache::DatabaseState::ERROR &&
+		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty() &&
+		       archiveWriteRetryQueue_.empty();
+	}
+
+	bool submitArchiveWrite(deepcache::PreviewWrite write) {
+		const std::size_t byteCount = write.rgba ? write.rgba->size() : 0;
+		if (archive_.canAcceptWrite(byteCount) && archive_.enqueue(write))
+			return true;
+		// Warming stops while this queue is nonempty, so it remains bounded to
+		// the one captured raster that lost admission to a concurrently changing
+		// archive queue or worker state.
+		archiveWriteRetryQueue_.push_back(std::move(write));
+		return false;
+	}
+
+	void drainArchiveWriteRetries() {
+		int submitted = 0;
+		while (!archiveWriteRetryQueue_.empty() && submitted < 16) {
+			const deepcache::PreviewWrite& write = archiveWriteRetryQueue_.front();
+			const std::size_t byteCount = write.rgba ? write.rgba->size() : 0;
+			if (!archive_.canAcceptWrite(byteCount) || !archive_.enqueue(write))
+				break;
+			archiveWriteRetryQueue_.pop_front();
+			submitted++;
+		}
 	}
 
 	void initializeArchive() {
@@ -1405,6 +1466,7 @@ private:
 	std::vector<std::uint8_t> displayEligibility_;
 	std::vector<std::uint8_t> displayEligibilityScratch_;
 	std::deque<std::pair<std::size_t, int>> persistentUploadQueue_;
+	std::deque<deepcache::PreviewWrite> archiveWriteRetryQueue_;
 	std::size_t pendingUploadBytes_ = 0;
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
 	std::unordered_map<std::size_t, std::string> cacheKeyByModelIndex_;
@@ -1733,7 +1795,7 @@ bool DeepcacheModelBox::captureFramebuffer(std::vector<std::uint8_t>& rgba, int&
 	const math::Vec size = framebuffer->getFramebufferSize();
 	width = static_cast<int>(std::round(size.x));
 	height = static_cast<int>(std::round(size.y));
-	if (width <= 0 || height <= 0 || width > 8192 || height > 8192 ||
+	if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
 	    static_cast<std::uint64_t>(width) * height * 4ull > 128ull * 1024ull * 1024ull)
 		return false;
 	rgba.resize(static_cast<std::size_t>(width) * height * 4u);
@@ -1846,6 +1908,15 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		return FramebufferWarmResult::FAILED;
 	if (!APP || !APP->window || !APP->window->vg || !APP->window->fbVg)
 		return FramebufferWarmResult::RETRY;
+	if (moduleWidget) {
+		// Fractal glass is produced off-thread. Re-step the preview tree while
+		// warming and do not persist a framebuffer until every overlay has
+		// published its pixels (or reported that no fallback exists).
+		moduleWidget->step();
+		if (!fractalOverlaysReadyForCapture(moduleWidget)) {
+			return FramebufferWarmResult::PENDING_ASSET;
+		}
+	}
 	try {
 		// Rack can lazily render this framebuffer while the browser is open, in
 		// which case its resolution follows the current browser transform. Always
@@ -3090,6 +3161,7 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	visual_assets::SplitPanelRenderer splitPanel(this, "res/Deepcache.panel.svg");
 	const std::string& panelPath = splitPanel.panelPath();
 	splitPanel.addLabels("res/Deepcache.labels.svg");
+	splitPanel.addPerfectWaveSoloBranding();
 
 	math::Vec planningMm(4.5f, 91.59958f);
 	math::Vec warmingMm(4.5f, 98.59958f);
@@ -3312,7 +3384,7 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		child->addChild(createMenuLabel("Resident records: " + std::to_string(manager->residentRecordCount())));
 		child->addChild(createMenuLabel("Resident previews: " + std::to_string(manager->residentPreviewCount())));
 		child->addChild(createMenuLabel("Framebuffer-ready: " + std::to_string(manager->framebufferReadyPreviewCount())));
-		child->addChild(createMenuLabel(string::f("Hot QOI: %.1f MB", manager->hotQoiBytes() / (1024.0 * 1024.0))));
+		child->addChild(createMenuLabel(string::f("Volatile QOI: %.1f MB", manager->hotQoiBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Retained RGBA: %.1f MB", manager->retainedRgbaBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Pending upload RGBA: %.1f MB", manager->pendingUploadBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Estimated GPU RGBA: %.1f MB", manager->estimatedGpuBytes() / (1024.0 * 1024.0))));

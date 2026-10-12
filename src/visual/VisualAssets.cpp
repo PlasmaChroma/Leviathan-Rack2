@@ -13,9 +13,9 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 #include <jansson.h>
 #include <cstdio>
-
 namespace visual_assets {
 
 namespace {
@@ -37,8 +37,69 @@ struct PanelGlassTintState {
 };
 
 PanelGlassTintState gPanelGlassTint;
+std::vector<PanelGlassTintState> gPanelGlassPreviewStateStack;
+
+void applyPanelGlassProgression(double cycleTime) {
+	cycleTime = std::fmod(std::max(0.0, cycleTime), 180.0);
+	float amount = 0.f;
+	NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
+	NVGcolor washColor;
+	NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
+	NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
+
+	if (cycleTime < 60.0) {
+		float t = float(cycleTime / 60.0);
+		amount = 0.28f * t;
+		washColor = nvgRGBA(255, 0, 255, int(std::round(32.f * t)));
+	}
+	else if (cycleTime < 120.0) {
+		float t = float((cycleTime - 60.0) / 60.0);
+		amount = 0.28f;
+		tintColor = nvgRGBf(
+			1.f + (0.95f - 1.f) * t,
+			0.22f + (0.05f - 0.22f) * t,
+			1.f + (0.15f - 1.f) * t);
+		washColor = nvgRGBA(
+			int(std::round(255.f + (242.f - 255.f) * t)),
+			int(std::round(12.f * t)),
+			int(std::round(255.f + (38.f - 255.f) * t)),
+			32);
+		glowColor = nvgRGB(
+			28 + int(227.f * t),
+			204 - int(174.f * t),
+			217 - int(151.f * t));
+		strokeColor = nvgRGB(
+			42 + int(162.f * t),
+			171 - int(171.f * t),
+			239 - int(205.f * t));
+	}
+	else {
+		float t = float((cycleTime - 120.0) / 60.0);
+		amount = 0.28f * (1.f - t);
+		tintColor = nvgRGBf(0.95f, 0.05f, 0.15f);
+		washColor = nvgRGBA(
+			242, 12, 38, int(std::round(32.f * (1.f - t))));
+		glowColor = nvgRGB(
+			255 - int(227.f * t),
+			30 + int(174.f * t),
+			66 + int(151.f * t));
+		strokeColor = nvgRGB(
+			204 - int(162.f * t),
+			int(171.f * t),
+			34 + int(205.f * t));
+	}
+
+	gPanelGlassTint.currentAmount = amount;
+	gPanelGlassTint.currentTintColor = tintColor;
+	gPanelGlassTint.currentWashColor = washColor;
+	gPanelGlassTint.currentCrystalGlowColor = glowColor;
+	gPanelGlassTint.currentCrystalStrokeColor = strokeColor;
+}
 
 void updatePanelGlassTint() {
+	if (!gPanelGlassPreviewStateStack.empty()) {
+		return;
+	}
 	double now = system::getTime();
 	if (gPanelGlassTint.lastUpdateSec <= 0.0) {
 		gPanelGlassTint.lastUpdateSec = now;
@@ -57,91 +118,8 @@ void updatePanelGlassTint() {
 	// Only update once per second
 	if (gPanelGlassTint.accumulatedTimeSec - gPanelGlassTint.lastColorUpdateAccumSec >= 1.0) {
 		gPanelGlassTint.lastColorUpdateAccumSec = std::floor(gPanelGlassTint.accumulatedTimeSec);
-
-		double cycleTime = std::fmod(gPanelGlassTint.accumulatedTimeSec, 180.0);
-		float amount = 0.f;
-		NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-		NVGcolor washColor = nvgRGBA(255, 0, 255, 0);
-		NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-		NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
-
-		if (cycleTime < 60.0) {
-			float t = float(cycleTime / 60.0);
-			amount = 0.28f * t;
-			tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-			washColor = nvgRGBA(255, 0, 255, int(std::round(32.f * t)));
-			glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-			strokeColor = nvgRGB(0x2a, 0xab, 0xef);
-		} else if (cycleTime < 120.0) {
-			float t = float((cycleTime - 60.0) / 60.0);
-			amount = 0.28f;
-			// Interpolate from Magenta (1.f, 0.22f, 1.f) to Crimson (0.95f, 0.05f, 0.15f)
-			tintColor = nvgRGBf(
-				1.f + (0.95f - 1.f) * t,
-				0.22f + (0.05f - 0.22f) * t,
-				1.f + (0.15f - 1.f) * t
-			);
-			// Interpolate wash from Magenta (255, 0, 255) to Crimson (242, 12, 38)
-			washColor = nvgRGBA(
-				int(std::round(255.f + (242.f - 255.f) * t)),
-				int(std::round(0.f + (12.f - 0.f) * t)),
-				int(std::round(255.f + (38.f - 255.f) * t)),
-				32
-			);
-			// Interpolate crystal glow from Cyan (28, 204, 217) to Ruby Red (255, 30, 66)
-			glowColor = nvgRGB(
-				28 + int(227.f * t),
-				204 - int(174.f * t),
-				217 - int(151.f * t)
-			);
-			// Interpolate crystal stroke from Cyan-Blue (42, 171, 239) to Crimson-Red (204, 0, 34)
-			strokeColor = nvgRGB(
-				42 + int(162.f * t),
-				171 - int(171.f * t),
-				239 - int(205.f * t)
-			);
-		} else {
-			float t = float((cycleTime - 120.0) / 60.0);
-			amount = 0.28f * (1.f - t);
-			tintColor = nvgRGBf(0.95f, 0.05f, 0.15f);
-			washColor = nvgRGBA(242, 12, 38, int(std::round(32.f * (1.f - t))));
-			// Interpolate crystal glow back from Ruby Red (255, 30, 66) to Cyan (28, 204, 217)
-			glowColor = nvgRGB(
-				255 - int(227.f * t),
-				30 + int(174.f * t),
-				66 + int(151.f * t)
-			);
-			// Interpolate crystal stroke back from Crimson-Red (204, 0, 34) to Cyan-Blue (42, 171, 239)
-			strokeColor = nvgRGB(
-				204 - int(162.f * t),
-				0 + int(171.f * t),
-				34 + int(205.f * t)
-			);
-		}
-
-		bool changed = (std::fabs(amount - gPanelGlassTint.currentAmount) > 1e-4f)
-			|| (std::fabs(tintColor.r - gPanelGlassTint.currentTintColor.r) > 1e-4f)
-			|| (std::fabs(tintColor.g - gPanelGlassTint.currentTintColor.g) > 1e-4f)
-			|| (std::fabs(tintColor.b - gPanelGlassTint.currentTintColor.b) > 1e-4f)
-			|| (washColor.r != gPanelGlassTint.currentWashColor.r)
-			|| (washColor.g != gPanelGlassTint.currentWashColor.g)
-			|| (washColor.b != gPanelGlassTint.currentWashColor.b)
-			|| (washColor.a != gPanelGlassTint.currentWashColor.a)
-			|| (glowColor.r != gPanelGlassTint.currentCrystalGlowColor.r)
-			|| (glowColor.g != gPanelGlassTint.currentCrystalGlowColor.g)
-			|| (glowColor.b != gPanelGlassTint.currentCrystalGlowColor.b)
-			|| (strokeColor.r != gPanelGlassTint.currentCrystalStrokeColor.r)
-			|| (strokeColor.g != gPanelGlassTint.currentCrystalStrokeColor.g)
-			|| (strokeColor.b != gPanelGlassTint.currentCrystalStrokeColor.b);
-
-		if (changed) {
-			gPanelGlassTint.currentAmount = amount;
-			gPanelGlassTint.currentTintColor = tintColor;
-			gPanelGlassTint.currentWashColor = washColor;
-			gPanelGlassTint.currentCrystalGlowColor = glowColor;
-			gPanelGlassTint.currentCrystalStrokeColor = strokeColor;
-			++gPanelGlassTint.generation;
-		}
+		applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
+		++gPanelGlassTint.generation;
 	}
 }
 
@@ -161,11 +139,17 @@ NVGcolor applyPanelGlassTint(NVGcolor color) {
 } // namespace
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
-	static std::map<std::string, std::shared_ptr<window::Svg>> cache;
+	// Widgets own the SVGs they use. Keeping only weak references here prevents
+	// plugin-static destruction from releasing Rack window resources during
+	// __cxa_finalize after the host has begun tearing its graphics state down.
+	static std::map<std::string, std::weak_ptr<window::Svg>> cache;
 	const std::string key = path ? path : "";
 	auto it = cache.find(key);
 	if (it != cache.end()) {
-		return it->second;
+		if (std::shared_ptr<window::Svg> svg = it->second.lock()) {
+			return svg;
+		}
+		cache.erase(it);
 	}
 	std::shared_ptr<window::Svg> svg = Svg::load(asset::plugin(pluginInstance, key));
 	cache[key] = svg;
@@ -250,100 +234,6 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 	}
 };
 
-int loadRasterMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecycleImage, const std::string& fullPath) {
-	struct Entry {
-		NVGcontext* vg = nullptr;
-		int handle = -1;
-		int lifecycleHandle = -1;
-		std::weak_ptr<window::Image> lifecycleImage;
-	};
-	struct Cache {
-		std::unordered_map<std::string, Entry> entries;
-		NVGcontext* activeVg = nullptr;
-		unsigned long long useCounter = 0ull;
-	};
-	static Cache cache;
-
-	if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
-		return -1;
-	}
-	if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
-		cache.entries.clear();
-	}
-
-	auto it = cache.entries.find(fullPath);
-	if (it != cache.entries.end()) {
-		std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
-		if (it->second.vg == vg && it->second.handle >= 0 &&
-			it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
-			return it->second.handle;
-		}
-		if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-			nvgDeleteImage(vg, it->second.handle);
-		}
-		cache.entries.erase(it);
-	}
-
-	int handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-	if (handle < 0) {
-		return -1;
-	}
-
-	Entry entry;
-	entry.vg = vg;
-	entry.handle = handle;
-	entry.lifecycleHandle = lifecycleImage->handle;
-	entry.lifecycleImage = lifecycleImage;
-	cache.entries[fullPath] = entry;
-	return handle;
-}
-
-struct AspectFitRasterImageWidget : TransparentWidget {
-	std::string path;
-	float opacity = 1.f;
-
-	AspectFitRasterImageWidget(std::string path, float opacity)
-		: path(std::move(path)), opacity(opacity) {
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (path.empty() || box.size.x <= 1.f || box.size.y <= 1.f) {
-			return;
-		}
-		const std::string fullPath = asset::plugin(pluginInstance, path);
-		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-		if (!image || image->handle < 0) {
-			return;
-		}
-		int imageHandle = loadRasterMipmapHandle(args.vg, image, fullPath);
-		if (imageHandle < 0) {
-			imageHandle = image->handle;
-		}
-
-		int imageW = 0;
-		int imageH = 0;
-		nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
-		if (imageW <= 0 || imageH <= 0) {
-			return;
-		}
-
-		const float aspect = float(imageW) / float(imageH);
-		float drawW = box.size.x;
-		float drawH = drawW / aspect;
-		if (drawH > box.size.y) {
-			drawH = box.size.y;
-			drawW = drawH * aspect;
-		}
-		const float x = 0.5f * (box.size.x - drawW);
-		const float y = 0.5f * (box.size.y - drawH);
-		NVGpaint paint = nvgImagePattern(args.vg, x, y, drawW, drawH, 0.f, imageHandle, clamp(opacity, 0.f, 1.f));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, x, y, drawW, drawH);
-		nvgFillPaint(args.vg, paint);
-		nvgFill(args.vg);
-	}
-};
-
 struct PreviewFrameEnhancementWidget : TransparentWidget {
 	float outsideMarginPx = 0.f;
 	NVGcolor highlightColor = nvgRGBA(28, 202, 216, 115);
@@ -389,6 +279,7 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	uint64_t tintGeneration = 0u;
+	float previewProgressionPhase = -1.f;
 
 	struct GlassRectArt {
 		math::Rect rectPx;
@@ -1063,6 +954,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		ScopedPanelGlassPreviewProgression previewProgression(
+			previewProgressionPhase);
 		for (const MetalRectArt& metal : metalRects) {
 			drawMetalRect(args, metal);
 		}
@@ -1181,14 +1074,6 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 
 } // namespace
 
-int loadPluginRasterMipmapHandle(
-	NVGcontext* vg,
-	std::shared_ptr<window::Image> lifecycleImage,
-	const std::string& fullPath
-) {
-	return loadRasterMipmapHandle(vg, std::move(lifecycleImage), fullPath);
-}
-
 bool isPanelGlassColorCycleEnabled() {
 	return gPanelGlassTint.enabled;
 }
@@ -1212,6 +1097,31 @@ NVGcolor panelGlassCrystalStrokeColor() {
 
 float panelGlassCyclePhase() {
 	return float(std::fmod(gPanelGlassTint.lastColorUpdateAccumSec, 180.0) / 180.0);
+}
+
+ScopedPanelGlassPreviewProgression::ScopedPanelGlassPreviewProgression(
+	float normalizedPhase) {
+	if (!gPanelGlassTint.enabled
+		|| !std::isfinite(normalizedPhase)
+		|| normalizedPhase < 0.f) {
+		return;
+	}
+	gPanelGlassPreviewStateStack.push_back(gPanelGlassTint);
+	active = true;
+	const float phase = std::max(0.f, std::min(normalizedPhase, 1.f));
+	gPanelGlassTint.accumulatedTimeSec = 180.0 * double(phase);
+	gPanelGlassTint.lastColorUpdateAccumSec =
+		std::floor(gPanelGlassTint.accumulatedTimeSec);
+	applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
+	++gPanelGlassTint.generation;
+}
+
+ScopedPanelGlassPreviewProgression::~ScopedPanelGlassPreviewProgression() {
+	if (!active || gPanelGlassPreviewStateStack.empty()) {
+		return;
+	}
+	gPanelGlassTint = gPanelGlassPreviewStateStack.back();
+	gPanelGlassPreviewStateStack.pop_back();
 }
 
 void saveSettings() {
@@ -1369,11 +1279,15 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
 	return createPreviewFrameEnhancementWidget(rectMm, PreviewFrameTint::Cyan);
 }
 
+float previewFrameOutsideMarginMm() {
+	return 0.45f;
+}
+
 static Widget* createPreviewFrameEnhancementWidgetWithColors(math::Rect rectMm, NVGcolor highlightColor, NVGcolor edgeHighlightColor) {
 	if (rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
 		return new Widget();
 	}
-	const float marginMm = 0.45f;
+	const float marginMm = previewFrameOutsideMarginMm();
 	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
 	fb->dirtyOnSubpixelChange = false;
 	fb->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
@@ -1402,7 +1316,10 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highligh
 	return createPreviewFrameEnhancementWidgetWithColors(rectMm, highlightColor, nvgRGBAf(highlightColor.r, highlightColor.g, highlightColor.b, 42.f / 255.f));
 }
 
-Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {
+Widget* createPanelSurfaceEffectWidget(
+	const std::string& svgPath,
+	Vec panelSizePx,
+	float previewProgressionPhase) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
 		empty->box.size = panelSizePx;
@@ -1422,6 +1339,7 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->framebuffer = fb;
 	effect->tintGeneration = gPanelGlassTint.generation;
+	effect->previewProgressionPhase = previewProgressionPhase;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;
@@ -1472,19 +1390,54 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 		return;
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
+	// Browser previews and live modules should share the same crystal color
+	// state instead of assigning every preview a random progression phase.
+	previewProgressionPhase_ = -1.f;
 	parent_->setPanel(createPanel(panelPath_));
-	parent_->addChild(createPanelSurfaceEffectWidget(panelPath_, parent_->box.size));
+	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
+		panelPath_, parent_->box.size, previewProgressionPhase_);
+	parent_->addChild(panelSurfaceEffect_);
 }
 
 const std::string& SplitPanelRenderer::panelPath() const {
 	return panelPath_;
 }
 
+Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
+	return panelSurfaceEffect_;
+}
+
+float SplitPanelRenderer::previewProgressionPhase() const {
+	return previewProgressionPhase_;
+}
+
+int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {
+	return visual_assets::addPerfectWavePanelBranding(parent_, panelPath_, opacity);
+}
+
+int SplitPanelRenderer::addPerfectWaveSoloBranding(float opacity) {
+	return visual_assets::addPerfectWaveSoloPanelBranding(parent_, panelPath_, opacity);
+}
+
+void SplitPanelRenderer::addCompactLeviathanLogoBranding(float opacity) {
+	addLeviathanLogo_ = true;
+	leviathanLogoOpacity_ = clamp(opacity, 0.f, 1.f);
+}
+
 SplitPanelRenderer::~SplitPanelRenderer() {
-	if (!parent_ || labelsAssetPath_.empty()) {
+	if (!parent_) {
 		return;
 	}
-	parent_->addChild(createPanelLabelsWidget(labelsAssetPath_.c_str(), parent_->box.size));
+	// Branding belongs below the labels layer so labels and panel annotations
+	// retain their intended visual priority wherever their bounds overlap.
+	if (addLeviathanLogo_) {
+		visual_assets::addCompactLeviathanLogoBranding(
+			parent_, panelPath_, leviathanLogoOpacity_);
+	}
+	if (!labelsAssetPath_.empty()) {
+		parent_->addChild(createPanelLabelsWidget(
+			labelsAssetPath_.c_str(), parent_->box.size));
+	}
 }
 
 void SplitPanelRenderer::addLabels(const char* labelsAssetPath) {
@@ -1554,6 +1507,16 @@ struct OrbScrewRasterLayer : TransparentWidget {
 		: path(std::move(path)) {
 	}
 
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
+	}
+
 	void draw(const DrawArgs& args) override {
 		if (path.empty() || imageSizePx <= 0.f || box.size.x <= 0.f || box.size.y <= 0.f) {
 			return;
@@ -1563,7 +1526,7 @@ struct OrbScrewRasterLayer : TransparentWidget {
 		if (!image || image->handle < 0) {
 			return;
 		}
-		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
+		int imageHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, fullPath);
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}
@@ -1775,52 +1738,14 @@ struct MagitekRasterImage : TransparentWidget {
 		: path(std::move(path)) {
 	}
 
-	int loadMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecycleImage, const std::string& fullPath) {
-		struct Entry {
-			NVGcontext* vg = nullptr;
-			int handle = -1;
-			int lifecycleHandle = -1;
-			std::weak_ptr<window::Image> lifecycleImage;
-		};
-		struct Cache {
-			std::unordered_map<std::string, Entry> entries;
-			NVGcontext* activeVg = nullptr;
-			unsigned long long useCounter = 0ull;
-		};
-		static Cache cache;
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
 
-		if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
-			return -1;
-		}
-		if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
-			cache.entries.clear();
-		}
-
-		auto it = cache.entries.find(fullPath);
-		if (it != cache.entries.end()) {
-			std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
-			if (it->second.vg == vg && it->second.handle >= 0 &&
-				it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
-				return it->second.handle;
-			}
-			if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-				nvgDeleteImage(vg, it->second.handle);
-			}
-			cache.entries.erase(it);
-		}
-
-		int handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-		if (handle < 0) {
-			return -1;
-		}
-
-		Entry entry;
-		entry.vg = vg;
-		entry.handle = handle;
-		entry.lifecycleHandle = lifecycleImage->handle;
-		entry.lifecycleImage = lifecycleImage;
-		cache.entries[fullPath] = entry;
-		return handle;
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1832,7 +1757,7 @@ struct MagitekRasterImage : TransparentWidget {
 		if (!image || image->handle < 0) {
 			return;
 		}
-		int imageHandle = loadMipmapHandle(args.vg, image, fullPath);
+		int imageHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, fullPath);
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}
@@ -2139,9 +2064,6 @@ float clockworkParamValue(GearKnobInvertSized* knob) {
 	return pq ? pq->getValue() : NAN;
 }
 
-static constexpr bool kClockworkLiquidShimmerEnabled = true;
-static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
-
 struct MovingSliderRail : widget::Widget {
 	app::SvgSlider* slider = nullptr;
 	std::shared_ptr<window::Svg> railSvg;
@@ -2178,69 +2100,6 @@ struct MovingSliderRail : widget::Widget {
 		nvgScale(args.vg, svgScaleX, svgScaleY);
 		railSvg->draw(args.vg);
 		nvgRestore(args.vg);
-	}
-};
-
-struct SliderRackGear : widget::Widget {
-	app::SvgSlider* slider = nullptr;
-	std::shared_ptr<window::Svg> gearSvg;
-	std::shared_ptr<window::Svg> shadowSvg;
-	float rotationDirection = 1.f;
-	float pitchRadiusPx = 1.f;
-	float restAngleRad = 0.f;
-
-	void draw(const DrawArgs& args) override {
-		if (!slider || !slider->handle || !gearSvg || !gearSvg->handle ||
-				box.size.x <= 0.f || box.size.y <= 0.f || pitchRadiusPx <= 0.f) {
-			return;
-		}
-
-		const Vec gearSvgSize = gearSvg->getSize();
-		if (gearSvgSize.x <= 0.f || gearSvgSize.y <= 0.f) {
-			return;
-		}
-
-		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
-		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
-		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
-		auto drawSvg = [&] (
-			const std::shared_ptr<window::Svg>& svg,
-			Vec offset,
-			float alpha,
-			bool darkenAsShadow
-		) {
-			if (!svg || !svg->handle) {
-				return;
-			}
-			const Vec svgSize = svg->getSize();
-			if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
-				return;
-			}
-			const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
-
-			nvgSave(args.vg);
-			nvgGlobalAlpha(args.vg, alpha);
-			if (darkenAsShadow) {
-				// Tint the exact metal SVG geometry black. Unlike destination-darkening
-				// blending, this produces a visible source-over shadow in the cache.
-				nvgGlobalTint(args.vg, nvgRGB(0x00, 0x00, 0x00));
-			}
-			nvgTranslate(
-				args.vg,
-				0.5f * box.size.x + offset.x,
-				0.5f * box.size.y + offset.y
-			);
-			nvgRotate(args.vg, angleRad);
-			nvgScale(args.vg, scale, scale);
-			nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-			svg->draw(args.vg);
-			nvgRestore(args.vg);
-		};
-
-		drawSvg(shadowSvg, Vec(0.4f, 0.45f), 0.6f, true);
-		drawSvg(gearSvg, Vec(), 1.f, false);
 	}
 };
 
@@ -2536,122 +2395,6 @@ void HoverOrbScrew::step() {
 		rotatingFb->visible = renderRotatingLayer;
 	}
 	OpaqueWidget::step();
-}
-
-LeviathanSlider::LeviathanSlider() {
-	constexpr float anchorWidthPx = 24.56693f;
-	constexpr float anchorHeightPx = 98.26772f;
-	constexpr float handleTravelInsetPx = 17.5f;
-	constexpr float trackHeightPx = 80.f;
-	constexpr float railClipYInTrackPx = 2.6426902f;
-	constexpr float railClipHeightPx = 74.7691385f;
-	constexpr float railArtworkWidthInViewBox = 9.8f;
-	constexpr float railViewBoxWidth = 24.f;
-	constexpr float railViewBoxHeight = 240.f;
-	constexpr float railToothPitchInViewBox = 2.f;
-	constexpr float railDrawHeightPx = 190.f;
-	constexpr float railVisibleWidthPx = 4.5f;
-	constexpr float railDrawWidthPx = railVisibleWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
-	constexpr float gearSizePx = 10.5f;
-	constexpr float gearToothCount = 20.f;
-	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
-	constexpr float gearRotationSpeedTrim = 1.11f;
-	constexpr float gearPitchRadiusPx =
-		(railToothPitchPx * gearToothCount / (2.f * float(M_PI) * gearRotationSpeedTrim));
-	constexpr float bottomGearPhaseOffsetRad = (float(M_PI) / gearToothCount) * -1.5;
-	constexpr float leftGearCenterXPx = 5.8661845f;
-	constexpr float rightGearCenterXPx = 18.7720951f;
-	constexpr float topGearCenterYPx = 22.f;
-	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
-
-	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
-	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderHandle.svg"));
-	box.size = Vec(anchorWidthPx, anchorHeightPx);
-	if (fb) {
-		// SvgSlider keeps the complete mechanical assembly in this framebuffer.
-		// Its onChange() invalidates the cache when the handle moves, so world
-		// subpixel changes do not need to redraw the SVG layers.
-		fb->dirtyOnSubpixelChange = false;
-		fb->box.size = box.size;
-	}
-	using SliderLight = VCVSliderLight<LeviathanCyanPurpleLight>;
-	auto* sliderLight = static_cast<SliderLight*>(light);
-	if (sliderLight && sliderLight->fb) {
-		sliderLight->fb->dirtyOnSubpixelChange = false;
-	}
-	if (background) {
-		background->box.pos = Vec(
-			0.5f * (anchorWidthPx - background->box.size.x),
-			0.5f * (anchorHeightPx - background->box.size.y)
-		);
-	}
-	if (fb && handle) {
-		auto* teethRail = new MovingSliderRail;
-		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_rounded_dark.svg");
-		teethRail->box.pos = Vec(
-			0.5f * (anchorWidthPx - railVisibleWidthPx),
-			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
-		);
-		teethRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
-		teethRail->drawWidthPx = railDrawWidthPx;
-		teethRail->drawHeightPx = railDrawHeightPx;
-		fb->addChildBelow(teethRail, handle);
-
-		const std::shared_ptr<window::Svg> gearSvg =
-			visual_assets::loadPluginSvgCached("res/icon/gear_metal.svg");
-		auto addRackGear = [&](Vec center, float rotationDirection, float restAngleRad) {
-			auto* gear = new SliderRackGear;
-			gear->slider = this;
-			gear->gearSvg = gearSvg;
-			// Share the exact metal SVG as the shadow stencil for both gears.
-			gear->shadowSvg = gearSvg;
-			gear->rotationDirection = rotationDirection;
-			gear->pitchRadiusPx = gearPitchRadiusPx;
-			gear->restAngleRad = restAngleRad;
-			gear->box.pos = center.minus(Vec(0.5f * gearSizePx, 0.5f * gearSizePx));
-			gear->box.size = Vec(gearSizePx, gearSizePx);
-			fb->addChildBelow(gear, handle);
-		};
-		addRackGear(
-			Vec(leftGearCenterXPx, topGearCenterYPx),
-			1.f,
-			0.f
-		);
-		addRackGear(
-			Vec(rightGearCenterXPx, bottomGearCenterYPx),
-			-1.f,
-			float(M_PI) + bottomGearPhaseOffsetRad
-		);
-	}
-	setHandlePosCentered(
-		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
-		math::Vec(anchorWidthPx * 0.5f, handleTravelInsetPx)
-	);
-}
-
-void LeviathanSlider::onHover(const event::Hover& e) {
-	if (!isInsideSliderControlArea(e.pos, box.size)) {
-		widget::Widget::onHover(e);
-		return;
-	}
-	VCVLightSlider<LeviathanCyanPurpleLight>::onHover(e);
-}
-
-void LeviathanSlider::onHoverScroll(const event::HoverScroll& e) {
-	if (!isInsideSliderControlArea(e.pos, box.size)) {
-		widget::Widget::onHoverScroll(e);
-		return;
-	}
-	VCVLightSlider<LeviathanCyanPurpleLight>::onHoverScroll(e);
-}
-
-void LeviathanSlider::onButton(const event::Button& e) {
-	if (!isInsideSliderControlArea(e.pos, box.size)) {
-		widget::Widget::onButton(e);
-		return;
-	}
-	VCVLightSlider<LeviathanCyanPurpleLight>::onButton(e);
 }
 
 LuminSlider::LuminSlider() {
@@ -3164,7 +2907,11 @@ SmallGoldButton::SmallGoldButton(float buttonSizePx) {
 void SmallGoldButton::step() {
 	app::Switch::step();
 	engine::ParamQuantity* pq = getParamQuantity();
-	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
+	const bool pointerHeld =
+		APP && APP->event && APP->event->getDraggedWidget() == this;
+	const float target = momentary
+		? ((pq && pq->getValue() > 0.5f) ? 1.f : 0.f)
+		: (pointerHeld ? 1.f : 0.f);
 	pressAmount += (target - pressAmount) * (target > pressAmount ? 0.38f : 0.46f);
 	if (std::fabs(target - pressAmount) < 0.001f) {
 		pressAmount = target;
@@ -3192,6 +2939,20 @@ void SmallGoldApertureLight::setBaseColor(NVGcolor color) {
 	activeColor = color;
 	baseColors.clear();
 	addBaseColor(color);
+}
+
+void SmallGoldApertureLight::onHover(const HoverEvent& e) {
+	// The enclosing gold button owns the useful parameter tooltip. Leaving the
+	// aperture hover-transparent prevents a duplicate light-description tooltip.
+	(void) e;
+}
+
+void SmallGoldApertureLight::onEnter(const EnterEvent& e) {
+	(void) e;
+}
+
+void SmallGoldApertureLight::onLeave(const LeaveEvent& e) {
+	(void) e;
 }
 
 void SmallGoldApertureLight::drawBackground(const DrawArgs& args) {
@@ -3407,7 +3168,7 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, endAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(2, 1, 1, 230));
+	nvgStrokeColor(args.vg, inactiveTrackColor);
 	nvgStrokeWidth(args.vg, ringWidth);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
@@ -3416,6 +3177,64 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 	if (drawActive) {
 		const float activeStartAngle = bipolar ? centerArcAngle : startAngle;
 		const float activeEndAngle = activeAngle;
+
+		const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+		if (bloomRaw > 0.001f) {
+			const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+			const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+			const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+
+			// Soft outer bloom pass (tightened radius)
+			NVGcolor outerBloomStart = activeColorStart;
+			outerBloomStart.a = clamp(outerBloomStart.a * 0.22f * bloom, 0.f, 255.f);
+			NVGcolor outerBloomEnd = activeColorEnd;
+			outerBloomEnd.a = clamp(outerBloomEnd.a * 0.22f * bloom, 0.f, 255.f);
+
+			NVGpaint outerBloomPaint = nvgLinearGradient(args.vg,
+				center.x - ringRadius, center.y,
+				center.x + ringRadius, center.y,
+				outerBloomStart,
+				outerBloomEnd);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg,
+				center.x,
+				center.y,
+				ringRadius,
+				std::min(activeStartAngle, activeEndAngle),
+				std::max(activeStartAngle, activeEndAngle),
+				NVG_CW);
+			nvgStrokePaint(args.vg, outerBloomPaint);
+			nvgStrokeWidth(args.vg, activeRingWidth * 1.6f);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+
+			// Tighter inner bloom pass (tightened radius)
+			NVGcolor innerBloomStart = activeColorStart;
+			innerBloomStart.a = clamp(innerBloomStart.a * 0.38f * bloom, 0.f, 255.f);
+			NVGcolor innerBloomEnd = activeColorEnd;
+			innerBloomEnd.a = clamp(innerBloomEnd.a * 0.38f * bloom, 0.f, 255.f);
+
+			NVGpaint innerBloomPaint = nvgLinearGradient(args.vg,
+				center.x - ringRadius, center.y,
+				center.x + ringRadius, center.y,
+				innerBloomStart,
+				innerBloomEnd);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg,
+				center.x,
+				center.y,
+				ringRadius,
+				std::min(activeStartAngle, activeEndAngle),
+				std::max(activeStartAngle, activeEndAngle),
+				NVG_CW);
+			nvgStrokePaint(args.vg, innerBloomPaint);
+			nvgStrokeWidth(args.vg, activeRingWidth * 1.25f);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+		}
+
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg,
 			center.x,
@@ -3427,48 +3246,18 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 		NVGpaint activePaint = nvgLinearGradient(args.vg,
 			center.x - ringRadius, center.y,
 			center.x + ringRadius, center.y,
-			// Eclipse-orange option: nvgRGBA(240, 138, 36, 248), nvgRGBA(255, 210, 154, 255)
-			nvgRGBA(255, 218, 42, 248),
-			nvgRGBA(255, 250, 205, 255));
+			activeColorStart,
+			activeColorEnd);
 		nvgStrokePaint(args.vg, activePaint);
 		nvgStrokeWidth(args.vg, activeRingWidth);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
 
-		if (kClockworkLiquidShimmerEnabled) {
-			const double now = system::getTime();
-			const double remaining = liquidShimmerUntil - now;
-			if (remaining > 0.0) {
-				const float fade = clamp(float(remaining / kClockworkLiquidShimmerDurationSec), 0.f, 1.f);
-				const float phase = float(std::fmod(now * 1.35, 1.0));
-				const float sweepX = ringRadius * 2.4f;
-				const float shimmerStartX = center.x - ringRadius * 1.2f + sweepX * phase;
-				NVGpaint shimmerPaint = nvgLinearGradient(args.vg,
-					shimmerStartX, center.y - ringRadius,
-					shimmerStartX + ringRadius * 0.55f, center.y + ringRadius,
-					// Eclipse-orange option: nvgRGBA(255, 215, 163, 0), nvgRGBA(255, 230, 190, alpha)
-					nvgRGBA(255, 255, 220, 0),
-					nvgRGBA(255, 255, 250, (unsigned char) std::round(118.f * fade)));
-				nvgBeginPath(args.vg);
-				nvgArc(args.vg,
-					center.x,
-					center.y,
-					ringRadius,
-					std::min(activeStartAngle, activeEndAngle),
-					std::max(activeStartAngle, activeEndAngle),
-					NVG_CW);
-				nvgStrokePaint(args.vg, shimmerPaint);
-				nvgStrokeWidth(args.vg, std::max(1.f, activeRingWidth * 0.55f));
-				nvgLineCap(args.vg, NVG_ROUND);
-				nvgStroke(args.vg);
-			}
-		}
 	}
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
-	// Eclipse-orange option: nvgRGBA(255, 210, 154, 76)
-	nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
+	nvgStrokeColor(args.vg, innerLineColor);
 	if (innerLineWidthSourcePx > 0.f) {
 		nvgStrokeWidth(args.vg, innerLineWidthSourcePx * assetScale);
 		nvgStroke(args.vg);
@@ -3556,8 +3345,12 @@ void GearKnobInvertSized::draw(const DrawArgs& args) {
 
 void GearKnobInvertSized::step() {
 	app::SvgKnob::step();
-	if (kClockworkLiquidShimmerEnabled && activeRing && fb && system::getTime() < activeRing->liquidShimmerUntil) {
-		fb->setDirty();
+	const float bloomAmount = settings::haloBrightness;
+	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastBloomAmount = bloomAmount;
+		if (fb) {
+			fb->setDirty();
+		}
 	}
 }
 
@@ -3569,9 +3362,6 @@ void GearKnobInvertSized::onChange(const ChangeEvent& e) {
 	}
 	if (activeRing) {
 		activeRing->valueNorm = valueNorm;
-		if (kClockworkLiquidShimmerEnabled) {
-			activeRing->liquidShimmerUntil = system::getTime() + kClockworkLiquidShimmerDurationSec;
-		}
 	}
 	if (fb) {
 		fb->setDirty();
@@ -3688,6 +3478,49 @@ TinyClockworkGearKnob::TinyClockworkGearKnob() {
 }
 
 BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
+	if (activeRing) {
+		activeRing->bipolar = true;
+		activeRing->centerNorm = 0.5f;
+		activeRing->valueNorm = normalizedParamValue();
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
+	minAngle = -0.8 * M_PI;
+	maxAngle = 0.8 * M_PI;
+	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny_dark.svg"));
+	if (shadowLayer) {
+		shadowLayer->box.size = box.size;
+		shadowLayer->minAngle = minAngle;
+		shadowLayer->maxAngle = maxAngle;
+		shadowLayer->valueNorm = normalizedParamValue();
+	}
+	if (activeRing) {
+		activeRing->box.size = box.size;
+		activeRing->minAngle = minAngle;
+		activeRing->maxAngle = maxAngle;
+		activeRing->valueNorm = normalizedParamValue();
+		activeRing->centerPx = 12.f;
+		activeRing->sourceDiameterPx = 24.f;
+		activeRing->sourceViewBoxPx = 56.f;
+		activeRing->ringRadiusSourcePx = 16.4f;
+		activeRing->ringWidthSourcePx = 8.0f;
+		activeRing->activeRingWidthSourcePx = 5.0f;
+		activeRing->innerLineWidthSourcePx = 0.0f;
+		activeRing->activeColorStart = nvgRGBA(240, 138, 36, 248);
+		activeRing->activeColorEnd = nvgRGBA(255, 210, 154, 255);
+		activeRing->inactiveTrackColor = nvgRGBA(18, 12, 6, 240);
+		activeRing->innerLineColor = nvgRGBA(255, 210, 154, 76);
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+BipolarDarkTinyClockworkGearKnob::BipolarDarkTinyClockworkGearKnob() {
 	if (activeRing) {
 		activeRing->bipolar = true;
 		activeRing->centerNorm = 0.5f;
@@ -4365,357 +4198,6 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
-void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
-	const float diameterPx = std::min(box.size.x, box.size.y);
-	if (diameterPx <= 1.f) return;
-
-	const Vec center = box.size.mult(0.5f);
-	const float scale = diameterPx / 46.f;
-	const float mainRadius = diameterPx * (18.15f / 46.f);
-	const float startAngle = -0.5f * M_PI + minAngle;
-	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
-	if (bloom <= 0.001f) return;
-
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
-	nvgSave(args.vg);
-
-	auto drawGlowStroke = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
-		if (a1 <= a0) return;
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-		t = clamp(t, 0.f, 1.f);
-		NVGcolor out;
-		out.r = crossfade(a.r, b.r, t);
-		out.g = crossfade(a.g, b.g, t);
-		out.b = crossfade(a.b, b.b, t);
-		out.a = crossfade(a.a, b.a, t);
-		return out;
-	};
-
-	auto drawSegmentedGlow = [&](float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			drawGlowStroke(s0, s1, mainRadius, widthPx, color);
-		}
-	};
-
-	if (foreground) {
-		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), bloomColor(config.foregroundOuterActiveColor), bloomColor(config.foregroundOuterInactiveColor));
-		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), bloomColor(config.foregroundInnerActiveColor), bloomColor(config.foregroundInnerInactiveColor));
-	}
-	else {
-		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), bloomColor(config.backgroundOuterActiveColor), bloomColor(config.backgroundOuterInactiveColor));
-		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), bloomColor(config.backgroundMidActiveColor), bloomColor(config.backgroundMidInactiveColor));
-		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), bloomColor(config.backgroundInnerActiveColor), bloomColor(config.backgroundInnerInactiveColor));
-	}
-
-	nvgRestore(args.vg);
-}
-
-void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
-	const float diameterPx = std::min(box.size.x, box.size.y);
-	if (diameterPx <= 1.f) return;
-
-	const Vec center = box.size.mult(0.5f);
-	const float scale = diameterPx / 46.f;
-	const float startAngle = -0.5f * M_PI + minAngle;
-	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float mainRadius = diameterPx * (18.15f / 46.f);
-	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
-	const float segmentWidth = mainWidth + 0.95f * scale;
-	const float segmentRadius = mainRadius - 0.5f * (segmentWidth - mainWidth);
-	const float guideRadius = diameterPx * (20.70f / 46.f);
-	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
-
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
-	nvgSave(args.vg);
-
-	auto drawArcBand = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
-		if (a1 <= a0) return;
-		const float halfWidthPx = 0.5f * widthPx;
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx, a0, a1, NVG_CW);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx, a1, a0, NVG_CCW);
-		nvgClosePath(args.vg);
-		nvgFillColor(args.vg, color);
-		nvgFill(args.vg);
-	};
-
-	auto drawGuideArc = [&](float radiusPx, float widthPx, NVGcolor color) {
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto drawPartialGuideArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
-		if (a1 <= a0) return;
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto drawSegmentBand = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor fill, NVGcolor innerHighlight) {
-		if (a1 <= a0) return;
-		const float halfWidthPx = 0.5f * widthPx;
-
-		drawArcBand(a0, a1, radiusPx, widthPx + 0.48f * scale, nvgRGBA(0, 0, 4, 218));
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx, a0, a1, NVG_CW);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx, a1, a0, NVG_CCW);
-		nvgClosePath(args.vg);
-
-		NVGpaint segmentPaint = nvgLinearGradient(args.vg,
-			center.x + std::cos(a0) * radiusPx,
-			center.y + std::sin(a0) * radiusPx,
-			center.x + std::cos(a1) * radiusPx,
-			center.y + std::sin(a1) * radiusPx,
-			fill,
-			innerHighlight);
-		nvgFillPaint(args.vg, segmentPaint);
-		nvgFill(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx * 0.84f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(0, 1, 7, 172));
-		nvgStrokeWidth(args.vg, std::max(0.13f, widthPx * 0.09f));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx * 0.52f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, innerHighlight);
-		nvgStrokeWidth(args.vg, std::max(0.16f, widthPx * 0.12f));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto drawSegmentedValueArc = [&]() {
-		const int segmentCount = 16;
-		const float aStart = startAngle;
-		const float aEnd = endAngle;
-		const float total = aEnd - aStart;
-		const float gap = std::max(0.010f, total * 0.009f);
-		const float step = total / float(segmentCount);
-		const NVGcolor litCore = config.activeColor;
-		const NVGcolor litHot = config.activeHighlightColor;
-		const NVGcolor unlitCore = config.inactiveColor;
-		const NVGcolor unlitHot = config.inactiveHighlightColor;
-		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-			t = clamp(t, 0.f, 1.f);
-			NVGcolor out;
-			out.r = crossfade(a.r, b.r, t);
-			out.g = crossfade(a.g, b.g, t);
-			out.b = crossfade(a.b, b.b, t);
-			out.a = crossfade(a.a, b.a, t);
-			return out;
-		};
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = aStart + step * float(i) + 0.5f * gap;
-			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
-			if (activeAngle <= s0) {
-				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, unlitCore, unlitHot);
-			}
-			else if (activeAngle >= s1) {
-				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, litCore, litHot);
-			}
-			else {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				drawSegmentBand(
-					s0,
-					s1,
-					segmentRadius,
-					segmentWidth,
-					blendColor(unlitCore, litCore, segmentProgress),
-					blendColor(unlitHot, litHot, segmentProgress));
-			}
-		}
-	};
-
-	auto drawSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-			t = clamp(t, 0.f, 1.f);
-			NVGcolor out;
-			out.r = crossfade(a.r, b.r, t);
-			out.g = crossfade(a.g, b.g, t);
-			out.b = crossfade(a.b, b.b, t);
-			out.a = crossfade(a.a, b.a, t);
-			return out;
-		};
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			drawPartialGuideArc(s0, s1, radiusPx, widthPx, color);
-		}
-	};
-
-	auto drawTerminator = [&](float angle, float direction) {
-		const float terminatorSweep = 0.055f;
-		const float a0 = angle + std::min(0.f, direction) * terminatorSweep;
-		const float a1 = angle + std::max(0.f, direction) * terminatorSweep;
-		drawArcBand(a0, a1, segmentRadius, segmentWidth + 1.15f * scale, nvgRGBA(0, 1, 8, 230));
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, segmentRadius - segmentWidth * 0.30f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(155, 170, 190, 48));
-		nvgStrokeWidth(args.vg, std::max(0.16f, 0.22f * scale));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	const float dipRadius = mainRadius - mainWidth * 1.03f - 0.46f * scale;
-	drawArcBand(startAngle, endAngle, mainRadius, mainWidth + 0.92f * scale, nvgRGBA(0, 0, 4, 248));
-	drawArcBand(startAngle, endAngle, dipRadius, std::max(0.55f, 0.82f * scale), nvgRGBA(0, 1, 8, 216));
-	drawGuideArc(guideRadius, guideWidth, bloomConfig.guideOuterColor);
-	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), bloomConfig.guideMidColor);
-	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), bloomConfig.guideInnerColor);
-	if (bloom > 0.001f) {
-		drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(bloomConfig.reflectionOuterActiveColor), bloomColor(bloomConfig.reflectionOuterInactiveColor));
-		drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(bloomConfig.reflectionInnerActiveColor), bloomColor(bloomConfig.reflectionInnerInactiveColor));
-	}
-	drawGuideArc(dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
-
-	drawSegmentedValueArc();
-	drawTerminator(startAngle, 1.f);
-	drawTerminator(endAngle, -1.f);
-
-	NVGpaint capShadow = nvgRadialGradient(
-		args.vg,
-		center.x,
-		center.y + diameterPx * 0.045f,
-		diameterPx * (11.0f / 46.f),
-		diameterPx * (16.2f / 46.f),
-		nvgRGBA(0, 0, 0, 0),
-		nvgRGBA(0, 0, 0, 76));
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, center.x, center.y, diameterPx * (16.8f / 46.f));
-	nvgFillPaint(args.vg, capShadow);
-	nvgFill(args.vg);
-
-	nvgRestore(args.vg);
-}
-
-void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
-	const float diameterPx = std::min(box.size.x, box.size.y);
-	if (diameterPx <= 1.f) return;
-
-	const Vec center = box.size.mult(0.5f);
-	const float scale = diameterPx / 46.f;
-	const float rimRadius = diameterPx * (14.62f / 46.f);
-	const float startAngle = -0.5f * M_PI + minAngle;
-	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
-	if (bloom <= 0.001f) return;
-
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
-	auto strokeArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
-		if (a1 <= a0) return;
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-		t = clamp(t, 0.f, 1.f);
-		NVGcolor out;
-		out.r = crossfade(a.r, b.r, t);
-		out.g = crossfade(a.g, b.g, t);
-		out.b = crossfade(a.b, b.b, t);
-		out.a = crossfade(a.a, b.a, t);
-		return out;
-	};
-
-	auto strokeSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			strokeArc(s0, s1, radiusPx, widthPx, color);
-		}
-	};
-
-	nvgSave(args.vg);
-
-	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), bloomColor(config.capReflectionOuterActiveColor), bloomColor(config.capReflectionOuterInactiveColor));
-	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), bloomColor(config.capReflectionInnerActiveColor), bloomColor(config.capReflectionInnerInactiveColor));
-
-	nvgRestore(args.vg);
-}
-
 void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
@@ -4854,200 +4336,6 @@ void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
 }
 
 float LeviathanHaloKnob::normalizedParamValue() {
-	engine::ParamQuantity* pq = getParamQuantity();
-	if (!pq) return 0.5f;
-	const float minValue = pq->getMinValue();
-	const float maxValue = pq->getMaxValue();
-	const float range = maxValue - minValue;
-	if (range <= 1e-6f) return 0.5f;
-	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
-}
-
-LeviathanHaloKnob2::LeviathanHaloKnob2() : LeviathanHaloKnob2(Config()) {
-}
-
-LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
-	Config config;
-	config.ledArc.activeColor = nvgRGBA(255, 184, 0, 255);
-	config.ledArc.activeHighlightColor = nvgRGBA(255, 232, 82, 232);
-	config.ledArc.inactiveColor = nvgRGBA(158, 58, 16, 216);
-	config.ledArc.inactiveHighlightColor = nvgRGBA(220, 94, 30, 168);
-	config.bloom.backgroundOuterActiveColor = nvgRGBA(255, 148, 0, 50);
-	config.bloom.backgroundOuterInactiveColor = nvgRGBA(130, 42, 10, 30);
-	config.bloom.backgroundMidActiveColor = nvgRGBA(255, 172, 0, 80);
-	config.bloom.backgroundMidInactiveColor = nvgRGBA(160, 50, 12, 50);
-	config.bloom.backgroundInnerActiveColor = nvgRGBA(255, 204, 20, 122);
-	config.bloom.backgroundInnerInactiveColor = nvgRGBA(204, 68, 16, 72);
-	config.bloom.foregroundOuterActiveColor = nvgRGBA(255, 214, 34, 74);
-	config.bloom.foregroundOuterInactiveColor = nvgRGBA(206, 72, 18, 44);
-	config.bloom.foregroundInnerActiveColor = nvgRGBA(255, 244, 118, 62);
-	config.bloom.foregroundInnerInactiveColor = nvgRGBA(236, 104, 34, 32);
-	config.bloom.reflectionOuterActiveColor = nvgRGBA(255, 174, 0, 70);
-	config.bloom.reflectionOuterInactiveColor = nvgRGBA(144, 44, 10, 68);
-	config.bloom.reflectionInnerActiveColor = nvgRGBA(255, 224, 36, 62);
-	config.bloom.reflectionInnerInactiveColor = nvgRGBA(218, 86, 22, 48);
-	config.bloom.guideOuterColor = nvgRGBA(255, 210, 38, 84);
-	config.bloom.guideMidColor = nvgRGBA(186, 58, 14, 58);
-	config.bloom.guideInnerColor = nvgRGBA(255, 238, 98, 68);
-	config.bloom.capReflectionOuterActiveColor = nvgRGBA(255, 188, 0, 96);
-	config.bloom.capReflectionOuterInactiveColor = nvgRGBA(188, 62, 16, 82);
-	config.bloom.capReflectionInnerActiveColor = nvgRGBA(255, 240, 108, 72);
-	config.bloom.capReflectionInnerInactiveColor = nvgRGBA(236, 106, 36, 54);
-	return config;
-}
-
-LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
-	minAngle = -0.83 * M_PI;
-	maxAngle = 0.83 * M_PI;
-
-	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
-	centerNormalSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg");
-	centerLitSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenterLit.svg");
-	app::SvgKnob::setSvg(backSvg);
-	box.size = Vec(46.f, 46.f);
-	if (fb) {
-		fb->box.size = box.size;
-	}
-	if (sw) {
-		sw->hide();
-	}
-	if (shadow) {
-		shadow->opacity = 0.f;
-	}
-	lastBloomAmount = settings::haloBrightness;
-
-	backLayer = new EclipseKnob::SvgLayer();
-	backLayer->setSvg(backSvg);
-	backLayer->box.size = box.size;
-	backLayer->minAngle = minAngle;
-	backLayer->maxAngle = maxAngle;
-	backLayer->valueNorm = normalizedParamValue();
-	backLayer->rotateWithValue = false;
-	fb->addChild(backLayer);
-
-	glowArc = new GlowArcWidget();
-	glowArc->box.size = box.size;
-	glowArc->minAngle = minAngle;
-	glowArc->maxAngle = maxAngle;
-	glowArc->valueNorm = normalizedParamValue();
-	glowArc->config = this->config.bloom;
-	fb->addChild(glowArc);
-
-	lightArc = new LightArcWidget();
-	lightArc->box.size = box.size;
-	lightArc->minAngle = minAngle;
-	lightArc->maxAngle = maxAngle;
-	lightArc->valueNorm = normalizedParamValue();
-	lightArc->config = this->config.ledArc;
-	lightArc->bloomConfig = this->config.bloom;
-	fb->addChild(lightArc);
-
-	foregroundGlowArc = new GlowArcWidget();
-	foregroundGlowArc->box.size = box.size;
-	foregroundGlowArc->minAngle = minAngle;
-	foregroundGlowArc->maxAngle = maxAngle;
-	foregroundGlowArc->valueNorm = normalizedParamValue();
-	foregroundGlowArc->foreground = true;
-	foregroundGlowArc->config = this->config.bloom;
-	fb->addChild(foregroundGlowArc);
-
-	centerLayer = new EclipseKnob::SvgLayer();
-	centerLayer->setSvg(centerNormalSvg);
-	centerLayer->box.size = box.size;
-	centerLayer->minAngle = minAngle;
-	centerLayer->maxAngle = maxAngle;
-	centerLayer->valueNorm = normalizedParamValue();
-	centerLayer->rotateWithValue = true;
-	fb->addChild(centerLayer);
-
-	capReflection = new CapReflectionWidget();
-	capReflection->box.size = box.size;
-	capReflection->minAngle = minAngle;
-	capReflection->maxAngle = maxAngle;
-	capReflection->valueNorm = normalizedParamValue();
-	capReflection->config = this->config.bloom;
-	fb->addChild(capReflection);
-
-}
-
-void LeviathanHaloKnob2::updateCenterSvg() {
-	const bool shouldLight = hovered || dragging;
-	if (centerLit == shouldLight) {
-		return;
-	}
-	centerLit = shouldLight;
-	if (centerLayer) {
-		centerLayer->setSvg(centerLit ? centerLitSvg : centerNormalSvg);
-		centerLayer->box.size = box.size;
-		centerLayer->valueNorm = normalizedParamValue();
-	}
-	if (fb) {
-		fb->setDirty();
-	}
-}
-
-void LeviathanHaloKnob2::step() {
-	app::SvgKnob::step();
-	const float bloomAmount = settings::haloBrightness;
-	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
-		lastBloomAmount = bloomAmount;
-		if (fb) {
-			fb->setDirty();
-		}
-	}
-}
-
-void LeviathanHaloKnob2::onEnter(const event::Enter& e) {
-	hovered = true;
-	updateCenterSvg();
-	app::SvgKnob::onEnter(e);
-}
-
-void LeviathanHaloKnob2::onLeave(const event::Leave& e) {
-	hovered = false;
-	updateCenterSvg();
-	app::SvgKnob::onLeave(e);
-}
-
-void LeviathanHaloKnob2::onDragStart(const event::DragStart& e) {
-	dragging = true;
-	updateCenterSvg();
-	app::SvgKnob::onDragStart(e);
-}
-
-void LeviathanHaloKnob2::onDragEnd(const event::DragEnd& e) {
-	dragging = false;
-	updateCenterSvg();
-	app::SvgKnob::onDragEnd(e);
-}
-
-void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
-	app::SvgKnob::onChange(e);
-	const float valueNorm = normalizedParamValue();
-	if (backLayer) {
-		backLayer->valueNorm = valueNorm;
-	}
-	if (centerLayer) {
-		centerLayer->valueNorm = valueNorm;
-	}
-	if (capReflection) {
-		capReflection->valueNorm = valueNorm;
-	}
-	if (glowArc) {
-		glowArc->valueNorm = valueNorm;
-	}
-	if (foregroundGlowArc) {
-		foregroundGlowArc->valueNorm = valueNorm;
-	}
-	if (lightArc) {
-		lightArc->valueNorm = valueNorm;
-	}
-	if (fb) {
-		fb->setDirty();
-	}
-}
-
-float LeviathanHaloKnob2::normalizedParamValue() {
 	engine::ParamQuantity* pq = getParamQuantity();
 	if (!pq) return 0.5f;
 	const float minValue = pq->getMinValue();

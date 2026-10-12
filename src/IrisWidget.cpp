@@ -328,6 +328,21 @@ struct IrisDisplay final : OpaqueWidget {
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }
 
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
+  }
+
   void step() override {
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
@@ -437,16 +452,36 @@ struct IrisScanLineOverlay final : TransparentWidget {
   explicit IrisScanLineOverlay(Iris* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const float scanTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
     const float scanBottom = std::max(scanTop, box.size.y - kIrisDisplayVerticalInset);
-    const float scanY = scanTop + scan * (scanBottom - scanTop);
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, 0.f, scanY);
-    nvgLineTo(args.vg, box.size.x, scanY);
-    nvgStrokeWidth(args.vg, 1.2f);
-    nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 220));
-    nvgStroke(args.vg);
+    const int channels = module
+      ? clamp(module->displayPolyChannelCount.load(std::memory_order_acquire), 1, 16)
+      : 1;
+
+    // Draw later voices first so the primary channel remains the clearest
+    // reference when two or more voices share the same scan position.
+    for (int channel = channels - 1; channel >= 0; --channel) {
+      const float scan = module
+        ? clamp(
+          channel == 0
+            ? module->displayScan.load(std::memory_order_relaxed)
+            : module->displayPolyScans[size_t(channel)].load(std::memory_order_relaxed),
+          0.f, 1.f)
+        : 0.62f;
+      const float scanY = scanTop + scan * (scanBottom - scanTop);
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, 0.f, scanY);
+      nvgLineTo(args.vg, box.size.x, scanY);
+      if (channel == 0) {
+        nvgStrokeWidth(args.vg, 1.2f);
+        nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 220));
+      }
+      else {
+        nvgStrokeWidth(args.vg, 0.9f);
+        nvgStrokeColor(args.vg, nvgRGBA(185, 225, 255, 112));
+      }
+      nvgStroke(args.vg);
+    }
   }
 };
 
@@ -474,6 +509,20 @@ struct IrisWaveformPreview final : TransparentWidget {
     }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+    TransparentWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    TransparentWidget::onContextCreate(e);
   }
 
   bool ensureGradientImage(NVGcontext* vg) {
@@ -1055,12 +1104,15 @@ struct IrisWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/iris.labels.svg");
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    splitPanel.addCompactLeviathanLogoBranding();
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
-    addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<CyanOrbScrew>(
-      Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+      Vec(RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(
+      Vec(box.size.x - 2.f * RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
 
     math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);
@@ -1160,7 +1212,7 @@ struct IrisWidget final : ModuleWidget {
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_COARSE_PARAM", Vec(13.5f, 54.f))), module, Iris::COARSE_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+    addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(
       mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));

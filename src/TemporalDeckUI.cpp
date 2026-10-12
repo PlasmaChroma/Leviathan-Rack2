@@ -43,6 +43,7 @@ struct TemporalDeckWidget;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
+  ui::Tooltip *loopTooltip = nullptr;
   Vec centerMm = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
   bool arcScrubbing = false;
@@ -52,13 +53,31 @@ struct TemporalDeckDisplayWidget : Widget {
   Vec currentPanelMousePos() const;
   Vec sampleLoopIconCenter() const;
   bool isWithinSampleLoopIcon(Vec panelPos) const;
+  void createLoopTooltip();
+  void destroyLoopTooltip();
 
+  ~TemporalDeckDisplayWidget() override;
+  void onContextCreate(const ContextCreateEvent &e) override;
+  void onContextDestroy(const ContextDestroyEvent &e) override;
+  void step() override;
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
+  void onHover(const event::Hover &e) override;
+  void onLeave(const event::Leave &e) override;
   void onDragStart(const event::DragStart &e) override;
   void onDragMove(const event::DragMove &e) override;
   void onDragEnd(const event::DragEnd &e) override;
 };
+
+void TemporalDeckDisplayWidget::onContextCreate(const ContextCreateEvent &e) {
+  visual_assets::onRasterContextCreate(e.vg);
+  Widget::onContextCreate(e);
+}
+
+void TemporalDeckDisplayWidget::onContextDestroy(const ContextDestroyEvent &e) {
+  visual_assets::onRasterContextDestroy(e.vg);
+  Widget::onContextDestroy(e);
+}
 
 struct TemporalDeckBufferModeWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -702,7 +721,7 @@ static std::string hexU64(uint64_t value) {
   return out.str();
 }
 
-static std::string jsonEscape(std::string text) {
+static std::string jsonEscape(const std::string& text) {
   std::ostringstream out;
   for (unsigned char c : text) {
     switch (c) {
@@ -2568,77 +2587,6 @@ static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle
   return true;
 }
 
-static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path,
-                                        std::shared_ptr<window::Image> lifecycleImage) {
-  struct MipmapCache {
-    struct Entry {
-      NVGcontext *vg = nullptr;
-      int handle = -1;
-      int lifecycleHandle = -1;
-      std::weak_ptr<window::Image> lifecycleImage;
-      uint64_t lastUse = 0;
-    };
-    std::unordered_map<std::string, Entry> entries;
-    uint64_t useCounter = 0;
-    NVGcontext *activeVg = nullptr;
-  };
-  static MipmapCache cache;
-  constexpr size_t kMaxMipmapImageCacheEntries = 16;
-
-  if (!vg || path.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
-    return -1;
-  }
-  if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(
-        vg, cache.activeVg, reinterpret_cast<unsigned long long*>(&cache.useCounter))) {
-    // Do not cross-delete image handles from a previous NanoVG context.
-    // Drop stale cache entries and rebuild lazily for this context.
-    cache.entries.clear();
-  }
-
-  auto it = cache.entries.find(path);
-  if (it != cache.entries.end()) {
-    std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
-    if (it->second.vg == vg && it->second.handle >= 0 &&
-        it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
-      it->second.lastUse = ++cache.useCounter;
-      return it->second.handle;
-    }
-    if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-      nvgDeleteImage(vg, it->second.handle);
-    }
-    cache.entries.erase(it);
-  }
-
-  int handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-  if (handle < 0) {
-    return -1;
-  }
-
-  MipmapCache::Entry entry;
-  entry.vg = vg;
-  entry.handle = handle;
-  entry.lifecycleHandle = lifecycleImage->handle;
-  entry.lifecycleImage = lifecycleImage;
-  entry.lastUse = ++cache.useCounter;
-  cache.entries[path] = entry;
-
-  if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
-    auto evictIt = cache.entries.begin();
-    for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
-      if (iter->second.lastUse < evictIt->second.lastUse) {
-        evictIt = iter;
-      }
-    }
-    std::shared_ptr<window::Image> evictLifecycleImage = evictIt->second.lifecycleImage.lock();
-    if (evictIt->second.vg == vg && evictIt->second.handle >= 0 && evictLifecycleImage) {
-      nvgDeleteImage(vg, evictIt->second.handle);
-    }
-    cache.entries.erase(evictIt);
-  }
-
-  return handle;
-}
-
 static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string &path, Vec center,
                                  float platterRadiusPx, float rotation) {
   if (path.empty()) {
@@ -2648,7 +2596,7 @@ static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string
   if (!image) {
     return false;
   }
-  int mipmapHandle = loadPlatterMipmapImageHandle(args.vg, path, image);
+  int mipmapHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, path);
   if (mipmapHandle >= 0 && drawPlatterImageHandle(args, mipmapHandle, center, platterRadiusPx, rotation)) {
     return true;
   }
@@ -2743,6 +2691,47 @@ bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
   return std::fabs(panelPos.x - c.x) <= 7.2f * kLoopIconScale && std::fabs(panelPos.y - c.y) <= 4.8f * kLoopIconScale;
 }
 
+TemporalDeckDisplayWidget::~TemporalDeckDisplayWidget() {
+  destroyLoopTooltip();
+}
+
+void TemporalDeckDisplayWidget::createLoopTooltip() {
+  if (!settings::tooltips || loopTooltip || !module || !APP || !APP->scene) {
+    return;
+  }
+  loopTooltip = new ui::Tooltip();
+  loopTooltip->text = std::string("Sample loop: ") +
+    (module->isSampleLoopEnabled() ? "On" : "Off") +
+    "\nClick to toggle looping";
+  APP->scene->addChild(loopTooltip);
+}
+
+void TemporalDeckDisplayWidget::destroyLoopTooltip() {
+  if (!loopTooltip) {
+    return;
+  }
+  if (loopTooltip->parent) {
+    loopTooltip->parent->removeChild(loopTooltip);
+  }
+  delete loopTooltip;
+  loopTooltip = nullptr;
+}
+
+void TemporalDeckDisplayWidget::step() {
+  Widget::step();
+  // The LongPlay LEDs overlap this full-panel display widget in the event
+  // hierarchy. Moving onto an LED can therefore bypass our normal onLeave()
+  // while Rack creates the LED's own tooltip. Poll the actual pointer while
+  // our tooltip exists so two tooltips can never remain layered.
+  if (loopTooltip) {
+    const bool stillOverActiveLoopControl = module && module->isSampleModeEnabled() &&
+      module->hasLoadedSample() && isWithinSampleLoopIcon(currentPanelMousePos());
+    if (!stillOverActiveLoopControl) {
+      destroyLoopTooltip();
+    }
+  }
+}
+
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   double accessibleLag = module ? std::max(1.0, module->getUiAccessibleLagSamples()) : 1.0;
   double lag = module ? std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag)) : 0.0;
@@ -2825,6 +2814,8 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
     if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
         isWithinSampleLoopIcon(e.pos)) {
       module->setSampleLoopEnabled(!module->isSampleLoopEnabled());
+      destroyLoopTooltip();
+      createLoopTooltip();
       e.consume(this);
       return;
     }
@@ -2841,6 +2832,22 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
     }
   }
   Widget::onButton(e);
+}
+
+void TemporalDeckDisplayWidget::onHover(const event::Hover &e) {
+  const bool overActiveLoopControl = module && module->isSampleModeEnabled() &&
+    module->hasLoadedSample() && isWithinSampleLoopIcon(e.pos);
+  if (overActiveLoopControl) {
+    createLoopTooltip();
+  } else {
+    destroyLoopTooltip();
+  }
+  Widget::onHover(e);
+}
+
+void TemporalDeckDisplayWidget::onLeave(const event::Leave &e) {
+  destroyLoopTooltip();
+  Widget::onLeave(e);
 }
 
 void TemporalDeckDisplayWidget::onDragStart(const event::DragStart &e) {
@@ -3528,6 +3535,29 @@ static bool isTDScopeModule(const engine::Module *neighbor) {
   return (neighbor->model == modelTDScope) || (neighbor->model->slug == "TDScope");
 }
 
+template <typename TBase>
+struct TemporalDeckLongPlayStatusLight : TBase {
+  void step() override {
+    TBase::step();
+    TemporalDeck *deck = dynamic_cast<TemporalDeck *>(this->module);
+    this->visible = deck &&
+      deck->getBufferDurationMode() == TemporalDeck::BUFFER_DURATION_LONGPLAY_DISK &&
+      deck->isSampleModeEnabled() && deck->hasLoadedSample();
+  }
+};
+
+struct TemporalDeckLongPlayCacheLight : SmallApertureLight {
+  TemporalDeckLongPlayCacheLight() {
+    baseColor = nvgRGB(193, 72, 255);
+    activeColor = baseColor;
+    baseColors.clear();
+    addBaseColor(baseColor);
+    addBaseColor(nvgRGB(42, 246, 255));
+    invalidateStaticBackgroundCache();
+    invalidateBloomCache();
+  }
+};
+
 struct TemporalDeckWidget : ModuleWidget {
   struct ScopeDragTraceRecorder {
     bool active = false;
@@ -3556,7 +3586,14 @@ struct TemporalDeckWidget : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/deck.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/deck.labels.svg");
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    splitPanel.addPerfectWaveBranding();
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
+    math::Rect leviathanLogoRectMm(Vec(34.44015f, 118.43102f), Vec(32.71933f, 12.24054f));
+    panel_svg::loadRectFromSvgMm(
+      panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
+    addChild(visual_assets::createAspectFitRasterImageWidget(
+      "res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
@@ -3701,6 +3738,17 @@ struct TemporalDeckWidget : ModuleWidget {
     display->platterRadiusPx = platterRadius;
     display->box.size = box.size;
     addChild(display);
+
+    // LongPlay-only cache telemetry, positioned from the same runtime geometry
+    // as the loop icon when the SVG does not provide explicit component anchors.
+    const Vec longPlayStatusCenter = display->sampleLoopIconCenter().plus(Vec(0.f, 12.0f));
+    const float panelPixelsPerMm = mm2px(Vec(1.f, 0.f)).x;
+    Vec longPlayCacheStatusMm(longPlayStatusCenter.x / panelPixelsPerMm,
+                              longPlayStatusCenter.y / panelPixelsPerMm);
+    applyPointOverride("LONGPLAY_CACHE_STATUS_LIGHT", &longPlayCacheStatusMm);
+    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<TemporalDeckLongPlayCacheLight>>(
+      mm2px(longPlayCacheStatusMm), module,
+      TemporalDeck::LONGPLAY_DISK_ACTIVITY_LIGHT));
 
     auto platter = new TemporalDeckPlatterWidget();
     platter->module = module;
@@ -4120,7 +4168,9 @@ struct TemporalDeckWidget : ModuleWidget {
             double mib = bytes / (1024.0 * 1024.0);
             return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
           };
-          std::array<int, TemporalDeck::BUFFER_DURATION_COUNT> menuOrder = {
+          // Disk-backed LongPlay is selected automatically for loaded files;
+          // it is not a live-recording buffer allocation choice.
+          std::array<int, 6> menuOrder = {
             TemporalDeck::BUFFER_DURATION_10S,       TemporalDeck::BUFFER_DURATION_20S,
             TemporalDeck::BUFFER_DURATION_1M_STEREO, TemporalDeck::BUFFER_DURATION_2M_STEREO,
             TemporalDeck::BUFFER_DURATION_10M_STEREO, TemporalDeck::BUFFER_DURATION_10M_MONO};

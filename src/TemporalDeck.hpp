@@ -38,7 +38,8 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
   static constexpr int BUFFER_DURATION_1M_STEREO = 4;
   static constexpr int BUFFER_DURATION_2M_STEREO = 5;
-  static constexpr int BUFFER_DURATION_COUNT = 6;
+  static constexpr int BUFFER_DURATION_LONGPLAY_DISK = 6;
+  static constexpr int BUFFER_DURATION_COUNT = 7;
 
   static constexpr int EXTERNAL_GATE_POS_GLIDE = 0;
   static constexpr int EXTERNAL_GATE_POS_MODULE_SYNC = 1;
@@ -108,7 +109,11 @@ struct TemporalDeck final : Module {
     EXPANDER_READY_LIGHT,
     ARC_LIGHT_START,
     ARC_MAX_LIGHT_START = ARC_LIGHT_START + kArcLightCount,
-    LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount
+    LEGACY_LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount,
+    // Temporal Deck is released: new lights must remain appended.
+    LONGPLAY_DISK_ACTIVITY_LIGHT = LEGACY_LIGHTS_LEN,
+    LONGPLAY_RAM_READY_LIGHT,
+    LIGHTS_LEN
   };
 
   TemporalDeck();

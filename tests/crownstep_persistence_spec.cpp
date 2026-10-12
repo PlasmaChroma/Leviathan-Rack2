@@ -201,6 +201,88 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
 }
 
+TestResult testNewModulePitchDefaults() {
+	Crownstep module;
+	const float span = crownstep::pitchRangeSemitoneSpan(
+		module.params[Crownstep::RANGE_PARAM].getValue(), module.boardCellCount());
+	const bool pass = module.pitchBipolarEnabled && nearlyEqual(span, 24.f, 1e-5f);
+	return {
+		"New Crownstep modules default to bipolar 24-semitone pitch",
+		pass,
+		"bipolar=" + std::to_string(module.pitchBipolarEnabled ? 1 : 0)
+			+ " span=" + std::to_string(span)
+	};
+}
+
+TestResult testApplyGameSetupAndStartNewGame() {
+	Crownstep module;
+	Move move;
+	move.originIndex = 8;
+	move.destinationIndex = 12;
+	module.moveHistory.push_back(move);
+	module.history.push_back(module.makeStepFromMove(move));
+	module.selectedSquare = 8;
+	module.gameOver = true;
+	module.winnerSide = crownstep::HUMAN_SIDE;
+
+	module.applyGameSetupAndStartNewGame(Crownstep::GAME_MODE_CHESS, Crownstep::PLAYER_FOLLOW);
+
+	const crownstep::BoardState expected = crownstep::chessMakeInitialBoard();
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_CHESS &&
+		module.playerMode == Crownstep::PLAYER_FOLLOW &&
+		module.board == expected &&
+		module.moveHistory.empty() &&
+		module.history.empty() &&
+		module.selectedSquare == -1 &&
+		!module.gameOver &&
+		module.winnerSide == 0 &&
+		module.turnSide == crownstep::HUMAN_SIDE &&
+		module.aiSide() == crownstep::HUMAN_SIDE;
+	return {
+		"Apply setup starts one clean game with the requested sides",
+		pass,
+		"mode=" + std::to_string(module.gameMode)
+			+ " player=" + std::to_string(module.playerMode)
+			+ " history=" + std::to_string(module.history.size())
+	};
+}
+
+TestResult testSameGameSetupPreservesChessTexture() {
+	Crownstep module;
+	module.setGameMode(Crownstep::GAME_MODE_CHESS, true);
+	module.boardTextureMode = Crownstep::BOARD_TEXTURE_MARBLE;
+	module.history.push_back(Step {});
+
+	module.applyGameSetupAndStartNewGame(module.gameMode, module.playerMode);
+
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_CHESS &&
+		module.boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE &&
+		module.history.empty();
+	return {
+		"Same-mode Chess restart preserves the selected texture",
+		pass,
+		"texture=" + std::to_string(module.boardTextureMode)
+			+ " history=" + std::to_string(module.history.size())
+	};
+}
+
+TestResult testApplyGameSetupClampsInvalidValues() {
+	Crownstep module;
+	module.applyGameSetupAndStartNewGame(999, -999);
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_OTHELLO &&
+		module.playerMode == Crownstep::PLAYER_INIT &&
+		module.board == crownstep::othelloMakeInitialBoard();
+	return {
+		"Apply setup safely clamps invalid values",
+		pass,
+		"mode=" + std::to_string(module.gameMode)
+			+ " player=" + std::to_string(module.playerMode)
+	};
+}
+
 TestResult testDiagonalLayoutModesAreDistinct() {
   bool pass = true;
   std::string detail;
@@ -341,6 +423,10 @@ TestResult testPlaybackSnapshotDoesNotWaitForSequenceMutex() {
 int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
+  tests.push_back(testNewModulePitchDefaults());
+  tests.push_back(testApplyGameSetupAndStartNewGame());
+  tests.push_back(testSameGameSetupPreservesChessTexture());
+  tests.push_back(testApplyGameSetupClampsInvalidValues());
   tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
   tests.push_back(testDiagonalLayoutModesAreDistinct());
   tests.push_back(testPlaybackSnapshotDoesNotWaitForSequenceMutex());

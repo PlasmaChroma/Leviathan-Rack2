@@ -24,9 +24,12 @@ struct PlasmaSwitch : app::Switch {
 	float hueAmount = 0.5f;
 	float sparkOffsetX[3] = {};
 	float sparkOffsetY[3] = {};
-	double lastStepSec = 0.0;
+	double lastVisualUpdateSec = 0.0;
+	double nextVisualUpdateSec = 0.0;
+	float lastVisualTarget = -1.f;
 	std::string backingFullPath;
 	widget::FramebufferWidget* shadowFb = nullptr;
+	widget::FramebufferWidget* visualFb = nullptr;
 	std::shared_ptr<window::Image> fallbackBackingImage;
 	NVGcontext* backingImageOwnerVg = nullptr;
 	int backingImageHandle = -1;
@@ -38,6 +41,7 @@ struct PlasmaSwitch : app::Switch {
 	~PlasmaSwitch() override;
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void drawVisual(const DrawArgs& args);
 
 	void resetBackingImageHandle(NVGcontext* currentVg, bool deleteCurrentHandle);
 	int ensureBackingImageHandle(NVGcontext* vg);

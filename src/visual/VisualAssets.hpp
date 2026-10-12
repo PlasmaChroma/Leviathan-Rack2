@@ -4,15 +4,26 @@
 #include "ApertureLight.hpp"
 #include "PlasmaSwitch.hpp"
 
+#include <cstdint>
 #include <functional>
+#include <vector>
 
 namespace visual_assets {
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
-int loadPluginRasterMipmapHandle(
+// Loads a mipmapped raster texture and works around Rack's low-bit indexed
+// PNG decoder bug by expanding 1/2/4-bit palette images in memory.
+int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,
 	const std::string& fullPath);
+void onRasterContextDestroy(NVGcontext* vg);
+void onRasterContextCreate(NVGcontext* vg);
+bool decodeRasterRgba8(
+	const std::string& fullPath,
+	std::vector<std::uint8_t>* rgba,
+	int* width,
+	int* height);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);
@@ -23,19 +34,65 @@ enum class PreviewFrameTint {
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
-Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
+float previewFrameOutsideMarginMm();
+Widget* createAspectFitRasterImageWidget(
+	const char* imageAssetPath,
+	math::Rect rectMm,
+	bool flipHorizontal = false,
+	float opacity = 1.f);
+// Installs normal-left and horizontally mirrored-right raster images at SVG
+// rect anchors. Either anchor may be omitted for one-sided art. Returns the
+// number of images installed, allowing callers and tooling to verify rollout.
+int addMirroredPanelRasterImages(
+	Widget* parent,
+	const std::string& panelPath,
+	const char* imageAssetPath,
+	const char* leftAnchorId,
+	const char* rightAnchorId,
+	float opacity = 1.f);
+// Standard Leviathan panel branding convention. Panels opt in with
+// BRANDING_WAVE_LEFT_RASTER and/or BRANDING_WAVE_RIGHT_RASTER rect anchors.
+int addPerfectWavePanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
+// Standard centered single-mark convention for narrow or intentionally solo
+// layouts. Panels opt in with a BRANDING_WAVE_SOLO_RASTER rect anchor.
+int addPerfectWaveSoloPanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
+// Standard centered Leviathan raster logo for 8 HP / 40.64 mm panels. An SVG
+// rect anchor can override the shared fallback without changing widget code.
+int addCompactLeviathanLogoBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
+Widget* createPanelSurfaceEffectWidget(
+	const std::string& svgPath,
+	Vec panelSizePx,
+	float previewProgressionPhase = -1.f);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 
 // Installs the standard static layers for modules with split panel and label SVGs.
 class SplitPanelRenderer final {
 	ModuleWidget* parent_ = nullptr;
+	Widget* panelSurfaceEffect_ = nullptr;
 	std::string panelPath_;
 	std::string labelsAssetPath_;
+	float previewProgressionPhase_ = -1.f;
+	float leviathanLogoOpacity_ = 1.f;
+	bool addLeviathanLogo_ = false;
 
 public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
+	Widget* panelSurfaceEffectWidget() const;
+	float previewProgressionPhase() const;
+	int addPerfectWaveBranding(float opacity = 1.f);
+	int addPerfectWaveSoloBranding(float opacity = 1.f);
+	void addCompactLeviathanLogoBranding(float opacity = 1.f);
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);
@@ -47,6 +104,21 @@ float panelGlassTintAmount();
 NVGcolor panelGlassCrystalGlowColor();
 NVGcolor panelGlassCrystalStrokeColor();
 float panelGlassCyclePhase();
+
+class ScopedPanelGlassPreviewProgression {
+public:
+	explicit ScopedPanelGlassPreviewProgression(float normalizedPhase);
+	~ScopedPanelGlassPreviewProgression();
+
+	ScopedPanelGlassPreviewProgression(
+		const ScopedPanelGlassPreviewProgression&) = delete;
+	ScopedPanelGlassPreviewProgression& operator=(
+		const ScopedPanelGlassPreviewProgression&) = delete;
+
+private:
+	bool active = false;
+};
+
 void loadSettings();
 void saveSettings();
 void resetPanelGlassColorCycle();
@@ -54,6 +126,20 @@ int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const 
 void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();
 uint64_t eclipseShadowDrawCount();
+
+struct HaloKnob2DrawMetrics {
+	uint64_t glSurfaceFramebufferNs = 0u;
+	uint64_t nanoVgSurfaceDrawNs = 0u;
+	uint64_t centerFramebufferNs = 0u;
+	uint64_t capReflectionFramebufferNs = 0u;
+	uint32_t glSurfaceFramebufferDraws = 0u;
+	uint32_t nanoVgSurfaceDraws = 0u;
+	uint32_t centerFramebufferDraws = 0u;
+	uint32_t capReflectionFramebufferDraws = 0u;
+};
+
+void resetHaloKnob2DrawMetrics();
+HaloKnob2DrawMetrics getHaloKnob2DrawMetrics();
 
 } // namespace visual_assets
 
@@ -154,13 +240,6 @@ struct TLeviathanCyanPurpleLight : TBase {
 };
 using LeviathanCyanPurpleLight = TLeviathanCyanPurpleLight<>;
 
-struct LeviathanSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
-	LeviathanSlider();
-	void onHover(const event::Hover& e) override;
-	void onHoverScroll(const event::HoverScroll& e) override;
-	void onButton(const event::Button& e) override;
-};
-
 struct LuminSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
 	LuminSlider();
 	void onHover(const event::Hover& e) override;
@@ -229,6 +308,9 @@ struct SmallGoldApertureLight : app::ModuleLightWidget {
 
 	SmallGoldApertureLight();
 	void setBaseColor(NVGcolor color);
+	void onHover(const HoverEvent& e) override;
+	void onEnter(const EnterEvent& e) override;
+	void onLeave(const LeaveEvent& e) override;
 	void drawBackground(const DrawArgs& args) override;
 	void drawLight(const DrawArgs& args) override;
 	void drawHalo(const DrawArgs& args) override;
@@ -257,7 +339,11 @@ struct GearKnobInvertSized : app::SvgKnob {
 		float innerLineWidthSourcePx = 0.55f;
 		bool bipolar = false;
 		float centerNorm = 0.5f;
-		double liquidShimmerUntil = 0.0;
+
+		NVGcolor activeColorStart = nvgRGBA(255, 218, 42, 248);
+		NVGcolor activeColorEnd = nvgRGBA(255, 250, 205, 255);
+		NVGcolor inactiveTrackColor = nvgRGBA(2, 1, 1, 230);
+		NVGcolor innerLineColor = nvgRGBA(255, 244, 154, 80);
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -281,6 +367,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 	widget::SvgWidget* cachedSvgSw = nullptr;
 	int dragMoveFrame = 0;
 	uint64_t dragLogGestureId = 0;
+	float lastBloomAmount = -1.f;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
@@ -300,6 +387,14 @@ struct TinyClockworkGearKnob : GearKnobInvertSized {
 
 struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 	BipolarTinyClockworkGearKnob();
+};
+
+struct DarkTinyClockworkGearKnob : GearKnobInvertSized {
+	DarkTinyClockworkGearKnob();
+};
+
+struct BipolarDarkTinyClockworkGearKnob : DarkTinyClockworkGearKnob {
+	BipolarDarkTinyClockworkGearKnob();
 };
 
 struct EclipseKnob : app::SvgKnob {
@@ -429,7 +524,7 @@ struct LeviathanHaloKnob : app::SvgKnob {
 	float normalizedParamValue();
 };
 
-struct LeviathanHaloKnob2 : app::SvgKnob {
+struct LeviathanHaloKnob2 : app::Knob {
 	struct LedArcConfig {
 		NVGcolor activeColor = nvgRGBA(26, 249, 252, 236);
 		NVGcolor activeHighlightColor = nvgRGBA(122, 252, 255, 188);
@@ -486,42 +581,42 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
-		struct CapReflectionWidget : TransparentWidget {
-			float minAngle = -0.83f * M_PI;
-			float maxAngle = 0.83f * M_PI;
-			float valueNorm = 0.5f;
-			BloomConfig config;
+	struct CapReflectionWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		BloomConfig config;
 
-			void draw(const DrawArgs& args) override;
-		};
-
-		GlowArcWidget* glowArc = nullptr;
-		GlowArcWidget* foregroundGlowArc = nullptr;
-		EclipseKnob::SvgLayer* backLayer = nullptr;
-		EclipseKnob::SvgLayer* centerLayer = nullptr;
-		std::shared_ptr<window::Svg> centerNormalSvg;
-		std::shared_ptr<window::Svg> centerLitSvg;
-		LightArcWidget* lightArc = nullptr;
-		CapReflectionWidget* capReflection = nullptr;
-		Config config;
-		float lastBloomAmount = -1.f;
-		bool hovered = false;
-		bool dragging = false;
-		bool centerLit = false;
-
-		LeviathanHaloKnob2();
-		explicit LeviathanHaloKnob2(Config config);
-		void step() override;
-		void onChange(const ChangeEvent& e) override;
-		void onEnter(const event::Enter& e) override;
-		void onLeave(const event::Leave& e) override;
-		void onDragStart(const event::DragStart& e) override;
-		void onDragEnd(const event::DragEnd& e) override;
-
-		static Config brightOrangeConfig();
-		float normalizedParamValue();
-		void updateCenterSvg();
+		void draw(const DrawArgs& args) override;
 	};
+
+	struct HaloGlSurface;
+	HaloGlSurface* glSurface = nullptr;
+	EclipseKnob::SvgLayer* backLayer = nullptr;
+	EclipseKnob::SvgLayer* centerLayer = nullptr;
+	std::shared_ptr<window::Svg> centerNormalSvg;
+	std::shared_ptr<window::Svg> centerLitSvg;
+	Config config;
+	float lastBloomAmount = -1.f;
+	bool hovered = false;
+	bool dragging = false;
+	bool centerLit = false;
+
+	LeviathanHaloKnob2();
+	explicit LeviathanHaloKnob2(Config config);
+	void step() override;
+	void onChange(const ChangeEvent& e) override;
+	void onEnter(const event::Enter& e) override;
+	void onLeave(const event::Leave& e) override;
+	void onDragStart(const event::DragStart& e) override;
+	void onDragEnd(const event::DragEnd& e) override;
+
+	static Config brightOrangeConfig();
+	bool isVisualDirty() const;
+	float normalizedParamValue();
+	void setForceNanoVgLedRenderer(bool force);
+	void updateCenterSvg();
+};
 
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {

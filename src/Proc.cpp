@@ -1773,7 +1773,9 @@ struct ProcWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/proc.labels.svg");
-		visual_assets::addFractalGlassOverlay(this, panelBasePath);
+		splitPanel.addCompactLeviathanLogoBranding();
+		visual_assets::addFractalGlassOverlay(
+			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));
@@ -1857,7 +1859,7 @@ struct ProcWidget : ModuleWidget {
 			curveKnob->setPreviewInteraction(&previewEdgeInteraction);
 			addParam(curveKnob);
 		}
-		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
+		addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;

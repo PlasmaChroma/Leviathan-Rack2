@@ -504,6 +504,21 @@ void Crownstep::setGameMode(int mode, bool startFreshGame) {
 	}
 }
 
+void Crownstep::applyGameSetupAndStartNewGame(int requestedGameMode, int requestedPlayerMode) {
+	requestedGameMode = clamp(requestedGameMode, 0, GAME_MODE_COUNT - 1);
+	requestedPlayerMode = clamp(requestedPlayerMode, 0, PLAYER_MODE_COUNT - 1);
+
+	cancelAiTurnWork();
+	// Avoid reapplying same-mode setup side effects. In particular, entering
+	// Chess selects the Wood texture, but an ordinary Chess restart must keep a
+	// texture the user selected afterward.
+	if (requestedGameMode != gameMode) {
+		setGameMode(requestedGameMode, false);
+	}
+	playerMode = requestedPlayerMode;
+	startNewGame();
+}
+
 void Crownstep::resetMoveAnimation() {
 	moveAnimation.path.clear();
 	moveAnimation.capturedIndices.clear();

@@ -13,9 +13,10 @@ struct Transfer {
 
 inline Transfer transferFromBrightness(float brightness) {
 	static constexpr int LUT_INTERVALS = 1024;
+	static constexpr size_t LUT_SIZE = size_t(LUT_INTERVALS) + 1u;
 	struct Tables {
-		std::array<float, LUT_INTERVALS + 1> glow {};
-		std::array<float, LUT_INTERVALS + 1> core {};
+		std::array<float, LUT_SIZE> glow {};
+		std::array<float, LUT_SIZE> core {};
 
 		Tables() {
 			for (int i = 0; i <= LUT_INTERVALS; ++i) {

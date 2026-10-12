@@ -38,6 +38,7 @@ struct FractalPalette {
   uint8_t highlightR = 255u;
   uint8_t highlightG = 255u;
   uint8_t highlightB = 255u;
+  float contrast = 1.f;
 };
 
 inline void applyFractalPalette(SourceField* source, const FractalPalette& palette) {
@@ -48,7 +49,10 @@ inline void applyFractalPalette(SourceField* source, const FractalPalette& palet
     // Gamma-lift the midrange for readable glass detail while retaining a
     // genuinely dark floor and a broad climb toward the highlight shade.
     const float normalized = float(luminance) * (1.f / (255.f * 256.f));
-    const uint32_t amount = uint32_t(std::round(std::sqrt(normalized) * 255.f));
+    const float lifted = std::sqrt(normalized);
+    const float contrasted = std::max(0.f, std::min(1.f,
+      (lifted - 0.5f) * std::max(palette.contrast, 0.f) + 0.5f));
+    const uint32_t amount = uint32_t(std::round(contrasted * 255.f));
     source->rgb8[i] = uint8_t(
       int(palette.shadowR) + ((int(palette.highlightR) - int(palette.shadowR)) * int(amount) + 127) / 255);
     source->rgb8[i + 1u] = uint8_t(

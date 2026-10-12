@@ -279,7 +279,7 @@
    sodipodi:insensitive="true" />
       <g
    id="waves_layer"
-   style="display:inline;opacity:0.5"
+   style="display:none;opacity:0.5"
    transform="matrix(1.0032752,0,0,1.0029283,6082.8217,1109.6544)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
@@ -642,4 +642,9 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" /></svg>
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
+<g id="perfect_wave_raster_anchors" style="display:none">
+  <rect id="BRANDING_WAVE_LEFT_RASTER" x="7269.610" y="12338.190" width="1306.748" height="511.810" />
+  <rect id="BRANDING_WAVE_RIGHT_RASTER" x="11743.674" y="12338.190" width="1306.748" height="511.810" />
+</g>
+</svg>

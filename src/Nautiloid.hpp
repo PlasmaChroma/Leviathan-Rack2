@@ -10,6 +10,7 @@
 #include <array>
 #include <condition_variable>
 #include <mutex>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -77,10 +78,11 @@ struct Nautiloid final : Module {
   void requestRenderWithCenteredCache();
   void requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestIrisSourceSync();
+  void setGpuPreviewAvailable(bool available, bool requireCpuFallback = true);
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
-  const nautiloid_iris_expander::SourceSlot* irisExpanderSourceSlotSnapshot(uint64_t* generation) const;
+  std::shared_ptr<const iris::SourceField> irisExpanderOwnedSourceSnapshot(uint64_t* generation) const;
 
   struct DisplayTileCacheSnapshot {
     int columns = 0;
@@ -147,6 +149,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {true};
   std::atomic<bool> debugGpuPreviewAvailable {false};
+  std::atomic<bool> cpuDisplayFallbackRequired {true};
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> forceIrisSourceSync {false};
@@ -223,6 +226,8 @@ private:
 
   void startWorker();
   void stopWorker();
+  void ensureFallbackWorkers();
+  void stopFallbackWorkers();
   void submitRequest(const WorkerRequest& request);
   void submitCacheRequest(const WorkerRequest& request);
   void submitReprojectionRequest(const WorkerRequest& request);
@@ -240,6 +245,13 @@ private:
   std::atomic<uint64_t> fractalStateSequence {0u};
   mutable std::mutex fractalStateWriteMutex;
   std::atomic<bool> stopRequested {false};
+
+  // The double-precision Iris source generator is always available. The
+  // display/reprojection/cache workers exist only while CPU fallback rendering
+  // is required.
+  std::mutex fallbackLifecycleMutex;
+  std::condition_variable fallbackLifecycleCv;
+  bool fallbackWorkersStopping = false;
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;
@@ -278,6 +290,7 @@ private:
   double authoritativeDisplayCenterX = 0.0;
   double authoritativeDisplayCenterY = 0.0;
   iris::SourceField irisCompatibleSource;
+  std::shared_ptr<const iris::SourceField> irisExpanderOwnedSource;
   // Uncolored Iris-resolution source retained so palette changes do not rerun
   // the fractal solver. This is separate from the currently published copy.
   iris::SourceField irisCanonicalSource;
