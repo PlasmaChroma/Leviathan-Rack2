@@ -182,18 +182,11 @@ void init(Plugin* p) {
 	p->addModel(modelProc);
 	p->addModel(modelTemporalDeck);
 	p->addModel(modelTDScope);
-<<<<<<< HEAD
-	p->addModel(modelUndertow);
-    p->addModel(modelDeepcache);
-	p->addModel(modelIris);
-	p->addModel(modelNautiloid);	
-=======
     p->addModel(modelUndertow);
     p->addModel(modelDeepcache);
 	p->addModel(modelIris);
 	p->addModel(modelNautiloid);
     p->addModel(modelPuffy);
->>>>>>> puffy-rc3
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
