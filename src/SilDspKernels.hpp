@@ -1,17 +1,9 @@
 #pragma once
 
-#include <algorithm>
 #include <simd/Vector.hpp>
 #include <simd/functions.hpp>
 
 namespace sil {
-
-// Float clamp for the audio path. Rack's clamp() is std::fmax(std::fmin()), which Rack's
-// build flags (no -ffinite-math-only) compile to two libm calls per use; std::min/max lower
-// to minss/maxss. A NaN input is returned as NaN here rather than as the upper bound.
-inline float clampf(float x, float lo, float hi) {
-	return std::min(std::max(x, lo), hi);
-}
 
 // Same filter and same setCutoff() contract as rack::dsp::RCFilter (r is in radians/sample),
 // with the recursion rewritten as y = k * (x + x1) - m * y1 so no divide sits in the

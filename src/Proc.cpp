@@ -254,7 +254,7 @@ struct Proc : Module {
 		if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
 			cachedInjectSampleTime = sampleTime;
 			cachedInjectAlphaBase = SIGNAL_INJECT_GAIN *
-				clamp(1.f - std::exp(-sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
+				levi_math::clampf(1.f - std::exp(-sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
 		}
 		return cachedInjectAlphaBase;
 	}
@@ -271,7 +271,7 @@ struct Proc : Module {
 		// Neutral reference is constant for the life of the module, compute once.
 		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
 		float scale = neutralHz / std::max(f, 1e-6f);
-		return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
+		return levi_math::clampf(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
 	}
 
 	static void enforceSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
@@ -286,7 +286,7 @@ struct Proc : Module {
 	}
 
 	static float shapeSignedFromKnob(float shape01) {
-		shape01 = clamp(shape01, 0.f, 1.f);
+		shape01 = levi_math::clampf(shape01, 0.f, 1.f);
 		if (shape01 < LINEAR_SHAPE) {
 			return (shape01 - LINEAR_SHAPE) / LINEAR_SHAPE;
 		}
@@ -299,7 +299,7 @@ struct Proc : Module {
 	static float slopeWarp(float x, float s) {
 		// Differential warp used by both function-generator and slew modes.
 		// We shape local slope, then normalize total travel time with slopeWarpScale().
-		x = clamp(x, 0.f, 1.f);
+		x = levi_math::clampf(x, 0.f, 1.f);
 		float u = std::fabs(s);
 		if (u < 1e-6f) {
 			return 1.f;
@@ -329,7 +329,7 @@ struct Proc : Module {
 	}
 
 	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
-		outputNorm = clamp(outputNorm, 0.f, 1.f);
+		outputNorm = levi_math::clampf(outputNorm, 0.f, 1.f);
 		if (std::fabs(shapeSigned) < 1e-6f) {
 			return rising ? outputNorm : (1.f - outputNorm);
 		}
@@ -343,7 +343,7 @@ struct Proc : Module {
 		}
 		const float partialIntegral = span * partialSum / float(WARP_SCALE_SAMPLES);
 		const float totalIntegral = std::max(slopeWarpScale(shapeSigned), 1e-6f);
-		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
+		return levi_math::clampf(partialIntegral / totalIntegral, 0.f, 1.f);
 	}
 
 	static float computeSegPhase(float out, float startOut, float invSpan) {
@@ -351,7 +351,7 @@ struct Proc : Module {
 			return 1.f;
 		}
 		float phase = (out - startOut) * invSpan;
-		return clamp(phase, 0.f, 1.f);
+		return levi_math::clampf(phase, 0.f, 1.f);
 	}
 
 	SlewStepResult processUnifiedShapedSlew(
@@ -400,7 +400,7 @@ struct Proc : Module {
 		stageTime = std::max(stageTime, 1e-6f);
 		float range = SLEW_REF_V_MAX - FUNCTION_V_MIN;
 		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
-		float dp = clamp(dt / stageTime, 0.f, 0.5f);
+		float dp = levi_math::clampf(dt / stageTime, 0.f, 0.5f);
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
 
 		float prevOut = out;
@@ -408,7 +408,7 @@ struct Proc : Module {
 		if ((in - prevOut) * (in - nextOut) < 0.f) {
 			float denom = nextOut - prevOut;
 			if (std::fabs(denom) > 1e-9f) {
-				result.targetFraction = clamp((in - prevOut) / denom, 1e-6f, 1.f);
+				result.targetFraction = levi_math::clampf((in - prevOut) / denom, 1e-6f, 1.f);
 			}
 			result.reachedTarget = true;
 			out = in;
@@ -428,7 +428,7 @@ struct Proc : Module {
 		if (dp <= 1e-9f) {
 			return 1.f;
 		}
-		return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
+		return levi_math::clampf(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
 	}
 
 	static void remapPhasePosForStageTimeChange(ChannelState& ch, float oldRise, float oldFall, float newRise, float newFall) {
@@ -442,12 +442,12 @@ struct Proc : Module {
 		const float oldTotal = oldRise + oldFall;
 		const float newTotal = newRise + newFall;
 		if (ch.phase == CHANNEL_RISE) {
-			const float dotX = clamp((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
-			ch.phasePos = clamp((dotX * newTotal) / newRise, 0.f, 2.f);
+			const float dotX = levi_math::clampf((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
+			ch.phasePos = levi_math::clampf((dotX * newTotal) / newRise, 0.f, 2.f);
 		}
 		else if (ch.phase == CHANNEL_FALL) {
-			const float dotX = clamp((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
-			ch.phasePos = clamp(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
+			const float dotX = levi_math::clampf((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
+			ch.phasePos = levi_math::clampf(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
 		}
 	}
 
@@ -455,7 +455,7 @@ struct Proc : Module {
 		if (newState == state) {
 			return;
 		}
-		float f = clamp(fraction01, 1e-6f, 1.f);
+		float f = levi_math::clampf(fraction01, 1e-6f, 1.f);
 		// Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
 		float p = f - 1.f;
 		float step = newState ? 10.f : -10.f;
@@ -471,7 +471,7 @@ struct Proc : Module {
 		if (std::fabs(step) < 1e-9f) {
 			return;
 		}
-		float f = clamp(fraction01, 1e-6f, 1.f);
+		float f = levi_math::clampf(fraction01, 1e-6f, 1.f);
 		float p = f - 1.f;
 		ch.signalBlep.insertDiscontinuity(p, step * ch.signalOutputGain);
 	}
@@ -504,7 +504,7 @@ struct Proc : Module {
 
 	float shapeKnobTimeCurve(float knob) const {
 		// Linear interpolation in LUT avoids powf() in the hot path.
-		knob = clamp(knob, 0.f, 1.f);
+		knob = levi_math::clampf(knob, 0.f, 1.f);
 		float idx = knob * float(KNOB_CURVE_LUT_SIZE - 1);
 		int i0 = int(idx);
 		int i1 = std::min(i0 + 1, KNOB_CURVE_LUT_SIZE - 1);
@@ -538,8 +538,8 @@ struct Proc : Module {
 
 	void publishPreviewDot(PreviewSharedState& shared, bool visible, float xNorm, float yNorm) {
 		shared.dotVersion.fetch_add(1u, std::memory_order_acq_rel);
-		shared.dotXNorm.store(clamp(xNorm, 0.f, 1.f), std::memory_order_relaxed);
-		shared.dotYNorm.store(clamp(yNorm, 0.f, 1.f), std::memory_order_relaxed);
+		shared.dotXNorm.store(levi_math::clampf(xNorm, 0.f, 1.f), std::memory_order_relaxed);
+		shared.dotYNorm.store(levi_math::clampf(yNorm, 0.f, 1.f), std::memory_order_relaxed);
 		shared.dotVisible.store(visible ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 		shared.dotVersion.fetch_add(1u, std::memory_order_release);
 	}
@@ -634,7 +634,7 @@ struct Proc : Module {
 	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
 		// Shape knob (log/lin/exp) contributes a multiplicative time factor.
 		// We interpolate in log2 domain so scaling stays perceptually smooth.
-		shape = clamp(shape, 0.f, 1.f);
+		shape = levi_math::clampf(shape, 0.f, 1.f);
 		if (shape < LINEAR_SHAPE) {
 			float t = shape / LINEAR_SHAPE;
 			return rack::dsp::exp2_taylor5((1.f - t) * logScaleLog2);
@@ -668,14 +668,14 @@ struct Proc : Module {
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
 		float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
-		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+		float stageOct = levi_math::clampf(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
 		// BOTH and curve-shape scaling are already multiplicative factors.
 		t *= bothScale;
 		t *= shapeTimeScale;
 
-		return clamp(t, absoluteMinTime, maxTime);
+		return levi_math::clampf(t, absoluteMinTime, maxTime);
 	}
 
 	void triggerFunction(ChannelState& ch) {
@@ -843,7 +843,7 @@ struct Proc : Module {
 			// Re-anchor phase to current output whenever curve changes so the tracer
 			// location is invalidated/recomputed against the updated curve shape.
 			float range = std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
-			float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
+			float x = levi_math::clampf((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
 			ch.phasePos = segmentPhaseFromOutputNorm(x, shapeSigned, ch.phase == CHANNEL_RISE);
 		}
 		float scale = ch.cachedWarpScale;
@@ -883,9 +883,9 @@ struct Proc : Module {
 			if (signalPatched) {
 				// During active cycling, shape toward the patched signal's
 				// fixed FG-domain amplitude so AMP does not alter Signal IN influence.
-				float shapedTarget = clamp(signalIn, FUNCTION_V_MIN, FG_V_MAX);
+				float shapedTarget = levi_math::clampf(signalIn, FUNCTION_V_MIN, FG_V_MAX);
 				float targetNorm = (FG_V_MAX > FUNCTION_V_MIN)
-					? clamp((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
+					? levi_math::clampf((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
 					: 0.f;
 				xIn = targetNorm;
 				injectAlpha = injectAlphaBase;
@@ -894,14 +894,14 @@ struct Proc : Module {
 			if (ch.phase == CHANNEL_RISE) {
 				float dpPhase = dt / riseTime;
 				ch.phasePos += dpPhase;
-				float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
-				float dp = clamp(dt / riseTime, 0.f, 0.5f);
+				float x = levi_math::clampf((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
+				float dp = levi_math::clampf(dt / riseTime, 0.f, 0.5f);
 				x += dp * slopeWarp(x, s) * scale;
 				if (injectAlpha > 0.f) {
 					// Hardware-like perturbation: gently pull active FG state toward input.
 					x += injectAlpha * (xIn - x);
 				}
-				x = clamp(x, 0.f, 1.f);
+				x = levi_math::clampf(x, 0.f, 1.f);
 				ch.out = FUNCTION_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x >= 1.f) {
 					// Preserve fractional overshoot so rise->fall transition remains sample-rate robust.
@@ -917,13 +917,13 @@ struct Proc : Module {
 			if (ch.phase == CHANNEL_FALL) {
 				float dpPhase = dt / fallTime;
 				ch.phasePos += dpPhase;
-				float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
-				float dp = clamp(dt / fallTime, 0.f, 0.5f);
+				float x = levi_math::clampf((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
+				float dp = levi_math::clampf(dt / fallTime, 0.f, 0.5f);
 				x -= dp * slopeWarp(x, s) * scale;
 				if (injectAlpha > 0.f) {
 					x += injectAlpha * (xIn - x);
 				}
-				x = clamp(x, 0.f, 1.f);
+				x = levi_math::clampf(x, 0.f, 1.f);
 				ch.out = FUNCTION_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x <= 0.f) {
 					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
@@ -1149,10 +1149,10 @@ struct Proc : Module {
 			float fall = std::max(ch.activeFallTime, 1e-6f);
 			float total = rise + fall;
 			if (ch.phase == CHANNEL_RISE) {
-				return clamp((ch.phasePos * rise) / total, 0.f, 1.f);
+				return levi_math::clampf((ch.phasePos * rise) / total, 0.f, 1.f);
 			}
 			if (ch.phase == CHANNEL_FALL) {
-				return clamp((rise + ch.phasePos * fall) / total, 0.f, 1.f);
+				return levi_math::clampf((rise + ch.phasePos * fall) / total, 0.f, 1.f);
 			}
 			return 0.f;
 		};
@@ -1180,8 +1180,8 @@ struct Proc : Module {
 			lights[CYCLE_LIGHT].setBrightness(channelResult.cycleOn ? 1.f : 0.f);
 			lights[EOR_LIGHT].setBrightness(channel.eorGateState ? 1.f : 0.f);
 			lights[EOC_LIGHT].setBrightness(channel.eocGateState ? 1.f : 0.f);
-			lights[MAIN_LIGHT].setBrightness(clamp(std::fabs(outRendered) / FG_V_MAX, 0.f, 1.f));
-			lights[NEG_LIGHT].setBrightness(clamp(std::fabs(negOut) / FG_V_MAX, 0.f, 1.f));
+			lights[MAIN_LIGHT].setBrightness(levi_math::clampf(std::fabs(outRendered) / FG_V_MAX, 0.f, 1.f));
+			lights[NEG_LIGHT].setBrightness(levi_math::clampf(std::fabs(negOut) / FG_V_MAX, 0.f, 1.f));
 		}
 		if (measurePerf) {
 			debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
@@ -1298,7 +1298,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 		}
 
 		const int paramId = edge == 1 ? Proc::RISE_PARAM : Proc::FALL_PARAM;
-		const float amount = clamp(modulePtr->params[paramId].getValue(), 0.f, 1.f);
+		const float amount = levi_math::clampf(modulePtr->params[paramId].getValue(), 0.f, 1.f);
 		return nvgRGBAf(
 			purple.r + (cyan.r - purple.r) * amount,
 			purple.g + (cyan.g - purple.g) * amount,
@@ -1313,7 +1313,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 			return orange;
 		}
 
-		const float amount = clamp(modulePtr->params[Proc::SHAPE_PARAM].getValue(), 0.f, 1.f);
+		const float amount = levi_math::clampf(modulePtr->params[Proc::SHAPE_PARAM].getValue(), 0.f, 1.f);
 		return nvgRGBAf(
 			orange.r + (yellow.r - orange.r) * amount,
 			orange.g + (yellow.g - orange.g) * amount,
@@ -1498,8 +1498,8 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 			float bottom = std::max(top + 1.f, h - drawPad);
 			float drawW = right - left;
 			float drawH = bottom - top;
-			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
+			float targetX = left + levi_math::clampf(dotXNorm, 0.f, 1.f) * drawW;
+			float targetY = top + (1.f - levi_math::clampf(dotYNorm, 0.f, 1.f)) * drawH;
 			// Keep the marker on the drawn curve, but use continuous interpolation
 			// across neighboring points to avoid visible stepping at slow rates.
 			int i0 = 0;
@@ -1516,7 +1516,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 			float x = targetX;
 			float y = points[i0].y;
 			if (i1 != i0 && x1 > x0) {
-				float t = clamp((targetX - x0) / (x1 - x0), 0.f, 1.f);
+				float t = levi_math::clampf((targetX - x0) / (x1 - x0), 0.f, 1.f);
 				y = points[i0].y + (points[i1].y - points[i0].y) * t;
 			}
 			float blendToCurve = 0.9f;
@@ -1658,9 +1658,9 @@ struct ProcLinearPointOverlay : TransparentWidget {
 		const float lineRadius = mm2px(Vec(LINE_RADIUS_MM, 0.f)).x;
 		const float labelRadius = mm2px(Vec(LABEL_RADIUS_MM, 0.f)).x;
 		const float tangentOffset = mm2px(Vec(LABEL_TANGENT_OFFSET_MM, 0.f)).x
-			* clamp(std::fabs(LINEAR_SHAPE_VALUE - SHARK_FIN_LINEAR_SHAPE_VALUE)
+			* levi_math::clampf(std::fabs(LINEAR_SHAPE_VALUE - SHARK_FIN_LINEAR_SHAPE_VALUE)
 				/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
-		const float topBlend = clamp((LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE)
+		const float topBlend = levi_math::clampf((LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE)
 			/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
 		const float labelYOffset = mm2px(Vec(0.f, LABEL_Y_OFFSET_MM + LABEL_TOP_Y_OFFSET_MM * topBlend)).y;
 		const Vec mirrorOffset = mm2px(Vec(

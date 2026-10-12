@@ -1,4 +1,5 @@
 #include "Nautiloid.hpp"
+#include "MathHelpers.hpp"
 #include "UiExpanderUtils.hpp"
 #include "Iris.hpp"
 #include "NautiloidCachePolicy.hpp"
@@ -267,9 +268,9 @@ bool cropDisplayCacheGenerationToSize(
     return false;
   }
   const float generationZoomScale =
-    std::pow(0.05f, clamp(generation.zoom, 0.f, kNautiloidMaxFractalZoom));
+    std::pow(0.05f, levi_math::clampf(generation.zoom, 0.f, kNautiloidMaxFractalZoom));
   const float requestedZoomScale =
-    std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
+    std::pow(0.05f, levi_math::clampf(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec cacheHalfSpan = nautiloidFractalViewportHalfSpan(mode).mult(
     generationZoomScale).mult(generation.cacheScale);
   const Vec requestedHalfSpan = nautiloidFractalViewportHalfSpan(mode).mult(
@@ -359,7 +360,7 @@ bool displayTileCacheCoversView(
   double centerY,
   float cacheScale) {
   if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
-  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
+  const float zoomScale = std::pow(0.05f, levi_math::clampf(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
   const float marginX = (cacheScale - 1.f) * halfSpan.x;
   const float marginY = (cacheScale - 1.f) * halfSpan.y;
@@ -375,7 +376,7 @@ bool displayTileCacheNeedsTileShiftRecentering(
   double centerY,
   float cacheScale) {
   if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
-  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
+  const float zoomScale = std::pow(0.05f, levi_math::clampf(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
   const float tileWorldX = 2.f * halfSpan.x * cacheScale * float(kDisplayTileSize) / float(kFractalCacheWidth);
   const float tileWorldY = 2.f * halfSpan.y * cacheScale * float(kDisplayTileSize) / float(kFractalCacheHeight);
@@ -406,7 +407,7 @@ bool computeTileAlignedCacheCenter(
   int* shiftRows) {
   if (!alignedCenterX || !alignedCenterY || !shiftColumns || !shiftRows) return false;
   if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
-  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
+  const float zoomScale = std::pow(0.05f, levi_math::clampf(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
   const float tileWorldX = 2.f * halfSpan.x * cacheScale * float(kDisplayTileSize) / float(kFractalCacheWidth);
   const float tileWorldY = 2.f * halfSpan.y * cacheScale * float(kDisplayTileSize) / float(kFractalCacheHeight);
@@ -473,8 +474,8 @@ std::vector<Vec> makeDisplayTileOrder(float centerX, float centerY) {
 
 uint8_t bilinearChannel(const iris::SourceField& source, float x, float y, int channel) {
   if (source.width <= 0 || source.height <= 0 || source.rgb8.empty()) return 0u;
-  x = clamp(x, 0.f, float(source.width - 1));
-  y = clamp(y, 0.f, float(source.height - 1));
+  x = levi_math::clampf(x, 0.f, float(source.width - 1));
+  y = levi_math::clampf(y, 0.f, float(source.height - 1));
   const int x0 = clamp(int(std::floor(x)), 0, source.width - 1);
   const int y0 = clamp(int(std::floor(y)), 0, source.height - 1);
   const int x1 = std::min(x0 + 1, source.width - 1);
@@ -740,17 +741,17 @@ void Nautiloid::process(const ProcessArgs& args) {
   const bool zoomRateConnected = inputs[ZOOM_RATE_INPUT].isConnected();
   zoomRateCvConnected.store(zoomRateConnected, std::memory_order_relaxed);
   zoomRateCvNorm.store(
-    zoomRateConnected ? clamp(inputs[ZOOM_RATE_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    zoomRateConnected ? levi_math::clampf(inputs[ZOOM_RATE_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
     std::memory_order_relaxed);
   const bool xVelocityConnected = inputs[X_VELOCITY_INPUT].isConnected();
   xVelocityCvConnected.store(xVelocityConnected, std::memory_order_relaxed);
   xVelocityCvNorm.store(
-    xVelocityConnected ? clamp(inputs[X_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    xVelocityConnected ? levi_math::clampf(inputs[X_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
     std::memory_order_relaxed);
   const bool yVelocityConnected = inputs[Y_VELOCITY_INPUT].isConnected();
   yVelocityCvConnected.store(yVelocityConnected, std::memory_order_relaxed);
   yVelocityCvNorm.store(
-    yVelocityConnected ? clamp(inputs[Y_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    yVelocityConnected ? levi_math::clampf(inputs[Y_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
     std::memory_order_relaxed);
 
   Module* right = rightExpander.module;
@@ -936,7 +937,7 @@ void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCe
   const FractalState state = fractalStateSnapshot();
   DisplayWorkerRequest request;
   request.mode = state.mode;
-  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.zoom = levi_math::clampf(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
   request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
@@ -950,7 +951,7 @@ void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheC
   const FractalState state = fractalStateSnapshot();
   DisplayWorkerRequest request;
   request.mode = state.mode;
-  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.zoom = levi_math::clampf(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
   request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
@@ -1003,7 +1004,7 @@ void Nautiloid::requestIrisSourceSync() {
   }
   DisplayWorkerRequest request;
   request.mode = state.mode;
-  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.zoom = levi_math::clampf(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
   request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   submitIrisRequest(request, nautiloid_requests::InteractionPhase::Final, true);
@@ -1018,7 +1019,7 @@ void Nautiloid::serviceIrisConsumerDemand() {
   const FractalState state = fractalStateSnapshot();
   DisplayWorkerRequest request;
   request.mode = state.mode;
-  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.zoom = levi_math::clampf(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
   request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   submitIrisRequest(request, nautiloid_requests::InteractionPhase::Final, force);
@@ -1385,9 +1386,9 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     return false;
   }
   const Vec oldHalfSpan = nautiloidFractalViewportHalfSpan(baseMode).mult(
-    std::pow(0.05f, clamp(baseZoom, 0.f, kNautiloidMaxFractalZoom)));
+    std::pow(0.05f, levi_math::clampf(baseZoom, 0.f, kNautiloidMaxFractalZoom)));
   const Vec newHalfSpan = nautiloidFractalViewportHalfSpan(request.mode).mult(
-    std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom)));
+    std::pow(0.05f, levi_math::clampf(request.zoom, 0.f, kNautiloidMaxFractalZoom)));
   if (oldHalfSpan.x <= 0.f || oldHalfSpan.y <= 0.f || newHalfSpan.x <= 0.f || newHalfSpan.y <= 0.f) {
     return false;
   }
@@ -1433,7 +1434,7 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     retainedCache->validTileCount() > 0u && retainedCache->mode == request.mode;
   const Vec cacheHalfSpan = cacheUsable
     ? nautiloidFractalViewportHalfSpan(currentCache->mode).mult(
-        std::pow(0.05f, clamp(currentCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
+        std::pow(0.05f, levi_math::clampf(currentCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
           currentCache->cacheScale)
     : Vec();
   std::array<Vec, kZoomAheadLayerCount> aheadHalfSpans;
@@ -1442,14 +1443,14 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     if (layer.valid() && layer.mode == request.mode &&
         std::fabs(request.zoom - layer.zoom) <= kZoomAheadLeads[size_t(i)] * 1.35f) {
       aheadHalfSpans[size_t(i)] = nautiloidFractalViewportHalfSpan(layer.mode).mult(
-        std::pow(0.05f, clamp(layer.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(layer.cacheScale);
+        std::pow(0.05f, levi_math::clampf(layer.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(layer.cacheScale);
     } else {
       aheadHalfSpans[size_t(i)] = Vec();
     }
   }
   const Vec retainedCacheHalfSpan = retainedCacheUsable
     ? nautiloidFractalViewportHalfSpan(retainedCache->mode).mult(
-        std::pow(0.05f, clamp(retainedCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
+        std::pow(0.05f, levi_math::clampf(retainedCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
           retainedCache->cacheScale)
     : Vec();
 
@@ -1611,7 +1612,7 @@ bool Nautiloid::publishDisplayCacheComposite(
 void Nautiloid::renderZoomAheadCaches(const DisplayWorkerRequest& request) {
   for (int layerIndex = 0; layerIndex < kZoomAheadLayerCount; ++layerIndex) {
     if (!isCpuFallbackActive()) return;
-    const float aheadZoom = clamp(
+    const float aheadZoom = levi_math::clampf(
       request.zoom + kZoomAheadLeads[size_t(layerIndex)], 0.f, kNautiloidMaxFractalZoom);
     if (aheadZoom <= request.zoom + 1e-4f) continue;
 
@@ -1959,11 +1960,11 @@ void Nautiloid::cacheWorkerLoop() {
     nautiloid_cache::CompositePublishPolicy compositePublishPolicy;
     const float visibleCenterX = float((0.5 + (request.centerX - targetCacheCenterX) /
       (2.0 * double(nautiloidFractalViewportHalfSpan(request.mode).mult(
-        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).x) * double(kFractalCacheScale))) *
+        std::pow(0.05f, levi_math::clampf(request.zoom, 0.f, kNautiloidMaxFractalZoom))).x) * double(kFractalCacheScale))) *
       double(kFractalCacheWidth));
     const float visibleCenterY = float((0.5 + (request.centerY - targetCacheCenterY) /
       (2.0 * double(nautiloidFractalViewportHalfSpan(request.mode).mult(
-        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).y) * double(kFractalCacheScale))) *
+        std::pow(0.05f, levi_math::clampf(request.zoom, 0.f, kNautiloidMaxFractalZoom))).y) * double(kFractalCacheScale))) *
       double(kFractalCacheHeight));
     const std::vector<Vec> tileOrder = makeDisplayTileOrder(visibleCenterX, visibleCenterY);
     for (const Vec& tilePos : tileOrder) {

@@ -1,4 +1,5 @@
 #include "ChronomawEngine.hpp"
+#include "MathHelpers.hpp"
 #include "ChronomawWaveforms.hpp"
 
 #include "plugin.hpp"
@@ -45,7 +46,7 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 			prevOutputValid_[size_t(i)] = false;
 		}
 	}
-	live.bpm = clamp(live.bpm, kMinBpm, kMaxBpm);
+	live.bpm = levi_math::clampf(live.bpm, kMinBpm, kMaxBpm);
 	if (!live.running) {
 		currentGate_ = 0.f;
 			out->running = false;
@@ -118,13 +119,13 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 			const uint64_t channelCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
 			const float internalV = live.running ? waveformInternalVoltage(ch, channelPhase, channelCycle) : kOutputMinV;
 			out->internalVolts[idx] = internalV;
-			const float level = clamp(ch.levelPct * 0.01f, 0.f, 1.f);
-			const float offset = clamp(ch.offsetPct * 0.01f, -1.f, 1.f);
+			const float level = levi_math::clampf(ch.levelPct * 0.01f, 0.f, 1.f);
+			const float offset = levi_math::clampf(ch.offsetPct * 0.01f, -1.f, 1.f);
 			float outV = internalV * level + offset * kOutputMaxV;
 			if (ch.invert) {
 				outV = kOutputMaxV - outV;
 			}
-			out->outVolts[idx] = clamp(outV, kOutputMinV, kOutputMaxV);
+			out->outVolts[idx] = levi_math::clampf(outV, kOutputMinV, kOutputMaxV);
 		}
 		out->timingPhaseOffsets[idx] = timingPhaseOffsets_[idx];
 		prevOutputs_[idx] = ch;

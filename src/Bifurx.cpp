@@ -1,4 +1,5 @@
 #include "BifurxModule.hpp"
+#include "MathHelpers.hpp"
 #include "BifurxPreview.hpp"
 #include "BifurxLicense.hpp"
 
@@ -134,9 +135,9 @@ constexpr float kSelfOscPlateauHeatTrim = 1.08f;
 constexpr float kSvfSelfOscDampingMin = 0.0005f;
 
 SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dampingMin) {
-	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sampleRate);
+	const float limitedCutoff = levi_math::clampf(cutoff, 4.f, 0.46f * sampleRate);
 	const float g = fastTan(kPi * limitedCutoff / sampleRate);
-	const float k = clamp(damping, dampingMin, kSvfDampingMax);
+	const float k = levi_math::clampf(damping, dampingMin, kSvfDampingMax);
 	const float a1 = 1.f / (1.f + g * (g + k));
 	SvfCoeffs coeffs;
 	coeffs.g = g;
@@ -225,8 +226,8 @@ void sanitizeCoreState(TptSvf& core) {
 		core.ic1eq = 0.f;
 		core.ic2eq = 0.f;
 	}
-	core.ic1eq = clamp(core.ic1eq, -20.f, 20.f);
-	core.ic2eq = clamp(core.ic2eq, -20.f, 20.f);
+	core.ic1eq = levi_math::clampf(core.ic1eq, -20.f, 20.f);
+	core.ic2eq = levi_math::clampf(core.ic2eq, -20.f, 20.f);
 }
 
 SvfOutputs processCharacterStage(
@@ -316,7 +317,7 @@ float onePoleAlpha(float dt, float tauSeconds) {
 }
 
 float logPosition(float hz, float minHz, float maxHz) {
-	const float safeHz = clamp(hz, minHz, maxHz);
+	const float safeHz = levi_math::clampf(hz, minHz, maxHz);
 	return std::log(safeHz / minHz) / std::log(maxHz / minHz);
 }
 
@@ -327,25 +328,25 @@ float logFrequencyAt(float x01, float minHz, float maxHz) {
 float bifurxFrequencyHzFromParam(float paramValue) {
 	// Quantity display/editing is not an audio-rate path. Keep it accurately
 	// invertible instead of inheriting the coarse fast-log/exp approximations.
-	return kFreqMinHz * std::exp2(kFreqLog2Span * clamp(paramValue, 0.f, 1.f));
+	return kFreqMinHz * std::exp2(kFreqLog2Span * levi_math::clampf(paramValue, 0.f, 1.f));
 }
 
 float bifurxParamFromFrequencyHz(float hz) {
-	const float safeHz = clamp(hz, kFreqMinHz, kFreqMaxHz);
-	return clamp(std::log2(safeHz / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
+	const float safeHz = levi_math::clampf(hz, kFreqMinHz, kFreqMaxHz);
+	return levi_math::clampf(std::log2(safeHz / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
 }
 
 float bifurxSpanSemitonesFromParam(float paramValue) {
-	return 96.f * bifurx::shapedSpan(clamp(paramValue, 0.f, 1.f));
+	return 96.f * bifurx::shapedSpan(levi_math::clampf(paramValue, 0.f, 1.f));
 }
 
 float bifurxParamFromSpanSemitones(float spanSemitones) {
-	const float safeSpan = clamp(spanSemitones, 0.f, 96.f);
-	return clamp(std::pow(safeSpan / 96.f, 1.f / 1.45f), 0.f, 1.f);
+	const float safeSpan = levi_math::clampf(spanSemitones, 0.f, 96.f);
+	return levi_math::clampf(std::pow(safeSpan / 96.f, 1.f / 1.45f), 0.f, 1.f);
 }
 
 float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, float topY) {
-	const float clampedDb = clamp(db, minDb, maxDb);
+	const float clampedDb = levi_math::clampf(db, minDb, maxDb);
 	const float midY = 0.5f * (bottomY + topY);
 
 	if (clampedDb >= 0.f) {
@@ -375,9 +376,9 @@ float resoToDamping(float resoNorm) {
 }
 
 float signedWeight(float balance, bool upperPeak) {
-	const float b = clamp(balance, -1.f, 1.f);
+	const float b = levi_math::clampf(balance, -1.f, 1.f);
 	// Slight cubic emphasis: keep midpoint behavior close, push harder near extremes.
-	const float shaped = clamp(b + 0.35f * b * b * b, -1.f, 1.f);
+	const float shaped = levi_math::clampf(b + 0.35f * b * b * b, -1.f, 1.f);
 	const float sign = upperPeak ? 1.f : -1.f;
 	return fastExp(0.82f * sign * shaped);
 }
@@ -622,19 +623,19 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool visualDemand = analysisVisualSubscribers.load(std::memory_order_acquire) > 0
 		&& (!visualWatchdogEnabled.load(std::memory_order_relaxed) || visualLeaseSamples > 0);
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
-	const float tito = clamp(params[TITO_PARAM].getValue(), -1.f, 1.f);
+	const float tito = levi_math::clampf(params[TITO_PARAM].getValue(), -1.f, 1.f);
 	const float titoAbs = std::fabs(tito);
 	const bool titoNeutral = titoAbs < 0.02f;
-	const float freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
+	const float freqParamNorm = levi_math::clampf(params[FREQ_PARAM].getValue(), 0.f, 1.f);
 	const bool voctConnected = inputs[VOCT_INPUT].isConnected();
 	// V/Oct is a calibrated pitch input, so follow it directly. Any glide is an
 	// explicit patching choice rather than an undocumented module behavior.
-	const float voctCv = voctConnected ? clamp(bifurx::sanitizeFinite(inputs[VOCT_INPUT].getVoltage()), -10.f, 10.f) : 0.f;
+	const float voctCv = voctConnected ? levi_math::clampf(bifurx::sanitizeFinite(inputs[VOCT_INPUT].getVoltage()), -10.f, 10.f) : 0.f;
 	const bool fmConnected = inputs[FM_INPUT].isConnected();
 	const bool resoCvConnected = inputs[RESO_CV_INPUT].isConnected();
 	const bool balanceCvConnected = inputs[BALANCE_CV_INPUT].isConnected();
 	const bool spanCvConnected = inputs[SPAN_CV_INPUT].isConnected();
-	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(bifurx::sanitizeFinite(inputs[FM_INPUT].getVoltage()), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt;
+	const float fmAmt = levi_math::clampf(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? levi_math::clampf(bifurx::sanitizeFinite(inputs[FM_INPUT].getVoltage()), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt;
 	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
 	const bool audioRateControlsActive = voctConnected || fmConnected;
 	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
@@ -702,14 +703,14 @@ void Bifurx::process(const ProcessArgs& args) {
 	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct;
 	bool slowDerivedStateChanged = false;
 	if (inspectSlowControls) {
-		const float resoCvNorm = resoCvConnected ? clamp(bifurx::sanitizeFinite(inputs[RESO_CV_INPUT].getVoltage()), 0.f, 8.f) / 8.f : 0.f;
-		const float nextResoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
-		const float balanceCvNorm = balanceCvConnected ? clamp(bifurx::sanitizeFinite(inputs[BALANCE_CV_INPUT].getVoltage()), -5.f, 5.f) / 5.f : 0.f;
-		const float nextBalanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
-		const float nextSpanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
-		const float nextSpanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
-		const float nextSpanCvNorm = spanCvConnected ? clamp(bifurx::sanitizeFinite(inputs[SPAN_CV_INPUT].getVoltage()), -10.f, 10.f) / 5.f : 0.f;
-		const float nextSpanNorm = clamp(nextSpanParamNorm + 0.5f * nextSpanAtten * nextSpanCvNorm, 0.f, 1.f);
+		const float resoCvNorm = resoCvConnected ? levi_math::clampf(bifurx::sanitizeFinite(inputs[RESO_CV_INPUT].getVoltage()), 0.f, 8.f) / 8.f : 0.f;
+		const float nextResoNorm = levi_math::clampf(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
+		const float balanceCvNorm = balanceCvConnected ? levi_math::clampf(bifurx::sanitizeFinite(inputs[BALANCE_CV_INPUT].getVoltage()), -5.f, 5.f) / 5.f : 0.f;
+		const float nextBalanceNorm = levi_math::clampf(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
+		const float nextSpanParamNorm = levi_math::clampf(params[SPAN_PARAM].getValue(), 0.f, 1.f);
+		const float nextSpanAtten = levi_math::clampf(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
+		const float nextSpanCvNorm = spanCvConnected ? levi_math::clampf(bifurx::sanitizeFinite(inputs[SPAN_CV_INPUT].getVoltage()), -10.f, 10.f) / 5.f : 0.f;
+		const float nextSpanNorm = levi_math::clampf(nextSpanParamNorm + 0.5f * nextSpanAtten * nextSpanCvNorm, 0.f, 1.f);
 		const bool slowSourcesChanged = initializeControlState
 			|| nextResoNorm != cachedResoNorm
 			|| nextBalanceNorm != cachedBalanceNorm
@@ -739,8 +740,8 @@ void Bifurx::process(const ProcessArgs& args) {
 			spanOct = 8.f * bifurx::shapedSpan(spanNorm);
 			balance = balanceNorm;
 			const float baseDamping = resoToDamping(resoNorm);
-			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
-			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
+			dampingA = levi_math::clampf(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
+			dampingB = levi_math::clampf(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 			const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW);
 			wA = lowW * norm;
 			wB = highW * norm;
@@ -764,7 +765,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		const float effectiveSpanOct = std::min(spanOct, availableOctaves);
 		const float halfSpanOct = 0.5f * effectiveSpanOct;
 		const float requestedCenterOct = kFreqLog2Span * freqParamNorm + voctCv + fm;
-		const float shiftedCenterOct = clamp(requestedCenterOct, halfSpanOct, availableOctaves - halfSpanOct);
+		const float shiftedCenterOct = levi_math::clampf(requestedCenterOct, halfSpanOct, availableOctaves - halfSpanOct);
 		freqA0 = kFreqMinHz * fastExp2(shiftedCenterOct - halfSpanOct);
 		freqB0 = kFreqMinHz * fastExp2(shiftedCenterOct + halfSpanOct);
 		cachedFreqA0 = freqA0; cachedFreqB0 = freqB0;
@@ -826,7 +827,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		float modA = 0.f, modB = 0.f;
 		if (tito < 0.f) { modA = depthScaled * coreA.ic1eq; modB = depthScaled * coreB.ic1eq; }
 		else { modA = depthScaled * coreB.ic1eq; modB = depthScaled * coreA.ic1eq; }
-		cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
+		cutoffA = freqA0 * fastExp2(levi_math::clampf(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(levi_math::clampf(modB, -2.5f, 2.5f));
 		updateTitoCoeffs(titoCoeffsA, titoCoeffFreqA, titoCoeffDampingA, titoCoeffSampleRateA, cutoffA, dampingA, args.sampleRate, titoCoeffRelativeThreshold, titoCoeffAbsoluteThresholdHz);
 		updateTitoCoeffs(titoCoeffsB, titoCoeffFreqB, titoCoeffDampingB, titoCoeffSampleRateB, cutoffB, dampingB, args.sampleRate, titoCoeffRelativeThreshold, titoCoeffAbsoluteThresholdHz);
 		coeffsAForSample = &titoCoeffsA;
@@ -880,7 +881,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	// operating-point shift. Apply a slow correction before the limiter, while
 	// measuring the final audible output below so limiter asymmetry is included.
 	// Neutral TITO and XM retain their existing output exactly.
-	const float titoSmDcMix = displayOnlyMode ? 0.f : clamp((-tito - 0.02f) / 0.98f, 0.f, 1.f);
+	const float titoSmDcMix = displayOnlyMode ? 0.f : levi_math::clampf((-tito - 0.02f) / 0.98f, 0.f, 1.f);
 	const float dcCorrectedModeOut = modeOut - titoSmDcMix * titoSmDcCorrection;
 
 	const float targetOut = displayOnlyMode ? in
@@ -900,7 +901,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		titoSmDcCorrection += titoSmDcAlpha * (0.f - titoSmDcCorrection);
 	}
 	if (!std::isfinite(titoSmDcCorrection)) titoSmDcCorrection = 0.f;
-	titoSmDcCorrection = clamp(titoSmDcCorrection, -10.f, 10.f);
+	titoSmDcCorrection = levi_math::clampf(titoSmDcCorrection, -10.f, 10.f);
 	const bool diagnosticsActive = debugEnabled && curveDebugLogging.load(std::memory_order_relaxed);
 	const float llAlpha = llTelemetryAlpha;
 	if (diagnosticsActive) {
@@ -935,9 +936,9 @@ void Bifurx::process(const ProcessArgs& args) {
 		if (shouldUpdatePreviewState) {
 			const int elapsedSamples = std::max(previewSampleAccum, 1);
 			previewSampleAccum = 0;
-			const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
+			const float pTFqA = levi_math::clampf(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = levi_math::clampf(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / levi_math::clampf(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / levi_math::clampf(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
 			const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
-			const float oneMinusAlpha = clamp(1.f - pSmAlpha, 0.f, 1.f);
+			const float oneMinusAlpha = levi_math::clampf(1.f - pSmAlpha, 0.f, 1.f);
 			if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
 			const float tMAOct = std::fabs(fastLog2(std::max(pTFqA, 1.f)) - fastLog2(std::max(previewPrevTargetFreqA, 1.f)));
 			const float tMBOct = std::fabs(fastLog2(std::max(pTFqB, 1.f)) - fastLog2(std::max(previewPrevTargetFreqB, 1.f)));

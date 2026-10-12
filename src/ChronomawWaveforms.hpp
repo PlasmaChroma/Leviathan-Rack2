@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChronomawState.hpp"
+#include "MathHelpers.hpp"
 #include "plugin.hpp"
 #include <array>
 #include <cmath>
@@ -98,11 +99,11 @@ inline const WaveformLuts& waveformLuts() {
 			const float s = 0.5f * (std::sin(kTwoPi * p - kHalfPi) + 1.f);
 			const float e = std::exp(-6.f * p);
 			const float l = 1.f - std::log1p(9.f * p) / std::log1p(9.f);
-			out.triangle[size_t(i)] = clamp(tri * kOutputMaxV, kOutputMinV, kOutputMaxV);
-			out.trapezoid[size_t(i)] = clamp(trap * kOutputMaxV, kOutputMinV, kOutputMaxV);
-			out.sine[size_t(i)] = clamp(s * kOutputMaxV, kOutputMinV, kOutputMaxV);
-			out.expEnv[size_t(i)] = clamp(e * kOutputMaxV, kOutputMinV, kOutputMaxV);
-			out.logEnv[size_t(i)] = clamp(l * kOutputMaxV, kOutputMinV, kOutputMaxV);
+			out.triangle[size_t(i)] = levi_math::clampf(tri * kOutputMaxV, kOutputMinV, kOutputMaxV);
+			out.trapezoid[size_t(i)] = levi_math::clampf(trap * kOutputMaxV, kOutputMinV, kOutputMaxV);
+			out.sine[size_t(i)] = levi_math::clampf(s * kOutputMaxV, kOutputMinV, kOutputMaxV);
+			out.expEnv[size_t(i)] = levi_math::clampf(e * kOutputMaxV, kOutputMinV, kOutputMaxV);
+			out.logEnv[size_t(i)] = levi_math::clampf(l * kOutputMaxV, kOutputMinV, kOutputMaxV);
 		}
 		return out;
 	}();
@@ -126,13 +127,13 @@ inline float unitRand(uint32_t seed, uint64_t cycle) {
 }
 
 inline double effectiveTimingMultiplier(const OutputState& outState) {
-	const double raw = double(clamp(outState.multiplier, 1.f / 16384.f, 192.f));
+	const double raw = double(levi_math::clampf(outState.multiplier, 1.f / 16384.f, 192.f));
 	if (outState.modifierMode == ModifierMode::Div) {
-		const double divisor = double(clamp(std::round(float(1.0 / std::max(1.0 / 16384.0, raw))), 1.f, 16384.f));
+		const double divisor = double(levi_math::clampf(std::round(float(1.0 / std::max(1.0 / 16384.0, raw))), 1.f, 16384.f));
 		return 1.0 / divisor;
 	}
 	if (outState.modifierMode == ModifierMode::Mult) {
-		return double(clamp(std::round(float(raw)), 1.f, 192.f));
+		return double(levi_math::clampf(std::round(float(raw)), 1.f, 192.f));
 	}
 	return raw;
 }
@@ -140,8 +141,8 @@ inline double effectiveTimingMultiplier(const OutputState& outState) {
 inline double rawTimingPhase(const OutputState& outState, double basePhase01) {
 	double p = basePhase01;
 	p *= effectiveTimingMultiplier(outState);
-	p += double(clamp(outState.phasePct * 0.005f, -0.5f, 0.5f));
-	p += double(clamp(outState.rotatePct * 0.005f, -0.5f, 0.5f));
+	p += double(levi_math::clampf(outState.phasePct * 0.005f, -0.5f, 0.5f));
+	p += double(levi_math::clampf(outState.rotatePct * 0.005f, -0.5f, 0.5f));
 	return p;
 }
 
@@ -149,25 +150,25 @@ inline float applyTimingPhase(const OutputState& outState, double basePhase01) {
 	double p = rawTimingPhase(outState, basePhase01);
 	p -= std::floor(p);
 
-	const float swing = clamp(outState.swingPct * 0.01f, -1.f, 1.f);
+	const float swing = levi_math::clampf(outState.swingPct * 0.01f, -1.f, 1.f);
 	const float halfScale = 1.f + 0.6f * swing;
 	if (p < 0.5f) {
 		p = 0.5f * clamp((p / 0.5f) / std::max(0.2f, halfScale), 0.f, 1.f);
 	}
 	else {
 		const float t = (p - 0.5f) / 0.5f;
-		p = 0.5f + 0.5f * clamp(t * std::max(0.2f, halfScale), 0.f, 1.f);
+		p = 0.5f + 0.5f * levi_math::clampf(t * std::max(0.2f, halfScale), 0.f, 1.f);
 	}
 
-	const float skew = clamp(outState.skewPct * 0.01f, -1.f, 1.f);
+	const float skew = levi_math::clampf(outState.skewPct * 0.01f, -1.f, 1.f);
 	const float gamma = (skew >= 0.f) ? (1.f / (1.f + 1.8f * skew)) : (1.f - 0.65f * skew);
-	p = std::pow(double(clamp(float(p), 0.f, 1.f)), double(clamp(gamma, 0.25f, 4.f)));
+	p = std::pow(double(levi_math::clampf(float(p), 0.f, 1.f)), double(levi_math::clampf(gamma, 0.25f, 4.f)));
 	return float(p - std::floor(p));
 }
 
 inline float waveformInternalVoltage(const OutputState& outState, float phase01, uint64_t cycle) {
 	const float p = phase01 - std::floor(phase01);
-	const float width = clamp(outState.widthPct * 0.01f, 0.01f, 1.f);
+	const float width = levi_math::clampf(outState.widthPct * 0.01f, 0.01f, 1.f);
 	const WaveformMode waveform = outState.waveform;
 	switch (waveform) {
 	case WaveformMode::RatchetX2: {
@@ -195,27 +196,27 @@ inline float waveformInternalVoltage(const OutputState& outState, float phase01,
 		// One-cycle parabola hump peaking at mid-cycle.
 		const float d = p - 0.5f;
 		const float hump = std::max(0.f, 1.f - 4.f * d * d);
-		return clamp(hump * kOutputMaxV, kOutputMinV, kOutputMaxV);
+		return levi_math::clampf(hump * kOutputMaxV, kOutputMinV, kOutputMaxV);
 	}
 	case WaveformMode::ExpEnvelope: {
 		// Instant peak at cycle start, smooth exponential decay over cycle.
-		const float t = clamp(p / width, 0.f, 1.f);
+		const float t = levi_math::clampf(p / width, 0.f, 1.f);
 		return sampleLut(waveformLuts().expEnv, t);
 	}
 	case WaveformMode::LogEnvelope: {
 		// Instant peak at cycle start, logarithmic-style decay (longer tail).
-		const float t = clamp(p / width, 0.f, 1.f);
+		const float t = levi_math::clampf(p / width, 0.f, 1.f);
 		return sampleLut(waveformLuts().logEnv, t);
 	}
 	case WaveformMode::ClassicRandom: {
 		const float r = unitRand(outState.randomSeed, cycle);
-		return clamp(r * kOutputMaxV, kOutputMinV, kOutputMaxV);
+		return levi_math::clampf(r * kOutputMaxV, kOutputMinV, kOutputMaxV);
 	}
 	case WaveformMode::SmoothRandom: {
 		const float r0 = unitRand(outState.randomSeed, cycle);
 		const float r1 = unitRand(outState.randomSeed, cycle + 1u);
 		const float s = r0 + (r1 - r0) * p;
-		return clamp(s * kOutputMaxV, kOutputMinV, kOutputMaxV);
+		return levi_math::clampf(s * kOutputMaxV, kOutputMinV, kOutputMaxV);
 	}
 	case WaveformMode::Gate:
 	default:
@@ -229,13 +230,13 @@ inline float renderOutputVoltage(const OutputState& outState, bool running, doub
 	if (outState.muted) {
 		return 0.f;
 	}
-	const float level = clamp(outState.levelPct * 0.01f, 0.f, 1.f);
-	const float offset = clamp(outState.offsetPct * 0.01f, -1.f, 1.f);
+	const float level = levi_math::clampf(outState.levelPct * 0.01f, 0.f, 1.f);
+	const float offset = levi_math::clampf(outState.offsetPct * 0.01f, -1.f, 1.f);
 	float v = internalV * level + offset * kOutputMaxV;
 	if (outState.invert) {
 		v = kOutputMaxV - v;
 	}
-	return clamp(v, kOutputMinV, kOutputMaxV);
+	return levi_math::clampf(v, kOutputMinV, kOutputMaxV);
 }
 
 } // namespace chronomaw

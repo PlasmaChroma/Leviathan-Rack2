@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 #include "SibylControl.hpp"
 #include "SibylResponse.hpp"
 #include "SibylCapabilities.hpp"
@@ -547,7 +548,7 @@ struct SibylModule : Module, SibylControl {
 				const sibyl::Scene& arrangedScene = composition.arrangement[index];
 				cumulativeBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
 					* std::max(1, arrangedScene.repeats);
-				cache.progressSegmentEnds[index] = clamp(
+				cache.progressSegmentEnds[index] = levi_math::clampf(
 					static_cast<float>(cumulativeBeats / cache.arrangementBeats), 0.f, 1.f);
 			}
 		}
@@ -611,13 +612,13 @@ struct SibylModule : Module, SibylControl {
 				display.sceneRepeat = telemetry.sceneRepeat;
 				display.sceneRepeats = cache.sceneRepeats;
 				display.sceneProgress = cache.sceneLengthBeats > 0.f
-					? clamp(static_cast<float>(telemetry.scenePhase / cache.sceneLengthBeats), 0.f, 1.f) : 0.f;
+					? levi_math::clampf(static_cast<float>(telemetry.scenePhase / cache.sceneLengthBeats), 0.f, 1.f) : 0.f;
 				if (cache.arrangementBeats > 0.0) {
 					const int repeat = clamp(telemetry.sceneRepeat, 0, cache.sceneRepeats - 1);
 					const double completedBeats = cache.completedSceneBeats +
 						static_cast<double>(cache.sceneLengthBeats)
 						* (repeat + display.sceneProgress);
-					display.arrangementProgress = clamp(
+					display.arrangementProgress = levi_math::clampf(
 						static_cast<float>(completedBeats / cache.arrangementBeats), 0.f, 1.f);
 				}
 				display.activeTrackMask = cache.activeTrackMask;
@@ -1488,7 +1489,7 @@ struct SibylModule : Module, SibylControl {
 			const CachedMacroRoute& route = m_cachedMacroRoutes[m];
 			if (!route.macro) continue;
 
-			float rawNorm = clamp(inputs[inputId].getVoltage() / 10.0f, 0.0f, 1.0f);
+			float rawNorm = levi_math::clampf(inputs[inputId].getVoltage() / 10.0f, 0.0f, 1.0f);
 			float contrib = (route.macro->polarity == sibyl::MacroPolarity::BIPOLAR)
 				? (rawNorm * 2.0f - 1.0f) * route.macro->amount
 				: rawNorm * route.macro->amount;
@@ -1532,7 +1533,7 @@ struct SibylModule : Module, SibylControl {
 			m_trackStates[ch].patternPhaseBeats += beatDelta;
 			double currentPatternPhase = m_trackStates[ch].patternPhaseBeats;
 			m_trackStates[ch].condition.advance(currentPatternPhase, pat.length * pat.resolutionBeats);
-			double effectiveSwing = clamp(comp->meta.swing + globalSwingMacro + trackSwingMacro[ch], 0.0f, 0.49f);
+			double effectiveSwing = levi_math::clampf(comp->meta.swing + globalSwingMacro + trackSwingMacro[ch], 0.0f, 0.49f);
 
 			// Linear Glide interpolation
 			if (m_trackStates[ch].glideRatePerSample != 0.0f) {
@@ -1584,7 +1585,7 @@ struct SibylModule : Module, SibylControl {
 					if (eligible) {
 						// Deterministic Probability Check + Macro Modulation
 						float baseProb = overrides.scaled(expression.probability, sibyl::PROBABILITY_SCALE, sibyl::PROBABILITY_OFFSET);
-						float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
+						float effProb = levi_math::clampf(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
 						uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
 							(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (eventStep * 83492791ULL);
 						// Opt-in probability evolution renews the draw per traversal. Keep
@@ -1631,11 +1632,11 @@ struct SibylModule : Module, SibylControl {
 						}
 
 						float baseVel = overrides.scaled(expression.velocity, sibyl::VELOCITY_SCALE, sibyl::VELOCITY_OFFSET);
-						float effVel = clamp(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
+						float effVel = levi_math::clampf(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
 						m_trackStates[ch].currentVel = effVel * 10.0f;
 						for (int lane = 0; lane < 3; ++lane) {
 							m_trackStates[ch].rawEventMod[lane] = expression.mod[lane];
-							m_trackStates[ch].currentMod[lane] = clamp(
+							m_trackStates[ch].currentMod[lane] = levi_math::clampf(
 								expression.mod[lane] + overrides.values[sibyl::MOD_1_OFFSET + lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
 						}
 					} else {
@@ -1667,10 +1668,10 @@ struct SibylModule : Module, SibylControl {
 						elapsed < pat.resolutionBeats) {
 					double eventFraction = elapsed / pat.resolutionBeats;
 					double sliceFraction = std::fmod(eventFraction * m_trackStates[ch].activeEventRatchets, 1.0);
-					float effectiveGate = clamp(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1.0f);
+					float effectiveGate = levi_math::clampf(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1.0f);
 					m_trackStates[ch].currentGate = sliceFraction <= effectiveGate ? 10.0f : 0.0f;
 				} else if (elapsed >= 0.0 && m_trackStates[ch].activeEventRatchets == 1) {
-					float effectiveGate = clamp(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1024.0f);
+					float effectiveGate = levi_math::clampf(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1024.0f);
 					m_trackStates[ch].currentGate = elapsed <= pat.resolutionBeats * effectiveGate ? 10.0f : 0.0f;
 				} else if (elapsed >= pat.resolutionBeats) {
 					m_trackStates[ch].currentGate = 0.0f;
@@ -2365,7 +2366,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgFillColor(args.vg, nvgRGBA(24, 39, 55, 225));
 		nvgFill(args.vg);
 		++nvgPathOps;
-		const float filledW = progressW * clamp(state.arrangementProgress, 0.f, 1.f);
+		const float filledW = progressW * levi_math::clampf(state.arrangementProgress, 0.f, 1.f);
 		if (filledW > 0.f) {
 			NVGpaint progressPaint = nvgLinearGradient(args.vg, progressX, progressY,
 				progressX + progressW, progressY, nvgRGBA(235, 241, 255, 255), cyan);
@@ -2381,7 +2382,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			lastDividerX = progressX;
 			nvgBeginPath(args.vg);
 			for (int index = 0; index + 1 < state.progressSegmentCount; ++index) {
-				const float segmentEnd = clamp(state.progressSegmentEnds[index], 0.f, 1.f);
+				const float segmentEnd = levi_math::clampf(state.progressSegmentEnds[index], 0.f, 1.f);
 				const float dividerX = progressX + progressW * segmentEnd;
 				// Dense arrangements retain their proportional fill without collapsing
 				// into an opaque picket fence at compact display scale.
@@ -2406,8 +2407,8 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const float sceneProgressY = progressY + progressH + 4.f;
 		const float sceneProgressH = progressH * (2.f / 3.f);
 		const int sceneRepeats = std::max(1, state.sceneRepeats);
-		const float repeatedSceneProgress = clamp(
-			(state.sceneRepeat + clamp(state.sceneProgress, 0.f, 1.f)) / sceneRepeats,
+		const float repeatedSceneProgress = levi_math::clampf(
+			(state.sceneRepeat + levi_math::clampf(state.sceneProgress, 0.f, 1.f)) / sceneRepeats,
 			0.f, 1.f);
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, progressX, sceneProgressY, progressW, sceneProgressH,
@@ -2494,7 +2495,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			if (!active || !gated) continue;
 			float x0, x1, y;
 			channelGeometry(channel, x0, x1, y);
-			const float px = x0 + clamp(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
+			const float px = x0 + levi_math::clampf(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
 			NVGpaint glow = nvgRadialGradient(args.vg, px, y, 0.4f, 5.f,
 				nvgRGBA(74, 247, 239, 190), nvgRGBA(74, 247, 239, 0));
 			nvgBeginPath(args.vg);
@@ -2512,7 +2513,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 				if (!active || gated != (gatedStyle != 0)) continue;
 				float x0, x1, y;
 				channelGeometry(channel, x0, x1, y);
-				const float px = x0 + clamp(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
+				const float px = x0 + levi_math::clampf(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
 				nvgCircle(args.vg, px, y, gated ? 2.2f : 1.25f);
 				hasCore = true;
 			}

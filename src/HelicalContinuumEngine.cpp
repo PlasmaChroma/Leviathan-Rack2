@@ -1,4 +1,5 @@
 #include "HelicalContinuumEngine.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -47,9 +48,7 @@ constexpr float RADIATION_VELOCITY_COEFFICIENT =
 // may exceed it and simply fills the meter.
 constexpr float VISUAL_ENERGY_REFERENCE = 0.25f;
 
-float clamp01(float value) {
-	return std::max(0.f, std::min(value, 1.f));
-}
+using levi_math::clamp01;
 
 } // namespace
 

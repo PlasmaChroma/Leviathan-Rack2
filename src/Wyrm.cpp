@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "MathHelpers.hpp"
 #include "DebugTerminalTransport.hpp"
 
 #include <chrono>
@@ -24,19 +25,19 @@ inline float foldedRockPenetration(float penetration, float rockWidth) {
 inline float foldAwayFromRock(float anchorY, float desiredY, float lower, float upper) {
 	const float width = upper - lower;
 	if (width <= 1e-6f) {
-		return clamp(desiredY, -1.f, 1.f);
+		return levi_math::clampf(desiredY, -1.f, 1.f);
 	}
 	if (anchorY <= lower) {
-		return clamp(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
+		return levi_math::clampf(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
 	}
 	if (anchorY >= upper) {
-		return clamp(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
+		return levi_math::clampf(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
 	}
 	const float center = 0.5f * (lower + upper);
 	if (desiredY < center) {
-		return clamp(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
+		return levi_math::clampf(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
 	}
-	return clamp(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
+	return levi_math::clampf(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
 }
 }
 
@@ -137,7 +138,7 @@ void Wyrm::setWavePoint(int index, float value) {
 	if (index < 0 || index >= pointCount) {
 		return;
 	}
-	wavePoints[index].store(clamp(value, -1.f, 1.f), std::memory_order_relaxed);
+	wavePoints[index].store(levi_math::clampf(value, -1.f, 1.f), std::memory_order_relaxed);
 	waveCustomized = true;
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
@@ -184,11 +185,11 @@ void Wyrm::setFactoryShape(int shapeId) {
 				const float inner1 = 2.f * levi_math::wrap01(p * 2.f + 0.13f) - 1.f;
 				const float inner2 = 2.f * levi_math::wrap01(p * 3.f - 0.21f) - 1.f;
 				v = base + 0.22f * inner1 + 0.11f * inner2;
-				v = clamp(v * 1.05f, -1.f, 1.f);
+				v = levi_math::clampf(v * 1.05f, -1.f, 1.f);
 			} break;
 			default: break;
 		}
-		wavePoints[i].store(clamp(v, -1.f, 1.f), std::memory_order_relaxed);
+		wavePoints[i].store(levi_math::clampf(v, -1.f, 1.f), std::memory_order_relaxed);
 	}
 	waveCustomized = false;
 	waveVersion.fetch_add(1u, std::memory_order_release);
@@ -287,7 +288,7 @@ void Wyrm::setEnvelopeShape(int shapeId) {
 			default:
 				break;
 		}
-		wavePoints[i].store(2.f * clamp(unipolar, 0.f, 1.f) - 1.f, std::memory_order_relaxed);
+		wavePoints[i].store(2.f * levi_math::clampf(unipolar, 0.f, 1.f) - 1.f, std::memory_order_relaxed);
 	}
 	waveCustomized = true;
 	waveVersion.fetch_add(1u, std::memory_order_release);
@@ -329,7 +330,7 @@ void Wyrm::rebuildWavetable() {
 	}
 	const float inv = 1.f / maxAbs;
 	for (int i = 0; i < kWyrmTableSize; ++i) {
-		wavetableBuffers[activeWavetableIndex][0][i] = clamp(
+		wavetableBuffers[activeWavetableIndex][0][i] = levi_math::clampf(
 			wavetableBuffers[activeWavetableIndex][0][i] * inv, -1.f, 1.f);
 	}
 
@@ -338,7 +339,7 @@ void Wyrm::rebuildWavetable() {
 		for (int i = 0; i < kWyrmTableSize; ++i) {
 			const int im1 = (i - 1 + kWyrmTableSize) % kWyrmTableSize;
 			const int ip1 = (i + 1) % kWyrmTableSize;
-			wavetableBuffers[activeWavetableIndex][level][i] = clamp(
+			wavetableBuffers[activeWavetableIndex][level][i] = levi_math::clampf(
 				0.25f * wavetableBuffers[activeWavetableIndex][level - 1][im1]
 					+ 0.5f * wavetableBuffers[activeWavetableIndex][level - 1][i]
 					+ 0.25f * wavetableBuffers[activeWavetableIndex][level - 1][ip1],
@@ -386,7 +387,7 @@ bool Wyrm::advanceWavetableBuild(uint32_t requestedVersion) {
 		}
 		else if (wavetableBuildStage == 2) {
 			const int i = wavetableBuildIndex++;
-			target[0][i] = clamp(target[0][i] / wavetableBuildMaxAbs, -1.f, 1.f);
+			target[0][i] = levi_math::clampf(target[0][i] / wavetableBuildMaxAbs, -1.f, 1.f);
 			if (wavetableBuildIndex == kWyrmTableSize) {
 				wavetableBuildStage = 3;
 				wavetableBuildIndex = 0;
@@ -396,7 +397,7 @@ bool Wyrm::advanceWavetableBuild(uint32_t requestedVersion) {
 			const int i = wavetableBuildIndex++;
 			const int im1 = (i - 1 + kWyrmTableSize) % kWyrmTableSize;
 			const int ip1 = (i + 1) % kWyrmTableSize;
-			target[wavetableBuildLevel][i] = clamp(
+			target[wavetableBuildLevel][i] = levi_math::clampf(
 				0.25f * target[wavetableBuildLevel - 1][im1]
 					+ 0.5f * target[wavetableBuildLevel - 1][i]
 					+ 0.25f * target[wavetableBuildLevel - 1][ip1],
@@ -437,7 +438,7 @@ float Wyrm::lookupWave(float ph, float phaseStep) const {
 	}
 	const int level0 = clamp(int(lod), 0, kWyrmTableMipLevels - 1);
 	const int level1 = std::min(level0 + 1, kWyrmTableMipLevels - 1);
-	const float levelMix = clamp(scale - 1.f, 0.f, 1.f);
+	const float levelMix = levi_math::clampf(scale - 1.f, 0.f, 1.f);
 	const float x = p * float(kWyrmTableSize);
 	const int i0 = int(x);
 	const int i1 = (i0 + 1 < kWyrmTableSize) ? (i0 + 1) : 0;
@@ -659,7 +660,7 @@ bool Wyrm::segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0
 	const float a = dx * dx * invRx * invRx + dy * dy * invRy * invRy;
 	const float b = 2.f * (x0 * dx * invRx * invRx + y0 * dy * invRy * invRy);
 	const float c = x0 * x0 * invRx * invRx + y0 * y0 * invRy * invRy - 1.f;
-	const float t = (a > 1e-8f) ? clamp(-b / (2.f * a), 0.f, 1.f) : 0.f;
+	const float t = (a > 1e-8f) ? levi_math::clampf(-b / (2.f * a), 0.f, 1.f) : 0.f;
 	const float closest = a * t * t + b * t + c;
 	if (closest > 0.f) {
 		return false;
@@ -738,7 +739,7 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 		if (sideVote[i] == 0) {
 			preferUpper = y >= rock.value;
 		}
-		const float sculpted = clamp(preferUpper ? upper : lower, -1.f, 1.f);
+		const float sculpted = levi_math::clampf(preferUpper ? upper : lower, -1.f, 1.f);
 		if ((preferUpper && y < sculpted) || (!preferUpper && y > sculpted)) {
 			wavePoints[i].store(sculpted, std::memory_order_relaxed);
 			local[i] = sculpted;
@@ -769,7 +770,7 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 					return;
 				}
 				const float y = local[idx];
-				const float projected = clamp(preferUp ? upper : lower, -1.f, 1.f);
+				const float projected = levi_math::clampf(preferUp ? upper : lower, -1.f, 1.f);
 				if ((preferUp && y < projected) || (!preferUp && y > projected)) {
 					local[idx] = projected;
 					touched[idx] = true;
@@ -815,14 +816,14 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 				preferUpper = segmentVote > 0;
 			}
 
-			const float projected = clamp(preferUpper ? upper : lower, -1.f, 1.f);
+			const float projected = levi_math::clampf(preferUpper ? upper : lower, -1.f, 1.f);
 			const float correction = projected - y;
 			if (std::fabs(correction) <= 1e-6f) {
 				continue;
 			}
 
 			auto moveEndpoint = [&](int idx) {
-				const float nextValue = clamp(local[idx] + correction, -1.f, 1.f);
+				const float nextValue = levi_math::clampf(local[idx] + correction, -1.f, 1.f);
 				if (std::fabs(nextValue - local[idx]) > 1e-6f) {
 					local[idx] = nextValue;
 					wavePoints[idx].store(nextValue, std::memory_order_relaxed);
@@ -851,7 +852,7 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 				}
 
 				const float relaxed = 0.5f * local[i] + 0.25f * (local[prev] + local[next]);
-				float candidate = clamp(0.65f * local[i] + 0.35f * relaxed, -1.f, 1.f);
+				float candidate = levi_math::clampf(0.65f * local[i] + 0.35f * relaxed, -1.f, 1.f);
 
 				float lower = 0.f;
 				float upper = 0.f;
@@ -907,10 +908,10 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 
 float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) const {
 	if (rockCount <= 0) {
-		return clamp(desiredY, -1.f, 1.f);
+		return levi_math::clampf(desiredY, -1.f, 1.f);
 	}
 	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
-	float y = clamp(desiredY, -1.f, 1.f);
+	float y = levi_math::clampf(desiredY, -1.f, 1.f);
 	for (int pass = 0; pass < 3; ++pass) {
 		bool changed = false;
 		for (int i = 0; i < rockCount; ++i) {
@@ -960,12 +961,12 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 			break;
 		}
 	}
-	return clamp(y, -1.f, 1.f);
+	return levi_math::clampf(y, -1.f, 1.f);
 }
 
 float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) {
 	if (state.rockCount <= 0) {
-		return clamp(desiredY, -1.f, 1.f);
+		return levi_math::clampf(desiredY, -1.f, 1.f);
 	}
 	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
 	const float phWrapped = levi_math::wrap01(ph);
@@ -1008,7 +1009,7 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 			rockUpper[i] = upper;
 		}
 	}
-	float y = clamp(desiredY, -1.f, 1.f);
+	float y = levi_math::clampf(desiredY, -1.f, 1.f);
 	for (int pass = 0; pass < 3; ++pass) {
 		bool changed = false;
 		for (int i = 0; i < state.rockCount; ++i) {
@@ -1031,7 +1032,7 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 			break;
 		}
 	}
-	return clamp(y, -1.f, 1.f);
+	return levi_math::clampf(y, -1.f, 1.f);
 }
 
 json_t* Wyrm::dataToJson() {
@@ -1117,7 +1118,7 @@ void Wyrm::dataFromJson(json_t* root) {
 		for (int i = 0; i < pointCount && i < int(n); ++i) {
 			json_t* v = json_array_get(pts, i);
 			if (v) {
-				wavePoints[i].store(clamp(float(json_number_value(v)), -1.f, 1.f), std::memory_order_relaxed);
+				wavePoints[i].store(levi_math::clampf(float(json_number_value(v)), -1.f, 1.f), std::memory_order_relaxed);
 			}
 		}
 		if (!customizedJ && n > 0) {
@@ -1141,9 +1142,9 @@ void Wyrm::dataFromJson(json_t* root) {
 			json_t* radiusValueJ = json_object_get(rockJ, "radiusValue");
 			json_t* seedJ = json_object_get(rockJ, "seed");
 			if (phaseJ) rocks[i].phase = levi_math::wrap01(float(json_number_value(phaseJ)));
-			if (valueJ) rocks[i].value = clamp(float(json_number_value(valueJ)), -1.f, 1.f);
-			if (radiusPhaseJ) rocks[i].radiusPhase = clamp(float(json_number_value(radiusPhaseJ)), 0.02f, 0.09f);
-			if (radiusValueJ) rocks[i].radiusValue = clamp(float(json_number_value(radiusValueJ)), 0.06f, 0.24f);
+			if (valueJ) rocks[i].value = levi_math::clampf(float(json_number_value(valueJ)), -1.f, 1.f);
+			if (radiusPhaseJ) rocks[i].radiusPhase = levi_math::clampf(float(json_number_value(radiusPhaseJ)), 0.02f, 0.09f);
+			if (radiusValueJ) rocks[i].radiusValue = levi_math::clampf(float(json_number_value(radiusValueJ)), 0.06f, 0.24f);
 			if (seedJ) rocks[i].seed = uint32_t(json_integer_value(seedJ));
 		}
 		rebuildAllRockBoundaryCaches();
@@ -1191,7 +1192,7 @@ void Wyrm::process(const ProcessArgs& args) {
 	}
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
-	const float displayRateNoFm = clamp(
+	const float displayRateNoFm = levi_math::clampf(
 		baseFreq * rack::dsp::exp2_taylor5(fine),
 		0.005f,
 		0.45f * args.sampleRate);
@@ -1255,24 +1256,24 @@ void Wyrm::process(const ProcessArgs& args) {
 			return 0.f;
 		}
 		if (poly) {
-			return clamp(finiteOr(inputs[id].getPolyVoltage(channel)) / 10.f, -1.f, 1.f);
+			return levi_math::clampf(finiteOr(inputs[id].getPolyVoltage(channel)) / 10.f, -1.f, 1.f);
 		}
 		return monoNorm;
 	};
-	const float monoSlitherAmountCvNorm = slitherAmountCvConnected ? clamp(finiteOr(inputs[SLITHER_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
-	const float monoSlitherSpeedCvNorm = slitherSpeedCvConnected ? clamp(finiteOr(inputs[SLITHER_SPEED_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
-	const float monoFoldCvNorm = foldCvConnected ? clamp(finiteOr(inputs[FOLD_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
+	const float monoSlitherAmountCvNorm = slitherAmountCvConnected ? levi_math::clampf(finiteOr(inputs[SLITHER_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
+	const float monoSlitherSpeedCvNorm = slitherSpeedCvConnected ? levi_math::clampf(finiteOr(inputs[SLITHER_SPEED_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
+	const float monoFoldCvNorm = foldCvConnected ? levi_math::clampf(finiteOr(inputs[FOLD_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
 	auto effectiveSlitherAmount = [&](int channel) {
 		const float cv = readBipolarCvNorm(SLITHER_CV_INPUT, slitherAmountCvConnected, channel, slitherAmountCvPoly, monoSlitherAmountCvNorm);
-		return clamp(slitherAmountKnob + cv, 0.f, 1.f);
+		return levi_math::clampf(slitherAmountKnob + cv, 0.f, 1.f);
 	};
 	auto effectiveSlitherSpeed = [&](int channel) {
 		const float cv = readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, slitherSpeedCvConnected, channel, slitherSpeedCvPoly, monoSlitherSpeedCvNorm);
-		return slitherSpeedFactor(clamp(slitherSpeedKnob + cv, 0.f, 1.f));
+		return slitherSpeedFactor(levi_math::clampf(slitherSpeedKnob + cv, 0.f, 1.f));
 	};
 	auto effectiveFoldAmt = [&](int channel) {
 		const float cv = readBipolarCvNorm(FOLD_CV_INPUT, foldCvConnected, channel, foldCvPoly, monoFoldCvNorm);
-		return clamp(foldBase + cv, 0.f, 2.f);
+		return levi_math::clampf(foldBase + cv, 0.f, 2.f);
 	};
 	const float monoVoct = voctConnected ? finiteOr(inputs[VOCT_INPUT].getVoltage()) : 0.f;
 	const float monoFmVoltage = fmConnected ? finiteOr(inputs[FM_INPUT].getVoltage()) : 0.f;
@@ -1296,13 +1297,13 @@ void Wyrm::process(const ProcessArgs& args) {
 	float phaseDisplay = 0.f;
 	float phaseFrequencyDisplay = 0.f;
 	if (canUsePlainFastPath) {
-		fastPathDisplayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(monoVoct + fine), 0.005f, 0.45f * args.sampleRate);
+		fastPathDisplayHzNoFm = levi_math::clampf(baseFreq * rack::dsp::exp2_taylor5(monoVoct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(monoVoct + monoFmVoltage * fmAtten + fine);
 		hz = finiteOr(hz, baseFreq);
-		fastPathHz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
+		fastPathHz = levi_math::clampf(hz, 0.005f, 0.45f * args.sampleRate);
 		fastPathPhaseStep = fastPathHz * args.sampleTime;
-		const float slitherBaseHz = lfoModeNow ? clamp(fastPathHz, 0.01f, 8.f) : clamp(0.125f * fastPathHz, 0.15f, 8.f);
-		const float slitherHz = clamp(slitherBaseHz * monoSlitherSpeed, 0.01f, 16.f);
+		const float slitherBaseHz = lfoModeNow ? levi_math::clampf(fastPathHz, 0.01f, 8.f) : levi_math::clampf(0.125f * fastPathHz, 0.15f, 8.f);
+		const float slitherHz = levi_math::clampf(slitherBaseHz * monoSlitherSpeed, 0.01f, 16.f);
 		fastPathSlitherStep = slitherHz * args.sampleTime;
 	}
 
@@ -1341,7 +1342,7 @@ void Wyrm::process(const ProcessArgs& args) {
 				displaySlitherSpeedFactor.store(monoSlitherSpeed, std::memory_order_relaxed);
 				displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 			}
-			const float raw = clamp(finiteOr(lookupWave(phase[c], fastPathPhaseStep)), -1.f, 1.f);
+			const float raw = levi_math::clampf(finiteOr(lookupWave(phase[c], fastPathPhaseStep)), -1.f, 1.f);
 			outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 			outputs[OUT_OUTPUT].setVoltage(5.f * raw, c);
 			if (c == 0) {
@@ -1356,11 +1357,11 @@ void Wyrm::process(const ProcessArgs& args) {
 		const float pitchOrTimeMod = envelopeModeNow ? (fm + fine) : (voct + fm + fine);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(pitchOrTimeMod);
 		hz = finiteOr(hz, baseFreq);
-		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
+		hz = levi_math::clampf(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
 			const float displayHzNoFm = envelopeModeNow
 				? displayRateNoFm
-				: clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
+				: levi_math::clampf(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
 			displaySlitherAmount.store(slitherAmount, std::memory_order_relaxed);
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
@@ -1369,8 +1370,8 @@ void Wyrm::process(const ProcessArgs& args) {
 		if (!envelopeModeNow) {
 			phase[c] = levi_math::wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
 		}
-		const float slitherBaseHz = slowRateModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
-		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
+		const float slitherBaseHz = slowRateModeNow ? levi_math::clampf(hz, 0.01f, 8.f) : levi_math::clampf(0.125f * hz, 0.15f, 8.f);
+		const float slitherHz = levi_math::clampf(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 		slitherPhase[c] = levi_math::wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
@@ -1385,12 +1386,12 @@ void Wyrm::process(const ProcessArgs& args) {
 				const float slitherTarget = slitherOffset(phase[c], slitherPhase[c], slitherAmount);
 				slither = hasRocks ? finiteOr(applyRockClamp(activeRockStateNow, base, phase[c], slitherTarget)) : slitherTarget;
 			}
-			raw = clamp(finiteOr(base + slither), -1.f, 1.f);
+			raw = levi_math::clampf(finiteOr(base + slither), -1.f, 1.f);
 		}
 		const float foldAmt = foldCvPoly ? effectiveFoldAmt(c) : monoFoldAmt;
 		float folded = raw;
 		if (foldAmt > 1e-5f) {
-			folded = clamp(finiteOr(levi_math::softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
+			folded = levi_math::clampf(finiteOr(levi_math::softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
 		}
 		const float rawVoltage = envelopeModeNow
 			? (renderEnvelopeVoice ? 5.f * (raw + 1.f) : 0.f)

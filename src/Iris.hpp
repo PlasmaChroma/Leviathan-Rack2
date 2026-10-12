@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DebugTerminalMetrics.hpp"
+#include "MathHelpers.hpp"
 #include "IrisIO.hpp"
 #include "IrisWorkerCompletion.hpp"
 #include "NautiloidIrisExpander.hpp"
@@ -25,13 +26,13 @@ constexpr float kIrisMinPitchFromC4 = -4.70919513631f;
 inline float irisBaseFrequencyFromKnob(float knobNorm, bool lfoMode = false) {
   const float minHz = lfoMode ? kIrisLfoMinHz : kIrisMinHz;
   const float maxHz = lfoMode ? kIrisLfoMaxHz : kIrisMaxHz;
-  return minHz * std::pow(maxHz / minHz, clamp(knobNorm, 0.f, 1.f));
+  return minHz * std::pow(maxHz / minHz, levi_math::clampf(knobNorm, 0.f, 1.f));
 }
 
 inline float irisKnobValueForFrequency(float hz, bool lfoMode = false) {
   const float minHz = lfoMode ? kIrisLfoMinHz : kIrisMinHz;
   const float maxHz = lfoMode ? kIrisLfoMaxHz : kIrisMaxHz;
-  hz = clamp(hz, minHz, maxHz);
+  hz = levi_math::clampf(hz, minHz, maxHz);
   return std::log(hz / minHz) / std::log(maxHz / minHz);
 }
 

@@ -88,7 +88,7 @@ inline float wyrmBaseFrequencyFromKnob(float knobNorm, bool lfoMode) {
 inline float wyrmKnobValueForFrequency(float hz, bool lfoMode) {
 	const float minFreq = lfoMode ? kWyrmLfoMinHz : kWyrmAudioMinHz;
 	const float maxFreq = lfoMode ? kWyrmLfoMaxHz : kWyrmAudioMaxHz;
-	hz = clamp(hz, minFreq, maxFreq);
+	hz = levi_math::clampf(hz, minFreq, maxFreq);
 	return std::log(hz / minFreq) / std::log(maxFreq / minFreq);
 }
 
@@ -121,7 +121,7 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 	// overshoot even when p1 -> p2 is a smooth monotonic stroke. Keep the cubic
 	// shape inside every authored segment, but never let it leave that segment's
 	// endpoint range.
-	return clamp(cubic, std::min(p1, p2), std::max(p1, p2));
+	return levi_math::clampf(cubic, std::min(p1, p2), std::max(p1, p2));
 }
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {

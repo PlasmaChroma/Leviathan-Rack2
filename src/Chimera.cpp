@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 #include "ChimeraSlice.hpp"
 #include "ChimeraClock.hpp"
 #include "ChimeraRateBridge.hpp"
@@ -49,7 +50,7 @@ struct ChimeraRateQuantity : ParamQuantity {
 
     float knobForSpeed(float speed) const {
         const bool forwardOnly = rateMode && rateMode->load(std::memory_order_relaxed) == 2;
-        const float target = clamp(speed, forwardOnly ? 0.f : -2.f, forwardOnly ? 4.f : 2.f);
+        const float target = levi_math::clampf(speed, forwardOnly ? 0.f : -2.f, forwardOnly ? 4.f : 2.f);
         if (!forwardOnly && target == 0.f) return 0.5f;
         float low = 0.f, high = 1.f;
         for (int i = 0; i < 24; ++i) {
@@ -1824,9 +1825,9 @@ struct Chimera : Module {
         return state;
     }
     void accumulateVu(float leftVolts, float rightVolts, float sampleTime) {
-        const float left = clamp(leftVolts * 0.2f, -4.f, 4.f);
-        const float right = clamp(rightVolts * 0.2f, -4.f, 4.f);
-        const float amount = clamp(30.f * sampleTime, 0.f, 1.f);
+        const float left = levi_math::clampf(leftVolts * 0.2f, -4.f, 4.f);
+        const float right = levi_math::clampf(rightVolts * 0.2f, -4.f, 4.f);
+        const float amount = levi_math::clampf(30.f * sampleTime, 0.f, 1.f);
         vuPowerState[0] += (left * left - vuPowerState[0]) * amount;
         vuPowerState[1] += (right * right - vuPowerState[1]) * amount;
         if (++vuBlockFrames < 256) return;
@@ -2189,8 +2190,8 @@ struct Chimera : Module {
             recoveryPostPending.store(true, std::memory_order_release);
         publishCoreState((slice.frame() & 255u) == 0 || wasRecording != out.recording ||
             recordDestinationChanged);
-        outputs[AUDIO_L_OUTPUT].setVoltage(clamp(out.audio.l * 5.f, -12.f, 12.f));
-        outputs[AUDIO_R_OUTPUT].setVoltage(clamp(out.audio.r * 5.f, -12.f, 12.f));
+        outputs[AUDIO_L_OUTPUT].setVoltage(levi_math::clampf(out.audio.l * 5.f, -12.f, 12.f));
+        outputs[AUDIO_R_OUTPUT].setVoltage(levi_math::clampf(out.audio.r * 5.f, -12.f, 12.f));
         outputs[CV_OUTPUT].setVoltage(out.cv);
         outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
         if (unbypassFadeRemaining) {

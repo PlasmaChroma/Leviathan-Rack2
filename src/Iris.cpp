@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "MathHelpers.hpp"
 #include "UiExpanderUtils.hpp"
 #include "IrisPolyphony.hpp"
 #include "Nautiloid.hpp"
@@ -36,7 +37,7 @@ bool hasLeftSourceForUi(const Iris* module) {
 }
 
 float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {
-  const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
+  const float hpCoeff = levi_math::clampf(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
   const float y = x - voice->linHpState;
   voice->linHpState = x - hpCoeff * y;
   return y;
@@ -53,7 +54,7 @@ float fastAtanApprox(float x) {
 float drivenLinFm(float lin, float amount) {
   const float bus = lin * amount * kLinFmScale;
   const float driveNorm =
-    clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
+    levi_math::clampf((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
   if (driveNorm <= 0.f || std::fabs(bus) < 1e-9f) return bus;
   const float drive = 1.f + driveNorm * (kLinFmMaxDrive - 1.f);
   const float norm = std::max(fastAtanApprox(drive), 1e-6f);
@@ -543,7 +544,7 @@ void Iris::process(const ProcessArgs& args) {
   const iris::ImageWavetable* fadeFromTable =
     fadeFromTableIndex >= 0 && fadeFromTableIndex < int(tableBuffers.size())
       ? &tableBuffers[size_t(fadeFromTableIndex)] : nullptr;
-  const float tableMix = fadeFromTable ? clamp(tableCrossfade, 0.f, 1.f) : 1.f;
+  const float tableMix = fadeFromTable ? levi_math::clampf(tableCrossfade, 0.f, 1.f) : 1.f;
   const int vOctChannels = inputs[V_OCT_INPUT].getChannels();
   const int scanChannels = inputs[SCAN_INPUT].getChannels();
   const int channels = iris::outputChannelCount(vOctChannels, scanChannels);
@@ -552,7 +553,7 @@ void Iris::process(const ProcessArgs& args) {
   const float coarseParam = params[COARSE_PARAM].getValue();
   const bool lfoMode = params[LFO_MODE_PARAM].getValue() > 0.5f;
   const float coarseKnob =
-    std::isfinite(coarseParam) ? clamp(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4, lfoMode);
+    std::isfinite(coarseParam) ? levi_math::clampf(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4, lfoMode);
   float coarsePitch = std::log2(irisBaseFrequencyFromKnob(coarseKnob, lfoMode) / dsp::FREQ_C4);
   const bool coarseStepped = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
   if (coarseStepped) coarsePitch = std::round(coarsePitch);
@@ -561,9 +562,9 @@ void Iris::process(const ProcessArgs& args) {
   const float scanAttenParam = params[SCAN_ATTEN_PARAM].getValue();
   const float linFmParam = params[LIN_FM_PARAM].getValue();
   const float fine = std::isfinite(fineParam) ? fineParam / 1200.f : 0.f;
-  const float scanKnob = std::isfinite(scanParam) ? clamp(scanParam, 0.f, 1.f) : 0.f;
-  const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
-  const float linFmAmount = std::isfinite(linFmParam) ? clamp(linFmParam, 0.f, 1.f) : 0.f;
+  const float scanKnob = std::isfinite(scanParam) ? levi_math::clampf(scanParam, 0.f, 1.f) : 0.f;
+  const float scanAtten = std::isfinite(scanAttenParam) ? levi_math::clampf(scanAttenParam, -1.f, 1.f) : 0.f;
+  const float linFmAmount = std::isfinite(linFmParam) ? levi_math::clampf(linFmParam, 0.f, 1.f) : 0.f;
   const bool softSync = params[SOFT_SYNC_MODE_PARAM].getValue() > 0.5f;
   const float processMinFrequency = lfoMode ? 0.005f : kMinFrequencyHz;
   const float processMaxFrequency = std::min(kMaxFrequencyHz, 0.45f * args.sampleRate);
@@ -576,21 +577,21 @@ void Iris::process(const ProcessArgs& args) {
     const int vOctChannel = iris::vOctSourceChannel(channel, vOctChannels);
     const float vOctInput = inputs[V_OCT_INPUT].getVoltage(vOctChannel);
     const float mainPitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f);
-    const float basePitch = clamp(mainPitch, -24.f, 16.f);
+    const float basePitch = levi_math::clampf(mainPitch, -24.f, 16.f);
     const float baseFrequency =
-      clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(basePitch), processMinFrequency, processMaxFrequency);
+      levi_math::clampf(dsp::FREQ_C4 * dsp::exp2_taylor5(basePitch), processMinFrequency, processMaxFrequency);
     const float linInput = inputs[LIN_FM_INPUT].getPolyVoltage(channel);
     const float lin = acCoupledLinFm(
       std::isfinite(linInput) ? linInput : 0.f, &voices[size_t(channel)], args.sampleTime);
     const float linBus = drivenLinFm(lin, linFmAmount);
     const float frequency =
-      clamp(baseFrequency + baseFrequency * linBus, processMinFrequency, processMaxFrequency);
+      levi_math::clampf(baseFrequency + baseFrequency * linBus, processMinFrequency, processMaxFrequency);
     if (channel == 0) {
       frequencyDisplay = baseFrequency;
     }
     const float scanInput = inputs[SCAN_INPUT].getPolyVoltage(channel);
     float scan = scanKnob + (std::isfinite(scanInput) ? scanInput : 0.f) * 0.1f * scanAtten;
-    scan = clamp(scan, 0.f, 1.f);
+    scan = levi_math::clampf(scan, 0.f, 1.f);
     displayPolyScans[size_t(channel)].store(scan, std::memory_order_relaxed);
     if (channel == 0) scanDisplay = scan;
     const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
@@ -849,9 +850,9 @@ void Iris::dataFromJson(json_t* root) {
       jsonIntegerOr(conversion, "imageChannelMode", iris::IMAGE_CHANNEL_ALL), 0, 3));
     displayImageChannelMode.store(int(conversionSettings.imageChannelMode), std::memory_order_relaxed);
     conversionSettings.seamSmoothing =
-      clamp(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, iris::kMaxSeamSmoothing);
+      levi_math::clampf(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, iris::kMaxSeamSmoothing);
     conversionSettings.waveSmoothing =
-      clamp(jsonRealOr(conversion, "waveSmoothing", 0.f), 0.f, iris::kMaxWaveSmoothing);
+      levi_math::clampf(jsonRealOr(conversion, "waveSmoothing", 0.f), 0.f, iris::kMaxWaveSmoothing);
     conversionSettings.dcRemove = jsonBoolOr(conversion, "dcRemove", false);
     conversionSettings.invert = jsonBoolOr(conversion, "invert", false);
     conversionSettings.contrast = jsonRealOr(conversion, "contrast", 1.f);
@@ -885,11 +886,11 @@ void Iris::dataFromJson(json_t* root) {
       source.generatorFractalMode =
         jsonIntegerOr(root, "nautiloidFractalMode", iris::FRACTAL_MANDELBROT);
       source.generatorFractalZoom =
-        clamp(jsonRealOr(root, "nautiloidFractalZoom", 0.f), 0.f, 5.f);
+        levi_math::clampf(jsonRealOr(root, "nautiloidFractalZoom", 0.f), 0.f, 5.f);
       source.generatorFractalCenterX =
-        clamp(jsonRealOr(root, "nautiloidFractalCenterX", 0.f), -2.f, 2.f);
+        levi_math::clampf(jsonRealOr(root, "nautiloidFractalCenterX", 0.f), -2.f, 2.f);
       source.generatorFractalCenterY =
-        clamp(jsonRealOr(root, "nautiloidFractalCenterY", 0.f), -2.f, 2.f);
+        levi_math::clampf(jsonRealOr(root, "nautiloidFractalCenterY", 0.f), -2.f, 2.f);
       source.generatorFractalColorMode = nautiloid_color::normalize(
         jsonIntegerOr(root, "nautiloidFractalColorMode", nautiloid_color::PRISM));
       json_t* generationJ = json_object_get(root, "nautiloidFractalGeneration");
@@ -947,7 +948,7 @@ void Iris::buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>*
     for (int x = 0; x < width; ++x) {
       const float phase = (float(x) + 0.5f) / float(width);
       const float sample = table.sample(phase, scan);
-      (*pixels)[size_t(y * width + x)] = uint8_t(std::round(clamp(sample * 0.5f + 0.5f, 0.f, 1.f) * 255.f));
+      (*pixels)[size_t(y * width + x)] = uint8_t(std::round(levi_math::clampf(sample * 0.5f + 0.5f, 0.f, 1.f) * 255.f));
     }
   }
 }
@@ -1006,7 +1007,7 @@ void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* sam
     std::fill(samples->begin(), samples->end(), 0.f);
     return;
   }
-  scan = clamp(scan, 0.f, 1.f);
+  scan = levi_math::clampf(scan, 0.f, 1.f);
   for (int i = 0; i < sampleCount; ++i) {
     (*samples)[size_t(i)] = snapshotTable.sample(float(i) / float(sampleCount - 1), scan);
   }

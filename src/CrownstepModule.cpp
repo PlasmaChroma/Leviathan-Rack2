@@ -1,4 +1,5 @@
 #include "CrownstepShared.hpp"
+#include "MathHelpers.hpp"
 #include "DebugTerminalTransport.hpp"
 #include <random>
 #include <unordered_map>
@@ -619,7 +620,7 @@ void Crownstep::beginMoveAnimation(const Move& move, const BoardState& beforeBoa
 	}
 
 	float segments = float(nextAnimation.path.size() - 1);
-	nextAnimation.durationSeconds = clamp(0.085f * segments, 0.12f, 0.34f);
+	nextAnimation.durationSeconds = levi_math::clampf(0.085f * segments, 0.12f, 0.34f);
 	if (isOthelloMode() && !nextAnimation.capturedIndices.empty()) {
 		nextAnimation.durationSeconds = std::max(
 			nextAnimation.durationSeconds,
@@ -746,7 +747,7 @@ int Crownstep::currentScaleIndex() {
 }
 
 float Crownstep::transposeVolts() {
-	float value = clamp(inputs[TRANSPOSE_INPUT].getVoltage(), -10.f, 10.f);
+	float value = levi_math::clampf(inputs[TRANSPOSE_INPUT].getVoltage(), -10.f, 10.f);
 	if (std::fabs(value) < TRANSPOSE_CV_ZERO_DEADBAND_VOLTS) {
 		return 0.f;
 	}
@@ -754,7 +755,7 @@ float Crownstep::transposeVolts() {
 }
 
 int Crownstep::rootCvOffsetSemitone() {
-	float rootCv = clamp(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
+	float rootCv = levi_math::clampf(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
 	// Pitch-CV mapping quantized to semitones:
 	// 0V -> 0 semitones, 1V -> 12 semitones, so 0V..1V spans one chromatic octave.
 	int cvOffsetSemitones = int(std::lround(rootCv * ROOT_CV_SEMITONES_PER_VOLT));
@@ -834,7 +835,7 @@ float Crownstep::randomBoardValueForSampledIndex(float sampledIndex) {
 	if (randomBoardValueMapSeed != boardValueRandomSeed || randomBoardValueMapCellCount != cellCount) {
 		rebuildRandomBoardValueMap();
 	}
-	float x = clamp(sampledIndex, 0.f, float(cellCount - 1));
+	float x = levi_math::clampf(sampledIndex, 0.f, float(cellCount - 1));
 	int low = int(std::floor(x));
 	int high = int(std::ceil(x));
 	float lowValue = float(randomBoardValueMap[size_t(low)]);
@@ -913,7 +914,7 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 		}
 	};
 	auto chessBoardValueForSampledIndex = [&](float sampledIndex, int layoutMode) {
-		float x = clamp(sampledIndex, 0.f, float(crownstep::CHESS_BOARD_SIZE - 1));
+		float x = levi_math::clampf(sampledIndex, 0.f, float(crownstep::CHESS_BOARD_SIZE - 1));
 		int low = int(std::floor(x));
 		int high = int(std::ceil(x));
 		float lowValue = float(chessBoardValueForIndex(low, layoutMode));
@@ -974,9 +975,9 @@ float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing)
 		const int transposeSemitones = int(std::lround(transposeVolts() * 12.f));
 		float semitone = boardValueIndex + (isKing ? 12.f : 0.f);
 		int quantizedSemitone = crownstep::quantizeSemitoneToScale(semitone, currentScaleIndex(), rootSemitone());
-		return clamp((float(quantizedSemitone + transposeSemitones) / 12.f), -10.f, 10.f);
+		return levi_math::clampf((float(quantizedSemitone + transposeSemitones) / 12.f), -10.f, 10.f);
 	}
-	return clamp(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
+	return levi_math::clampf(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
 }
 
 float Crownstep::applyMelodicBiasToBoardValueIndex(float previousBoardValueIndex, float currentBoardValueIndex, const Move& move) const {
@@ -988,10 +989,10 @@ float Crownstep::applyMelodicBiasToBoardValueIndex(float previousBoardValueIndex
 
 	float freeSemitones = 2.f;
 	float fullSemitones = 10.f;
-	float deltaNorm = clamp((absDelta - freeSemitones) / (fullSemitones - freeSemitones), 0.f, 1.f);
-	float pathEnergy = clamp(float(std::max(0, int(move.path.size()) - 1)) / 4.f, 0.f, 1.f);
-	float captureEnergy = clamp(float(move.captured.size()) / 6.f, 0.f, 1.f);
-	float moveEnergy = clamp(0.6f * crownstep::normalizedMoveMod(move) + 0.25f * pathEnergy + 0.15f * captureEnergy, 0.f, 1.f);
+	float deltaNorm = levi_math::clampf((absDelta - freeSemitones) / (fullSemitones - freeSemitones), 0.f, 1.f);
+	float pathEnergy = levi_math::clampf(float(std::max(0, int(move.path.size()) - 1)) / 4.f, 0.f, 1.f);
+	float captureEnergy = levi_math::clampf(float(move.captured.size()) / 6.f, 0.f, 1.f);
+	float moveEnergy = levi_math::clampf(0.6f * crownstep::normalizedMoveMod(move) + 0.25f * pathEnergy + 0.15f * captureEnergy, 0.f, 1.f);
 	float maxPull = 0.7f;
 	float pull = deltaNorm * maxPull * (1.f - 0.8f * moveEnergy);
 	float biasedDelta = delta * (1.f - pull);
@@ -1225,23 +1226,23 @@ float Crownstep::expressiveModForMove(
 	};
 
 	float moveEnergy = crownstep::normalizedMoveMod(move);
-	float captureNorm = clamp(float(move.captured.size()) / 4.f, 0.f, 1.f);
+	float captureNorm = levi_math::clampf(float(move.captured.size()) / 4.f, 0.f, 1.f);
 
 	int men = 0;
 	int kings = 0;
 	pieceCounts(afterBoard, &men, &kings);
 	// Lower piece count generally means a more exposed/endgame board state.
 	float initialPieceCount = isChessMode() ? 32.f : 24.f;
-	float phaseNorm = clamp((initialPieceCount - (float(men) + float(kings))) / initialPieceCount, 0.f, 1.f);
+	float phaseNorm = levi_math::clampf((initialPieceCount - (float(men) + float(kings))) / initialPieceCount, 0.f, 1.f);
 
 	int beforeMaterial = gameRules ? gameRules->evaluateBoardMaterial(beforeBoard) : crownstep::evaluateBoardMaterial(beforeBoard);
 	int afterMaterial = gameRules ? gameRules->evaluateBoardMaterial(afterBoard) : crownstep::evaluateBoardMaterial(afterBoard);
 	float moverMaterialBefore = (moverSide == aiSide()) ? float(beforeMaterial) : -float(beforeMaterial);
 	float moverMaterialAfter = (moverSide == aiSide()) ? float(afterMaterial) : -float(afterMaterial);
-	float materialSwingNorm = clamp(std::fabs(moverMaterialAfter - moverMaterialBefore) / 900.f, 0.f, 1.f);
+	float materialSwingNorm = levi_math::clampf(std::fabs(moverMaterialAfter - moverMaterialBefore) / 900.f, 0.f, 1.f);
 
 	float combined = 0.56f * moveEnergy + 0.20f * materialSwingNorm + 0.14f * captureNorm + 0.10f * phaseNorm;
-	return clamp(combined, 0.f, 1.f);
+	return levi_math::clampf(combined, 0.f, 1.f);
 }
 
 void Crownstep::commitMove(const Move& move, int moverSide) {

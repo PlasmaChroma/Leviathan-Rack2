@@ -1,4 +1,5 @@
 #include "Mandelwake.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,12 +16,12 @@ constexpr std::array<double, 4> kPulseWidthsMs {{0.1, 1.0, 5.0, 10.0}};
 
 struct MandelwakeSmoothQuantity final : ParamQuantity {
 	float getDisplayValue() override {
-		const float value = clamp(getValue(), 0.f, 1.f);
+		const float value = levi_math::clampf(getValue(), 0.f, 1.f);
 		return 2000.f * value * value * value;
 	}
 
 	void setDisplayValue(float displayValue) override {
-		const float milliseconds = clamp(displayValue, 0.f, 2000.f);
+		const float milliseconds = levi_math::clampf(displayValue, 0.f, 2000.f);
 		setImmediateValue(std::cbrt(milliseconds / 2000.f));
 	}
 
@@ -35,7 +36,7 @@ struct MandelwakeRateQuantity final : ParamQuantity {
 	}
 
 	void setDisplayValue(float displayValue) override {
-		const float hz = clamp(displayValue, 0.05f, 200.f);
+		const float hz = levi_math::clampf(displayValue, 0.05f, 200.f);
 		setImmediateValue(std::log2(hz / 4.f));
 	}
 
@@ -98,19 +99,19 @@ mandelwake::Map mapFromInt(int value) {
 }
 
 float q28ToXVoltage(mandelwake::OrbitQ28 value) {
-	return clamp(
+	return levi_math::clampf(
 		2.5f * static_cast<float>(value) / static_cast<float>(mandelwake::kScaleQ28),
 		-5.f, 5.f);
 }
 
 float q28ToRadiusVoltage(std::uint32_t value) {
-	return clamp(
+	return levi_math::clampf(
 		5.f * static_cast<float>(value) / static_cast<float>(mandelwake::kScaleQ28),
 		0.f, 10.f);
 }
 
 float q30ToNormalizedPhase(std::int32_t value) {
-	return clamp(
+	return levi_math::clampf(
 		static_cast<float>(value) / static_cast<float>(mandelwake::kOneQ30),
 		-1.f, 1.f);
 }
@@ -248,10 +249,10 @@ void Mandelwake::refreshInternalIncrement(int channelIndex, int rateIndex) {
 }
 
 mandelwake::StepInputs Mandelwake::buildStepInputs(int channelIndex) {
-	const float xAmount = clamp(finiteOrZero(params[X_AMOUNT_PARAM].getValue()), -1.f, 1.f);
-	const float yAmount = clamp(finiteOrZero(params[Y_AMOUNT_PARAM].getValue()), -1.f, 1.f);
-	const float zoomAmount = clamp(finiteOrZero(params[ZOOM_AMOUNT_PARAM].getValue()), -1.f, 1.f);
-	const float mutateAmount = clamp(finiteOrZero(params[MUTATE_AMOUNT_PARAM].getValue()), -1.f, 1.f);
+	const float xAmount = levi_math::clampf(finiteOrZero(params[X_AMOUNT_PARAM].getValue()), -1.f, 1.f);
+	const float yAmount = levi_math::clampf(finiteOrZero(params[Y_AMOUNT_PARAM].getValue()), -1.f, 1.f);
+	const float zoomAmount = levi_math::clampf(finiteOrZero(params[ZOOM_AMOUNT_PARAM].getValue()), -1.f, 1.f);
+	const float mutateAmount = levi_math::clampf(finiteOrZero(params[MUTATE_AMOUNT_PARAM].getValue()), -1.f, 1.f);
 
 	const double xNorm = clampDouble(static_cast<double>(inputVoltage(inputs[X_INPUT], channelIndex)) / 5.0, -1.0, 1.0) * xAmount;
 	const double yNorm = clampDouble(static_cast<double>(inputVoltage(inputs[Y_INPUT], channelIndex)) / 5.0, -1.0, 1.0) * yAmount;
@@ -476,7 +477,7 @@ void Mandelwake::process(const ProcessArgs& args) {
 					inputVoltage(inputs[CLOCK_INPUT], channelIndex), 0.1f, 2.f);
 			}
 			else if (freeRunWhenUnclocked.load(std::memory_order_relaxed)) {
-				const float pitch = clamp(
+				const float pitch = levi_math::clampf(
 					finiteOrZero(params[RATE_PARAM].getValue())
 						+ inputVoltage(inputs[RATE_INPUT], channelIndex),
 					kRatePitchMinimum, kRatePitchMaximum);
@@ -504,7 +505,7 @@ void Mandelwake::process(const ProcessArgs& args) {
 			? 5.f * (channel.currentPhase + 1.f)
 			: 5.f * channel.currentPhase;
 		outputs[PHASE_OUTPUT].setVoltage(
-			outputPhaseUnipolar ? clamp(phaseVoltage, 0.f, 10.f) : clamp(phaseVoltage, -5.f, 5.f),
+			outputPhaseUnipolar ? levi_math::clampf(phaseVoltage, 0.f, 10.f) : levi_math::clampf(phaseVoltage, -5.f, 5.f),
 			channelIndex);
 		outputs[GATE_OUTPUT].setVoltage(channel.gateSamples > 0 ? 10.f : 0.f, channelIndex);
 		outputs[ESCAPE_OUTPUT].setVoltage(channel.escapeSamples > 0 ? 10.f : 0.f, channelIndex);

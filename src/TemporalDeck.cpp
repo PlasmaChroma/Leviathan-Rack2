@@ -1,4 +1,5 @@
 #include "TemporalDeckArcLights.hpp"
+#include "MathHelpers.hpp"
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckSettings.hpp"
@@ -415,7 +416,7 @@ static ScopeViewState computeScopeViewState(const PlatterInputSnapshot& platterI
   state.markerLag = frameLagSamples;
   state.waveformLagAnchor = frameLagSamples;
   if (expanderLagDragWasActive && std::isfinite(expanderLagDragLastLagSamples)) {
-    state.waveformLagAnchor = clamp(expanderLagDragLastLagSamples, 0.f, frameAccessibleLagSamples);
+    state.waveformLagAnchor = levi_math::clampf(expanderLagDragLastLagSamples, 0.f, frameAccessibleLagSamples);
   }
   state.freezeWaveformWindow = platterInput.platterTouchHoldDirect ||
                                (platterInput.scopeLagDragActive && !platterInput.platterMotionActive) ||
@@ -863,7 +864,7 @@ static void writeLe32(std::ofstream &out, uint32_t value) {
 }
 
 static int16_t floatToPcm16(float x) {
-  x = clamp(x, -1.f, 1.f);
+  x = levi_math::clampf(x, -1.f, 1.f);
   int v = int(std::lround(double(x) * 32767.0));
   v = std::max(-32768, std::min(32767, v));
   return int16_t(v);
@@ -972,7 +973,7 @@ static int nextCartridgeCharacter(int current) {
 
 struct DeckRateQuantity : ParamQuantity {
   static float valueForSpeed(float speed) {
-    speed = clamp(speed, 0.5f, 2.f);
+    speed = levi_math::clampf(speed, 0.5f, 2.f);
     if (speed <= 1.f) {
       return speed - 0.5f;
     }
@@ -1969,7 +1970,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         if (std::isfinite(rawDtSec) && rawDtSec > 0.0) {
           constexpr float kMinRequestDtSec = 1.0f / 240.0f;
           constexpr float kMaxRequestDtSec = 1.0f / 20.0f;
-          requestDtSec = clamp(float(rawDtSec), kMinRequestDtSec, kMaxRequestDtSec);
+          requestDtSec = levi_math::clampf(float(rawDtSec), kMinRequestDtSec, kMaxRequestDtSec);
         }
       }
       if (lagDragRequestActive && lagDragRequestUsesNormalizedMotion) {
@@ -1989,7 +1990,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         scopeDragTravelSamples = std::max(scopeDragTravelSamples, 1.f);
         lagTarget = float(impl->engine.clampLag(impl->expanderLagDragAnchorLagSamples + lagDragRequestNormalizedOffset * scopeDragTravelSamples,
                           maxLag));
-        lagDragRequestVelocity = clamp(lagDragRequestNormalizedVelocity * scopeDragTravelSamples,
+        lagDragRequestVelocity = levi_math::clampf(lagDragRequestNormalizedVelocity * scopeDragTravelSamples,
                                        -std::max(args.sampleRate * 3.0f, 1.0f),
                                        std::max(args.sampleRate * 3.0f, 1.0f));
         const bool scopeLiveDrag =
@@ -1998,16 +1999,16 @@ void TemporalDeck::process(const ProcessArgs &args) {
           const float sampleRate = std::max(args.sampleRate, 1.f);
           const float nearNowWindowSamples = sampleRate * kScopeLiveNowAssistWindowSec;
           const float referenceLag =
-            clamp(dragJustStarted ? lagTarget : impl->expanderLagDragLastLagSamples, 0.f, nearNowWindowSamples);
-          const float depthT = clamp(referenceLag / nearNowWindowSamples, 0.f, 1.f);
+            levi_math::clampf(dragJustStarted ? lagTarget : impl->expanderLagDragLastLagSamples, 0.f, nearNowWindowSamples);
+          const float depthT = levi_math::clampf(referenceLag / nearNowWindowSamples, 0.f, 1.f);
           const float nearNowT = 1.f - depthT;
           const float targetBoost = kScopeLiveNearNowTargetBoostBase +
                                      nearNowT * nearNowT * kScopeLiveNearNowTargetBoostExtra;
           const float assistDt = requestDtSec > 0.f ? requestDtSec : args.sampleTime;
           const float assistVelocity = sampleRate * targetBoost;
-          lagTarget = clamp(lagTarget - assistVelocity * assistDt, 0.f, maxLag);
+          lagTarget = levi_math::clampf(lagTarget - assistVelocity * assistDt, 0.f, maxLag);
           lagDragRequestVelocity =
-            clamp(lagDragRequestVelocity + assistVelocity, -std::max(args.sampleRate * 3.0f, 1.0f),
+            levi_math::clampf(lagDragRequestVelocity + assistVelocity, -std::max(args.sampleRate * 3.0f, 1.0f),
                   std::max(args.sampleRate * 3.0f, 1.0f));
         } else if (scopeLiveDrag && !scopeRequestStationary && lagDragRequestNormalizedVelocity < 0.f &&
                    !dragJustStarted) {
@@ -2015,7 +2016,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           const float assistDt = requestDtSec > 0.f ? requestDtSec : args.sampleTime;
           const float reverseHandVelocitySamples = std::max(0.f, -lagDragRequestVelocity);
           const float reverseTargetFloor =
-            clamp(impl->expanderLagDragLastLagSamples + (sampleRate + reverseHandVelocitySamples) * assistDt, 0.f, maxLag);
+            levi_math::clampf(impl->expanderLagDragLastLagSamples + (sampleRate + reverseHandVelocitySamples) * assistDt, 0.f, maxLag);
           lagTarget = std::max(lagTarget, reverseTargetFloor);
           scopeLiveReverseTargetCompensated = lagTarget >= reverseTargetFloor;
         }
@@ -2088,7 +2089,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // Safety clamp: Scope is an external input path, so guard against
           // sender-side timing spikes producing unrealistic multi-turn motion.
           float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
-          velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+          velocitySamples = levi_math::clampf(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
           scopeTraceVelocityApplied = velocitySamples;
           impl->platterInput.setScopeLagDrag(true, lagTarget, velocitySamples, false);
           int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
@@ -2805,12 +2806,12 @@ void TemporalDeck::convertLiveToSample() {
 }
 
 void TemporalDeck::seekSampleByNormalizedPosition(double normalized) {
-  impl->pendingSampleSeekNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
+  impl->pendingSampleSeekNormalized.store(levi_math::clampf(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
   impl->pendingSampleSeekRevision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void TemporalDeck::seekLiveByArcNormalizedPosition(double normalized) {
-  impl->pendingLiveSeekArcNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
+  impl->pendingLiveSeekArcNormalized.store(levi_math::clampf(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
   impl->pendingLiveSeekRevision.fetch_add(1, std::memory_order_relaxed);
 }
 

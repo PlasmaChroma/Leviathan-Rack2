@@ -10,6 +10,16 @@ inline float clamp01(float x) {
 	return std::max(0.f, std::min(x, 1.f));
 }
 
+// Float clamp for audio-rate code, a drop-in for rack::clamp() on float arguments.
+// rack::clamp() is std::fmax(std::fmin(x, hi), lo); without -ffinite-math-only (Rack's build does
+// not set it) GCC lowers each of those to a libm call. std::min/std::max lower to minss/maxss.
+// The operand order below reproduces fmax(fmin(x, hi), lo) exactly, including NaN (returns hi)
+// and lo > hi (returns lo), so it can replace clamp() anywhere the arguments are all float.
+// Integer, double and simd arguments must keep using clamp().
+inline float clampf(float x, float lo, float hi) {
+	return std::max(lo, std::min(hi, x));
+}
+
 // Established Leviathan saturation curve. Keep this stable for modules whose
 // sound and patch behavior already depend on it.
 inline float tanhLegacy(float x) {

@@ -13,9 +13,7 @@ constexpr float kMinimumSampleRate = 1000.f;
 constexpr float kLiveCeilingVolts = 5.f;
 constexpr float kSoftKneeVolts = 4.f;
 
-float clamp01(float value) {
-	return std::max(0.f, std::min(value, 1.f));
-}
+using levi_math::clamp01;
 
 float onePoleCoefficient(float seconds, float sampleRate) {
 	if (!(seconds > 0.f) || !(sampleRate > 0.f)) {

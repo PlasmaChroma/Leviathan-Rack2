@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DebugTerminalMetrics.hpp"
+#include "MathHelpers.hpp"
 #include "plugin.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
@@ -11,11 +12,11 @@ constexpr float kUndertowMinHz = 10.f;
 constexpr float kUndertowMaxHz = 10000.f;
 
 inline float undertowBaseFrequencyFromKnob(float knobNorm) {
-  return kUndertowMinHz * std::pow(kUndertowMaxHz / kUndertowMinHz, clamp(knobNorm, 0.f, 1.f));
+  return kUndertowMinHz * std::pow(kUndertowMaxHz / kUndertowMinHz, levi_math::clampf(knobNorm, 0.f, 1.f));
 }
 
 inline float undertowKnobValueForFrequency(float hz) {
-  hz = clamp(hz, kUndertowMinHz, kUndertowMaxHz);
+  hz = levi_math::clampf(hz, kUndertowMinHz, kUndertowMaxHz);
   return std::log(hz / kUndertowMinHz) / std::log(kUndertowMaxHz / kUndertowMinHz);
 }
 

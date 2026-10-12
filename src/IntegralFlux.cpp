@@ -8,6 +8,8 @@
 #include <cmath>
 #include <limits>
 
+using levi_math::clampf;
+
 namespace {
 std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
 }
@@ -20,7 +22,7 @@ float IntegralFlux::shapeSignedForMode(float shapeSigned, bool rising, FunctionS
 }
 
 float IntegralFlux::slopeWarp(float x, float s) {
-	x = clamp(x, 0.f, 1.f);
+	x = clampf(x, 0.f, 1.f);
 	float u = std::fabs(s);
 	if (u < 1e-6f) {
 		return 1.f;
@@ -138,13 +140,13 @@ float IntegralFlux::consumeTracerReductionAverageForUi(int channel) {
 
 float IntegralFlux::attenuverterGain(float knob01) {
 	// Noon = 0, CCW = negative, CW = positive.
-	return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
+	return clampf(knob01, 0.f, 1.f) * 2.f - 1.f;
 }
 
 float IntegralFlux::injectAlphaBaseForSampleTime(float sampleTime) {
 	if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
 		cachedInjectSampleTime = sampleTime;
-		cachedInjectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
+		cachedInjectAlphaBase = OUTER_INJECT_GAIN * clampf(1.f - std::exp(-sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
 	}
 	return cachedInjectAlphaBase;
 }
@@ -161,7 +163,7 @@ float IntegralFlux::bothTimeScaleFromCv(float v) {
 	// Neutral reference is constant for the life of the module, compute once.
 	static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
 	float scale = neutralHz / std::max(f, 1e-6f);
-	return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
+	return clampf(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
 }
 
 void IntegralFlux::enforceOuterSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
@@ -176,8 +178,8 @@ void IntegralFlux::enforceOuterSpeedLimit(float& riseTime, float& fallTime, floa
 }
 
 float IntegralFlux::shapeSignedFromKnob(float shape01, float linearShape) {
-	shape01 = clamp(shape01, 0.f, 1.f);
-	linearShape = clamp(linearShape, 1e-4f, 1.f - 1e-4f);
+	shape01 = clampf(shape01, 0.f, 1.f);
+	linearShape = clampf(linearShape, 1e-4f, 1.f - 1e-4f);
 	if (shape01 < linearShape) {
 		return (shape01 - linearShape) / linearShape;
 	}
@@ -192,7 +194,7 @@ float IntegralFlux::shapeSignedFromKnobForMode(float shape01, FunctionShapeMode 
 }
 
 float IntegralFlux::segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
-	outputNorm = clamp(outputNorm, 0.f, 1.f);
+	outputNorm = clampf(outputNorm, 0.f, 1.f);
 	if (std::fabs(shapeSigned) < 1e-6f) {
 		return rising ? outputNorm : (1.f - outputNorm);
 	}
@@ -206,11 +208,11 @@ float IntegralFlux::segmentPhaseFromOutputNorm(float outputNorm, float shapeSign
 	}
 	const float partialIntegral = span * partialSum / float(WARP_SCALE_SAMPLES);
 	const float totalIntegral = std::max(slopeWarpScale(shapeSigned), 1e-6f);
-	return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
+	return clampf(partialIntegral / totalIntegral, 0.f, 1.f);
 }
 
 float IntegralFlux::segmentPhaseFromOutputNormForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
-	outputNorm = clamp(outputNorm, 0.f, 1.f);
+	outputNorm = clampf(outputNorm, 0.f, 1.f);
 	if (mode == FUNCTION_SHAPE_MATHS) {
 		return segmentPhaseFromOutputNorm(outputNorm, shapeSigned, rising);
 	}
@@ -222,7 +224,7 @@ float IntegralFlux::computeSegPhase(float out, float startOut, float invSpan) {
 		return 1.f;
 	}
 	float phase = (out - startOut) * invSpan;
-	return clamp(phase, 0.f, 1.f);
+	return clampf(phase, 0.f, 1.f);
 }
 
 IntegralFlux::SlewStepResult IntegralFlux::processUnifiedShapedSlew(
@@ -273,10 +275,10 @@ IntegralFlux::SlewStepResult IntegralFlux::processUnifiedShapedSlew(
 	stageTime = std::max(stageTime, 1e-6f);
 	const bool rising = delta > 0.f;
 	float range = OUTER_V_MAX - OUTER_V_MIN;
-	float outputNorm = clamp((out - OUTER_V_MIN) / std::max(range, 1e-6f), 0.f, 1.f);
+	float outputNorm = clampf((out - OUTER_V_MIN) / std::max(range, 1e-6f), 0.f, 1.f);
 	float scale = rising ? riseWarpScale : fallWarpScale;
 	float warp = slopeWarpForMode(outputNorm, shapeSigned, rising, shapeMode);
-	float dp = clamp(dt / stageTime, 0.f, 0.5f);
+	float dp = clampf(dt / stageTime, 0.f, 0.5f);
 	float step = dp * warp * scale * range;
 
 	float prevOut = out;
@@ -298,7 +300,7 @@ float IntegralFlux::phaseCrossingFraction(float phasePos, float dp) {
 	if (dp <= 1e-9f) {
 		return 1.f;
 	}
-	return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
+	return clampf(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
 }
 
 void IntegralFlux::remapPhasePosForStageTimeChange(OuterChannelState& ch, float oldRise, float oldFall, float newRise, float newFall) {
@@ -312,12 +314,12 @@ void IntegralFlux::remapPhasePosForStageTimeChange(OuterChannelState& ch, float 
 	const float oldTotal = oldRise + oldFall;
 	const float newTotal = newRise + newFall;
 	if (ch.phase == OUTER_RISE) {
-		const float dotX = clamp((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
-		ch.phasePos = clamp((dotX * newTotal) / newRise, 0.f, 2.f);
+		const float dotX = clampf((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
+		ch.phasePos = clampf((dotX * newTotal) / newRise, 0.f, 2.f);
 	}
 	else if (ch.phase == OUTER_FALL) {
-		const float dotX = clamp((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
-		ch.phasePos = clamp(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
+		const float dotX = clampf((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
+		ch.phasePos = clampf(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
 	}
 }
 
@@ -325,7 +327,7 @@ void IntegralFlux::insertGateTransition(OuterChannelState& ch, bool newState, fl
 	if (newState == ch.gateState) {
 		return;
 	}
-	float f = clamp(fraction01, 1e-6f, 1.f);
+	float f = clampf(fraction01, 1e-6f, 1.f);
 	// Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
 	float p = f - 1.f;
 	float step = newState ? 10.f : -10.f;
@@ -341,7 +343,7 @@ void IntegralFlux::insertSignalTransition(OuterChannelState& ch, float step, flo
 	if (std::fabs(step) < 1e-9f) {
 		return;
 	}
-	float f = clamp(fraction01, 1e-6f, 1.f);
+	float f = clampf(fraction01, 1e-6f, 1.f);
 	float p = f - 1.f;
 	ch.signalBlep.insertDiscontinuity(p, step);
 }
@@ -375,7 +377,7 @@ void IntegralFlux::initKnobCurveLut() {
 
 float IntegralFlux::shapeKnobTimeCurve(float knob) const {
 	// Linear interpolation in LUT avoids powf() in the hot path.
-	knob = clamp(knob, 0.f, 1.f);
+	knob = clampf(knob, 0.f, 1.f);
 	float idx = knob * float(KNOB_CURVE_LUT_SIZE - 1);
 	int i0 = int(idx);
 	int i1 = std::min(i0 + 1, KNOB_CURVE_LUT_SIZE - 1);
@@ -412,8 +414,8 @@ void IntegralFlux::publishPreviewState(PreviewSharedState& shared, float riseTim
 
 void IntegralFlux::publishPreviewDot(PreviewSharedState& shared, bool visible, float xNorm, float yNorm) {
 	shared.dotVersion.fetch_add(1u, std::memory_order_acq_rel);
-	shared.dotXNorm.store(clamp(xNorm, 0.f, 1.f), std::memory_order_relaxed);
-	shared.dotYNorm.store(clamp(yNorm, 0.f, 1.f), std::memory_order_relaxed);
+	shared.dotXNorm.store(clampf(xNorm, 0.f, 1.f), std::memory_order_relaxed);
+	shared.dotYNorm.store(clampf(yNorm, 0.f, 1.f), std::memory_order_relaxed);
 	shared.dotVisible.store(visible ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 	shared.dotVersion.fetch_add(1u, std::memory_order_release);
 }
@@ -512,7 +514,7 @@ void IntegralFlux::getPreviewState(int channel, float& riseTime, float& fallTime
 float IntegralFlux::computeShapeTimeScale(float shape, FunctionShapeMode mode, float logScaleLog2, float expScaleLog2) const {
 	// Shape knob (log/lin/exp) contributes a multiplicative time factor.
 	// We interpolate in log2 domain so scaling stays perceptually smooth.
-	shape = clamp(shape, 0.f, 1.f);
+	shape = clampf(shape, 0.f, 1.f);
 	const float linearShape = mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE;
 	if (shape < linearShape) {
 		float t = shape / linearShape;
@@ -547,14 +549,14 @@ float IntegralFlux::computeStageTime(
 	// Rise/Fall CV applies in log-time domain:
 	// +V -> longer (slower), -V -> shorter (faster).
 	float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
-	float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+	float stageOct = clampf(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 	t *= rack::dsp::exp2_taylor5(stageOct);
 
 	// BOTH and curve-shape scaling are already multiplicative factors.
 	t *= bothScale;
 	t *= shapeTimeScale;
 
-	return clamp(t, absoluteMinTime, maxTime);
+	return clampf(t, absoluteMinTime, maxTime);
 }
 
 void IntegralFlux::triggerOuterFunction(OuterChannelState& ch) {
@@ -719,7 +721,7 @@ IntegralFlux::OuterChannelResult IntegralFlux::processOuterChannel(
 		// Re-anchor phase to current output whenever curve changes so the tracer
 		// location is invalidated/recomputed against the updated curve shape.
 		float range = std::max(OUTER_V_MAX - OUTER_V_MIN, 1e-6f);
-		float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+		float x = clampf((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 		ch.phasePos = segmentPhaseFromOutputNormForMode(x, shapeSigned, ch.phase == OUTER_RISE, shapeMode);
 	}
 	float riseScale = ch.cachedRiseWarpScale;
@@ -761,21 +763,21 @@ IntegralFlux::OuterChannelResult IntegralFlux::processOuterChannel(
 		if (signalPatched) {
 			// Map patched input into the same normalized domain as the internal integrator state.
 			float inSoft = levi_math::softLimit(signalIn, 8.f);
-			xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
+			xIn = clampf((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
 			injectAlpha = injectAlphaBase;
 		}
 
 		if (ch.phase == OUTER_RISE) {
 			float dpPhase = dt / riseTime;
 			ch.phasePos += dpPhase;
-			float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			float dp = clamp(dt / riseTime, 0.f, 0.5f);
+			float x = clampf((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+			float dp = clampf(dt / riseTime, 0.f, 0.5f);
 			x += dp * slopeWarpForMode(x, s, true, shapeMode) * riseScale;
 			if (injectAlpha > 0.f) {
 				// Hardware-like perturbation: gently pull active FG state toward input.
 				x += injectAlpha * (xIn - x);
 			}
-			x = clamp(x, 0.f, 1.f);
+			x = clampf(x, 0.f, 1.f);
 			ch.out = OUTER_V_MIN + x * range;
 			if (ch.phasePos >= 1.f || x >= 1.f) {
 				// Preserve fractional overshoot so rise->fall transition remains sample-rate robust.
@@ -796,13 +798,13 @@ IntegralFlux::OuterChannelResult IntegralFlux::processOuterChannel(
 		if (ch.phase == OUTER_FALL) {
 			float dpPhase = dt / fallTime;
 			ch.phasePos += dpPhase;
-			float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			float dp = clamp(dt / fallTime, 0.f, 0.5f);
+			float x = clampf((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+			float dp = clampf(dt / fallTime, 0.f, 0.5f);
 			x -= dp * slopeWarpForMode(x, s, false, shapeMode) * fallScale;
 			if (injectAlpha > 0.f) {
 				x += injectAlpha * (xIn - x);
 			}
-			x = clamp(x, 0.f, 1.f);
+			x = clampf(x, 0.f, 1.f);
 			ch.out = OUTER_V_MIN + x * range;
 			if (ch.phasePos >= 1.f || x <= 0.f) {
 				float f = phaseCrossingFraction(ch.phasePos, dpPhase);
@@ -1072,10 +1074,10 @@ void IntegralFlux::process(const ProcessArgs& args) {
 			float fall = std::max(ch.activeFallTime, 1e-6f);
 			float total = rise + fall;
 			if (ch.phase == OUTER_RISE) {
-				return clamp((ch.phasePos * rise) / total, 0.f, 1.f);
+				return clampf((ch.phasePos * rise) / total, 0.f, 1.f);
 			}
 			if (ch.phase == OUTER_FALL) {
-				return clamp((rise + ch.phasePos * fall) / total, 0.f, 1.f);
+				return clampf((rise + ch.phasePos * fall) / total, 0.f, 1.f);
 			}
 			return 0.f;
 		};
@@ -1093,12 +1095,12 @@ void IntegralFlux::process(const ProcessArgs& args) {
 		);
 	}
 	// Variable outputs are attenuverters; unity outputs bypass this scaling.
-	float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
+	float ch1Var = clampf(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 	float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
-	float ch2Var = clamp(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
+	float ch2Var = clampf(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
 	float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
-	float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
-	float ch4Var = clamp(ch4OutRendered * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
+	float ch3Var = clampf(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
+	float ch4Var = clampf(ch4OutRendered * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
 	float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateEnabled ? ch1.gateBlep.process() : 0.f);
 	float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateEnabled ? ch4.gateBlep.process() : 0.f);
 	bool eorHigh = ch1.gateState;
@@ -1118,9 +1120,9 @@ void IntegralFlux::process(const ProcessArgs& args) {
 		float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
 		float sumRaw = busV1 + busV2 + busV3 + busV4;
 		float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1, busV2), std::fmax(busV3, busV4)));
-		sumOut = clamp(sumRaw, -10.f, 10.f);
-		invOut = clamp(-sumOut, -10.f, 10.f);
-		orOut = clamp(orRaw, 0.f, 10.f);
+		sumOut = clampf(sumRaw, -10.f, 10.f);
+		invOut = clampf(-sumOut, -10.f, 10.f);
+		orOut = clampf(orRaw, 0.f, 10.f);
 	}
 
 	outputs[EOR_1_OUTPUT].setVoltage(eorOut);
@@ -1142,12 +1144,12 @@ void IntegralFlux::process(const ProcessArgs& args) {
 		lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
 		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
 		lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
-		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
-		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4OutRendered) / OUTER_V_MAX, 0.f, 1.f));
+		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clampf(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
+		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clampf(std::fabs(ch4OutRendered) / OUTER_V_MAX, 0.f, 1.f));
 		// Mixer LEDs indicate SUM bus polarity (INV is the same signal inverted):
 		// red = negative SUM, green = positive SUM.
-		lights[OR_LED_LIGHT].setBrightness(clamp((-sumOut) / 10.f, 0.f, 1.f));
-		lights[INV_LED_LIGHT].setBrightness(clamp(sumOut / 10.f, 0.f, 1.f));
+		lights[OR_LED_LIGHT].setBrightness(clampf((-sumOut) / 10.f, 0.f, 1.f));
+		lights[INV_LED_LIGHT].setBrightness(clampf(sumOut / 10.f, 0.f, 1.f));
 	}
 	if (measurePerf) {
 		const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(

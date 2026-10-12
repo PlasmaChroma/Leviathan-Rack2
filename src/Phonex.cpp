@@ -1,4 +1,5 @@
 #include "Phonex.hpp"
+#include "MathHelpers.hpp"
 
 #include "PhonexRom.hpp"
 #include "PhonexSequenceCompiler.hpp"
@@ -164,7 +165,7 @@ void Phonex::process(const ProcessArgs& args) {
 	lights[VOICED_LIGHT].setBrightness(frame.voiced ? 1.f : 0.f);
 	lights[FRAME_LIGHT].setBrightness(frame.framePulse ? 1.f : 0.f);
 	lights[EOX_LIGHT].setBrightness(frame.eoxPulse ? 1.f : 0.f);
-	lights[BEND_LIGHT].setBrightness(clamp(controls.bend + controls.bendCv / 5.f, 0.f, 1.f));
+	lights[BEND_LIGHT].setBrightness(levi_math::clampf(controls.bend + controls.bendCv / 5.f, 0.f, 1.f));
 }
 
 phonex::TextCompileResult Phonex::submitText(phonex::StringView text) {

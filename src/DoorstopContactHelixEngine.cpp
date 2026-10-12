@@ -1,4 +1,5 @@
 #include "DoorstopContactHelixEngine.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +8,7 @@ namespace doorstop {
 namespace {
 constexpr float PI = 3.14159265358979323846f;
 constexpr int SUBSTEPS = 4;
-float clamp01(float x) { return std::max(0.f, std::min(x, 1.f)); }
+using levi_math::clamp01;
 }
 
 void ContactHelixEngine::updateCoefficients() {

@@ -1,4 +1,5 @@
 #include "PhonexEngine.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -66,9 +67,7 @@ float LatticeFilter::process(
 
 namespace {
 
-float clampf(float value, float low, float high) {
-	return std::max(low, std::min(high, value));
-}
+using levi_math::clampf;
 
 float quietSpeed(float speed) {
 	return std::abs(speed) < 0.025f ? 0.f : clampf(speed, -4.f, 4.f);

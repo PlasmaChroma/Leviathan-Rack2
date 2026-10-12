@@ -1,10 +1,11 @@
 #include "Bulkhead.hpp"
+#include "MathHelpers.hpp"
 
 namespace {
 constexpr float SPEED_OF_SOUND_MPS = 343.f;
 
 inline float cvToUnit(float v) {
-	return clamp(v / 5.f, -1.f, 1.f);
+	return levi_math::clampf(v / 5.f, -1.f, 1.f);
 }
 
 inline float mapUnit(float t, float lo, float hi) {
@@ -79,7 +80,7 @@ inline float dotVec2(const bulkhead::geometry::Vec2& a, const bulkhead::geometry
 }
 
 inline float directionalEmission(float speakerYawRadians, const bulkhead::geometry::Vec2& fromSpeakerToTarget) {
-	const float front = clamp(dotVec2(forwardFromYaw(speakerYawRadians), normalizeOrUp(fromSpeakerToTarget)), -1.f, 1.f);
+	const float front = levi_math::clampf(dotVec2(forwardFromYaw(speakerYawRadians), normalizeOrUp(fromSpeakerToTarget)), -1.f, 1.f);
 	return 0.35f + 0.65f * std::max(0.f, front);
 }
 
@@ -92,7 +93,7 @@ inline float roomAreaNorm(const bulkhead::geometry::RoomBounds& room) {
 	const float h = std::max(0.5f, room.top - room.bottom);
 	// 8m x 5m (default) ~= neutral midpoint around 0.5.
 	const float a = w * h;
-	return clamp((a - 8.f) / 64.f, 0.f, 1.f);
+	return levi_math::clampf((a - 8.f) / 64.f, 0.f, 1.f);
 }
 
 } // namespace
@@ -334,7 +335,7 @@ void Bulkhead::process(const ProcessArgs& args) {
 	combL[0].line.writeSample(monoIn);
 	combR[0].line.writeSample(monoIn);
 
-	const float decayNorm = clamp((decaySec - 0.1f) / 29.9f, 0.f, 1.f);
+	const float decayNorm = levi_math::clampf((decaySec - 0.1f) / 29.9f, 0.f, 1.f);
 	const float feedbackBase = 0.64f + 0.30f * decayNorm;
 	const float dampBase = 0.12f + 0.55f * absorb;
 	const float motionDepth = 1.f + motion * 0.08f;
@@ -368,9 +369,9 @@ void Bulkhead::process(const ProcessArgs& args) {
 	const float areaN = roomAreaNorm(room);
 	const float distToLeft = std::max(0.05f, vec2Length(subVec2(listener, speakerLeft)));
 	const float distToRight = std::max(0.05f, vec2Length(subVec2(listener, speakerRight)));
-	const float listenerSourceDistN = clamp(0.5f * (distToLeft + distToRight) / 6.f, 0.f, 1.f);
-	const float absorbLateBias = clamp(absorb * 0.35f, 0.f, 0.35f);
-	const float lateWeight = clamp(0.28f + 0.52f * areaN + 0.20f * listenerSourceDistN - absorbLateBias, 0.15f, 0.92f);
+	const float listenerSourceDistN = levi_math::clampf(0.5f * (distToLeft + distToRight) / 6.f, 0.f, 1.f);
+	const float absorbLateBias = levi_math::clampf(absorb * 0.35f, 0.f, 0.35f);
+	const float lateWeight = levi_math::clampf(0.28f + 0.52f * areaN + 0.20f * listenerSourceDistN - absorbLateBias, 0.15f, 0.92f);
 	const float earlyWeight = 1.f - lateWeight;
 	float wetL = earlyL * earlyWeight + lateL * lateWeight;
 	float wetR = earlyR * earlyWeight + lateR * lateWeight;
@@ -400,8 +401,8 @@ void Bulkhead::process(const ProcessArgs& args) {
 		const bulkhead::geometry::Vec2 listenerToRight = subVec2(speakerRight, listener);
 		const bulkhead::geometry::Vec2 dirLeft = normalizeOrUp(listenerToLeft);
 		const bulkhead::geometry::Vec2 dirRight = normalizeOrUp(listenerToRight);
-		const float panLeft = clamp(dirLeft.x, -1.f, 1.f);
-		const float panRight = clamp(dirRight.x, -1.f, 1.f);
+		const float panLeft = levi_math::clampf(dirLeft.x, -1.f, 1.f);
+		const float panRight = levi_math::clampf(dirRight.x, -1.f, 1.f);
 		const float distLeft = std::max(0.08f, vec2Length(listenerToLeft) * roomScaleForDirect);
 		const float distRight = std::max(0.08f, vec2Length(listenerToRight) * roomScaleForDirect);
 		const float attLeft = dryDistanceAttenuation(distLeft);
@@ -418,8 +419,8 @@ void Bulkhead::process(const ProcessArgs& args) {
 
 	outL = softClip(outL);
 	outR = softClip(outR);
-	outputs[OUT_L_OUTPUT].setVoltage(clamp(outL, -10.f, 10.f));
-	outputs[OUT_R_OUTPUT].setVoltage(clamp(outR, -10.f, 10.f));
+	outputs[OUT_L_OUTPUT].setVoltage(levi_math::clampf(outL, -10.f, 10.f));
+	outputs[OUT_R_OUTPUT].setVoltage(levi_math::clampf(outR, -10.f, 10.f));
 }
 
 json_t* Bulkhead::dataToJson() {

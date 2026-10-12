@@ -1,4 +1,5 @@
 #include "Undertow.hpp"
+#include "MathHelpers.hpp"
 #include "UndertowShape.hpp"
 #include "WavePreviewTracer.hpp"
 
@@ -42,7 +43,7 @@ inline float drivenLinFm(float lin, float amount) {
   // bus drive. This keeps the 80% transition continuous instead of clipping raw
   // Rack volts down to a much smaller post-drive value.
   const float bus = lin * amount * kLinFmScale;
-  const float driveNorm = clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
+  const float driveNorm = levi_math::clampf((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
   if (driveNorm <= 0.f || std::fabs(bus) < 1e-9f) {
     return bus;
   }
@@ -52,7 +53,7 @@ inline float drivenLinFm(float lin, float amount) {
 }
 
 inline float onePoleCoeff(float sampleTime, float tauSeconds) {
-  return clamp(sampleTime / (tauSeconds + sampleTime), 0.f, 1.f);
+  return levi_math::clampf(sampleTime / (tauSeconds + sampleTime), 0.f, 1.f);
 }
 
 inline float updateAnalogCharacterEnv(float x, Undertow::VoiceState* voice, float sampleTime) {
@@ -65,7 +66,7 @@ inline float updateAnalogCharacterEnv(float x, Undertow::VoiceState* voice, floa
 }
 
 inline float analogCharacter(float x, float env, float baseDrive, float driveSkew) {
-  const float drive = baseDrive + kAnalogCharacterEnvDriveDepth * clamp(env, 0.f, 1.f);
+  const float drive = baseDrive + kAnalogCharacterEnvDriveDepth * levi_math::clampf(env, 0.f, 1.f);
   const float signDrive = x >= 0.f ? (drive + driveSkew) : (drive - driveSkew);
   const float norm = std::max(fastAtanApprox(signDrive), 1e-6f);
   return fastAtanApprox(x * signDrive) / norm;
@@ -75,7 +76,7 @@ inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, floa
   if (!blep || std::fabs(step) < 1e-9f) {
     return;
   }
-  float f = clamp(fraction01, 1e-6f, 1.f);
+  float f = levi_math::clampf(fraction01, 1e-6f, 1.f);
   // Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
   blep->insertDiscontinuity(f - 1.f, step);
 }
@@ -149,7 +150,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float edgeHardness = params[EDGE_HARDNESS_PARAM].getValue();
   const bool analogCharacterEnabledNow = analogCharacterEnabled.load(std::memory_order_relaxed);
   const bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
-  const float linHpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * args.sampleTime, 0.f, 1.f);
+  const float linHpCoeff = levi_math::clampf(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * args.sampleTime, 0.f, 1.f);
   bool anySyncRising = false;
   bool anyPatchedSGateHigh = false;
 
@@ -159,12 +160,12 @@ void Undertow::process(const ProcessArgs& args) {
     const float expo = inputs[EXPO_INPUT].getNormalPolyVoltage(0.f, channel);
     const float baseFreq = coarseHz * dsp::approxExp2_taylor5(fineOctaves + vOct + expo);
     if (channel == 0) {
-      displayFrequencyHz.store(clamp(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
+      displayFrequencyHz.store(levi_math::clampf(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
     }
     const float linIn = inputs[LIN_FM_INPUT].getNormalPolyVoltage(0.f, channel);
     const float lin = acCoupledLinFm(linIn, &voice, linHpCoeff);
     const float linBus = drivenLinFm(lin, linAmt);
-    const float freq = clamp(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
+    const float freq = levi_math::clampf(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
     const float phaseInc = freq * args.sampleTime;
     const float shape = shapeCvPatched
                             ? undertow_shape::shapeControlTaper(
@@ -186,7 +187,7 @@ void Undertow::process(const ProcessArgs& args) {
     float syncDiscontinuityFrac = 0.5f;
     if (syncRising) {
       if (phaseInc > 1e-9f) {
-        syncDiscontinuityFrac = clamp((1.f - phaseBeforeEvents) / phaseInc, 1e-6f, 1.f);
+        syncDiscontinuityFrac = levi_math::clampf((1.f - phaseBeforeEvents) / phaseInc, 1e-6f, 1.f);
       }
       voice.phase = 0.f;
     }
@@ -197,7 +198,7 @@ void Undertow::process(const ProcessArgs& args) {
     if (voice.phase >= 1.f) {
       wrapped = true;
       if (phaseInc > 1e-9f) {
-        wrapDiscontinuityFrac = clamp((1.f - phaseBeforeAdvance) / phaseInc, 1e-6f, 1.f);
+        wrapDiscontinuityFrac = levi_math::clampf((1.f - phaseBeforeAdvance) / phaseInc, 1e-6f, 1.f);
       }
       voice.phase -= std::floor(voice.phase);
     }
@@ -261,10 +262,10 @@ void Undertow::process(const ProcessArgs& args) {
                                                  kAnalogCharacterDriveSkew)
                                : shaped;
     outputs[SINE_OUTPUT].setVoltage(5.f * sineOut + voice.sineBlep.process(), channel);
-    outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shapeOut + voice.shapeBlep.process(), -5.f, 5.f), channel);
+    outputs[SHAPE_OUTPUT].setVoltage(levi_math::clampf(5.f * shapeOut + voice.shapeBlep.process(), -5.f, 5.f), channel);
     // The sub square and S-Gate edges are band-limited with MinBLEP, so the
     // correction may briefly move around the steady +/-5V rails.
-    const float subOut = clamp(subBase + voice.subBlep.process(), -5.f, 5.f);
+    const float subOut = levi_math::clampf(subBase + voice.subBlep.process(), -5.f, 5.f);
     outputs[SUB_OUTPUT].setVoltage(subOut, channel);
   }
 
@@ -330,7 +331,7 @@ void Undertow::dataFromJson(json_t* root) {
     previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
-    params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));
+    params[EDGE_HARDNESS_PARAM].setValue(levi_math::clampf(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));
   }
   else if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
     params[EDGE_HARDNESS_PARAM].setValue(json_boolean_value(hardEdgesJ) ? 0.5f : 0.f);

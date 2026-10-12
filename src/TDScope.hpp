@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DebugTerminalTransport.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "SpscLatestSnapshot.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
@@ -206,7 +207,7 @@ struct TDScope final : Module {
   }
 
   float scopeColorBrightnessClamped() const {
-    return clamp(scopeColorBrightness, 0.f, 1.f);
+    return levi_math::clampf(scopeColorBrightness, 0.f, 1.f);
   }
 
   float scopeColorBrightnessScale() const {
@@ -228,9 +229,9 @@ struct TDScope final : Module {
   NVGcolor applyScopeColorBrightness(NVGcolor c) const {
     float colorScale = scopeColorBrightnessScale();
     float colorLift = scopeColorBrightnessLift();
-    c.r = clamp(c.r * colorScale, 0.f, 1.f);
-    c.g = clamp(c.g * colorScale, 0.f, 1.f);
-    c.b = clamp(c.b * colorScale, 0.f, 1.f);
+    c.r = levi_math::clampf(c.r * colorScale, 0.f, 1.f);
+    c.g = levi_math::clampf(c.g * colorScale, 0.f, 1.f);
+    c.b = levi_math::clampf(c.b * colorScale, 0.f, 1.f);
     c.r = c.r + (1.f - c.r) * colorLift;
     c.g = c.g + (1.f - c.g) * colorLift;
     c.b = c.b + (1.f - c.b) * colorLift;
@@ -281,7 +282,7 @@ struct TDScope final : Module {
     }
     json_t *brightnessJ = json_object_get(root, "scopeColorBrightness");
     if (brightnessJ) {
-      scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
+      scopeColorBrightness = levi_math::clampf(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
     bool legacyShaderRenderer = true;
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");

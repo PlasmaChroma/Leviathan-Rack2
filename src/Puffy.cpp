@@ -1,4 +1,5 @@
 #include "Puffy.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -223,7 +224,7 @@ void Puffy::process(const ProcessArgs& args) {
 	const float puffCv = inputs[PUFF_CV_INPUT].isConnected()
 		? inputs[PUFF_CV_INPUT].getVoltage(0)
 		: 0.f;
-	const float amountTarget = clamp(
+	const float amountTarget = levi_math::clampf(
 		params[PUFF_PARAM].getValue()
 			+ params[PUFF_CV_AMOUNT_PARAM].getValue() * puffCv / 10.f,
 		0.f,

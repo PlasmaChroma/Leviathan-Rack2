@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TemporalDeckExpanderProtocol.hpp"
+#include "MathHelpers.hpp"
 #include "TemporalDeckTest.hpp"
 #include "TemporalDeckScratchSmoothing.hpp"
 
@@ -239,7 +240,7 @@ struct TemporalDeckBuffer {
   }
 
   static const SincKernel &sincKernelForFraction(float frac) {
-    frac = clamp(frac, 0.f, 0.999999f);
+    frac = levi_math::clampf(frac, 0.f, 0.999999f);
     int phase = int(std::lround(frac * float(kSincPhaseCount)));
     phase = clamp(phase, 0, kSincPhaseCount - 1);
     return sincKernelLut()[size_t(phase)];
@@ -469,7 +470,7 @@ struct TemporalDeckEngine {
     if (scratchLagSamples >= double(nearNowWindowSamples)) {
       return liveDriftCancel;
     }
-    const float depthT = clamp(float(scratchLagSamples) / nearNowWindowSamples, 0.f, 1.f);
+    const float depthT = levi_math::clampf(float(scratchLagSamples) / nearNowWindowSamples, 0.f, 1.f);
     // Keep this gentle and depth-tapered so it helps final settle near NOW
     // without changing deep-buffer drag character beyond drift cancellation.
     return liveDriftCancel + sampleRate * (1.0f - depthT) * 0.85f;
@@ -819,7 +820,7 @@ struct TemporalDeckEngine {
       return;
     }
     const double sampleEnd = double(sampleFrames - 1);
-    const double activeEnd = sampleEnd * double(clamp(bufferKnob, 0.f, 1.f));
+    const double activeEnd = sampleEnd * double(levi_math::clampf(bufferKnob, 0.f, 1.f));
     streamedLoopStartFrame = 0u;
     streamedLoopEndFrameExclusive = uint64_t(std::floor(activeEnd)) + 1u;
     streamedLoopEndFrameExclusive = std::max<uint64_t>(
@@ -1147,7 +1148,7 @@ struct TemporalDeckEngine {
   }
 
   double maxLagFromKnob(float knob) const {
-    return double(clamp(knob, 0.f, 1.f)) * double(sampleRate) * double(usableBufferSecondsForMode(bufferDurationMode));
+    return double(levi_math::clampf(knob, 0.f, 1.f)) * double(sampleRate) * double(usableBufferSecondsForMode(bufferDurationMode));
   }
 
   double accessibleLag(float knob) const {
@@ -1183,7 +1184,7 @@ struct TemporalDeckEngine {
   }
 
   static float baseSpeedFromKnob(float rateKnob) {
-    rateKnob = clamp(rateKnob, 0.f, 1.f);
+    rateKnob = levi_math::clampf(rateKnob, 0.f, 1.f);
     // Knob-only range is 0.5x .. 2.0x, centered at 1.0x.
     if (rateKnob < 0.5f) {
       float t = rateKnob / 0.5f;
@@ -1194,7 +1195,7 @@ struct TemporalDeckEngine {
   }
 
   static float baseSpeedFromCv(float rateCv) {
-    rateCv = clamp(rateCv, -10.f, 10.f);
+    rateCv = levi_math::clampf(rateCv, -10.f, 10.f);
     if (rateCv <= 0.f) {
       float t = (rateCv + 10.f) / 10.f;
       return 0.5f + 0.5f * t;
@@ -1205,7 +1206,7 @@ struct TemporalDeckEngine {
 
   float computeBaseSpeed(float rateKnob, float rateCv, bool rateCvConnected, bool reverse) const {
     float speed = rateCvConnected ? baseSpeedFromCv(rateCv) : baseSpeedFromKnob(rateKnob);
-    speed = clamp(speed, -3.f, 3.f);
+    speed = levi_math::clampf(speed, -3.f, 3.f);
     if (reverse) {
       speed *= -1.f;
     }
@@ -1374,11 +1375,11 @@ struct TemporalDeckEngine {
     }
 
     float sr = std::max(sampleRate, 1.f);
-    float desiredVelocity = clamp(float(delta) * 18.0f, -sampleSlipCatchSpeedRatio() * sr,
+    float desiredVelocity = levi_math::clampf(float(delta) * 18.0f, -sampleSlipCatchSpeedRatio() * sr,
                                   sampleSlipCatchSpeedRatio() * sr);
     float maxDv = sampleSlipCatchAccelRatio() * sr * dt;
-    sampleSlipVelocity += clamp(desiredVelocity - sampleSlipVelocity, -maxDv, maxDv);
-    sampleSlipVelocity *= clamp(1.f - dt * 10.f, 0.f, 1.f);
+    sampleSlipVelocity += levi_math::clampf(desiredVelocity - sampleSlipVelocity, -maxDv, maxDv);
+    sampleSlipVelocity *= levi_math::clampf(1.f - dt * 10.f, 0.f, 1.f);
 
     double nextPos = currentPos + double(sampleSlipVelocity) * double(dt);
     double nextDelta = sampleDeltaToTarget(nextPos, targetPos, newestPos);
@@ -1401,9 +1402,9 @@ struct TemporalDeckEngine {
   void startSlipBlend(double lagNow, float sr) {
     slipBlendActive = true;
     float lagSec = float(std::max(0.0, lagNow) / std::max(sr, 1.f));
-    float lagNorm = clamp(lagSec / (kSlipNearNowBlendThresholdMs * 0.001f), 0.f, 1.f);
-    float speedNorm = clamp(slipCatchVelocity / std::max(sr * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
-    float blendVoicing = clamp(0.65f * speedNorm + 0.35f * lagNorm, 0.f, 1.f);
+    float lagNorm = levi_math::clampf(lagSec / (kSlipNearNowBlendThresholdMs * 0.001f), 0.f, 1.f);
+    float speedNorm = levi_math::clampf(slipCatchVelocity / std::max(sr * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
+    float blendVoicing = levi_math::clampf(0.65f * speedNorm + 0.35f * lagNorm, 0.f, 1.f);
     slipBlendRemaining = crossfade(kSlipBlendTimeMin, kSlipBlendTimeMax, blendVoicing);
     if (slipReturnOverrideTime >= 0.f) {
       slipBlendRemaining *= 0.55f;
@@ -1437,7 +1438,7 @@ struct TemporalDeckEngine {
     }
 
     float lagSec = float(lagNow / sr);
-    float lagNorm = clamp(lagSec / kSlipCatchLagReferenceSec, 0.f, 1.f);
+    float lagNorm = levi_math::clampf(lagSec / kSlipCatchLagReferenceSec, 0.f, 1.f);
     float desiredExtraRatio = slipCatchMaxExtraRatio() * std::pow(lagNorm, slipCatchLagCurveExponent());
 
     float blendThresholdSec = kSlipNearNowBlendThresholdMs * 0.001f;
@@ -1450,7 +1451,7 @@ struct TemporalDeckEngine {
     } else if (slipReturnMode == SLIP_RETURN_INSTANT) {
       blendThresholdSec *= 0.85f;
     }
-    float nearNowGain = clamp(lagSec / blendThresholdSec, 0.f, 1.f);
+    float nearNowGain = levi_math::clampf(lagSec / blendThresholdSec, 0.f, 1.f);
     desiredExtraRatio *= nearNowGain;
 
     float desiredExtraVel = desiredExtraRatio * sr;
@@ -1461,7 +1462,7 @@ struct TemporalDeckEngine {
       float requiredTotalVel = float(lagNow) / remaining;
       float requiredExtraVel = std::max(0.f, requiredTotalVel - transportVel);
       float quickCap = sr * kQuickSlipVelocityCapRatio;
-      requiredExtraVel = clamp(requiredExtraVel, 0.f, quickCap);
+      requiredExtraVel = levi_math::clampf(requiredExtraVel, 0.f, quickCap);
       desiredExtraVel = std::max(desiredExtraVel, requiredExtraVel);
       slipCatchVelocity = desiredExtraVel;
     } else {
@@ -1469,11 +1470,11 @@ struct TemporalDeckEngine {
       float brakeBase = accelBase * kSlipCatchBrakeMultiplier;
       float dv = desiredExtraVel - slipCatchVelocity;
       float maxDv = (dv >= 0.f ? accelBase : brakeBase) * dt;
-      slipCatchVelocity += clamp(dv, -maxDv, maxDv);
+      slipCatchVelocity += levi_math::clampf(dv, -maxDv, maxDv);
       slipCatchVelocity = std::max(0.f, slipCatchVelocity);
       float dampingThresholdSec = kSlipNearNowDampingThresholdMs * 0.001f;
       if (lagSec < dampingThresholdSec) {
-        float nearNowNorm = clamp(lagSec / dampingThresholdSec, 0.f, 1.f);
+        float nearNowNorm = levi_math::clampf(lagSec / dampingThresholdSec, 0.f, 1.f);
         float dampingFloor = slipNearNowDampingFloor();
         float damping = dampingFloor + (1.f - dampingFloor) * nearNowNorm;
         slipCatchVelocity *= damping;
@@ -1499,19 +1500,19 @@ struct TemporalDeckEngine {
   }
 
   double lagForPositionCv(float cv, double limit) const {
-    double normalized = double(clamp(std::fabs(cv) / 10.f, 0.f, 1.f));
+    double normalized = double(levi_math::clampf(std::fabs(cv) / 10.f, 0.f, 1.f));
     return normalized * limit;
   }
 
   double lagOffsetForPositionCv(float cv) const {
-    float clampedCv = clamp(cv, -10.f, 10.f);
+    float clampedCv = levi_math::clampf(cv, -10.f, 10.f);
     // POS polarity: +V moves forward (toward NOW), -V moves backward.
     // Lag is defined as distance behind NOW, so forward motion is negative lag.
     return -double(clampedCv) * double(sampleRate);
   }
 
   float onePoleCoeff(float hz) const {
-    hz = clamp(hz, 0.f, sampleRate * 0.45f);
+    hz = levi_math::clampf(hz, 0.f, sampleRate * 0.45f);
     if (hz <= 0.f) {
       return 0.f;
     }
@@ -1588,10 +1589,10 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
     cachedLpCoeffBase = onePoleCoeff(cachedCartridgeParams.lpHz);
     cachedLpCoeffMotion = onePoleCoeff(cachedCartridgeParams.lpMotionHz);
-    cachedSaturationMix = clamp(cachedCartridgeParams.saturationMix, 0.f, 1.f);
+    cachedSaturationMix = levi_math::clampf(cachedCartridgeParams.saturationMix, 0.f, 1.f);
     cachedDriveEnabled = cachedCartridgeParams.drive > 1.f && cachedSaturationMix > 1e-6f;
-    cachedCrossfeed = clamp(cachedCartridgeParams.crossfeed, 0.f, 0.45f);
-    cachedStereoTilt = clamp(cachedCartridgeParams.stereoTilt, -0.2f, 0.2f);
+    cachedCrossfeed = levi_math::clampf(cachedCartridgeParams.crossfeed, 0.f, 0.45f);
+    cachedStereoTilt = levi_math::clampf(cachedCartridgeParams.stereoTilt, -0.2f, 0.2f);
     cachedTiltLeftGain = 1.f - cachedStereoTilt * 0.5f;
     cachedTiltRightGain = 1.f + cachedStereoTilt * 0.5f;
     cachedAirMixGain = 1.f + cachedCartridgeParams.presenceGain;
@@ -1652,11 +1653,11 @@ struct TemporalDeckEngine {
     }
     refreshCartridgeCache();
     const CartridgeParams &p = cachedCartridgeParams;
-    motionAmount = clamp(motionAmount, 0.f, 1.f);
+    motionAmount = levi_math::clampf(motionAmount, 0.f, 1.f);
 
     // Motion amount modulates LP corner for "stylus under motion" dulling.
     // Use cached endpoint coefficients to avoid per-sample exp() in onePoleCoeff().
-    float lpMotionMix = clamp(motionAmount * p.motionDulling, 0.f, 1.f);
+    float lpMotionMix = levi_math::clampf(motionAmount * p.motionDulling, 0.f, 1.f);
     float lpCoeff = crossfade(cachedLpCoeffBase, cachedLpCoeffMotion, lpMotionMix);
 
     auto processChannel = [&](float x, CartridgeChannelState &state, float lpCoeff) {
@@ -1693,7 +1694,7 @@ struct TemporalDeckEngine {
       float wearTilt = 1.f + wowFlutter;
 
       // Semi-worn character: gentle high smearing + channel mismatch.
-      float lofiBlend = clamp(0.28f + motionAmount * 0.34f, 0.f, 0.68f);
+      float lofiBlend = levi_math::clampf(0.28f + motionAmount * 0.34f, 0.f, 0.68f);
       float mono = 0.5f * (left + right);
       left = left * (1.f - lofiBlend) + mono * lofiBlend * (1.01f + 0.35f * wowFlutter);
       right = right * (1.f - lofiBlend) + mono * lofiBlend * (0.99f - 0.30f * wowFlutter);
@@ -1723,7 +1724,7 @@ struct TemporalDeckEngine {
       // Keep cartridge level while reducing non-scratch coloration intensity.
       float dryL = in.first * cachedMakeupGain;
       float dryR = in.second * cachedMakeupGain;
-      float playbackMix = clamp(cachedPlaybackColorMix, 0.f, 1.f);
+      float playbackMix = levi_math::clampf(cachedPlaybackColorMix, 0.f, 1.f);
       left = crossfade(dryL, left, playbackMix);
       right = crossfade(dryR, right, playbackMix);
     }
@@ -2150,7 +2151,7 @@ struct TemporalDeckEngine {
   }
 
   void decayHybridWheelBurst(float dt) {
-    float decay = clamp(1.f - dt * kHybridScratchWheelBurstDecayHz, 0.f, 1.f);
+    float decay = levi_math::clampf(1.f - dt * kHybridScratchWheelBurstDecayHz, 0.f, 1.f);
     scratchWheelVelocityBurst *= decay;
     if (std::fabs(scratchWheelVelocityBurst) < kHybridScratchVelocityDeadband) {
       scratchWheelVelocityBurst = 0.f;
@@ -2168,23 +2169,23 @@ struct TemporalDeckEngine {
     scratchLagSamples = clampLag(scratchLagSamples, limit);
 
     float lagError = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
-    float correctionVelocity = clamp(-lagError * (kHybridScratchCorrectionHz * correctionScale),
+    float correctionVelocity = levi_math::clampf(-lagError * (kHybridScratchCorrectionHz * correctionScale),
                                      -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
     float handFollowHz = kHybridScratchHandFollowHz * followScale;
-    float handAlpha = clamp(dt * handFollowHz, 0.f, 1.f);
+    float handAlpha = levi_math::clampf(dt * handFollowHz, 0.f, 1.f);
     scratchHandVelocity += (targetReadVelocity - scratchHandVelocity) * handAlpha;
 
     float desiredVelocity = scratchHandVelocity + scratchWheelVelocityBurst + correctionVelocity;
-    float speedNorm = clamp(std::fabs(desiredVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
+    float speedNorm = levi_math::clampf(std::fabs(desiredVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
     float accelLimit = kHybridScratchMaxAccel * (0.55f + 0.85f * speedNorm) * followScale;
     float velocityError = desiredVelocity - scratchMotionVelocity;
     bool reversingPlatter = scratchMotionVelocity * desiredVelocity < 0.f;
     float maxVelocityStep = accelLimit * (reversingPlatter ? 1.35f : 1.0f) * dt;
-    scratchMotionVelocity += clamp(velocityError, -maxVelocityStep, maxVelocityStep);
+    scratchMotionVelocity += levi_math::clampf(velocityError, -maxVelocityStep, maxVelocityStep);
 
-    float damping = clamp(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale), 0.f, 1.f);
+    float damping = levi_math::clampf(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale), 0.f, 1.f);
     float coastDamping = std::fabs(desiredVelocity) < (0.75f * kHybridScratchVelocityDeadband)
-                           ? clamp(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale * 1.8f), 0.f, 1.f)
+                           ? levi_math::clampf(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale * 1.8f), 0.f, 1.f)
                            : damping;
     scratchMotionVelocity *= coastDamping;
 
@@ -2272,11 +2273,11 @@ struct TemporalDeckEngine {
     float maxLagAccel = samplesPerRev * kExternalCvMaxTurnAccelPerSec2;
 
     float lagError = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
-    float desiredLagVelocity = clamp(lagError * kExternalCvCorrectionHz, -maxLagVelocity, maxLagVelocity);
+    float desiredLagVelocity = levi_math::clampf(lagError * kExternalCvCorrectionHz, -maxLagVelocity, maxLagVelocity);
     float maxVelStep = maxLagAccel * dt;
-    scratch3LagVelocity += clamp(desiredLagVelocity - scratch3LagVelocity, -maxVelStep, maxVelStep);
+    scratch3LagVelocity += levi_math::clampf(desiredLagVelocity - scratch3LagVelocity, -maxVelStep, maxVelStep);
 
-    float damping = clamp(1.f - dt * kExternalCvVelocityDampingHz, 0.f, 1.f);
+    float damping = levi_math::clampf(1.f - dt * kExternalCvVelocityDampingHz, 0.f, 1.f);
     scratch3LagVelocity *= damping;
 
     double lagEstimate = clampLag(scratchLagSamples + double(scratch3LagVelocity) * double(dt), limit);
@@ -2330,8 +2331,8 @@ struct TemporalDeckEngine {
     float lagVelocity = scratch3LagVelocity;
     if (gestureAlive) {
       float desiredLagVelocity = -platterGestureVelocity;
-      float speedNorm = clamp(std::fabs(desiredLagVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
-      float velAlpha = clamp(dt * (kScratch3VelocityFollowHz * (0.8f + 0.6f * speedNorm)), 0.f, 1.f);
+      float speedNorm = levi_math::clampf(std::fabs(desiredLagVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
+      float velAlpha = levi_math::clampf(dt * (kScratch3VelocityFollowHz * (0.8f + 0.6f * speedNorm)), 0.f, 1.f);
       lagVelocity += (desiredLagVelocity - lagVelocity) * velAlpha;
 
       float lagPred = lagEstimate + lagVelocity * dt;
@@ -2339,7 +2340,7 @@ struct TemporalDeckEngine {
       lagEstimate = lagPred + kScratch3LagAlpha * residual;
       lagVelocity += (kScratch3LagBeta / std::max(dt, 1e-6f)) * residual;
     } else {
-      float decay = clamp(1.f - dt * kScratch3VelocityDecayHz, 0.f, 1.f);
+      float decay = levi_math::clampf(1.f - dt * kScratch3VelocityDecayHz, 0.f, 1.f);
       lagVelocity *= decay;
       lagEstimate += lagVelocity * dt;
       if (std::fabs(lagVelocity) < kScratch3VelocityDeadband) {
@@ -2347,7 +2348,7 @@ struct TemporalDeckEngine {
       }
     }
 
-    lagVelocity = clamp(lagVelocity, -kScratch3MaxLagVelocity, kScratch3MaxLagVelocity);
+    lagVelocity = levi_math::clampf(lagVelocity, -kScratch3MaxLagVelocity, kScratch3MaxLagVelocity);
     lagEstimate = clampLag(lagEstimate, limit);
     scratch3LagVelocity = lagVelocity;
     scratchLagSamples = lagEstimate;
@@ -2455,7 +2456,7 @@ struct TemporalDeckEngine {
     lastSlipReturnMode = slipReturnMode;
 
     double sampleEndPos = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : 0.0;
-    double sampleWindowEndPos = sampleModeActive ? sampleEndPos * double(clamp(bufferKnob, 0.f, 1.f)) : 0.0;
+    double sampleWindowEndPos = sampleModeActive ? sampleEndPos * double(levi_math::clampf(bufferKnob, 0.f, 1.f)) : 0.0;
     if (diskBackedSample) {
       updateStreamActiveWindow(bufferKnob);
     }
@@ -2466,8 +2467,8 @@ struct TemporalDeckEngine {
     float prevBaseSpeedLocal = prevBaseSpeed;
     prevBaseSpeed = baseSpeed;
     float speed = baseSpeed;
-    float mix = clamp(mixKnob, 0.f, 1.f);
-    float feedback = clamp(feedbackKnob, 0.f, 1.f);
+    float mix = levi_math::clampf(mixKnob, 0.f, 1.f);
+    float feedback = levi_math::clampf(feedbackKnob, 0.f, 1.f);
     bool fullyWet = (mix == 1.f);
     bool noFeedback = (feedback == 0.f);
     bool scratchGateHigh = scratchGateConnected && scratchGate;
@@ -2546,7 +2547,7 @@ struct TemporalDeckEngine {
         // Keep S_POS polarity consistent with POS input:
         // +V = forward/toward NOW, -V = backward/deeper lag.
         float posSec = float((scratchOutAnchorLagSamples - lagNow) / std::max(sampleRate, 1.f));
-        result.scratchPosOut = clamp(posSec, -10.f, 10.f);
+        result.scratchPosOut = levi_math::clampf(posSec, -10.f, 10.f);
       }
     };
     bool fastSampleTransportPath =
@@ -2575,7 +2576,7 @@ struct TemporalDeckEngine {
 
       std::pair<float, float> wet = readSampleBounded(readHead, SCRATCH_INTERP_CUBIC, sampleWindowEndPos);
       float readDeltaForTone = float(readHeadDelta(readHead, prevReadHead, sampleWindowEndPos));
-      float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
+      float motionAmount = levi_math::clampf(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
       wet = applyCartridgeCharacter(wet, motionAmount, false);
       prevScratchOutL = wet.first;
       prevScratchOutR = wet.second;
@@ -2994,7 +2995,7 @@ struct TemporalDeckEngine {
           targetReadVelocity += liveManualTowardNowAssistSamplesPerSec(
             sampleModeActive, scratchModelTreatsAsFreeze, scopeLagDragActive, manualTouchScratch, manualMotionActive,
             gestureDirection, scratchLagSamples, sampleRate);
-          float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
+          float motionNorm = levi_math::clampf(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool touchForwardNearNow = shouldAllowManualTouchNowSnap(
             sampleModeActive, scratchModelTreatsAsFreeze, scopeLagDragActive, manualTouchScratch, manualMotionActive, gestureDirection,
             scratchLagTargetSamples, nowSnapThresholdSamples);
@@ -3039,7 +3040,7 @@ struct TemporalDeckEngine {
           }
           scratchWheelVelocityBurst -= wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
           scratchWheelVelocityBurst =
-            clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
+            levi_math::clampf(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
         }
         decayHybridWheelBurst(dt);
         bool freshForwardWheelImpulse = std::fabs(wheelDelta) > 1e-6f && wheelDeltaShaped < 0.f;
@@ -3091,7 +3092,7 @@ struct TemporalDeckEngine {
 
     if (nowCatchActive && !sampleModeActive && !slipReturning && !slipBlendActive) {
       nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
-      float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
+      float progress = 1.f - levi_math::clampf(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
       float shapedProgress = progress * (2.f - progress);
       double targetLag = nowCatchStartLag * double(1.f - shapedProgress);
       if (nowCatchRemaining <= 0.f || targetLag < 0.5f) {
@@ -3132,10 +3133,10 @@ struct TemporalDeckEngine {
     double readDeltaForTone = readHeadDelta(readHead, prevReadHead, sampleWindowEndPos);
     if (anyScratch) scratchSmoothing.trackMotion(readDeltaForTone);
     float slipBlendProgress = slipBlendActive
-      ? (slipBlendRemaining <= dt ? 1.f : 1.f - clamp(slipBlendRemaining / std::max(slipBlendDuration, dt), 0.f, 1.f))
+      ? (slipBlendRemaining <= dt ? 1.f : 1.f - levi_math::clampf(slipBlendRemaining / std::max(slipBlendDuration, dt), 0.f, 1.f))
       : 0.f;
     float slipBlendWeight = slipBlendProgress * slipBlendProgress * (3.f - 2.f * slipBlendProgress);
-    float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
+    float motionAmount = levi_math::clampf(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
     if (slipBlendActive) motionAmount *= 1.f - slipBlendWeight;
     if (scratchReadPath) {
       // Preserve more buffer detail during scratching by reducing motion-driven
@@ -3172,7 +3173,7 @@ struct TemporalDeckEngine {
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
     if (slipReadPath) {
       float slipSpeedNorm =
-        clamp(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
+        levi_math::clampf(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
       float slipSpeedToneNorm = std::pow(slipSpeedNorm, 1.25f);
       float cutoffHz = crossfade(kSlipDynamicLpCutoffHighHz, kSlipDynamicLpCutoffLowHz, slipSpeedToneNorm);
       float lpCoeff = onePoleCoeff(cutoffHz);
@@ -3216,7 +3217,7 @@ struct TemporalDeckEngine {
         int deltaSign = (readDeltaForTone > 0.2f) ? 1 : ((readDeltaForTone < -0.2f) ? -1 : 0);
         if (deltaSign != 0 && prevScratchDeltaSign != 0 && deltaSign != prevScratchDeltaSign) {
           float jerk = std::fabs(readDeltaForTone - prevScratchReadDelta);
-          scratchFlipTransientEnv = std::max(scratchFlipTransientEnv, clamp(jerk * 0.18f, 0.f, 1.f));
+          scratchFlipTransientEnv = std::max(scratchFlipTransientEnv, levi_math::clampf(jerk * 0.18f, 0.f, 1.f));
         }
         if (deltaSign != 0) {
           prevScratchDeltaSign = deltaSign;
@@ -3279,7 +3280,7 @@ struct TemporalDeckEngine {
       // Small per-cartridge gain recovery during active scratch motion.
       // This compensates perceived loudness dip from interpolation + de-click
       // smoothing without flattening the cartridge tone differences.
-      float warpAmount = clamp(float(std::fabs(readDeltaForTone) / 3.0), 0.f, 1.f);
+      float warpAmount = levi_math::clampf(float(std::fabs(readDeltaForTone) / 3.0), 0.f, 1.f);
       float comp = 1.f + cachedScratchCompensation * (0.35f + 0.65f * warpAmount);
       wet.first *= comp;
       wet.second *= comp;

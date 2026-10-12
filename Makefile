@@ -1551,12 +1551,12 @@ build/tests/strand_module_spec: tests/strand_module_spec.cpp src/Strand.hpp src/
 test-sil-boost: build/tests/sil_boost_spec
 	$(call run_rack_test_bin,build/tests/sil_boost_spec)
 
-build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
+build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/MathHelpers.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_boost_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 .PHONY: test-sil-perf
 test-sil-perf: build/tests/sil_perf_regression_spec
 	$(call run_rack_test_bin,build/tests/sil_perf_regression_spec)
 
-build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
+build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/MathHelpers.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_perf_regression_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

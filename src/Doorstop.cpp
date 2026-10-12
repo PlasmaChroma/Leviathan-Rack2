@@ -1,4 +1,5 @@
 #include "Doorstop.hpp"
+#include "MathHelpers.hpp"
 
 #include <string>
 
@@ -127,10 +128,10 @@ Doorstop::Doorstop() {
 void Doorstop::publishVisualState(const doorstop::Frame& frame) {
 	const float maximumDisplacement = engine.getVisualMaximumDisplacement();
 	const float displacement = std::isfinite(frame.displacement)
-		? clamp(frame.displacement, -maximumDisplacement, maximumDisplacement)
+		? levi_math::clampf(frame.displacement, -maximumDisplacement, maximumDisplacement)
 		: 0.f;
-	const float velocity = std::isfinite(frame.velocity) ? clamp(frame.velocity, -1.f, 1.f) : 0.f;
-	const float strike = std::isfinite(frame.strikeLight) ? clamp(frame.strikeLight, 0.f, 1.f) : 0.f;
+	const float velocity = std::isfinite(frame.velocity) ? levi_math::clampf(frame.velocity, -1.f, 1.f) : 0.f;
+	const float strike = std::isfinite(frame.strikeLight) ? levi_math::clampf(frame.strikeLight, 0.f, 1.f) : 0.f;
 	visualDisplacement.store(displacement, std::memory_order_relaxed);
 	visualVelocity.store(velocity, std::memory_order_relaxed);
 	visualEnergy.store(visualEnergyEnvelope, std::memory_order_relaxed);
@@ -229,7 +230,7 @@ void Doorstop::process(const ProcessArgs& args) {
 			? inputs[VELOCITY_INPUT].getVoltage(0)
 			: 5.f;
 		const float normalizedVelocity = std::isfinite(velocityVoltage)
-			? clamp(velocityVoltage / 10.f, -1.f, 1.f)
+			? levi_math::clampf(velocityVoltage / 10.f, -1.f, 1.f)
 			: 0.f;
 		if (normalizedVelocity != 0.f) {
 			engine.strike(normalizedVelocity);
@@ -241,7 +242,7 @@ void Doorstop::process(const ProcessArgs& args) {
 		if (manualVelocityPending.exchange(false, std::memory_order_acquire)) {
 			manualVelocity = pendingManualVelocity.load(std::memory_order_relaxed);
 		}
-		engine.strike(clamp(manualVelocity, 0.1f, 1.f));
+		engine.strike(levi_math::clampf(manualVelocity, 0.1f, 1.f));
 		appliedStrike = true;
 	}
 
@@ -472,7 +473,7 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 			json_t* valueJ = json_object_get(v4TuningJ, key);
 			if (!json_is_number(valueJ)) return;
 			const double value = json_number_value(valueJ);
-			if (std::isfinite(value)) *destination = clamp(float(value), minimum, maximum);
+			if (std::isfinite(value)) *destination = levi_math::clampf(float(value), minimum, maximum);
 		};
 		loadV4Scale("excitation", &loadedV4Excitation, 0.25f, 2.f);
 		loadV4Scale("bend", &loadedV4Bend, 0.25f, 2.f);
@@ -511,7 +512,7 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 		if (json_is_number(breakInJ)) {
 			const double value = json_number_value(breakInJ);
 			if (std::isfinite(value)) {
-				loadedBreakIn = clamp(static_cast<float>(value), 0.f, 1.f);
+				loadedBreakIn = levi_math::clampf(static_cast<float>(value), 0.f, 1.f);
 			}
 		}
 

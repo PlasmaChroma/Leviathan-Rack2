@@ -1,4 +1,5 @@
 #include "Umi.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -80,7 +81,7 @@ float Umi::currentPulseLengthSeconds() const {
 }
 
 void Umi::updateCachedControls() {
-	const float rate = clamp(params[RATE_PARAM].getValue(), 0.f, 1.f);
+	const float rate = levi_math::clampf(params[RATE_PARAM].getValue(), 0.f, 1.f);
 	if (rate != cachedRateParam) {
 		cachedRateParam = rate;
 		if (rate < 0.02f) {
@@ -93,13 +94,13 @@ void Umi::updateCachedControls() {
 	}
 	cachedDensity = clamp(int(std::lround(params[DENSITY_PARAM].getValue())), 1, 8);
 
-	const float gravityNorm = clamp(params[GRAVITY_PARAM].getValue() + normalizedCv(inputs[GRAVITY_CV_INPUT]), 0.f, 1.f);
-	const float bounceNorm = clamp(params[BOUNCE_PARAM].getValue() + normalizedCv(inputs[BOUNCE_CV_INPUT]), 0.f, 1.f);
+	const float gravityNorm = levi_math::clampf(params[GRAVITY_PARAM].getValue() + normalizedCv(inputs[GRAVITY_CV_INPUT]), 0.f, 1.f);
+	const float bounceNorm = levi_math::clampf(params[BOUNCE_PARAM].getValue() + normalizedCv(inputs[BOUNCE_CV_INPUT]), 0.f, 1.f);
 	physicsParams.gravity = 200.f + gravityNorm * 2000.f;
-	physicsParams.tilt = clamp(params[TILT_PARAM].getValue() + normalizedCv(inputs[TILT_CV_INPUT]), -1.f, 1.f);
+	physicsParams.tilt = levi_math::clampf(params[TILT_PARAM].getValue() + normalizedCv(inputs[TILT_CV_INPUT]), -1.f, 1.f);
 	physicsParams.restitution = 0.15f + bounceNorm * 0.77f;
-	physicsParams.drag = clamp(params[DRAG_PARAM].getValue(), 0.f, 1.f) * 4.f;
-	physicsParams.chaos = clamp(params[CHAOS_PARAM].getValue() + normalizedCv(inputs[CHAOS_CV_INPUT]), 0.f, 1.f);
+	physicsParams.drag = levi_math::clampf(params[DRAG_PARAM].getValue(), 0.f, 1.f) * 4.f;
+	physicsParams.chaos = levi_math::clampf(params[CHAOS_PARAM].getValue() + normalizedCv(inputs[CHAOS_CV_INPUT]), 0.f, 1.f);
 }
 
 void Umi::applySettings() {
@@ -163,9 +164,9 @@ void Umi::handleCapture(const umi::CaptureEvent& event) {
 	anyPulse.trigger(pulseLength);
 	if (sinkIndex < 4) leftPulse.trigger(pulseLength);
 	else rightPulse.trigger(pulseLength);
-	velocityCv = clamp(event.speed / 2400.f, 0.f, 1.f) * 10.f;
+	velocityCv = levi_math::clampf(event.speed / 2400.f, 0.f, 1.f) * 10.f;
 	positionCv = float(sinkIndex) * (10.f / 7.f);
-	activity = clamp(activity + 0.2f, 0.f, 1.f);
+	activity = levi_math::clampf(activity + 0.2f, 0.f, 1.f);
 	captureSerial[static_cast<std::size_t>(sinkIndex)]++;
 }
 

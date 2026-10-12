@@ -5,6 +5,7 @@
 #include "SilLimiterPeakWindow.hpp"
 #include "SilLevelMeter.hpp"
 #include "SilDspKernels.hpp"
+#include "MathHelpers.hpp"
 #include "SilSpectrumSnapshot.hpp"
 #include "SpscLatestSnapshot.hpp"
 #include "DebugTerminalMetrics.hpp"
@@ -27,7 +28,7 @@ namespace {
 
 std::atomic<uint32_t> gSilDebugInstanceCounter {1u};
 
-using sil::clampf;
+using levi_math::clampf;
 
 } // namespace
 

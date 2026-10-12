@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TemporalDeckExpanderProtocol.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -71,12 +72,12 @@ inline float computeReadHeadMarkerT(const ScopeWindowLagSpan& span, float marker
       span.windowTopLag == span.windowBottomLag) {
     return 0.5f;
   }
-  return clamp((markerLagSamples - span.windowTopLag) / (span.windowBottomLag - span.windowTopLag), 0.f, 1.f);
+  return levi_math::clampf((markerLagSamples - span.windowTopLag) / (span.windowBottomLag - span.windowTopLag), 0.f, 1.f);
 }
 
 inline float applyLiveReadHeadPolicy(float markerT, float markerLagSamples, float halfWindowSamples, bool sampleMode,
                                      bool verticalInverted) {
-  float t = clamp(markerT, 0.f, 1.f);
+  float t = levi_math::clampf(markerT, 0.f, 1.f);
   if (sampleMode) {
     // Sample mode policy: marker is always centered.
     t = 0.5f;
@@ -126,14 +127,14 @@ inline float solveLagDragPlaybackLag(float desiredPlaybackLag,
     const double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
     effectiveAccessibleLag += std::max(sampleRate, 1.f) * float(msgAgeSec);
   }
-  return clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
+  return levi_math::clampf(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
 }
 
 inline float computeLagDragVelocity(float previousLagSamples, float currentLagSamples, double dtSec, float sampleRate) {
   const float dt = std::max(float(dtSec), 1e-6f);
   float velocitySamples = (previousLagSamples - currentLagSamples) / dt;
   const float maxAbsGestureVelocity = std::max(sampleRate, 1.f) * 3.0f;
-  velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+  velocitySamples = levi_math::clampf(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
   return velocitySamples;
 }
 
@@ -151,14 +152,14 @@ inline std::pair<float, float> computeScopePeakStatsFromBins(const temporaldeck_
     if (temporaldeck_expander::isScopeBinValid(bin)) {
       const int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
       const float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-      peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+      peaks.push_back(levi_math::clampf(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
     }
     if (renderStereo) {
       const temporaldeck_expander::ScopeBin& binR = rightScopeBins[i];
       if (temporaldeck_expander::isScopeBinValid(binR)) {
         const int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
         const float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-        peaks.push_back(clamp(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+        peaks.push_back(levi_math::clampf(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
       }
     }
   }
@@ -214,7 +215,7 @@ inline float updateScopeAutoScale(ScopeAutoScaleState* state,
     }
 
     float targetFullScaleVolts = std::max(p99Volts * 1.08f, state->livePeakHoldVolts * 1.015f);
-    targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+    targetFullScaleVolts = levi_math::clampf(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
 
     if (!modeChanged) {
       const float hysteresisFrac = 0.03f;

@@ -1,4 +1,5 @@
 #include "Cantor.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -28,10 +29,10 @@ Cantor::Cantor() {
 
 cantor::CultureSettings Cantor::currentSettings() {
 	cantor::CultureSettings settings;
-	settings.intent = clamp(params[INTENT_PARAM].getValue(), 0.f, 1.f);
-	settings.coherence = clamp(params[COHERENCE_PARAM].getValue(), 0.f, 1.f);
-	settings.interpret = clamp(params[INTERPRET_PARAM].getValue(), 0.f, 1.f);
-	settings.field = clamp(params[FIELD_PARAM].getValue(), 0.f, 1.f);
+	settings.intent = levi_math::clampf(params[INTENT_PARAM].getValue(), 0.f, 1.f);
+	settings.coherence = levi_math::clampf(params[COHERENCE_PARAM].getValue(), 0.f, 1.f);
+	settings.interpret = levi_math::clampf(params[INTERPRET_PARAM].getValue(), 0.f, 1.f);
+	settings.field = levi_math::clampf(params[FIELD_PARAM].getValue(), 0.f, 1.f);
 	return settings;
 }
 

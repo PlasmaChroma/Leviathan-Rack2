@@ -1,4 +1,5 @@
 #include "Chronomaw.hpp"
+#include "MathHelpers.hpp"
 #include "ChronomawWaveforms.hpp"
 #include <cmath>
 
@@ -54,17 +55,17 @@ static void outputStateFromJson(json_t* outJ, chronomaw::OutputState* out) {
 	}
 	out->muted = json_is_true(json_object_get(outJ, "muted"));
 	out->waveform = chronomaw::waveformFromIndex(jsonIntOr(outJ, "waveform", 0));
-	out->multiplier = clamp(jsonFloatOr(outJ, "multiplier", 1.f), 1.f / 16384.f, 192.f);
+	out->multiplier = levi_math::clampf(jsonFloatOr(outJ, "multiplier", 1.f), 1.f / 16384.f, 192.f);
 	const int legacyMode = (out->multiplier < 1.f) ? int(chronomaw::ModifierMode::Div) : int(chronomaw::ModifierMode::Mult);
 	out->modifierMode = chronomaw::ModifierMode(clamp(jsonIntOr(outJ, "modifierMode", legacyMode), 0, 2));
-	out->widthPct = clamp(jsonFloatOr(outJ, "widthPct", 50.f), 0.f, 100.f);
-	out->levelPct = clamp(jsonFloatOr(outJ, "levelPct", 100.f), 0.f, 100.f);
-	out->offsetPct = clamp(jsonFloatOr(outJ, "offsetPct", 0.f), -100.f, 100.f);
-	out->phasePct = clamp(jsonFloatOr(outJ, "phasePct", 0.f), -100.f, 100.f);
-	out->swingPct = clamp(jsonFloatOr(outJ, "swingPct", 0.f), -100.f, 100.f);
-	out->skewPct = clamp(jsonFloatOr(outJ, "skewPct", 0.f), -100.f, 100.f);
-	out->rotatePct = clamp(jsonFloatOr(outJ, "rotatePct", 0.f), -100.f, 100.f);
-	out->probabilityPct = clamp(jsonFloatOr(outJ, "probabilityPct", 100.f), 0.f, 100.f);
+	out->widthPct = levi_math::clampf(jsonFloatOr(outJ, "widthPct", 50.f), 0.f, 100.f);
+	out->levelPct = levi_math::clampf(jsonFloatOr(outJ, "levelPct", 100.f), 0.f, 100.f);
+	out->offsetPct = levi_math::clampf(jsonFloatOr(outJ, "offsetPct", 0.f), -100.f, 100.f);
+	out->phasePct = levi_math::clampf(jsonFloatOr(outJ, "phasePct", 0.f), -100.f, 100.f);
+	out->swingPct = levi_math::clampf(jsonFloatOr(outJ, "swingPct", 0.f), -100.f, 100.f);
+	out->skewPct = levi_math::clampf(jsonFloatOr(outJ, "skewPct", 0.f), -100.f, 100.f);
+	out->rotatePct = levi_math::clampf(jsonFloatOr(outJ, "rotatePct", 0.f), -100.f, 100.f);
+	out->probabilityPct = levi_math::clampf(jsonFloatOr(outJ, "probabilityPct", 100.f), 0.f, 100.f);
 	out->invert = json_is_true(json_object_get(outJ, "invert"));
 	out->randomSeed = uint32_t(std::max<int64_t>(0, jsonIntOr<int64_t>(outJ, "randomSeed", 0)));
 }
@@ -311,7 +312,7 @@ void Chronomaw::process(const ProcessArgs& args) {
 	lights[SYNC_LIGHT].setBrightness(inputs[CLK_INPUT].isConnected() ? 0.6f : 0.f);
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		float v = frameOut.outVolts[size_t(i)];
-		lights[OUT_1_LIGHT + i].setBrightness(clamp(v / chronomaw::kOutputMaxV, 0.f, 1.f));
+		lights[OUT_1_LIGHT + i].setBrightness(levi_math::clampf(v / chronomaw::kOutputMaxV, 0.f, 1.f));
 	}
 }
 
@@ -353,7 +354,7 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 	}
 	json_t* liveJ = json_object_get(rootJ, "live");
 	if (liveJ && json_is_object(liveJ)) {
-		state.live.bpm = clamp(jsonFloatOr(liveJ, "bpm", chronomaw::kDefaultBpm), chronomaw::kMinBpm, chronomaw::kMaxBpm);
+		state.live.bpm = levi_math::clampf(jsonFloatOr(liveJ, "bpm", chronomaw::kDefaultBpm), chronomaw::kMinBpm, chronomaw::kMaxBpm);
 		state.live.running = json_is_true(json_object_get(liveJ, "running"));
 		state.live.activeBank = clamp(jsonIntOr(liveJ, "activeBank", 0), 0, chronomaw::kNumBanks - 1);
 			state.live.density = chronomaw::DensityMode::Monitor;
@@ -378,7 +379,7 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 			if (!bankJ || !json_is_object(bankJ)) {
 				continue;
 			}
-			state.banks[b].bpm = clamp(jsonFloatOr(bankJ, "bpm", chronomaw::kDefaultBpm), chronomaw::kMinBpm, chronomaw::kMaxBpm);
+			state.banks[b].bpm = levi_math::clampf(jsonFloatOr(bankJ, "bpm", chronomaw::kDefaultBpm), chronomaw::kMinBpm, chronomaw::kMaxBpm);
 			readOutputArray(bankJ, "outputs", &state.banks[b].outputs);
 		}
 	}
