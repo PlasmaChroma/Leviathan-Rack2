@@ -1,11 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-<<<<<<< HEAD
-  "version": "2.8.0",
-=======
   "version": "2.9.1",
->>>>>>> puffy-rc3
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
