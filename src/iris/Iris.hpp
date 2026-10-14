@@ -5,7 +5,7 @@
 #include "IrisIO.hpp"
 #include "IrisWorkerCompletion.hpp"
 #include "../nautiloid/NautiloidIrisExpander.hpp"
-#include "../nautiloid/NautiloidColor.hpp"
+#include "../common/fractal/FractalColorMap.hpp"
 #include "../plugin.hpp"
 
 #include <array>
@@ -89,7 +89,7 @@ struct Iris final : Module {
   };
 
   struct Voice {
-    iris::WavetableOscillator oscillator;
+    fractal::WavetableOscillator oscillator;
     dsp::SchmittTrigger sync;
     float linHpState = 0.f;
   };
@@ -107,7 +107,7 @@ struct Iris final : Module {
   void requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation);
   // UI-thread APIs: copy conversion settings and submit owned work off audio.
   void requestOwnedExpanderSource(
-    std::shared_ptr<const iris::SourceField> source, uint64_t generation);
+    std::shared_ptr<const fractal::SourceField> source, uint64_t generation);
   void requestReload();
   void clearToDefault();
   void requestRebuild();
@@ -118,14 +118,14 @@ struct Iris final : Module {
   bool consumeRestoredImageSourceMode();
   std::shared_ptr<const std::vector<uint8_t>> previewPixelsSnapshot(
     int* width = nullptr, int* height = nullptr) const;
-  std::shared_ptr<const iris::SourceField> sourceFieldSnapshot() const;
+  std::shared_ptr<const fractal::SourceField> sourceFieldSnapshot() const;
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
   bool embedsSource() const { return embedSource; }
   void setEmbedSource(bool enabled) { embedSource = enabled; }
 
-  iris::ConversionSettings conversionSettings;
+  fractal::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
   std::array<std::atomic<float>, 16> displayPolyScans;
   std::atomic<int> displayPolyChannelCount {1};
@@ -134,9 +134,9 @@ struct Iris final : Module {
   std::atomic<float> displayPhase {0.f};
   std::atomic<float> displayWaveValue {0.f};
   std::atomic<float> displayPhaseFrequencyHz {0.f};
-  std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
+  std::atomic<int> displayImageChannelMode {fractal::IMAGE_CHANNEL_ALL};
   std::atomic<bool> displayChannelPreview {false};
-  std::atomic<int> activeSourceKind {iris::SOURCE_IMAGE};
+  std::atomic<int> activeSourceKind {fractal::SOURCE_IMAGE};
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};
@@ -148,7 +148,7 @@ private:
   friend struct IrisPhase4TestAccess;
 #endif
 
-  using SourcePtr = std::shared_ptr<const iris::SourceField>;
+  using SourcePtr = std::shared_ptr<const fractal::SourceField>;
 
   enum WorkerRequestType {
     REQUEST_NONE = 0,
@@ -164,11 +164,11 @@ private:
   struct WorkerRequest {
     WorkerRequestType type = REQUEST_NONE;
     std::string path;
-    iris::ConversionSettings settings;
+    fractal::ConversionSettings settings;
     SourcePtr source;
     const nautiloid_iris_expander::SourceSlot* sourceSlot = nullptr;
-    int nautiloidFractalMode = iris::FRACTAL_NONE;
-    int nautiloidFractalColorMode = nautiloid_color::PRISM;
+    int nautiloidFractalMode = fractal::FRACTAL_NONE;
+    int nautiloidFractalColorMode = fractal_color::PRISM;
     float nautiloidFractalZoom = 0.f;
     float nautiloidFractalCenterX = 0.f;
     float nautiloidFractalCenterY = 0.f;
@@ -179,7 +179,7 @@ private:
   struct WorkerResult {
     SourcePtr source;
     bool preserveExistingSource = false;
-    int sourceKind = iris::SOURCE_IMAGE;
+    int sourceKind = fractal::SOURCE_IMAGE;
   };
 
   void startWorker();
@@ -187,10 +187,10 @@ private:
   void submitRequest(const WorkerRequest& request);
   void workerLoop();
   bool publishWorkerResult(WorkerResult& result, int tableIndex, std::string diagnostic = {});
-  static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
+  static void buildPreview(const fractal::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;
-  std::array<iris::ImageWavetable, 3> tableBuffers;
+  std::array<fractal::ImageWavetable, 3> tableBuffers;
   int activeTableIndex = 0;
   int fadeFromTableIndex = -1;
   float tableCrossfade = 1.f;
@@ -206,14 +206,14 @@ private:
   uint64_t nextRequestSerial = 0u;
 
   mutable std::mutex snapshotMutex;
-  iris::ImageWavetable snapshotTable;
+  fractal::ImageWavetable snapshotTable;
   SourcePtr snapshotSource;
   std::shared_ptr<const std::vector<uint8_t>> snapshotPreview;
-  int previewWidth = iris::kSourcePreviewWidth;
-  int previewHeight = iris::kSourcePreviewHeight;
+  int previewWidth = fractal::kSourcePreviewWidth;
+  int previewHeight = fractal::kSourcePreviewHeight;
   std::string lastError;
   bool embedSource = true;
-  int currentSourceKind = iris::SOURCE_IMAGE;
+  int currentSourceKind = fractal::SOURCE_IMAGE;
   std::atomic<uint64_t> lastExpanderSourceGeneration {0u};
   std::atomic<uintptr_t> lastExpanderSourceIdentity {0u};
   dsp::ClockDivider lightDivider;

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace nautiloid_color {
+namespace fractal_color {
 
 enum Mode {
   PRISM,
@@ -89,4 +89,4 @@ inline void applyRgb8(int mode, std::vector<uint8_t>* rgb8) {
   }
 }
 
-} // namespace nautiloid_color
+} // namespace fractal_color

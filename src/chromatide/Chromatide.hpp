@@ -58,7 +58,7 @@ struct Chromatide : Module {
     // Published canvas snapshots are immutable and shared with Iris's worker.
     // Use the C++17 atomic shared_ptr free functions to exchange this between
     // the state loader and UI delivery service; audio never acquires ownership.
-    std::shared_ptr<const iris::SourceField> irisPublishedSource;
+    std::shared_ptr<const fractal::SourceField> irisPublishedSource;
     std::atomic<uint64_t> irisPreviewGeneration {0u};
     std::atomic<bool> forceIrisSync {true};
     uint64_t lastExpanderGenerationSent = 0u;

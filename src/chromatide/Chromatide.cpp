@@ -26,7 +26,7 @@ void Chromatide::serviceIrisSource() {
 
     Module* right = ui_expander::neighbor(this, true);
     if (right && right->model == modelIris) {
-        std::shared_ptr<const iris::SourceField> source =
+        std::shared_ptr<const fractal::SourceField> source =
             std::atomic_load_explicit(&irisPublishedSource, std::memory_order_acquire);
         if (!source) return;
         Iris* irisModule = static_cast<Iris*>(right);
@@ -159,20 +159,20 @@ void Chromatide::syncBrushFromParams() {
 }
 
 void Chromatide::publishToIris() {
-    auto source = std::make_shared<iris::SourceField>();
-    source->width = iris::kCanonicalSourceWidth;
-    source->height = iris::kCanonicalSourceHeight;
-    source->channels = iris::kCanonicalSourceChannels;
-    source->bitDepth = iris::kCanonicalSourceBitDepth;
+    auto source = std::make_shared<fractal::SourceField>();
+    source->width = fractal::kCanonicalSourceWidth;
+    source->height = fractal::kCanonicalSourceHeight;
+    source->channels = fractal::kCanonicalSourceChannels;
+    source->bitDepth = fractal::kCanonicalSourceBitDepth;
     source->rgb8.assign(canvas.pixels.begin(), canvas.pixels.end());
     source->sourceName = "Chromatide Canvas";
     source->sourcePath.clear();
-    source->originalWidth = iris::kCanonicalSourceWidth;
-    source->originalHeight = iris::kCanonicalSourceHeight;
-    source->originalChannels = iris::kCanonicalSourceChannels;
-    source->generatorKind = iris::SOURCE_GENERATOR_NONE;
+    source->originalWidth = fractal::kCanonicalSourceWidth;
+    source->originalHeight = fractal::kCanonicalSourceHeight;
+    source->originalChannels = fractal::kCanonicalSourceChannels;
+    source->generatorKind = fractal::SOURCE_GENERATOR_NONE;
 
-    std::shared_ptr<const iris::SourceField> immutableSource = std::move(source);
+    std::shared_ptr<const fractal::SourceField> immutableSource = std::move(source);
     std::atomic_store_explicit(
         &irisPublishedSource, std::move(immutableSource), std::memory_order_release);
     irisPreviewGeneration.fetch_add(1u, std::memory_order_release);

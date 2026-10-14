@@ -194,17 +194,17 @@ void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
   naut->requestIrisSourceSync();
 }
 
-const iris::ImageWavetable& irisBrowserPreviewTable() {
-  static const iris::ImageWavetable table = iris::makeDefaultTable();
+const fractal::ImageWavetable& irisBrowserPreviewTable() {
+  static const fractal::ImageWavetable table = fractal::makeDefaultTable();
   return table;
 }
 
 const std::vector<uint8_t>& irisBrowserPreviewPixels() {
   static std::vector<uint8_t> pixels;
   if (pixels.empty()) {
-    const iris::ImageWavetable& table = irisBrowserPreviewTable();
-    const int width = iris::kSourcePreviewWidth;
-    const int height = iris::kSourcePreviewHeight;
+    const fractal::ImageWavetable& table = irisBrowserPreviewTable();
+    const int width = fractal::kSourcePreviewWidth;
+    const int height = fractal::kSourcePreviewHeight;
     pixels.assign(size_t(width * height), 0u);
     for (int y = 0; y < height; ++y) {
       const float scan = (float(y) + 0.5f) / float(height);
@@ -223,25 +223,25 @@ NVGcolor irisPreviewChannelColor(int mode, float value) {
   const float amount = clamp(std::fabs(value), 0.f, 1.f);
   const uint8_t alpha = 255u;
   switch (mode) {
-    case iris::IMAGE_CHANNEL_RED:
+    case fractal::IMAGE_CHANNEL_RED:
       return nvgRGBA(
         uint8_t(std::round(245.f * amount)),
         uint8_t(std::round(32.f * amount)),
         uint8_t(std::round(52.f * amount)),
         alpha);
-    case iris::IMAGE_CHANNEL_GREEN:
+    case fractal::IMAGE_CHANNEL_GREEN:
       return nvgRGBA(
         uint8_t(std::round(36.f * amount)),
         uint8_t(std::round(230.f * amount)),
         uint8_t(std::round(112.f * amount)),
         alpha);
-    case iris::IMAGE_CHANNEL_BLUE:
+    case fractal::IMAGE_CHANNEL_BLUE:
       return nvgRGBA(
         uint8_t(std::round(54.f * amount)),
         uint8_t(std::round(126.f * amount)),
         uint8_t(std::round(255.f * amount)),
         alpha);
-    case iris::IMAGE_CHANNEL_ALL:
+    case fractal::IMAGE_CHANNEL_ALL:
     default:
       return nvgRGBA(
         uint8_t(std::round(235.f * amount)),
@@ -277,7 +277,7 @@ void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>
   if (!samples) return;
   sampleCount = std::max(sampleCount, 2);
   samples->resize(size_t(sampleCount));
-  const iris::ImageWavetable& table = irisBrowserPreviewTable();
+  const fractal::ImageWavetable& table = irisBrowserPreviewTable();
   for (int i = 0; i < sampleCount; ++i) {
     (*samples)[size_t(i)] = table.sample(float(i) / float(sampleCount - 1), scan);
   }
@@ -287,7 +287,7 @@ struct IrisDisplay final : OpaqueWidget {
   Iris* module = nullptr;
   uint64_t generation = uint64_t(-1);
   bool channelPreview = false;
-  int channelMode = iris::IMAGE_CHANNEL_ALL;
+  int channelMode = fractal::IMAGE_CHANNEL_ALL;
   NVGcontext* imageContext = nullptr;
   int imageHandle = -1;
   int uploadedWidth = 0;
@@ -327,7 +327,7 @@ struct IrisDisplay final : OpaqueWidget {
       module ? module->displayChannelPreview.load(std::memory_order_relaxed) : false;
     const int currentChannelMode =
       module ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
-             : iris::IMAGE_CHANNEL_ALL;
+             : fractal::IMAGE_CHANNEL_ALL;
     if (imageContext != args.vg) {
       nvg_gfx_lifecycle::resetOwnedNvgImage(
         imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
@@ -339,7 +339,7 @@ struct IrisDisplay final : OpaqueWidget {
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
       std::shared_ptr<const std::vector<uint8_t>> grayOwned;
       const std::vector<uint8_t>* gray = nullptr;
-      std::shared_ptr<const iris::SourceField> source;
+      std::shared_ptr<const fractal::SourceField> source;
       const std::vector<uint8_t>* rgb = nullptr;
       int width = 0;
       int height = 0;
@@ -359,8 +359,8 @@ struct IrisDisplay final : OpaqueWidget {
       } else {
         const std::vector<uint8_t>& preview = irisBrowserPreviewPixels();
         gray = &preview;
-        width = iris::kSourcePreviewWidth;
-        height = iris::kSourcePreviewHeight;
+        width = fractal::kSourcePreviewWidth;
+        height = fractal::kSourcePreviewHeight;
       }
       if (currentChannelPreview && rgb && !rgb->empty()) {
         const size_t pixelCount = rgb->size() / 3u;
@@ -369,13 +369,13 @@ struct IrisDisplay final : OpaqueWidget {
           uint8_t red = (*rgb)[i * 3u + 0u];
           uint8_t green = (*rgb)[i * 3u + 1u];
           uint8_t blue = (*rgb)[i * 3u + 2u];
-          if (currentChannelMode == iris::IMAGE_CHANNEL_RED) {
+          if (currentChannelMode == fractal::IMAGE_CHANNEL_RED) {
             green = 0u;
             blue = 0u;
-          } else if (currentChannelMode == iris::IMAGE_CHANNEL_GREEN) {
+          } else if (currentChannelMode == fractal::IMAGE_CHANNEL_GREEN) {
             red = 0u;
             blue = 0u;
-          } else if (currentChannelMode == iris::IMAGE_CHANNEL_BLUE) {
+          } else if (currentChannelMode == fractal::IMAGE_CHANNEL_BLUE) {
             red = 0u;
             green = 0u;
           }
@@ -771,13 +771,13 @@ struct IrisSmoothingMenuButton final : TL1105 {
       module, &module->conversionSettings.waveSmoothing, "Wave smoothing");
     menu->addChild(waveSlider);
     addEnumMenu(menu, "Normalize", module, &module->conversionSettings.normalizeMode,
-      {{"Balanced", iris::NORMALIZE_BALANCED}, {"Global", iris::NORMALIZE_GLOBAL},
-       {"Per row", iris::NORMALIZE_PER_ROW}, {"Off", iris::NORMALIZE_NONE}});
+      {{"Balanced", fractal::NORMALIZE_BALANCED}, {"Global", fractal::NORMALIZE_GLOBAL},
+       {"Per row", fractal::NORMALIZE_PER_ROW}, {"Off", fractal::NORMALIZE_NONE}});
     addEnumMenu(menu, "Row order", module, &module->conversionSettings.rowOrder,
-      {{"Top to bottom", iris::ROW_TOP_TO_BOTTOM}, {"Bottom to top", iris::ROW_BOTTOM_TO_TOP}});
+      {{"Top to bottom", fractal::ROW_TOP_TO_BOTTOM}, {"Bottom to top", fractal::ROW_BOTTOM_TO_TOP}});
     addEnumMenu(menu, "Trim flat rows", module, &module->conversionSettings.trimMode,
-      {{"Off", iris::TRIM_OFF}, {"Gentle", iris::TRIM_GENTLE}, {"Medium", iris::TRIM_MEDIUM},
-       {"Aggressive", iris::TRIM_AGGRESSIVE}});
+      {{"Off", fractal::TRIM_OFF}, {"Gentle", fractal::TRIM_GENTLE}, {"Medium", fractal::TRIM_MEDIUM},
+       {"Aggressive", fractal::TRIM_AGGRESSIVE}});
     menu->addChild(createCheckMenuItem("Per-row DC removal", "",
       [this]() { return module->conversionSettings.dcRemove; },
       [this]() {
@@ -830,14 +830,14 @@ struct IrisSourceMenuButton final : TL1105 {
     menu->addChild(createMenuLabel("Source"));
     menu->addChild(createCheckMenuItem(
       "Image file...", "",
-      [this]() { return module && module->sourceKind() == iris::SOURCE_IMAGE; },
+      [this]() { return module && module->sourceKind() == fractal::SOURCE_IMAGE; },
       [this]() { chooseIrisImage(module); }));
     menu->addChild(createCheckMenuItem(
       "Nautiloid", "",
       [this]() {
         if (!module || !isNautiloidModule(ui_expander::neighbor(module, false))) return false;
         const int kind = module->sourceKind();
-        return kind == iris::SOURCE_EXPANDER_IMAGE || kind == iris::SOURCE_NAUTILOID_FRACTAL;
+        return kind == fractal::SOURCE_EXPANDER_IMAGE || kind == fractal::SOURCE_FRACTAL;
       },
       [this]() { selectNautiloidSourceForIris(getAncestorOfType<ModuleWidget>(), module); }));
     e.consume(this);
@@ -983,7 +983,7 @@ struct IrisChannelPreviewButton final : TL1105 {
     const bool enabled = module && module->displayChannelPreview.load(std::memory_order_relaxed);
     const int mode = module
       ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
-      : iris::IMAGE_CHANNEL_ALL;
+      : fractal::IMAGE_CHANNEL_ALL;
     const float cx = 0.5f * box.size.x;
     const float cy = 0.5f * box.size.y;
     const float rx = std::max(3.1f, 0.31f * box.size.x);
@@ -1017,13 +1017,13 @@ struct IrisImageChannelButton final : SmallGoldButton {
   std::string tooltipText() const {
     const int mode = module
       ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
-      : iris::IMAGE_CHANNEL_ALL;
+      : fractal::IMAGE_CHANNEL_ALL;
     const char* modeName = "All";
     switch (mode) {
-      case iris::IMAGE_CHANNEL_RED: modeName = "Red"; break;
-      case iris::IMAGE_CHANNEL_GREEN: modeName = "Green"; break;
-      case iris::IMAGE_CHANNEL_BLUE: modeName = "Blue"; break;
-      case iris::IMAGE_CHANNEL_ALL:
+      case fractal::IMAGE_CHANNEL_RED: modeName = "Red"; break;
+      case fractal::IMAGE_CHANNEL_GREEN: modeName = "Green"; break;
+      case fractal::IMAGE_CHANNEL_BLUE: modeName = "Blue"; break;
+      case fractal::IMAGE_CHANNEL_ALL:
       default: modeName = "All"; break;
     }
     return std::string("Color channel: ") + modeName;
@@ -1048,7 +1048,7 @@ struct IrisImageChannelButton final : SmallGoldButton {
   void onButton(const event::Button& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
       const int current = clamp(int(module->conversionSettings.imageChannelMode), 0, 3);
-      module->conversionSettings.imageChannelMode = iris::ImageChannelMode((current + 1) % 4);
+      module->conversionSettings.imageChannelMode = fractal::ImageChannelMode((current + 1) % 4);
       module->displayImageChannelMode.store(
         int(module->conversionSettings.imageChannelMode), std::memory_order_relaxed);
       module->requestRebuild();

@@ -6,7 +6,7 @@
 
 Model* modelIris = nullptr;
 void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot*, uint64_t) {}
-void Iris::requestOwnedExpanderSource(std::shared_ptr<const iris::SourceField>, uint64_t) {}
+void Iris::requestOwnedExpanderSource(std::shared_ptr<const fractal::SourceField>, uint64_t) {}
 
 static void testTransforms() {
     float rx = 0.0f, ry = 0.0f;
@@ -199,7 +199,7 @@ static void testPublishedSnapshotOwnership() {
     Chromatide module;
     const uint64_t initialGeneration =
         module.irisPreviewGeneration.load(std::memory_order_acquire);
-    std::shared_ptr<const iris::SourceField> initial =
+    std::shared_ptr<const fractal::SourceField> initial =
         std::atomic_load_explicit(&module.irisPublishedSource, std::memory_order_acquire);
     assert(initial);
     assert(initial->valid());
@@ -212,7 +212,7 @@ static void testPublishedSnapshotOwnership() {
     assert(initial->rgb8[offset] == initialRed);
     module.publishToIris();
 
-    std::shared_ptr<const iris::SourceField> published =
+    std::shared_ptr<const fractal::SourceField> published =
         std::atomic_load_explicit(&module.irisPublishedSource, std::memory_order_acquire);
     assert(published);
     assert(published.get() != initial.get());

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../nautiloid/NautiloidFractal.hpp"
+#include "../fractal/BuiltinFractals.hpp"
 #include "../../plugin.hpp"
 #include "../../theme/ThemeTypes.hpp"
 
@@ -16,7 +16,7 @@ public:
 	~FractalGlassOverlay() override;
 
 	void setFramebuffer(widget::FramebufferWidget* framebuffer);
-	void setLiveParams(const iris::NautiloidFractalSourceParams* params);
+	void setLiveParams(const fractal::FractalSourceParams* params);
 	// A local editor may preview texture opacity without publishing a global
 	// theme change. NaN clears the preview and resumes the shared setting.
 	void setTextureAmountPreview(float amount);

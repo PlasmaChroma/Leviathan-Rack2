@@ -139,8 +139,8 @@ bool decodePayload(const std::string& code,
 
 State canonicalize(const State& requested) {
   State canonical;
-  canonical.mode = iris::isBuiltinFractalMode(requested.mode)
-    ? requested.mode : iris::FRACTAL_MANDELBROT;
+  canonical.mode = fractal::isBuiltinFractalMode(requested.mode)
+    ? requested.mode : fractal::FRACTAL_MANDELBROT;
   canonical.zoom = decodeZoom(encodeZoom(requested.zoom));
   canonical.centerX = decodeCoordinate(encodeCoordinate(requested.centerX));
   canonical.centerY = decodeCoordinate(encodeCoordinate(requested.centerY));
@@ -179,7 +179,7 @@ DecodeResult decode(const std::string& input) {
     result.error = "Unsupported location code version";
     return result;
   }
-  if (!iris::isBuiltinFractalMode(mode)) {
+  if (!fractal::isBuiltinFractalMode(mode)) {
     result.error = "Invalid fractal mode";
     return result;
   }

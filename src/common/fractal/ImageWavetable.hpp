@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IrisSourceField.hpp"
+#include "SourceField.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace iris {
+namespace fractal {
 
 constexpr float kMaxSeamSmoothing = 1.f;
 constexpr float kMaxWaveSmoothing = 1.f;
@@ -17,8 +17,8 @@ constexpr float kWaveSmoothingCapacityScale = 1.2f;
 constexpr int kFrameSize = 1024;
 constexpr int kDefaultRows = 256;
 constexpr int kMaxRows = 256;
-static_assert(kCanonicalSourceWidth == kFrameSize, "Iris source width must match frame size");
-static_assert(kCanonicalSourceHeight == kDefaultRows, "Iris source height must match default rows");
+static_assert(kCanonicalSourceWidth == kFrameSize, "canonical source width must match wavetable frame size");
+static_assert(kCanonicalSourceHeight == kDefaultRows, "canonical source height must match default row count");
 constexpr int kSourcePreviewWidth = kCanonicalSourceWidth;
 constexpr int kSourcePreviewHeight = kCanonicalSourceHeight;
 
@@ -52,7 +52,7 @@ enum SourceKind {
   SOURCE_IMAGE = 0,
   SOURCE_BUILTIN_FRACTAL = 1,
   SOURCE_EXPANDER_IMAGE = 2,
-  SOURCE_NAUTILOID_FRACTAL = 3,
+  SOURCE_FRACTAL = 3,
 };
 
 enum BuiltinFractalMode {
@@ -312,8 +312,8 @@ inline void buildSourcePreviewFromSourceField(const SourceField& source, ImageWa
   table->sourcePreviewWidth = previewWidth;
   table->sourcePreviewHeight = previewHeight;
   if (source.width == previewWidth && source.height == previewHeight) {
-    // Canonical Iris sources already have preview dimensions. In particular,
-    // Nautiloid publishes exactly 1024x256 RGB8, so bilinear resampling here
+    // Canonical sources already have preview dimensions. In particular,
+    // the Nautiloid fractal explorer publishes exactly 1024x256 RGB8, so bilinear resampling here
     // would only reproduce the input byte-for-byte at considerable cost.
     table->sourcePreviewRgb = source.rgb8;
     return;
@@ -584,4 +584,4 @@ inline ImageWavetable makeDefaultTable() {
   return table;
 }
 
-} // namespace iris
+} // namespace fractal

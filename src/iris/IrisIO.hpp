@@ -1,10 +1,13 @@
 #pragma once
 
-#include "IrisWavetable.hpp"
+#include "../common/fractal/ImageWavetable.hpp"
 
 #include <string>
 
 namespace iris {
+// The Iris module builds on the shared fractal/wavetable types.
+using namespace fractal;
+
 
 bool importImageFileToSourceField(const std::string& path, SourceField* out, std::string* error);
 bool importImageFile(const std::string& path, const ConversionSettings& settings,

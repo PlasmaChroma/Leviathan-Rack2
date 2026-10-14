@@ -3,6 +3,9 @@
 #include <algorithm>
 
 namespace iris {
+// The Iris module builds on the shared fractal/wavetable types.
+using namespace fractal;
+
 
 constexpr int kMaximumPolyphony = 16;
 

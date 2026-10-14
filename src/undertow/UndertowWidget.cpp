@@ -1,7 +1,7 @@
 #include "../common/render/HostStrokeBridge.hpp"
 #include "Undertow.hpp"
 #include "UndertowDrawLog.hpp"
-#include "UndertowShape.hpp"
+#include "../common/FoldShapes.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../common/visual/VisualAssets.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
@@ -93,7 +93,7 @@ struct UndertowShapePreviewWidget final : Widget {
     const auto started = debug_terminal::debugTimerStart(measure);
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
       const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
-      const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, edgeHardness, asymOnRight);
+      const float folded = fold_shape::thresholdFold(phase, shapeAmount, asymEnabled, edgeHardness, asymOnRight);
       samples[size_t(i)] = clamp(folded, -1.f, 1.f) * 5.f;
     }
     samplesInitialized = true;

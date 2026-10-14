@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace undertow_shape {
+namespace fold_shape {
 
 inline float clampf(float x, float lo, float hi) {
   return std::max(lo, std::min(x, hi));
@@ -79,4 +79,4 @@ inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false
   return clampf(y, -1.f, 1.f);
 }
 
-} // namespace undertow_shape
+} // namespace fold_shape

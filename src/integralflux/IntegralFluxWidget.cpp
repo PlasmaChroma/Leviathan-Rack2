@@ -115,10 +115,10 @@ bool appendIntegralFluxFractalParamsCapture(const IntegralFlux* module) {
 	json_t* entry = json_object();
 	json_object_set_new(entry, "capturedAtUnix", json_integer(json_int_t(std::time(nullptr))));
 	json_object_set_new(entry, "source", json_string("Nautiloid"));
-	json_object_set_new(entry, "fractalSourceVersion", json_integer(iris::kNautiloidFractalSourceVersion));
+	json_object_set_new(entry, "fractalSourceVersion", json_integer(fractal::kFractalSourceVersion));
 	json_t* fractal = json_object();
 	json_object_set_new(fractal, "mode", json_integer(naut->fractalMode));
-	json_object_set_new(fractal, "modeName", json_string(iris::builtinFractalName(naut->fractalMode)));
+	json_object_set_new(fractal, "modeName", json_string(fractal::builtinFractalName(naut->fractalMode)));
 	json_object_set_new(fractal, "zoom", json_real(naut->fractalZoom));
 	json_object_set_new(fractal, "centerX", json_real(naut->fractalCenterX));
 	json_object_set_new(fractal, "centerY", json_real(naut->fractalCenterY));
@@ -1798,7 +1798,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		if (nautiloidGlass) {
 			Nautiloid* naut = leftNautiloidForIntegralFlux(static_cast<IntegralFlux*>(module));
 			if (naut) {
-				iris::NautiloidFractalSourceParams params;
+				fractal::FractalSourceParams params;
 				params.mode = naut->fractalMode;
 				params.zoom = naut->fractalZoom;
 				params.centerX = naut->fractalCenterX;

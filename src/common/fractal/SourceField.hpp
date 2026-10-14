@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace iris {
+namespace fractal {
 
 constexpr int kCanonicalSourceWidth = 1024;
 constexpr int kCanonicalSourceHeight = 256;
@@ -13,7 +13,7 @@ constexpr int kCanonicalSourceBitDepth = 8;
 
 enum SourceGeneratorKind {
   SOURCE_GENERATOR_NONE = 0,
-  SOURCE_GENERATOR_NAUTILOID_FRACTAL = 1,
+  SOURCE_GENERATOR_FRACTAL = 1,
 };
 
 struct SourceField {
@@ -53,4 +53,4 @@ bool saveSourceFieldQoi(const std::string& path, const SourceField& source,
 bool loadSourceFieldQoi(const std::string& path, SourceField* out,
                         std::string* error = nullptr);
 
-} // namespace iris
+} // namespace fractal

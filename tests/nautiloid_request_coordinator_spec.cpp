@@ -1,6 +1,6 @@
 #include "../src/nautiloid/NautiloidRequestCoordinator.hpp"
 #include "../src/nautiloid/NautiloidCachePolicy.hpp"
-#include "../src/nautiloid/NautiloidFractal.hpp"
+#include "../src/common/fractal/BuiltinFractals.hpp"
 
 #include <iostream>
 #include <string>
@@ -105,13 +105,13 @@ int main() {
     compositePolicy.shouldPublishPartial(21u, 1060));
 
   int cancellationChecks = 0;
-  iris::FractalCancellationToken cancellation;
+  fractal::FractalCancellationToken cancellation;
   cancellation.isCancelled = cancelAfterFirstRow;
   cancellation.context = &cancellationChecks;
-  iris::SourceField source;
+  fractal::SourceField source;
   std::string error;
-  const bool rendered = iris::makeBuiltinFractalSourceSized(
-    iris::FRACTAL_MANDELBROT,
+  const bool rendered = fractal::makeBuiltinFractalSourceSized(
+    fractal::FRACTAL_MANDELBROT,
     0.f,
     0.0,
     0.0,

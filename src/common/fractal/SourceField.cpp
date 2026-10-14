@@ -1,6 +1,6 @@
-#include "IrisSourceField.hpp"
+#include "SourceField.hpp"
 
-#include "../third_party/qoi.h"
+#include "../../third_party/qoi.h"
 
 #include <algorithm>
 #include <array>
@@ -11,7 +11,7 @@
 #include <limits>
 #include <memory>
 
-namespace iris {
+namespace fractal {
 namespace {
 
 constexpr size_t kQoiHeaderSize = 14u;
@@ -187,4 +187,4 @@ bool loadSourceFieldQoi(const std::string& path, SourceField* out, std::string* 
   return true;
 }
 
-} // namespace iris
+} // namespace fractal

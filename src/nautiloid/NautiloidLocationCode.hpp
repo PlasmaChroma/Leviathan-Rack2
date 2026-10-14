@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../iris/IrisWavetable.hpp"
+#include "../common/fractal/ImageWavetable.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -16,11 +16,11 @@ constexpr float kMaxZoom = 4.f;
 constexpr double kMinCoordinate = -2.0;
 constexpr double kMaxCoordinate = 2.0;
 
-static_assert(iris::kLastBuiltinFractalMode <= 0x0f,
+static_assert(fractal::kLastBuiltinFractalMode <= 0x0f,
               "Nautiloid location codes reserve four bits for fractal mode");
 
 struct State {
-  int mode = iris::FRACTAL_MANDELBROT;
+  int mode = fractal::FRACTAL_MANDELBROT;
   float zoom = 0.f;
   double centerX = 0.0;
   double centerY = 0.0;

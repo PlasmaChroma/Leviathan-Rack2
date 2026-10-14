@@ -35,33 +35,33 @@ std::string nautiloidDebugLogPath() {
 
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
-    case iris::FRACTAL_MANDELBROT:
+    case fractal::FRACTAL_MANDELBROT:
       return Vec(1.62f, 0.86f);
-    case iris::FRACTAL_MULTIBROT:
+    case fractal::FRACTAL_MULTIBROT:
       return Vec(1.45f, 0.90f);
-    case iris::FRACTAL_MULTIJULIA:
+    case fractal::FRACTAL_MULTIJULIA:
       return Vec(1.45f, 0.84f);
-    case iris::FRACTAL_JULIA:
+    case fractal::FRACTAL_JULIA:
       return Vec(1.58f, 0.72f);
-    case iris::FRACTAL_PHOENIX_JULIA:
+    case fractal::FRACTAL_PHOENIX_JULIA:
       return Vec(1.62f, 0.74f);
-    case iris::FRACTAL_MANOWAR:
+    case fractal::FRACTAL_MANOWAR:
       return Vec(1.65f, 0.95f);
-    case iris::FRACTAL_BURNING_SHIP:
+    case fractal::FRACTAL_BURNING_SHIP:
       return Vec(0.42f, 0.145f);
-    case iris::FRACTAL_CELTIC:
+    case fractal::FRACTAL_CELTIC:
       return Vec(1.62f, 0.88f);
-    case iris::FRACTAL_BUFFALO:
+    case fractal::FRACTAL_BUFFALO:
       return Vec(1.55f, 0.84f);
-    case iris::FRACTAL_SPIDER:
+    case fractal::FRACTAL_SPIDER:
       return Vec(1.56f, 0.84f);
-    case iris::FRACTAL_BARNSLEY:
+    case fractal::FRACTAL_BARNSLEY:
       return Vec(1.75f, 0.95f);
-    case iris::FRACTAL_NOVA:
+    case fractal::FRACTAL_NOVA:
       return Vec(2.0f, 0.86f);
-    case iris::FRACTAL_NEWTON:
+    case fractal::FRACTAL_NEWTON:
       return Vec(2.45f, 0.98f);
-    case iris::FRACTAL_TRICORN:
+    case fractal::FRACTAL_TRICORN:
     default:
       return Vec(1.68f, 0.90f);
   }
@@ -106,7 +106,7 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
 
 bool nautiloidGpuPreviewEnabled(Nautiloid* module) {
   if (!module ||
-      !iris::isBuiltinFractalMode(module->fractalMode) ||
+      !fractal::isBuiltinFractalMode(module->fractalMode) ||
       !module->debugGpuPreviewEnabled.load(std::memory_order_relaxed)) {
     return false;
   }
@@ -124,16 +124,16 @@ double nautiloidClampDouble(double value, double minValue, double maxValue) {
 
 int nautiloidColorMode(const Nautiloid* module) {
   if (!module) return Nautiloid::COLOR_PRISM;
-  return nautiloid_color::normalize(module->fractalColorMode);
+  return fractal_color::normalize(module->fractalColorMode);
 }
 
 const char* nautiloidColorModeName(int mode) {
-  return nautiloid_color::name(mode);
+  return fractal_color::name(mode);
 }
 
 void nautiloidApplyDisplayPalette(int mode, uint8_t r, uint8_t g, uint8_t b,
                                   uint8_t* outR, uint8_t* outG, uint8_t* outB) {
-  nautiloid_color::applyPixel(mode, r, g, b, outR, outG, outB);
+  fractal_color::applyPixel(mode, r, g, b, outR, outG, outB);
 }
 
 struct NautiloidGlPreview final : widget::OpenGlWidget {
@@ -160,7 +160,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   NVGcontext* ownerVg = nullptr;
   GLuint vertexShader = 0;
   bool vertexShaderInitAttempted = false;
-  std::array<ModeProgram, size_t(iris::kLastBuiltinFractalMode) + 1u> modePrograms {};
+  std::array<ModeProgram, size_t(fractal::kLastBuiltinFractalMode) + 1u> modePrograms {};
   visual_assets::AdaptiveGlSurface adaptiveSurface;
   bool lastEffectiveActive = false;
   bool lastInteractionActive = false;
@@ -276,7 +276,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void validateModeProgramForCurrentContext(int mode) {
-    if (!iris::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
+    if (!fractal::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
       return;
     }
     const ModeProgram& modeProgram = modePrograms[size_t(mode)];
@@ -298,7 +298,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   bool ensureShaderReady(int mode, bool deepPrecision = false) {
-    if (!iris::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
+    if (!fractal::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
       return false;
     }
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
@@ -670,7 +670,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         } else if (NAUTILOID_MODE == 2) {
           c = p;
         } else if (NAUTILOID_MODE == 3) {
-          // Keep this in sync with kNautiloidMultijuliaReal/Imag.
+          // Keep this in sync with kMultijuliaReal/Imag.
           c = vec2(-0.18, 0.76);
           z = p;
         } else if (NAUTILOID_MODE == 4) {
@@ -758,8 +758,8 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
     const std::string fragmentSource =
       std::string("#version 120\n") +
-      "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER) "\n" +
-      "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER) "\n" +
+      "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_FRACTAL_ESCAPE_MAX_ITER) "\n" +
+      "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_FRACTAL_ROOT_MAX_ITER) "\n" +
       "#define NAUTILOID_MODE " + std::to_string(mode) + "\n" +
       "#define NAUTILOID_DEEP_PRECISION " + std::string(deepPrecision ? "1\n" : "0\n") +
       kFragmentShaderBody;
@@ -823,7 +823,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     const bool effectiveActive = nautiloidGpuPreviewEnabled(module);
     bool currentModeReady = false;
     bool currentModeAttempted = false;
-    if (module && iris::isBuiltinFractalMode(module->fractalMode) &&
+    if (module && fractal::isBuiltinFractalMode(module->fractalMode) &&
         module->fractalMode >= 0 && size_t(module->fractalMode) < modePrograms.size()) {
       const ModeProgram& modeProgram = modePrograms[size_t(module->fractalMode)];
       currentModeReady = modeProgram.fast.ready || modeProgram.deep.ready;
@@ -897,7 +897,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_SCISSOR_TEST);
 
-    const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
+    const int mode = module ? int(module->fractalMode) : fractal::FRACTAL_NONE;
     if (isExtraGlValidationEnabled()) {
       validateModeProgramForCurrentContext(mode);
     }
@@ -1245,7 +1245,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     }
     if (generation != currentGeneration || uploadedColorMode != colorMode || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
-      std::shared_ptr<const iris::SourceField> source;
+      std::shared_ptr<const fractal::SourceField> source;
       int width = 0;
       int height = 0;
       if (module) {
@@ -1381,7 +1381,7 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
     }
     if (generation != currentGeneration || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
-      std::shared_ptr<const iris::SourceField> source;
+      std::shared_ptr<const fractal::SourceField> source;
       int width = 0;
       int height = 0;
       if (module) {
@@ -1938,24 +1938,24 @@ struct NautiloidSourceButton final : TL1105 {
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Fractals"));
     const std::array<int, 14> modes = {{
-      iris::FRACTAL_MANDELBROT,
-      iris::FRACTAL_MULTIBROT,
-      iris::FRACTAL_JULIA,
-      iris::FRACTAL_MULTIJULIA,
-      iris::FRACTAL_PHOENIX_JULIA,
-      iris::FRACTAL_MANOWAR,
-      iris::FRACTAL_BURNING_SHIP,
-      iris::FRACTAL_CELTIC,
-      iris::FRACTAL_BUFFALO,
-      iris::FRACTAL_TRICORN,
-      iris::FRACTAL_SPIDER,
-      iris::FRACTAL_BARNSLEY,
-      iris::FRACTAL_NEWTON,
-      iris::FRACTAL_NOVA,
+      fractal::FRACTAL_MANDELBROT,
+      fractal::FRACTAL_MULTIBROT,
+      fractal::FRACTAL_JULIA,
+      fractal::FRACTAL_MULTIJULIA,
+      fractal::FRACTAL_PHOENIX_JULIA,
+      fractal::FRACTAL_MANOWAR,
+      fractal::FRACTAL_BURNING_SHIP,
+      fractal::FRACTAL_CELTIC,
+      fractal::FRACTAL_BUFFALO,
+      fractal::FRACTAL_TRICORN,
+      fractal::FRACTAL_SPIDER,
+      fractal::FRACTAL_BARNSLEY,
+      fractal::FRACTAL_NEWTON,
+      fractal::FRACTAL_NOVA,
     }};
     for (int mode : modes) {
       menu->addChild(createCheckMenuItem(
-        iris::builtinFractalName(mode), "",
+        fractal::builtinFractalName(mode), "",
         [this, mode]() { return module->fractalMode == mode; },
         [this, mode]() { module->requestFractal(mode); }));
     }
@@ -2190,7 +2190,7 @@ struct NautiloidColorModeButton final : LeviathanIconButton {
         };
         color = prism[i];
       } else {
-        const nautiloid_color::Rgb stop = nautiloid_color::stop(mode, i);
+        const fractal_color::Rgb stop = fractal_color::stop(mode, i);
         color = nvgRGB(uint8_t(stop.r), uint8_t(stop.g), uint8_t(stop.b));
       }
       nvgBeginPath(args.vg);

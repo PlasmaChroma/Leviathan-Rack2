@@ -19,15 +19,15 @@ bool isDragonKingDebugEnabled() {
 }
 
 struct IrisPhase4TestAccess {
-  static std::shared_ptr<const iris::SourceField> seedRetainedSource(
-      Iris& module, std::shared_ptr<const iris::SourceField> source) {
+  static std::shared_ptr<const fractal::SourceField> seedRetainedSource(
+      Iris& module, std::shared_ptr<const fractal::SourceField> source) {
     std::lock_guard<std::mutex> lock(module.snapshotMutex);
     module.snapshotSource = std::move(source);
     return module.snapshotSource;
   }
 
   static void requestMissingFileReload(
-      Iris& module, const std::shared_ptr<const iris::SourceField>& source) {
+      Iris& module, const std::shared_ptr<const fractal::SourceField>& source) {
     Iris::WorkerRequest request;
     request.type = Iris::REQUEST_RELOAD_IMAGE_FILE;
     request.path = "/tmp/leviathan-iris-definitely-missing.png";
@@ -38,7 +38,7 @@ struct IrisPhase4TestAccess {
     module.submitRequest(request);
   }
 
-  static const iris::SourceField* snapshotSourceIdentity(Iris& module) {
+  static const fractal::SourceField* snapshotSourceIdentity(Iris& module) {
     std::lock_guard<std::mutex> lock(module.snapshotMutex);
     return module.snapshotSource.get();
   }
@@ -61,12 +61,12 @@ bool waitUntil(const std::function<bool()>& predicate) {
   return false;
 }
 
-std::shared_ptr<const iris::SourceField> makeRetainedSource() {
-  auto source = std::make_shared<iris::SourceField>();
-  source->width = iris::kCanonicalSourceWidth;
-  source->height = iris::kCanonicalSourceHeight;
-  source->channels = iris::kCanonicalSourceChannels;
-  source->bitDepth = iris::kCanonicalSourceBitDepth;
+std::shared_ptr<const fractal::SourceField> makeRetainedSource() {
+  auto source = std::make_shared<fractal::SourceField>();
+  source->width = fractal::kCanonicalSourceWidth;
+  source->height = fractal::kCanonicalSourceHeight;
+  source->channels = fractal::kCanonicalSourceChannels;
+  source->bitDepth = fractal::kCanonicalSourceBitDepth;
   source->sourcePath = "/tmp/original-iris-image.png";
   source->sourceName = "original-iris-image.png";
   source->rgb8.resize(

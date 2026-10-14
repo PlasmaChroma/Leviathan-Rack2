@@ -22,6 +22,9 @@
 #include <memory>
 
 namespace iris {
+// The Iris module builds on the shared fractal/wavetable types.
+using namespace fractal;
+
 
 namespace {
 

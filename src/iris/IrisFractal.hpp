@@ -1,3 +1,3 @@
 #pragma once
 
-#include "../nautiloid/NautiloidFractal.hpp"
+#include "../common/fractal/BuiltinFractals.hpp"

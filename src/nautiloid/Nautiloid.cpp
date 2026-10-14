@@ -30,7 +30,7 @@ std::atomic<uint32_t> gNautiloidDebugInstanceCounter {1u};
 
 bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
   return shaderAvailable &&
-    iris::isBuiltinFractalMode(mode);
+    fractal::isBuiltinFractalMode(mode);
 }
 
 bool requestGpuPreviewVisible(int mode, bool shaderAvailable, const Nautiloid* module) {
@@ -56,33 +56,33 @@ bool isIntegralFluxModule(const engine::Module* neighbor) {
 
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
-    case iris::FRACTAL_MANDELBROT:
+    case fractal::FRACTAL_MANDELBROT:
       return Vec(1.62f, 0.86f);
-    case iris::FRACTAL_MULTIBROT:
+    case fractal::FRACTAL_MULTIBROT:
       return Vec(1.45f, 0.90f);
-    case iris::FRACTAL_MULTIJULIA:
+    case fractal::FRACTAL_MULTIJULIA:
       return Vec(1.45f, 0.84f);
-    case iris::FRACTAL_JULIA:
+    case fractal::FRACTAL_JULIA:
       return Vec(1.58f, 0.72f);
-    case iris::FRACTAL_PHOENIX_JULIA:
+    case fractal::FRACTAL_PHOENIX_JULIA:
       return Vec(1.62f, 0.74f);
-    case iris::FRACTAL_MANOWAR:
+    case fractal::FRACTAL_MANOWAR:
       return Vec(1.65f, 0.95f);
-    case iris::FRACTAL_BURNING_SHIP:
+    case fractal::FRACTAL_BURNING_SHIP:
       return Vec(0.42f, 0.145f);
-    case iris::FRACTAL_CELTIC:
+    case fractal::FRACTAL_CELTIC:
       return Vec(1.62f, 0.88f);
-    case iris::FRACTAL_BUFFALO:
+    case fractal::FRACTAL_BUFFALO:
       return Vec(1.55f, 0.84f);
-    case iris::FRACTAL_SPIDER:
+    case fractal::FRACTAL_SPIDER:
       return Vec(1.56f, 0.84f);
-    case iris::FRACTAL_BARNSLEY:
+    case fractal::FRACTAL_BARNSLEY:
       return Vec(1.75f, 0.95f);
-    case iris::FRACTAL_NOVA:
+    case fractal::FRACTAL_NOVA:
       return Vec(2.0f, 0.86f);
-    case iris::FRACTAL_NEWTON:
+    case fractal::FRACTAL_NEWTON:
       return Vec(2.45f, 0.98f);
-    case iris::FRACTAL_TRICORN:
+    case fractal::FRACTAL_TRICORN:
     default:
       return Vec(1.68f, 0.90f);
   }
@@ -258,9 +258,9 @@ bool cropDisplayCacheGenerationToSize(
     double centerY,
     int outWidth,
     int outHeight,
-    const iris::SourceField* fallback,
+    const fractal::SourceField* fallback,
     bool allowPartial,
-    iris::SourceField* out,
+    fractal::SourceField* out,
     bool* completeOut) {
   if (!out || !generation.valid() || generation.mode != mode ||
       generation.cacheScale <= 1.f || outWidth <= 1 || outHeight <= 1 ||
@@ -284,11 +284,11 @@ bool cropDisplayCacheGenerationToSize(
     return false;
   }
 
-  iris::SourceField source;
+  fractal::SourceField source;
   source.width = outWidth;
   source.height = outHeight;
-  source.channels = iris::kCanonicalSourceChannels;
-  source.bitDepth = iris::kCanonicalSourceBitDepth;
+  source.channels = fractal::kCanonicalSourceChannels;
+  source.bitDepth = fractal::kCanonicalSourceBitDepth;
   source.originalWidth = outWidth;
   source.originalHeight = outHeight;
   source.originalChannels = source.channels;
@@ -472,7 +472,7 @@ std::vector<Vec> makeDisplayTileOrder(float centerX, float centerY) {
   return tiles;
 }
 
-uint8_t bilinearChannel(const iris::SourceField& source, float x, float y, int channel) {
+uint8_t bilinearChannel(const fractal::SourceField& source, float x, float y, int channel) {
   if (source.width <= 0 || source.height <= 0 || source.rgb8.empty()) return 0u;
   x = levi_math::clampf(x, 0.f, float(source.width - 1));
   y = levi_math::clampf(y, 0.f, float(source.height - 1));
@@ -553,12 +553,12 @@ size_t Nautiloid::DisplayCacheGeneration::validTileCount() const {
 }
 
 bool Nautiloid::DisplayCacheGeneration::valid() const {
-  return mode != iris::FRACTAL_NONE && zoom >= 0.f && width > 1 && height > 1 &&
+  return mode != fractal::FRACTAL_NONE && zoom >= 0.f && width > 1 && height > 1 &&
     tileSize > 0 && cacheScale > 1.f && tiles.size() == fullTileCount();
 }
 
 bool Nautiloid::PresentationLayer::valid() const {
-  return mode != iris::FRACTAL_NONE &&
+  return mode != fractal::FRACTAL_NONE &&
     zoom >= 0.f &&
     width > 1 &&
     height > 1 &&
@@ -568,7 +568,7 @@ bool Nautiloid::PresentationLayer::valid() const {
 }
 
 void Nautiloid::PresentationLayer::clear() {
-  mode = iris::FRACTAL_NONE;
+  mode = fractal::FRACTAL_NONE;
   zoom = -1.f;
   centerX = 0.f;
   centerY = 0.f;
@@ -649,7 +649,7 @@ void Nautiloid::PresentationLayer::writeTile(
 }
 
 void Nautiloid::DisplayTileCache::clear() {
-  mode = iris::FRACTAL_NONE;
+  mode = fractal::FRACTAL_NONE;
   zoom = -1.f;
   centerX = 0.f;
   centerY = 0.f;
@@ -782,13 +782,13 @@ void Nautiloid::serviceIrisSource() {
     forceIrisSourceSync.store(true, std::memory_order_release);
   }
   const bool forceIrisSync = forceIrisSourceSync.load(std::memory_order_acquire);
-  const int rightIrisSourceKind = rightIris ? rightIris->sourceKind() : iris::SOURCE_IMAGE;
+  const int rightIrisSourceKind = rightIris ? rightIris->sourceKind() : fractal::SOURCE_IMAGE;
   const bool rightIrisUsingNautiloid =
-    rightIrisSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
-    rightIrisSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
+    rightIrisSourceKind == fractal::SOURCE_EXPANDER_IMAGE ||
+    rightIrisSourceKind == fractal::SOURCE_FRACTAL;
   const nautiloid_requests::IrisConsumerDemand irisDemand = !irisConnected
     ? nautiloid_requests::IrisConsumerDemand::None
-    : (!rightIris || rightIrisSourceKind != iris::SOURCE_IMAGE
+    : (!rightIris || rightIrisSourceKind != fractal::SOURCE_IMAGE
       ? nautiloid_requests::IrisConsumerDemand::AcceptUpdates
       : nautiloid_requests::IrisConsumerDemand::RetainImageSource);
   if (requestCoordinator.setIrisConsumerDemand(irisDemand)) {
@@ -806,7 +806,7 @@ void Nautiloid::serviceIrisSource() {
   if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight && irisAcceptsAutoSync) {
       uint64_t ownedGeneration = 0u;
-      std::shared_ptr<const iris::SourceField> source =
+      std::shared_ptr<const fractal::SourceField> source =
         irisExpanderOwnedSourceSnapshot(&ownedGeneration);
       if (source && ownedGeneration == generation) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
@@ -888,14 +888,14 @@ json_t* Nautiloid::dataToJson() {
 
 void Nautiloid::dataFromJson(json_t* root) {
   if (!root) return;
-  const int mode = jsonIntegerOr(root, "fractalMode", iris::FRACTAL_MANDELBROT);
+  const int mode = jsonIntegerOr(root, "fractalMode", fractal::FRACTAL_MANDELBROT);
   FractalState state;
   state.mode = mode;
   state.zoom = float(jsonRealOr(root, "fractalZoom", 0.f));
   state.centerX = jsonRealOr(root, "fractalCenterX", 0.0);
   state.centerY = jsonRealOr(root, "fractalCenterY", 0.0);
   setFractalState(state);
-  fractalColorMode = nautiloid_color::normalize(
+  fractalColorMode = fractal_color::normalize(
     jsonIntegerOr(root, "fractalColorMode", COLOR_PRISM));
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
@@ -908,7 +908,7 @@ void Nautiloid::dataFromJson(json_t* root) {
 }
 
 void Nautiloid::requestFractal(int mode) {
-  if (!iris::isBuiltinFractalMode(mode)) return;
+  if (!fractal::isBuiltinFractalMode(mode)) return;
   FractalState state = fractalStateSnapshot();
   if (state.mode != mode) {
     state.mode = mode;
@@ -921,7 +921,7 @@ void Nautiloid::requestFractal(int mode) {
 }
 
 void Nautiloid::setFractalColorMode(int mode) {
-  const int normalized = nautiloid_color::normalize(mode);
+  const int normalized = fractal_color::normalize(mode);
   if (normalized == int(fractalColorMode)) return;
   fractalColorMode = normalized;
   // Reuse the canonical display cache, but publish a newly colored Iris source
@@ -983,15 +983,15 @@ void Nautiloid::setGpuPreviewAvailable(bool available, bool requireCpuFallback) 
 void Nautiloid::requestIrisSourceSync() {
   forceIrisSourceSync.store(true, std::memory_order_release);
   uint64_t generation = 0u;
-  std::shared_ptr<const iris::SourceField> source = irisExpanderOwnedSourceSnapshot(&generation);
+  std::shared_ptr<const fractal::SourceField> source = irisExpanderOwnedSourceSnapshot(&generation);
   const FractalState state = fractalStateSnapshot();
   const bool sourceMatchesCurrentState = source &&
-    iris::sourceHasNautiloidFractalParams(*source) &&
+    fractal::sourceHasFractalSourceParams(*source) &&
     source->generatorFractalMode == state.mode &&
     std::fabs(source->generatorFractalZoom - state.zoom) <= 1e-5f &&
     std::fabs(source->generatorFractalCenterX - state.centerX) <= 1e-12 &&
     std::fabs(source->generatorFractalCenterY - state.centerY) <= 1e-12 &&
-    source->generatorFractalColorMode == nautiloid_color::normalize(fractalColorMode);
+    source->generatorFractalColorMode == fractal_color::normalize(fractalColorMode);
   Module* right = ui_expander::neighbor(this, true);
   if (generation != 0u && sourceMatchesCurrentState && isIrisModule(right)) {
     if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
@@ -1039,7 +1039,7 @@ void Nautiloid::resetView() {
 }
 
 void Nautiloid::previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const {
-  std::shared_ptr<const iris::SourceField> source = previewSourceSnapshot();
+  std::shared_ptr<const fractal::SourceField> source = previewSourceSnapshot();
   if (width) *width = source ? source->width : 0;
   if (height) *height = source ? source->height : 0;
   if (!rgb) return;
@@ -1050,7 +1050,7 @@ void Nautiloid::previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* heig
   }
 }
 
-std::shared_ptr<const iris::SourceField> Nautiloid::previewSourceSnapshot() const {
+std::shared_ptr<const fractal::SourceField> Nautiloid::previewSourceSnapshot() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   if (!previewPublishedSource || !previewPublishedSource->valid()) return {};
   return previewPublishedSource;
@@ -1068,7 +1068,7 @@ void Nautiloid::irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* 
   }
 }
 
-std::shared_ptr<const iris::SourceField> Nautiloid::irisExpanderOwnedSourceSnapshot(uint64_t* generation) const {
+std::shared_ptr<const fractal::SourceField> Nautiloid::irisExpanderOwnedSourceSnapshot(uint64_t* generation) const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   const uint64_t gen = irisPreviewGeneration.load(std::memory_order_acquire);
   if (generation) *generation = gen;
@@ -1332,7 +1332,7 @@ bool Nautiloid::submitIrisRequest(
     irisRequest.zoom = request.zoom;
     irisRequest.centerX = request.centerX;
     irisRequest.centerY = request.centerY;
-    irisRequest.colorMode = nautiloid_color::normalize(fractalColorMode);
+    irisRequest.colorMode = fractal_color::normalize(fractalColorMode);
     irisRequest.serial = serial;
     irisRequest.authoritative = phase == nautiloid_requests::InteractionPhase::Final;
     irisRequestPending = true;
@@ -1350,10 +1350,10 @@ void Nautiloid::markDisplayRenderFinished(uint64_t serial) {
 }
 
 void Nautiloid::publishAuthoritativeDisplaySource(
-    iris::SourceField source,
+    fractal::SourceField source,
     const DisplayWorkerRequest& request) {
-  std::shared_ptr<const iris::SourceField> published =
-    std::make_shared<const iris::SourceField>(source);
+  std::shared_ptr<const fractal::SourceField> published =
+    std::make_shared<const fractal::SourceField>(source);
   std::lock_guard<std::mutex> lock(snapshotMutex);
   previewPublishedSource = std::move(published);
   authoritativeDisplaySource = std::move(source);
@@ -1366,8 +1366,8 @@ void Nautiloid::publishAuthoritativeDisplaySource(
 bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) {
   if (!isCpuFallbackActive() ||
       !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
-  iris::SourceField base;
-  int baseMode = iris::FRACTAL_NONE;
+  fractal::SourceField base;
+  int baseMode = fractal::FRACTAL_NONE;
   float baseZoom = -1.f;
   double baseCenterX = 0.0;
   double baseCenterY = 0.0;
@@ -1408,11 +1408,11 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     return false;
   }
 
-  iris::SourceField reprojected;
+  fractal::SourceField reprojected;
   reprojected.width = kDisplaySourceWidth;
   reprojected.height = kDisplaySourceHeight;
-  reprojected.channels = iris::kCanonicalSourceChannels;
-  reprojected.bitDepth = iris::kCanonicalSourceBitDepth;
+  reprojected.channels = fractal::kCanonicalSourceChannels;
+  reprojected.bitDepth = fractal::kCanonicalSourceBitDepth;
   reprojected.originalWidth = reprojected.width;
   reprojected.originalHeight = reprojected.height;
   reprojected.originalChannels = reprojected.channels;
@@ -1541,8 +1541,8 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     }
   }
   {
-    std::shared_ptr<const iris::SourceField> published =
-      std::make_shared<const iris::SourceField>(std::move(reprojected));
+    std::shared_ptr<const fractal::SourceField> published =
+      std::make_shared<const fractal::SourceField>(std::move(reprojected));
     std::lock_guard<std::mutex> lock(snapshotMutex);
     previewPublishedSource = std::move(published);
   }
@@ -1557,13 +1557,13 @@ bool Nautiloid::publishDisplayCacheComposite(
     bool* completeOut) {
   if (!isCpuFallbackActive() ||
       !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
-  std::shared_ptr<const iris::SourceField> fallback;
+  std::shared_ptr<const fractal::SourceField> fallback;
   if (allowPartial) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     fallback = previewPublishedSource;
   }
 
-  iris::SourceField source;
+  fractal::SourceField source;
   bool complete = false;
   DisplayCacheGenerationPtr generation;
   {
@@ -1594,8 +1594,8 @@ bool Nautiloid::publishDisplayCacheComposite(
   if (complete) {
     publishAuthoritativeDisplaySource(std::move(source), request);
   } else {
-    std::shared_ptr<const iris::SourceField> published =
-      std::make_shared<const iris::SourceField>(std::move(source));
+    std::shared_ptr<const fractal::SourceField> published =
+      std::make_shared<const fractal::SourceField>(std::move(source));
     std::lock_guard<std::mutex> lock(snapshotMutex);
     previewPublishedSource = std::move(published);
   }
@@ -1670,11 +1670,11 @@ void Nautiloid::renderZoomAheadCaches(const DisplayWorkerRequest& request) {
         }
       }
 
-      iris::SourceField tileSource;
+      fractal::SourceField tileSource;
       std::string error;
       const int tileW = std::min(kZoomAheadTileSize, kZoomAheadWidth - tileX);
       const int tileH = std::min(kZoomAheadTileSize, kZoomAheadHeight - tileY);
-      const bool ok = iris::makeBuiltinFractalSourceSized(
+      const bool ok = fractal::makeBuiltinFractalSourceSized(
         request.mode,
         aheadZoom,
         request.centerX,
@@ -1780,7 +1780,7 @@ void Nautiloid::workerLoop() {
       continue;
     }
 
-    iris::SourceField source;
+    fractal::SourceField source;
     std::string error;
     {
       displayCacheMisses.fetch_add(1u, std::memory_order_relaxed);
@@ -1791,7 +1791,7 @@ void Nautiloid::workerLoop() {
     } cancellationContext;
     cancellationContext.module = this;
     cancellationContext.serial = request.serial;
-    iris::FractalCancellationToken cancellation;
+    fractal::FractalCancellationToken cancellation;
     cancellation.context = &cancellationContext;
     cancellation.isCancelled = [](void* opaque) {
       DisplayCancellationContext* context = static_cast<DisplayCancellationContext*>(opaque);
@@ -1799,7 +1799,7 @@ void Nautiloid::workerLoop() {
         !context->module->isCpuFallbackActive() ||
         !context->module->requestCoordinator.isNewestDisplaySerial(context->serial);
     };
-    ok = iris::makeBuiltinFractalSourceSized(
+    ok = fractal::makeBuiltinFractalSourceSized(
       request.mode,
       request.zoom,
       request.centerX,
@@ -1994,11 +1994,11 @@ void Nautiloid::cacheWorkerLoop() {
           if (tileCurrent) continue;
         }
 
-        iris::SourceField tileSource;
+        fractal::SourceField tileSource;
         std::string error;
         const int tileW = std::min(kDisplayTileSize, kFractalCacheWidth - tileX);
         const int tileH = std::min(kDisplayTileSize, kFractalCacheHeight - tileY);
-        const bool ok = iris::makeBuiltinFractalSourceSized(
+        const bool ok = fractal::makeBuiltinFractalSourceSized(
           request.mode,
           request.zoom,
           targetCacheCenterX,
@@ -2131,7 +2131,7 @@ void Nautiloid::irisWorkerLoop() {
         irisCompatibleColorMode == request.colorMode;
     }
     if (irisCompatibleCurrent) {
-      iris::SourceField cachedSource;
+      fractal::SourceField cachedSource;
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
         cachedSource = irisCompatibleSource;
@@ -2160,10 +2160,10 @@ void Nautiloid::irisWorkerLoop() {
       }
       nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
       slot.source = std::move(cachedSource);
-      iris::NautiloidFractalSourceParams cachedParams =
-        iris::nautiloidFractalParamsFromSource(slot.source);
+      fractal::FractalSourceParams cachedParams =
+        fractal::fractalSourceParamsFromSource(slot.source);
       cachedParams.generation = request.serial;
-      iris::applyNautiloidFractalParams(&slot.source, cachedParams);
+      fractal::applyFractalSourceParams(&slot.source, cachedParams);
       if (!requestCoordinator.isCurrentIrisSerial(request.serial)) {
         nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
         irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
@@ -2178,7 +2178,7 @@ void Nautiloid::irisWorkerLoop() {
           continue;
         }
         irisExpanderOwnedSource =
-          std::make_shared<const iris::SourceField>(std::move(slot.source));
+          std::make_shared<const fractal::SourceField>(std::move(slot.source));
         irisPreviewGeneration.store(request.serial, std::memory_order_release);
       }
       irisExpanderWriteSlot = slotIndex;
@@ -2210,7 +2210,7 @@ void Nautiloid::irisWorkerLoop() {
 
     nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
     std::string irisError;
-    iris::NautiloidFractalSourceParams sourceParams;
+    fractal::FractalSourceParams sourceParams;
     sourceParams.mode = request.mode;
     sourceParams.zoom = request.zoom;
     sourceParams.centerX = request.centerX;
@@ -2238,7 +2238,7 @@ void Nautiloid::irisWorkerLoop() {
       } cancellationContext;
       cancellationContext.module = this;
       cancellationContext.serial = request.serial;
-      iris::FractalCancellationToken cancellation;
+      fractal::FractalCancellationToken cancellation;
       cancellation.context = &cancellationContext;
       cancellation.isCancelled = [](void* opaque) {
         IrisCancellationContext* context = static_cast<IrisCancellationContext*>(opaque);
@@ -2246,9 +2246,9 @@ void Nautiloid::irisWorkerLoop() {
           context->module->stopRequested.load(std::memory_order_acquire) ||
           !context->module->requestCoordinator.isCurrentIrisSerial(context->serial);
       };
-      iris::NautiloidFractalSourceParams canonicalParams = sourceParams;
-      canonicalParams.colorMode = nautiloid_color::PRISM;
-      irisOk = iris::makeNautiloidIrisSource(
+      fractal::FractalSourceParams canonicalParams = sourceParams;
+      canonicalParams.colorMode = fractal_color::PRISM;
+      irisOk = fractal::makeFractalSource(
         canonicalParams, &slot.source, &irisError, &cancellation);
       if (irisOk) {
         std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -2271,8 +2271,8 @@ void Nautiloid::irisWorkerLoop() {
       irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
       continue;
     }
-    nautiloid_color::applyRgb8(request.colorMode, &slot.source.rgb8);
-    iris::applyNautiloidFractalParams(&slot.source, sourceParams);
+    fractal_color::applyRgb8(request.colorMode, &slot.source.rgb8);
+    fractal::applyFractalSourceParams(&slot.source, sourceParams);
 
     if (stopRequested.load(std::memory_order_acquire) ||
         !requestCoordinator.isCurrentIrisSerial(request.serial)) {
@@ -2291,7 +2291,7 @@ void Nautiloid::irisWorkerLoop() {
       }
       irisCompatibleSource = slot.source;
       irisExpanderOwnedSource =
-        std::make_shared<const iris::SourceField>(std::move(slot.source));
+        std::make_shared<const fractal::SourceField>(std::move(slot.source));
       irisCompatibleSerial = request.serial;
       irisCompatibleMode = request.mode;
       irisCompatibleZoom = request.zoom;

@@ -36,18 +36,18 @@ std::string libraryPath() {
 		: std::string();
 }
 
-bool sameParams(const iris::NautiloidFractalSourceParams& a,
-	const iris::NautiloidFractalSourceParams& b) {
+bool sameParams(const fractal::FractalSourceParams& a,
+	const fractal::FractalSourceParams& b) {
 	return a.mode == b.mode && std::fabs(a.zoom - b.zoom) <= 1e-5f &&
 		std::fabs(a.centerX - b.centerX) <= 1e-7 &&
 		std::fabs(a.centerY - b.centerY) <= 1e-7;
 }
 
-iris::FractalPalette paletteForColor(NVGcolor color) {
+fractal::FractalPalette paletteForColor(NVGcolor color) {
 	const int r = int(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
 	const int g = int(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
 	const int b = int(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
-	iris::FractalPalette palette;
+	fractal::FractalPalette palette;
 	palette.shadowR = uint8_t(std::max(1, r * 7 / 12));
 	palette.shadowG = uint8_t(std::max(1, g * 7 / 12));
 	palette.shadowB = uint8_t(std::max(1, b * 7 / 12));
@@ -59,7 +59,7 @@ iris::FractalPalette paletteForColor(NVGcolor color) {
 }
 
 struct SavedEntry {
-	iris::NautiloidFractalSourceParams params;
+	fractal::FractalSourceParams params;
 	size_t index = 0u;
 };
 
@@ -75,7 +75,7 @@ std::unordered_map<std::string, SelectionPool> gSelectionPools;
 struct FractalRenderKey {
 	int width = 0;
 	int height = 0;
-	int mode = iris::FRACTAL_NONE;
+	int mode = fractal::FRACTAL_NONE;
 	uint32_t zoomBits = 0u;
 	uint64_t centerXBits = 0u;
 	uint64_t centerYBits = 0u;
@@ -102,14 +102,14 @@ struct FractalRenderKeyHash {
 	}
 };
 
-using CachedFractalField = std::shared_ptr<const iris::SourceField>;
+using CachedFractalField = std::shared_ptr<const fractal::SourceField>;
 using CachedFractalFuture = std::shared_future<CachedFractalField>;
 std::mutex gFractalRenderCacheMutex;
 std::unordered_map<FractalRenderKey, CachedFractalFuture, FractalRenderKeyHash>
 	gFractalRenderCache;
 
 FractalRenderKey makeFractalRenderKey(
-	const iris::NautiloidFractalSourceParams& params, int width, int height) {
+	const fractal::FractalSourceParams& params, int width, int height) {
 	FractalRenderKey key;
 	key.width = width;
 	key.height = height;
@@ -121,9 +121,9 @@ FractalRenderKey makeFractalRenderKey(
 }
 
 CachedFractalField renderFractalField(
-	const iris::NautiloidFractalSourceParams& params, int width, int height) {
-	std::shared_ptr<iris::SourceField> source(new iris::SourceField);
-	if (!iris::makeBuiltinFractalSourceSized(params.mode, params.zoom,
+	const fractal::FractalSourceParams& params, int width, int height) {
+	std::shared_ptr<fractal::SourceField> source(new fractal::SourceField);
+	if (!fractal::makeBuiltinFractalSourceSized(params.mode, params.zoom,
 		params.centerX, params.centerY, width, height, 1.f, source.get()) ||
 		!source->valid()) {
 		return CachedFractalField();
@@ -132,7 +132,7 @@ CachedFractalField renderFractalField(
 }
 
 CachedFractalField cachedFractalField(
-	const iris::NautiloidFractalSourceParams& params, int width, int height) {
+	const fractal::FractalSourceParams& params, int width, int height) {
 	const FractalRenderKey key = makeFractalRenderKey(params, width, height);
 	CachedFractalFuture future;
 	std::shared_ptr<std::promise<CachedFractalField>> producer;
@@ -195,7 +195,7 @@ void shuffleEntryOrder(std::vector<size_t>* order) {
 }
 
 bool selectRandomEntry(const std::string& selectionKey,
-	iris::NautiloidFractalSourceParams* params, size_t* entryIndex) {
+	fractal::FractalSourceParams* params, size_t* entryIndex) {
 	if (!params || !entryIndex) return false;
 	json_error_t error;
 	json_t* root = json_load_file(libraryPath().c_str(), 0, &error);
@@ -220,7 +220,7 @@ bool selectRandomEntry(const std::string& selectionKey,
 		candidate.params.centerX = json_number_value(x);
 		candidate.params.centerY = json_number_value(y);
 		candidate.index = i;
-		if (!iris::isBuiltinFractalMode(candidate.params.mode) ||
+		if (!fractal::isBuiltinFractalMode(candidate.params.mode) ||
 			!std::isfinite(candidate.params.zoom) || !std::isfinite(candidate.params.centerX) ||
 			!std::isfinite(candidate.params.centerY)) continue;
 		candidate.params.zoom = clamp(candidate.params.zoom, 0.f, 4.f);
@@ -277,7 +277,7 @@ struct FractalGlassOverlay::Impl {
 		leviathan::theme::ThemeRole themeRole = leviathan::theme::ThemeRole::None;
 	};
 	struct Request {
-		iris::NautiloidFractalSourceParams params;
+		fractal::FractalSourceParams params;
 		uint64_t serial = 0u;
 		bool cacheable = false;
 	};
@@ -311,14 +311,14 @@ struct FractalGlassOverlay::Impl {
 	std::atomic<uint32_t> colorPreviews[4];
 	bool hasSemanticRegion = false;
 	bool liveValid = false;
-	iris::NautiloidFractalSourceParams live;
+	fractal::FractalSourceParams live;
 	bool wasLive = false;
 	bool fallbackAttempted = false;
 	bool fallbackValid = false;
-	iris::NautiloidFractalSourceParams fallback;
+	fractal::FractalSourceParams fallback;
 	size_t fallbackIndex = size_t(-1);
 	bool submittedValid = false;
-	iris::NautiloidFractalSourceParams submitted;
+	fractal::FractalSourceParams submitted;
 	std::string selectionKey;
 	int renderWidth = 2;
 	int renderHeight = kReferenceRenderHeight;
@@ -385,7 +385,7 @@ struct FractalGlassOverlay::Impl {
 		if (worker.joinable()) worker.join();
 	}
 
-	void submit(const iris::NautiloidFractalSourceParams& params, bool cacheable) {
+	void submit(const fractal::FractalSourceParams& params, bool cacheable) {
 		std::lock_guard<std::mutex> lock(requestMutex);
 		request.params = params;
 		request.serial = ++nextSerial;
@@ -442,8 +442,8 @@ struct FractalGlassOverlay::Impl {
 			sourceField = source;
 			rendered.resize(regions.size());
 			for (size_t i = 0; i < regions.size(); ++i) {
-				iris::SourceField tinted = *source;
-				iris::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
+				fractal::SourceField tinted = *source;
+				fractal::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
 				rendered[i] = std::move(tinted.rgb8);
 			}
 			renderedWidth = source->width;
@@ -459,8 +459,8 @@ struct FractalGlassOverlay::Impl {
 			const leviathan::theme::ThemeSnapshot theme = leviathan::theme::read().snapshot;
 			rendered.resize(regions.size());
 			for (size_t i = 0; i < regions.size(); ++i) {
-				iris::SourceField tinted = *sourceField;
-				iris::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
+				fractal::SourceField tinted = *sourceField;
+				fractal::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
 				rendered[i] = std::move(tinted.rgb8);
 			}
 			renderedWidth = sourceField->width;
@@ -571,7 +571,7 @@ void FractalGlassOverlay::clearColorPreview(leviathan::theme::ThemeRole role) {
 	impl->requestRepalette();
 }
 
-void FractalGlassOverlay::setLiveParams(const iris::NautiloidFractalSourceParams* params) {
+void FractalGlassOverlay::setLiveParams(const fractal::FractalSourceParams* params) {
 	impl->liveValid = params != nullptr;
 	if (params) impl->live = *params;
 }

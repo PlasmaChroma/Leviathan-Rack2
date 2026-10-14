@@ -43,6 +43,7 @@ SOURCES += $(wildcard src/common/wavepreview/*.cpp)
 SOURCES += $(wildcard src/vtune/*.cpp)
 SOURCES += $(wildcard src/vessel/module/*.cpp)
 SOURCES += $(wildcard src/common/visual/*.cpp)
+SOURCES += $(wildcard src/common/fractal/*.cpp)
 SOURCES += src/common/render/HostStrokeBridge.cpp
 SOURCES += $(wildcard src/theme/*.cpp)
 SOURCES += $(wildcard src/vessel/*.cpp)
@@ -1115,25 +1116,25 @@ build/tests/umi_engine_spec: tests/umi_engine_spec.cpp src/umi/UmiEngine.cpp src
 build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp src/common/visual/ApertureLightTransfer.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
-build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/iris/IrisWavetable.hpp src/iris/IrisPolyphony.hpp src/iris/IrisIO.cpp src/iris/IrisIO.hpp src/iris/IrisSourceField.cpp src/iris/IrisSourceField.hpp | build/tests
-	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp -o $@
+build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/common/fractal/ImageWavetable.hpp src/iris/IrisPolyphony.hpp src/iris/IrisIO.cpp src/iris/IrisIO.hpp src/common/fractal/SourceField.cpp src/common/fractal/SourceField.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/iris/IrisIO.cpp src/common/fractal/SourceField.cpp -o $@
 
 build/tests/iris_worker_completion_spec: tests/iris_worker_completion_spec.cpp src/iris/IrisWorkerCompletion.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
 
-build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/common/fractal/SourceField.cpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/IrisIO.cpp src/common/fractal/SourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/nautiloid/NautiloidRequestCoordinator.hpp src/nautiloid/NautiloidCachePolicy.hpp src/nautiloid/NautiloidFractal.hpp | build/tests
+build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/nautiloid/NautiloidRequestCoordinator.hpp src/nautiloid/NautiloidCachePolicy.hpp src/common/fractal/BuiltinFractals.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_request_coordinator_spec.cpp -o $@
 
-build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/nautiloid/NautiloidLocationCode.cpp src/nautiloid/NautiloidLocationCode.hpp src/nautiloid/NautiloidFractal.hpp | build/tests
+build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/nautiloid/NautiloidLocationCode.cpp src/nautiloid/NautiloidLocationCode.hpp src/common/fractal/BuiltinFractals.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/nautiloid/NautiloidLocationCode.cpp -o $@
 
 build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp src/nautiloid/NautiloidGpuPrecision.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_gpu_precision_spec.cpp -o $@
 
-build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/nautiloid/Nautiloid.cpp src/nautiloid/Nautiloid.hpp src/nautiloid/NautiloidLocationCode.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp src/chromatide/Chromatide.cpp src/chromatide/ChromatideCanvas.cpp src/common/UiExpanderUtils.hpp | build/tests
+build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/nautiloid/Nautiloid.cpp src/nautiloid/Nautiloid.hpp src/nautiloid/NautiloidLocationCode.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/common/fractal/SourceField.cpp src/chromatide/Chromatide.cpp src/chromatide/ChromatideCanvas.cpp src/common/UiExpanderUtils.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp src/integralflux/IntegralFlux.hpp src/common/MathHelpers.hpp | build/tests
@@ -1201,10 +1202,10 @@ build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/mandelw
 build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexEngine.hpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexFixtures.hpp src/phonex/PhonexTypes.hpp src/phonex/PhonexRom.cpp src/phonex/PhonexRom.hpp src/phonex/PhonexRomData.inc src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexSequenceCompiler.hpp src/phonex/PhonexPronunciation.cpp src/phonex/PhonexPronunciation.hpp src/phonex/PhonexSequenceMailbox.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexPronunciation.cpp $(MINGW_TEST_STACK_FLAGS) -o $@
 
-build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/undertow/UndertowShape.hpp | build/tests
+build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/common/FoldShapes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
 
-build/tests/undertow_module_spec: tests/undertow_module_spec.cpp src/undertow/Undertow.cpp src/undertow/Undertow.hpp src/undertow/UndertowShape.hpp | build/tests
+build/tests/undertow_module_spec: tests/undertow_module_spec.cpp src/undertow/Undertow.cpp src/undertow/Undertow.hpp src/common/FoldShapes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/undertow_module_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
@@ -1278,8 +1279,8 @@ build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/deepcac
 build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_spec.cpp src/deepcache/DeepcacheThemeClassifier.cpp src/deepcache/DeepcacheThemeClassifier.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_classifier_spec.cpp src/deepcache/DeepcacheThemeClassifier.cpp -o $@
 
-build/tests/chromatide_spec: tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/iris/IrisSourceField.cpp src/deepcache/DeepcacheQoi.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/iris/IrisSourceField.cpp src/deepcache/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/chromatide_spec: tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/common/fractal/SourceField.cpp src/deepcache/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/common/fractal/SourceField.cpp src/deepcache/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 BIFURX_TEST_OPT_FLAGS ?= -O3 -funsafe-math-optimizations $(if $(ARCH_X64),-march=nehalem,)
 build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_runtime_spec.cpp src/bifurx/Bifurx.cpp src/bifurx/Bifurx.hpp src/bifurx/BifurxTypes.hpp src/bifurx/BifurxDsp.hpp src/bifurx/BifurxModule.hpp src/bifurx/BifurxPreview.hpp src/bifurx/BifurxDisplay.hpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxRenderClient.hpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxInputStage.hpp src/bifurx/BifurxOutputStage.hpp src/bifurx/BifurxOversampling.hpp src/bifurx/BifurxTransitionSmoother.hpp src/bifurx/BifurxRenderData.hpp src/bifurx/BifurxWorker.hpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.hpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp | build/tests
@@ -1376,7 +1377,7 @@ build/tests/lumin_function_pilot_spec: tests/lumin_function_pilot_spec.cpp tests
 build/tests/adaptive_visual_update_spec: tests/adaptive_visual_update_spec.cpp src/common/render/AdaptiveVisualUpdate.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
 
-build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/undertow/UndertowShape.hpp src/common/wavepreview/WavePreviewSimplifier.hpp src/common/render/HostStrokeBridge.cpp src/common/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
+build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/common/FoldShapes.hpp src/common/wavepreview/WavePreviewSimplifier.hpp src/common/render/HostStrokeBridge.cpp src/common/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
 	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_host_stroke_bridge_spec.cpp src/common/render/HostStrokeBridge.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 build/tests/lumin_native_function_spec: tests/lumin_native_function_spec.cpp tests/lumin_function_curve_spec.cpp src/common/render/NativeFunctionContour.hpp src/common/render/FunctionCurve.hpp src/common/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests

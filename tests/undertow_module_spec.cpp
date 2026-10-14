@@ -511,7 +511,7 @@ TestResult morphIsPerVoiceButPreviewIsChannelZero() {
     args.frame = frame;
     module.process(args);
   }
-  const float expectedPreview = undertow_shape::shapeControlTaper(2.f / 8.f);
+  const float expectedPreview = fold_shape::shapeControlTaper(2.f / 8.f);
   const bool initial = nearlyEqual(module.displayShapeAmount.load(std::memory_order_relaxed), expectedPreview)
       && !nearlyEqual(module.outputs[Undertow::SHAPE_OUTPUT].getVoltage(0),
                       module.outputs[Undertow::SHAPE_OUTPUT].getVoltage(2), 1e-3f);

@@ -2,7 +2,7 @@
 #include "BifurxInputStage.hpp"
 #include "BifurxOutputStage.hpp"
 #include "BifurxOversampling.hpp"
-#include "../undertow/UndertowShape.hpp"
+#include "../common/FoldShapes.hpp"
 
 #include <array>
 #include <algorithm>
@@ -112,7 +112,7 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 	const float sampleRate = std::max(state.sampleRate, 1.f);
 	const float phase = 261.63f * float(sampleIndex) / sampleRate;
 	const float phase01 = phase - std::floor(phase);
-	return 5.f * undertow_shape::thresholdFold(phase01, 0.5f, false, 0.5f, false);
+	return 5.f * fold_shape::thresholdFold(phase01, 0.5f, false, 0.5f, false);
 }
 
 namespace {
@@ -165,8 +165,8 @@ void generateUndertowBrowserPreview(float* buffer, int sampleCount, float sample
 		}
 
 		const float triangle = 4.f * std::fabs(phase - 0.5f) - 1.f;
-		const float sine = undertow_shape::triToSine(triangle);
-		const float shaped = undertow_shape::thresholdFold(phase, shape, false, edgeHardness, false);
+		const float sine = fold_shape::triToSine(triangle);
+		const float shaped = fold_shape::thresholdFold(phase, shape, false, edgeHardness, false);
 		const float envTarget = 0.5f * (std::fabs(sine) + std::fabs(shaped));
 		const float envCoeff = envTarget > characterEnv ? attackCoeff : releaseCoeff;
 		characterEnv += (envTarget - characterEnv) * envCoeff;

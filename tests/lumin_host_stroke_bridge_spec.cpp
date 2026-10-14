@@ -4,7 +4,7 @@
 #include "callback_bridge.hpp"
 #include "flux_geometry.hpp"
 #include <cstring>
-#include "undertow/UndertowShape.hpp"
+#include "common/FoldShapes.hpp"
 #include "common/wavepreview/WavePreviewSimplifier.hpp"
 
 static lumin::HostStrokeBridge* liveBridge=nullptr;
@@ -101,7 +101,7 @@ static void undertowContours(NVGcontext* vg) {
   for(float shape:{0.f,.1f,.5f,.9f,1.f})for(float hardness:{0.f,.5f,1.f})for(int asym=0;asym<3;++asym) {
    std::array<Vec,256> source;Points contour;
    for(int i=0;i<256;++i){float phase=float(i)/255;
-    float v=clamp(undertow_shape::thresholdFold(phase,shape,asym!=0,hardness,asym==2),-1.f,1.f);
+    float v=clamp(fold_shape::thresholdFold(phase,shape,asym!=0,hardness,asym==2),-1.f,1.f);
     source[i]=Vec(1.625f+phase*102.75f,1.625f+(.5f-.5f*v)*44.75f);
    }
    wave_preview::simplifyPath(source.data(),source.size(),1,.02f,[&](const Vec& p,bool){contour.push_back(p);});

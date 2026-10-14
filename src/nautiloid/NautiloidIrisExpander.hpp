@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../iris/IrisSourceField.hpp"
+#include "../common/fractal/SourceField.hpp"
 
 #include <atomic>
 #include <limits>
@@ -11,7 +11,7 @@ constexpr int kSourceSlotCount = 3;
 constexpr uint32_t kWriterClaim = std::numeric_limits<uint32_t>::max();
 
 struct SourceSlot {
-  iris::SourceField source;
+  fractal::SourceField source;
   std::atomic<uint64_t> generation {0u};
   mutable std::atomic<uint32_t> readers {0u};
 };

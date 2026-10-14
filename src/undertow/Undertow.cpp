@@ -1,6 +1,6 @@
 #include "Undertow.hpp"
 #include "../common/MathHelpers.hpp"
-#include "UndertowShape.hpp"
+#include "../common/FoldShapes.hpp"
 #include "../common/wavepreview/WavePreviewTracer.hpp"
 
 namespace {
@@ -113,9 +113,9 @@ Undertow::~Undertow() {
 float Undertow::getShapeAmount(int channel) {
   const float shapeKnob = params[SHAPE_PARAM].getValue();
   if (inputs[SHAPE_CV_INPUT].isConnected()) {
-    return undertow_shape::shapeControlTaper(shapeKnob * (inputs[SHAPE_CV_INPUT].getPolyVoltage(channel) / 8.f));
+    return fold_shape::shapeControlTaper(shapeKnob * (inputs[SHAPE_CV_INPUT].getPolyVoltage(channel) / 8.f));
   }
-  return undertow_shape::shapeControlTaper(shapeKnob);
+  return fold_shape::shapeControlTaper(shapeKnob);
 }
 
 void Undertow::process(const ProcessArgs& args) {
@@ -144,7 +144,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float linAmt = params[LIN_FM_PARAM].getValue();
   const float shapeKnob = params[SHAPE_PARAM].getValue();
   const bool shapeCvPatched = inputs[SHAPE_CV_INPUT].isConnected();
-  const float unmodulatedShape = undertow_shape::shapeControlTaper(shapeKnob);
+  const float unmodulatedShape = fold_shape::shapeControlTaper(shapeKnob);
   const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
   const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
   const float edgeHardness = params[EDGE_HARDNESS_PARAM].getValue();
@@ -168,7 +168,7 @@ void Undertow::process(const ProcessArgs& args) {
     const float freq = levi_math::clampf(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
     const float phaseInc = freq * args.sampleTime;
     const float shape = shapeCvPatched
-                            ? undertow_shape::shapeControlTaper(
+                            ? fold_shape::shapeControlTaper(
                                   shapeKnob * (inputs[SHAPE_CV_INPUT].getPolyVoltage(channel) / 8.f))
                             : unmodulatedShape;
     if (channel == 0) {
@@ -178,9 +178,9 @@ void Undertow::process(const ProcessArgs& args) {
     // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
     const float phaseBeforeEvents = voice.phase;
     const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
-    const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
+    const float sineBeforeEvents = fold_shape::triToSine(triBeforeEvents);
     const float shapedBeforeEvents =
-        undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
+        fold_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
 
     const bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].getNormalPolyVoltage(0.f, channel));
     anySyncRising = anySyncRising || syncRising;
@@ -204,9 +204,9 @@ void Undertow::process(const ProcessArgs& args) {
     }
 
     const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
-    const float sine = undertow_shape::triToSine(tri);
+    const float sine = fold_shape::triToSine(tri);
     const float shaped =
-        undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
+        fold_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
     const float analogCharacterEnv =
         updateAnalogCharacterEnv(0.5f * (std::fabs(sine) + std::fabs(shaped)), &voice, args.sampleTime);
 

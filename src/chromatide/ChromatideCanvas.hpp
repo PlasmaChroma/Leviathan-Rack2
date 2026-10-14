@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../iris/IrisSourceField.hpp"
+#include "../common/fractal/SourceField.hpp"
 #include <array>
 #include <vector>
 #include <string>
@@ -101,9 +101,9 @@ struct ChromatideUndoRecord {
 
 class ChromatideCanvas {
 public:
-    static constexpr int WIDTH = iris::kCanonicalSourceWidth;     // 1024
-    static constexpr int HEIGHT = iris::kCanonicalSourceHeight;   // 256
-    static constexpr int CHANNELS = iris::kCanonicalSourceChannels; // 3
+    static constexpr int WIDTH = fractal::kCanonicalSourceWidth;     // 1024
+    static constexpr int HEIGHT = fractal::kCanonicalSourceHeight;   // 256
+    static constexpr int CHANNELS = fractal::kCanonicalSourceChannels; // 3
     static constexpr size_t BUFFER_SIZE = static_cast<size_t>(WIDTH * HEIGHT * CHANNELS); // 786,432
 
     static constexpr float VIEWPORT_ASPECT_RATIO = 98.0f / 65.27f; // Approx 1.5014555f

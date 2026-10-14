@@ -53,7 +53,7 @@ bool restoresWithoutFinalRequestStarvation(int mode) {
 
   json_t* irisState = json_object();
   json_object_set_new(
-    irisState, "sourceKind", json_integer(iris::SOURCE_NAUTILOID_FRACTAL));
+    irisState, "sourceKind", json_integer(fractal::SOURCE_FRACTAL));
   json_object_set_new(irisState, "sourceMode", json_string("nautiloid"));
   json_object_set_new(irisState, "sourceModeNautiloidAttached", json_true());
   json_object_set_new(irisState, "nautiloidFractalMode", json_integer(mode));
@@ -119,7 +119,7 @@ bool chromatideDeliveryRunsOnUiAndReconnects() {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
   while (std::chrono::steady_clock::now() < deadline && irisModule.loading.load())
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  if (irisModule.sourceKind() != iris::SOURCE_EXPANDER_IMAGE) return false;
+  if (irisModule.sourceKind() != fractal::SOURCE_EXPANDER_IMAGE) return false;
 
   // Attach the same canvas generation to a different Iris instance.
   Iris replacement;
@@ -134,7 +134,7 @@ bool chromatideDeliveryRunsOnUiAndReconnects() {
   const auto reconnectDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
   while (std::chrono::steady_clock::now() < reconnectDeadline && replacement.loading.load())
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  return replacement.sourceKind() == iris::SOURCE_EXPANDER_IMAGE;
+  return replacement.sourceKind() == fractal::SOURCE_EXPANDER_IMAGE;
 }
 
 bool uiLookupUsesIdsRatherThanEnginePointers() {
@@ -262,9 +262,9 @@ int main() {
   check("UI adjacency resolves registered IDs, rejects one-way links, and survives removal",
         uiLookupUsesIdsRatherThanEnginePointers());
   check("Spider reconnect publishes without startup request starvation",
-        restoresWithoutFinalRequestStarvation(iris::FRACTAL_SPIDER));
+        restoresWithoutFinalRequestStarvation(fractal::FRACTAL_SPIDER));
   check("Barnsley reconnect publishes without startup request starvation",
-        restoresWithoutFinalRequestStarvation(iris::FRACTAL_BARNSLEY));
+        restoresWithoutFinalRequestStarvation(fractal::FRACTAL_BARNSLEY));
   check("CPU fallback serves live pan and zoom previews from immutable cache generations",
         cacheGenerationsRemainImmutableAcrossRecenter());
   check("Chromatide delivers on UI service, keeps audio free of submissions, and reconnects",

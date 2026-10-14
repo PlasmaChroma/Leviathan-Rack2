@@ -2,8 +2,8 @@
 
 #include "../plugin.hpp"
 #include "../common/DebugTerminalMetrics.hpp"
-#include "NautiloidFractal.hpp"
-#include "NautiloidColor.hpp"
+#include "../common/fractal/BuiltinFractals.hpp"
+#include "../common/fractal/FractalColorMap.hpp"
 #include "NautiloidIrisExpander.hpp"
 #include "NautiloidLocationCode.hpp"
 #include "NautiloidRequestCoordinator.hpp"
@@ -35,13 +35,13 @@ struct Nautiloid final : Module {
   using DisplayCacheGenerationPtr = std::shared_ptr<const DisplayCacheGeneration>;
 
   enum FractalColorMode {
-    COLOR_PRISM = nautiloid_color::PRISM,
-    COLOR_ABYSS = nautiloid_color::ABYSS,
-    COLOR_EMBER = nautiloid_color::EMBER,
-    COLOR_AMETHYST = nautiloid_color::AMETHYST,
-    COLOR_EMERALD = nautiloid_color::EMERALD,
-    COLOR_INVERTED = nautiloid_color::INVERTED,
-    FRACTAL_COLOR_MODES_LEN = nautiloid_color::MODES_LEN
+    COLOR_PRISM = fractal_color::PRISM,
+    COLOR_ABYSS = fractal_color::ABYSS,
+    COLOR_EMBER = fractal_color::EMBER,
+    COLOR_AMETHYST = fractal_color::AMETHYST,
+    COLOR_EMERALD = fractal_color::EMERALD,
+    COLOR_INVERTED = fractal_color::INVERTED,
+    FRACTAL_COLOR_MODES_LEN = fractal_color::MODES_LEN
   };
 
   enum ParamId {
@@ -88,10 +88,10 @@ struct Nautiloid final : Module {
   void serviceIrisConsumerDemand();
   void setGpuPreviewAvailable(bool available, bool requireCpuFallback = true);
   void resetView();
-  std::shared_ptr<const iris::SourceField> previewSourceSnapshot() const;
+  std::shared_ptr<const fractal::SourceField> previewSourceSnapshot() const;
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
-  std::shared_ptr<const iris::SourceField> irisExpanderOwnedSourceSnapshot(uint64_t* generation) const;
+  std::shared_ptr<const fractal::SourceField> irisExpanderOwnedSourceSnapshot(uint64_t* generation) const;
 
   struct DisplayTileCacheSnapshot {
     int columns = 0;
@@ -101,7 +101,7 @@ struct Nautiloid final : Module {
     int cacheHeight = 0;
     float cacheScale = 1.f;
     bool current = false;
-    int cacheMode = iris::FRACTAL_NONE;
+    int cacheMode = fractal::FRACTAL_NONE;
     float cacheZoom = -1.f;
     double cacheCenterX = 0.0;
     double cacheCenterY = 0.0;
@@ -127,7 +127,7 @@ struct Nautiloid final : Module {
   bool loadLocationCode(const std::string& code, std::string* error = nullptr);
   std::string locationCodeSnapshot() const;
 
-  NautiloidAtomicValue<int> fractalMode {iris::FRACTAL_MANDELBROT};
+  NautiloidAtomicValue<int> fractalMode {fractal::FRACTAL_MANDELBROT};
   NautiloidAtomicValue<float> fractalZoom {0.f};
   NautiloidAtomicValue<double> fractalCenterX {0.0};
   // The geometry cache stays canonical, while display and Iris-bound copies
@@ -200,7 +200,7 @@ struct Nautiloid final : Module {
   };
 
   struct DisplayTileCache {
-    int mode = iris::FRACTAL_NONE;
+    int mode = fractal::FRACTAL_NONE;
     float zoom = -1.f;
     double centerX = 0.0;
     double centerY = 0.0;
@@ -227,7 +227,7 @@ struct Nautiloid final : Module {
   };
 
   struct DisplayCacheGeneration {
-    int mode = iris::FRACTAL_NONE;
+    int mode = fractal::FRACTAL_NONE;
     float zoom = -1.f;
     double centerX = 0.0;
     double centerY = 0.0;
@@ -245,7 +245,7 @@ struct Nautiloid final : Module {
   };
 
   struct PresentationLayer {
-    int mode = iris::FRACTAL_NONE;
+    int mode = fractal::FRACTAL_NONE;
     float zoom = -1.f;
     double centerX = 0.0;
     double centerY = 0.0;
@@ -269,7 +269,7 @@ struct Nautiloid final : Module {
 
 private:
   struct DisplayWorkerRequest {
-    int mode = iris::FRACTAL_MANDELBROT;
+    int mode = fractal::FRACTAL_MANDELBROT;
     float zoom = 0.f;
     double centerX = 0.0;
     double centerY = 0.0;
@@ -282,7 +282,7 @@ private:
   };
 
   struct IrisWorkerRequest {
-    int mode = iris::FRACTAL_MANDELBROT;
+    int mode = fractal::FRACTAL_MANDELBROT;
     float zoom = 0.f;
     double centerX = 0.0;
     double centerY = 0.0;
@@ -311,7 +311,7 @@ private:
   void irisWorkerLoop();
   bool publishDisplayCacheComposite(const DisplayWorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
   bool publishDisplayReprojection(const DisplayWorkerRequest& request);
-  void publishAuthoritativeDisplaySource(iris::SourceField source, const DisplayWorkerRequest& request);
+  void publishAuthoritativeDisplaySource(fractal::SourceField source, const DisplayWorkerRequest& request);
   void renderZoomAheadCaches(const DisplayWorkerRequest& request);
 
   std::atomic<uint64_t> fractalStateSequence {0u};
@@ -356,22 +356,22 @@ private:
   std::atomic<bool> irisDemandSyncPending {false};
 
   mutable std::mutex snapshotMutex;
-  std::shared_ptr<const iris::SourceField> previewPublishedSource;
-  iris::SourceField authoritativeDisplaySource;
-  int authoritativeDisplayMode = iris::FRACTAL_NONE;
+  std::shared_ptr<const fractal::SourceField> previewPublishedSource;
+  fractal::SourceField authoritativeDisplaySource;
+  int authoritativeDisplayMode = fractal::FRACTAL_NONE;
   float authoritativeDisplayZoom = -1.f;
   double authoritativeDisplayCenterX = 0.0;
   double authoritativeDisplayCenterY = 0.0;
-  iris::SourceField irisCompatibleSource;
-  std::shared_ptr<const iris::SourceField> irisExpanderOwnedSource;
+  fractal::SourceField irisCompatibleSource;
+  std::shared_ptr<const fractal::SourceField> irisExpanderOwnedSource;
   // Uncolored Iris-resolution source retained so palette changes do not rerun
   // the fractal solver. This is separate from the currently published copy.
-  iris::SourceField irisCanonicalSource;
+  fractal::SourceField irisCanonicalSource;
   std::array<nautiloid_iris_expander::SourceSlot, nautiloid_iris_expander::kSourceSlotCount> irisExpanderSlots;
   std::atomic<int> irisExpanderPublishedSlot {-1};
   int irisExpanderWriteSlot = 0;
   uint64_t irisCompatibleSerial = 0u;
-  int irisCompatibleMode = iris::FRACTAL_NONE;
+  int irisCompatibleMode = fractal::FRACTAL_NONE;
   float irisCompatibleZoom = -1.f;
   double irisCompatibleCenterX = 0.0;
   double irisCompatibleCenterY = 0.0;

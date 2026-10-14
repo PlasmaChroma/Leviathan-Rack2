@@ -1,30 +1,30 @@
 #pragma once
 
-#include "../iris/IrisWavetable.hpp"
-#include "NautiloidColor.hpp"
+#include "ImageWavetable.hpp"
+#include "FractalColorMap.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <utility>
 
-#define LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER 192
-#define LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER 64
+#define LEVIATHAN_FRACTAL_ESCAPE_MAX_ITER 192
+#define LEVIATHAN_FRACTAL_ROOT_MAX_ITER 64
 
-namespace iris {
+namespace fractal {
 
-constexpr int kNautiloidFractalSourceVersion = 1;
-constexpr int kNautiloidEscapeFractalMaxIter = LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER;
-constexpr int kNautiloidRootFractalMaxIter = LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER;
-constexpr double kNautiloidMultijuliaReal = -0.18;
-constexpr double kNautiloidMultijuliaImag = 0.76;
+constexpr int kFractalSourceVersion = 1;
+constexpr int kEscapeFractalMaxIter = LEVIATHAN_FRACTAL_ESCAPE_MAX_ITER;
+constexpr int kRootFractalMaxIter = LEVIATHAN_FRACTAL_ROOT_MAX_ITER;
+constexpr double kMultijuliaReal = -0.18;
+constexpr double kMultijuliaImag = 0.76;
 
-struct NautiloidFractalSourceParams {
+struct FractalSourceParams {
   int mode = FRACTAL_MANDELBROT;
   float zoom = 0.f;
   double centerX = 0.0;
   double centerY = 0.0;
-  int colorMode = nautiloid_color::PRISM;
+  int colorMode = fractal_color::PRISM;
   uint64_t generation = 0u;
 };
 
@@ -62,32 +62,32 @@ inline void applyFractalPalette(SourceField* source, const FractalPalette& palet
   }
 }
 
-inline bool sourceHasNautiloidFractalParams(const SourceField& source) {
-  return source.generatorKind == SOURCE_GENERATOR_NAUTILOID_FRACTAL &&
-         source.generatorVersion == kNautiloidFractalSourceVersion &&
+inline bool sourceHasFractalSourceParams(const SourceField& source) {
+  return source.generatorKind == SOURCE_GENERATOR_FRACTAL &&
+         source.generatorVersion == kFractalSourceVersion &&
          isBuiltinFractalMode(source.generatorFractalMode);
 }
 
-inline NautiloidFractalSourceParams nautiloidFractalParamsFromSource(const SourceField& source) {
-  NautiloidFractalSourceParams params;
+inline FractalSourceParams fractalSourceParamsFromSource(const SourceField& source) {
+  FractalSourceParams params;
   params.mode = source.generatorFractalMode;
   params.zoom = source.generatorFractalZoom;
   params.centerX = source.generatorFractalCenterX;
   params.centerY = source.generatorFractalCenterY;
-  params.colorMode = nautiloid_color::normalize(source.generatorFractalColorMode);
+  params.colorMode = fractal_color::normalize(source.generatorFractalColorMode);
   params.generation = source.generatorGeneration;
   return params;
 }
 
-inline void applyNautiloidFractalParams(SourceField* source, const NautiloidFractalSourceParams& params) {
+inline void applyFractalSourceParams(SourceField* source, const FractalSourceParams& params) {
   if (!source) return;
-  source->generatorKind = SOURCE_GENERATOR_NAUTILOID_FRACTAL;
-  source->generatorVersion = kNautiloidFractalSourceVersion;
+  source->generatorKind = SOURCE_GENERATOR_FRACTAL;
+  source->generatorVersion = kFractalSourceVersion;
   source->generatorFractalMode = params.mode;
   source->generatorFractalZoom = params.zoom;
   source->generatorFractalCenterX = params.centerX;
   source->generatorFractalCenterY = params.centerY;
-  source->generatorFractalColorMode = nautiloid_color::normalize(params.colorMode);
+  source->generatorFractalColorMode = fractal_color::normalize(params.colorMode);
   source->generatorGeneration = params.generation;
 }
 
@@ -168,7 +168,7 @@ inline void writeEscapeColor(int iter, int maxIter, float mag2, float minOrbit, 
   writePalette(t, orbit, base, rgb8);
 }
 
-#if defined(LEVIATHAN_IRIS_ENABLE_RACK_SIMD)
+#if defined(LEVIATHAN_FRACTAL_ENABLE_RACK_SIMD)
 inline void renderMandelbrotFamilySimd(
   int mode,
   float zoomScale,
@@ -319,12 +319,12 @@ inline bool makeBuiltinFractalSourceSized(
   const int pixelX0 = std::max(0, viewportPixelX);
   const int pixelY0 = std::max(0, viewportPixelY);
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
-    ? kNautiloidRootFractalMaxIter
-    : kNautiloidEscapeFractalMaxIter;
+    ? kRootFractalMaxIter
+    : kEscapeFractalMaxIter;
   const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
   const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
     source.width == fullWidth && source.height == fullHeight;
-#if defined(LEVIATHAN_IRIS_ENABLE_RACK_SIMD)
+#if defined(LEVIATHAN_FRACTAL_ENABLE_RACK_SIMD)
   if (!cancellation && fullViewport && detail::kUseSimdFractalRenderer &&
       simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
     detail::renderMandelbrotFamilySimd(
@@ -412,8 +412,8 @@ inline bool makeBuiltinFractalSourceSized(
         cr = panX + double(nx) * 1.45 * zoomScale * viewScale;
         ci = panY + double(ny) * 0.90 * zoomScale * viewScale;
       } else if (mode == FRACTAL_MULTIJULIA) {
-        cr = kNautiloidMultijuliaReal;
-        ci = kNautiloidMultijuliaImag;
+        cr = kMultijuliaReal;
+        ci = kMultijuliaImag;
         zr = panX + double(nx) * 1.45 * zoomScale * viewScale;
         zi = panY + double(ny) * 0.84 * zoomScale * viewScale;
       } else if (mode == FRACTAL_JULIA) {
@@ -583,8 +583,8 @@ inline bool makeBuiltinFractalSource(
   return makeBuiltinFractalSource(mode, 0.f, 0.f, 0.f, out, error);
 }
 
-inline bool makeNautiloidIrisSource(
-  const NautiloidFractalSourceParams& params,
+inline bool makeFractalSource(
+  const FractalSourceParams& params,
   SourceField* out,
   std::string* error = nullptr,
   const FractalCancellationToken* cancellation = nullptr) {
@@ -607,9 +607,9 @@ inline bool makeNautiloidIrisSource(
   }
   out->sourcePath.clear();
   out->sourceName = std::string("Nautiloid: ") + builtinFractalName(params.mode);
-  nautiloid_color::applyRgb8(params.colorMode, &out->rgb8);
-  applyNautiloidFractalParams(out, params);
+  fractal_color::applyRgb8(params.colorMode, &out->rgb8);
+  applyFractalSourceParams(out, params);
   return true;
 }
 
-} // namespace iris
+} // namespace fractal
