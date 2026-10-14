@@ -16,6 +16,13 @@ SOURCES += $(wildcard src/visual/*.cpp)
 SOURCES += src/render/HostStrokeBridge.cpp
 SOURCES += $(wildcard src/theme/*.cpp)
 SOURCES += $(wildcard src/vessel/*.cpp)
+SOURCES += $(wildcard src/hydra/*.cpp)
+SOURCES += $(wildcard src/hydra/beads/dsp/*.cc)
+SOURCES += src/hydra/beads/resources.cc
+SOURCES += $(wildcard src/hydra/stmlib/dsp/*.cc)
+SOURCES += $(wildcard src/hydra/stmlib/utils/*.cc)
+FLAGS += -Isrc/hydra
+FLAGS += -Wno-unused-local-typedefs
 SOURCES += $(wildcard src/doom/*.c)
 
 
@@ -177,6 +184,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/sil_perf_regression_spec \
 	build/tests/sil_limiter_peak_window_spec \
 	build/tests/bulkhead_geometry_spec \
+	build/tests/hydra_engine_spec \
 	build/tests/umi_engine_spec \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
@@ -849,6 +857,7 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal test-str
 	$(call run_rack_test_bin,build/tests/sil_perf_regression_spec)
 	$(call run_test_bin,build/tests/sil_limiter_peak_window_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
+	$(call run_test_bin,build/tests/hydra_engine_spec)
 	$(call run_test_bin,build/tests/umi_engine_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
@@ -1062,6 +1071,10 @@ build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.c
 
 build/tests/sil_limiter_peak_window_spec: tests/sil_limiter_peak_window_spec.cpp src/SilLimiterPeakWindow.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
+
+HYDRA_ENGINE_SOURCES := src/hydra/HydraEngine.cpp $(wildcard src/hydra/beads/dsp/*.cc) src/hydra/beads/resources.cc $(wildcard src/hydra/stmlib/dsp/*.cc) $(wildcard src/hydra/stmlib/utils/*.cc)
+build/tests/hydra_engine_spec: tests/hydra_engine_spec.cpp $(HYDRA_ENGINE_SOURCES) | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Isrc/hydra $^ -o $@
 
 build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

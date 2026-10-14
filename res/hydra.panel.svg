@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850">
+  <defs>
+    <linearGradient id="hydraGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c1620" />
+      <stop offset="1" stop-color="#150f26" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art">
+    <g id="Background_Rect" />
+    <rect id="panel_gradient" x="0" y="0" width="10160" height="12850" fill="url(#hydraGrad)" opacity="0.9" />
+    <line id="top_horizontal_line" x1="500" y1="780" x2="9660" y2="780" stroke="#5740bf" stroke-width="30" />
+  </g>
+  <g id="components" style="display:none;opacity:0.5">
+    <circle id="QUALITY_BTN" cx="1020" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="FREEZE_BTN" cx="3050" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SEED_BTN" cx="5080" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_BTN" cx="7110" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="QUALITY_LED_0" cx="480" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="QUALITY_LED_1" cx="840" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="QUALITY_LED_2" cx="1200" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="QUALITY_LED_3" cx="1560" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="FREEZE_LED" cx="3050" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SEED_LED" cx="5080" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_LED_0" cx="6750" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_LED_1" cx="7110" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_LED_2" cx="7470" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="INPUT_LED" cx="9140" cy="1700" r="110" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="TIME_KNOB" cx="1020" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="TIME_AMT" cx="1020" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="TIME_CV" cx="1020" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SIZE_KNOB" cx="3050" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SIZE_AMT" cx="3050" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SIZE_CV" cx="3050" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SHAPE_KNOB" cx="5080" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SHAPE_AMT" cx="5080" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SHAPE_CV" cx="5080" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="PITCH_KNOB" cx="7110" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="PITCH_AMT" cx="7110" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="PITCH_CV" cx="7110" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="DENSITY_KNOB" cx="9140" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="DENSITY_CV" cx="9140" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="FEEDBACK_KNOB" cx="1020" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="DRYWET_KNOB" cx="3050" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="REVERB_KNOB" cx="5080" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_FB_AMT" cx="1020" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_DW_AMT" cx="3050" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_RV_AMT" cx="5080" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="IN_L_INPUT" cx="1020" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="IN_R_INPUT" cx="3050" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="FREEZE_GATE_INPUT" cx="5080" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="SEED_IN_INPUT" cx="7110" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="ASSIGN_CV_INPUT" cx="9140" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="OUT_L_OUTPUT" cx="7110" cy="11300" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+    <circle id="OUT_R_OUTPUT" cx="9140" cy="11300" r="180" style="fill:#ff0000;fill-opacity:0.95" />
+  </g>
+</svg>

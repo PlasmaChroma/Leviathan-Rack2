@@ -227,6 +227,7 @@ void init(Plugin* p) {
 	p->addModel(modelSil);
 	p->addModel(modelChronomaw);
 	p->addModel(modelBulkhead);
+	p->addModel(modelHydra);
 	p->addModel(modelUmi);
 	p->addModel(modelDoorstop);
 	p->addModel(modelChromatide);

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+<defs>
+<linearGradient id="hydraGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c1620"/><stop offset="1" stop-color="#150f26"/></linearGradient>
+</defs>
+<g id="panel_art"><g id="Background_Rect"><g id="theme_background"><rect id="black_background" x="0" y="0" width="10160" height="12850" fill="#000000"/></g></g>
+<rect id="panel_gradient" x="0" y="0" width="10160" height="12850" fill="url(#hydraGrad)" opacity="0.9"/>
+<line id="top_horizontal_line" x1="500" y1="780" x2="9660" y2="780" stroke="#5740bf" stroke-width="30"/>
+<text x="5080.0" y="560" style="font-family:Rubik;font-size:320px;font-weight:700;text-anchor:middle;fill:#1cccd9;letter-spacing:60px">HYDRA</text>
+</g>
+<g id="labels" inkscape:groupmode="layer" inkscape:label="Labels">
+<g id="panel_labels" style="font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.85"><text x="1020" y="2360" style="font-size:190px;font-weight:500">QUALITY</text><text x="3050" y="2360" style="font-size:190px;font-weight:500">FREEZE</text><text x="5080" y="2360" style="font-size:190px;font-weight:500">SEED</text><text x="7110" y="2360" style="font-size:190px;font-weight:500">ASSIGN</text><text x="9140" y="2360" style="font-size:190px;font-weight:500">LEVEL</text><text x="1020" y="3980" style="font-size:190px;font-weight:500">TIME</text><text x="1020" y="5160" style="font-size:160px;font-weight:500">AMT</text><text x="3050" y="3980" style="font-size:190px;font-weight:500">SIZE</text><text x="3050" y="5160" style="font-size:160px;font-weight:500">AMT</text><text x="5080" y="3980" style="font-size:190px;font-weight:500">SHAPE</text><text x="5080" y="5160" style="font-size:160px;font-weight:500">AMT</text><text x="7110" y="3980" style="font-size:190px;font-weight:500">PITCH</text><text x="7110" y="5160" style="font-size:160px;font-weight:500">AMT</text><text x="9140" y="3980" style="font-size:190px;font-weight:500">DENSITY</text><text x="1020" y="8180" style="font-size:190px;font-weight:500">FEEDBACK</text><text x="3050" y="8180" style="font-size:190px;font-weight:500">DRY/WET</text><text x="5080" y="8180" style="font-size:190px;font-weight:500">REVERB</text><text x="1020" y="9380" style="font-size:150px;font-weight:500">FB CV AMT</text><text x="3050" y="9380" style="font-size:150px;font-weight:500">DW CV AMT</text><text x="5080" y="9380" style="font-size:150px;font-weight:500">RV CV AMT</text></g>
+<g id="theme_text_input" inkscape:label="Input Text"><g id="jack_labels_input" style="font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.85"><text x="1020" y="6520" style="font-size:170px;font-weight:500">TIME CV</text><text x="3050" y="6520" style="font-size:170px;font-weight:500">SIZE CV</text><text x="5080" y="6520" style="font-size:170px;font-weight:500">SHAPE CV</text><text x="7110" y="6520" style="font-size:170px;font-weight:500">PITCH CV</text><text x="9140" y="6520" style="font-size:170px;font-weight:500">DENS CV</text><text x="1020" y="10740" style="font-size:170px;font-weight:500">IN L</text><text x="3050" y="10740" style="font-size:170px;font-weight:500">IN R</text><text x="5080" y="10740" style="font-size:170px;font-weight:500">FREEZE</text><text x="7110" y="10740" style="font-size:170px;font-weight:500">SEED</text><text x="9140" y="10740" style="font-size:170px;font-weight:500">ASSIGN</text></g></g>
+<g id="theme_text_output" inkscape:label="Output Text"><g id="jack_labels_output" style="font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.85"><text x="7110" y="11940" style="font-size:170px;font-weight:500">OUT L</text><text x="9140" y="11940" style="font-size:170px;font-weight:500">OUT R</text></g></g>
+</g>
+<g id="components" style="display:none;opacity:0.5">
+<circle id="QUALITY_BTN" cx="1020" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="FREEZE_BTN" cx="3050" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SEED_BTN" cx="5080" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_BTN" cx="7110" cy="1700" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="QUALITY_LED_0" cx="480" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="QUALITY_LED_1" cx="840" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="QUALITY_LED_2" cx="1200" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="QUALITY_LED_3" cx="1560" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="FREEZE_LED" cx="3050" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SEED_LED" cx="5080" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_LED_0" cx="6750" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_LED_1" cx="7110" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_LED_2" cx="7470" cy="1120" r="90" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="INPUT_LED" cx="9140" cy="1700" r="110" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="TIME_KNOB" cx="1020" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="TIME_AMT" cx="1020" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="TIME_CV" cx="1020" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SIZE_KNOB" cx="3050" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SIZE_AMT" cx="3050" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SIZE_CV" cx="3050" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SHAPE_KNOB" cx="5080" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SHAPE_AMT" cx="5080" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SHAPE_CV" cx="5080" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="PITCH_KNOB" cx="7110" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="PITCH_AMT" cx="7110" cy="4600" r="170" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="PITCH_CV" cx="7110" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="DENSITY_KNOB" cx="9140" cy="3300" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="DENSITY_CV" cx="9140" cy="5900" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="FEEDBACK_KNOB" cx="1020" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="DRYWET_KNOB" cx="3050" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="REVERB_KNOB" cx="5080" cy="7500" r="205" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_FB_AMT" cx="1020" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_DW_AMT" cx="3050" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_RV_AMT" cx="5080" cy="8800" r="150" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="IN_L_INPUT" cx="1020" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="IN_R_INPUT" cx="3050" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="FREEZE_GATE_INPUT" cx="5080" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="SEED_IN_INPUT" cx="7110" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="ASSIGN_CV_INPUT" cx="9140" cy="10100" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="OUT_L_OUTPUT" cx="7110" cy="11300" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+<circle id="OUT_R_OUTPUT" cx="9140" cy="11300" r="180" style="fill:#ff0000;fill-opacity:0.95"/>
+</g>
+</svg>

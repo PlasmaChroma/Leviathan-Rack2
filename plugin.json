@@ -167,6 +167,17 @@
       "hidden": true
     },
     {
+      "slug": "Hydra",
+      "name": "Hydra",
+      "description": "Granular texture processor with layered, delayed, transposed grains, delay mode and reverb.",
+      "tags": [
+        "Granular",
+        "Effect",
+        "Reverb"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Umi",
       "name": "Umi",
       "description": "Visible pearl-physics probability sequencer with eight sink triggers and event CV.",

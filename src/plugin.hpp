@@ -37,6 +37,7 @@ extern Model* modelWyrm;
 extern Model* modelSil;
 extern Model* modelChronomaw;
 extern Model* modelBulkhead;
+extern Model* modelHydra;
 extern Model* modelUndertow;
 extern Model* modelIris;
 extern Model* modelNautiloid;
