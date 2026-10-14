@@ -5,10 +5,10 @@
 #include "PuffyFishWidget.hpp"
 #include "PuffyTransferPreviewWidget.hpp"
 #include "PuffyVisualPalette.hpp"
-#include "../visual/ApertureLight.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/PreviewSurface.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/ApertureLight.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/PreviewSurface.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <chrono>

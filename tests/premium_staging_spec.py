@@ -16,7 +16,7 @@ import sync_bifurx_to_pro as sync
 class PremiumResourceClosureSpec(unittest.TestCase):
     def test_eclipse2_constructor_assets_reach_pro_sync(self):
         root = Path(__file__).resolve().parents[1]
-        source = (root / "src/visual/VisualAssets.cpp").read_text(encoding="utf-8")
+        source = (root / "src/common/visual/VisualAssets.cpp").read_text(encoding="utf-8")
         constructor = source.split("Eclipse2Knob::Eclipse2Knob() {", 1)[1].split(
             "void Eclipse2Knob::step()", 1)[0]
         resources = set(re.findall(r'loadPluginSvgCached\("([^"]+)"\)', constructor))

@@ -1,6 +1,6 @@
 # Retained PolylineStroke shader checkpoint — 10 September 2026
 
-Experimental implementation now exists in `src/render/PolylineStroke.hpp`. It is
+Experimental implementation now exists in `src/common/render/PolylineStroke.hpp`. It is
 header-only and is not included by any live module. No package was installed.
 The proposed general segment-local backend is **not** implemented. This is an
 explicit monotone-X specialization evolving the earlier distance-union probe.

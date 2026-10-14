@@ -2,7 +2,7 @@
 #include "Chronomaw.hpp"
 #include "ChronomawWaveforms.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>

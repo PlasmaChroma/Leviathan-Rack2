@@ -1,7 +1,7 @@
 # Flux analytic current-contour live pilot — 10 September 2026
 
 **Built and packaged, disabled by default. Not installed or measured live yet.**
-The shader now lives in `src/render/FunctionCurve.hpp`, shared by offline probes
+The shader now lives in `src/common/render/FunctionCurve.hpp`, shared by offline probes
 and the optional live recipe `FunctionContourPilot.hpp`. The archived include
 forwards to this shared implementation so live/offline math cannot drift.
 

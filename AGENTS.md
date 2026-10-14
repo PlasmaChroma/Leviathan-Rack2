@@ -34,7 +34,7 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 ## Patterns
 
-- Source layout: each module owns a lowercase folder `src/<module>/` (for example `src/bifurx/`, `src/sibyl/`); code shared by several modules lives flat in `src/common/`; `src/visual`, `src/theme`, and `src/render` hold shared visual/theme infrastructure. `src/plugin.cpp` and `src/plugin.hpp` stay at the `src/` root. Include shared and cross-module headers relative to the including file (for example `../common/MathHelpers.hpp`). Module wrappers for folders that also hold standalone DSP (for example `src/vessel/module/`) are kept in a `module/` subfolder so DSP-only test globs stay Rack-free.
+- Source layout: each module owns a lowercase folder `src/<module>/` (for example `src/bifurx/`, `src/sibyl/`); code shared by several modules lives flat in `src/common/`, with shared rendering/widget infrastructure in `src/common/visual/`, `src/common/render/`, and `src/common/wavepreview/`; `src/theme` holds shared theme infrastructure. `src/plugin.cpp` and `src/plugin.hpp` stay at the `src/` root. Include shared and cross-module headers relative to the including file (for example `../common/MathHelpers.hpp`). Module wrappers for folders that also hold standalone DSP (for example `src/vessel/module/`) are kept in a `module/` subfolder so DSP-only test globs stay Rack-free.
 
 - Use the Octavia skill only for work involving Octavia, Octavia Console, Sibyl, or Moirai, not unrelated VCV Rack module source or UI work.
 

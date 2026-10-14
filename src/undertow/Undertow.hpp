@@ -3,7 +3,7 @@
 #include "../common/DebugTerminalMetrics.hpp"
 #include "../common/MathHelpers.hpp"
 #include "../plugin.hpp"
-#include "../wavepreview/WavePreviewTracer.hpp"
+#include "../common/wavepreview/WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
 #include <cmath>

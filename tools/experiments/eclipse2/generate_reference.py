@@ -2,7 +2,7 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[3]
-source = (root / "src/visual/VisualAssets.cpp").read_text(encoding="utf-8")
+source = (root / "src/common/visual/VisualAssets.cpp").read_text(encoding="utf-8")
 sections = []
 for start, end in [
     ("EclipseKnob::SvgLayer::SvgLayer()", "EclipseKnob::ShadowWidget::ShadowWidget()"),

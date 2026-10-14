@@ -1,4 +1,4 @@
-#include "../src/render/AdaptiveVisualUpdate.hpp"
+#include "../src/common/render/AdaptiveVisualUpdate.hpp"
 #include <cassert>
 #include <iostream>
 

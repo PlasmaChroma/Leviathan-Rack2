@@ -135,7 +135,7 @@ All three quality-menu callbacks store the atomic `modulationQualityMode`, then 
 
 ### PREM-04 — The actual renderer lacks a complete incoming GL-state baseline
 
-**Locations:** `src/BifurxGL.cpp:1231–1280,1330–1364,1437–1459`; `src/visual/AdaptiveGlSurface.cpp:255–323` and `beginShaderPass()`.
+**Locations:** `src/BifurxGL.cpp:1231–1280,1330–1364,1437–1459`; `src/common/visual/AdaptiveGlSurface.cpp:255–323` and `beginShaderPass()`.
 
 The fixed-surface helper saves and restores incoming state, but its standalone `renderIfNeeded()` path does not call the neutral-state setup used by `renderBatch()`. Bifurx's callback disables depth/culling/scissor, yet does not establish all state it depends on: for example stencil and alpha tests, blend equation, and the fixed-function fallback's program/array-buffer baseline. Saving state protects the host on return; it does not make the callback independent of that state while rendering.
 

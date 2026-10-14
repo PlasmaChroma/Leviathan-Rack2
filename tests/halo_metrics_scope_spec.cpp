@@ -1,4 +1,4 @@
-#include "../src/visual/HaloKnob2Metrics.hpp"
+#include "../src/common/visual/HaloKnob2Metrics.hpp"
 #include <cassert>
 #include <cstdio>
 int main() {

@@ -2,7 +2,7 @@
 #include "Umi.hpp"
 #include "../common/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <array>
 #include <cerrno>

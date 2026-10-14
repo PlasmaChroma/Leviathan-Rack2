@@ -2,7 +2,7 @@
 #include "preview_benchmark_utils.hpp"
 static bool pilotDebug=true; bool isDragonKingDebugEnabled() { return pilotDebug; }
 #define private public
-#include "visual/ApertureLight.hpp"
+#include "common/visual/ApertureLight.hpp"
 #undef private
 // Use Rack's real framebuffer implementation with a minimal offline window.
 namespace rack {

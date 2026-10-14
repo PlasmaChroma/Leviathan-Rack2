@@ -1,11 +1,11 @@
 #include "plugin.hpp"
 #include "../tools/preview_benchmark_utils.hpp"
-#include "render/HostStrokeBridge.hpp"
+#include "common/render/HostStrokeBridge.hpp"
 #include "callback_bridge.hpp"
 #include "flux_geometry.hpp"
 #include <cstring>
 #include "undertow/UndertowShape.hpp"
-#include "wavepreview/WavePreviewSimplifier.hpp"
+#include "common/wavepreview/WavePreviewSimplifier.hpp"
 
 static lumin::HostStrokeBridge* liveBridge=nullptr;
 using Points=std::vector<Vec>;

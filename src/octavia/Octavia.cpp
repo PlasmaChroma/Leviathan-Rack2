@@ -18,8 +18,8 @@
 
 #include "../plugin.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
 #include "../temporaldeck/TemporalDeck.hpp"
 #include "../sibyl/SibylControl.hpp"
 #include "OctaviaSemanticControl.hpp"

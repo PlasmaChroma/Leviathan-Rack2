@@ -1,7 +1,7 @@
 // Native Rack-linked CPU microbenchmark; does not measure rendering or FPS.
-#include "wavepreview/WavePreviewGeometryKey.hpp"
-#include "wavepreview/WavePreviewTracer.hpp"
-#include "visual/SettledContourFramebuffer.hpp"
+#include "common/wavepreview/WavePreviewGeometryKey.hpp"
+#include "common/wavepreview/WavePreviewTracer.hpp"
+#include "common/visual/SettledContourFramebuffer.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>

@@ -3,9 +3,9 @@
 #include "../../common/NvgOwnedImage.hpp"
 #include "../../common/PanelSvgUtils.hpp"
 #include "../../theme/ThemedTextWidget.hpp"
-#include "../../visual/FractalGlassOverlay.hpp"
-#include "../../visual/PlasmaConduit.hpp"
-#include "../../visual/VisualAssets.hpp"
+#include "../../common/visual/FractalGlassOverlay.hpp"
+#include "../../common/visual/PlasmaConduit.hpp"
+#include "../../common/visual/VisualAssets.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>

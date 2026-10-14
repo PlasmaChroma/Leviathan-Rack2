@@ -83,34 +83,34 @@ SOURCE_FILES = (
     "src/theme/ThemePresets.hpp",
     "src/theme/ThemeTypes.hpp",
     "src/theme/ThemeUiPoller.hpp",
-    "src/visual/AdaptiveGlSurface.cpp",
-    "src/visual/AdaptiveGlSurface.hpp",
-    "src/visual/ApertureLight.cpp",
-    "src/visual/ApertureLight.hpp",
-    "src/visual/ApertureLightTransfer.hpp",
-    "src/visual/ApertureBloomMasks.hpp",
-    "src/visual/Eclipse2RetainedCap.hpp",
-    "src/visual/Eclipse2RingCache.hpp",
-    "src/visual/Eclipse2RuntimeBake.cpp",
-    "src/visual/Eclipse2RuntimeBake.hpp",
-    "src/visual/Eclipse2Track.hpp",
-    "src/visual/FractalGlassOverlay.cpp",
-    "src/visual/SharedSvgCache.cpp",
-    "src/visual/SharedSvgCache.hpp",
-    "src/visual/SharedSvgCacheState.hpp",
-    "src/visual/FractalGlassOverlay.hpp",
-    "src/visual/HaloKnob2.cpp",
-    "src/visual/HaloKnob2Metrics.hpp",
-    "src/visual/PlasmaConduit.cpp",
-    "src/visual/PlasmaConduit.hpp",
-    "src/visual/PlasmaSwitch.cpp",
-    "src/visual/PlasmaSwitch.hpp",
-    "src/visual/RasterImageAssets.cpp",
-    "src/visual/SharedSvgCache.cpp",
-    "src/visual/SharedSvgCache.hpp",
-    "src/visual/SharedSvgCacheState.hpp",
-    "src/visual/VisualAssets.cpp",
-    "src/visual/VisualAssets.hpp",
+    "src/common/visual/AdaptiveGlSurface.cpp",
+    "src/common/visual/AdaptiveGlSurface.hpp",
+    "src/common/visual/ApertureLight.cpp",
+    "src/common/visual/ApertureLight.hpp",
+    "src/common/visual/ApertureLightTransfer.hpp",
+    "src/common/visual/ApertureBloomMasks.hpp",
+    "src/common/visual/Eclipse2RetainedCap.hpp",
+    "src/common/visual/Eclipse2RingCache.hpp",
+    "src/common/visual/Eclipse2RuntimeBake.cpp",
+    "src/common/visual/Eclipse2RuntimeBake.hpp",
+    "src/common/visual/Eclipse2Track.hpp",
+    "src/common/visual/FractalGlassOverlay.cpp",
+    "src/common/visual/SharedSvgCache.cpp",
+    "src/common/visual/SharedSvgCache.hpp",
+    "src/common/visual/SharedSvgCacheState.hpp",
+    "src/common/visual/FractalGlassOverlay.hpp",
+    "src/common/visual/HaloKnob2.cpp",
+    "src/common/visual/HaloKnob2Metrics.hpp",
+    "src/common/visual/PlasmaConduit.cpp",
+    "src/common/visual/PlasmaConduit.hpp",
+    "src/common/visual/PlasmaSwitch.cpp",
+    "src/common/visual/PlasmaSwitch.hpp",
+    "src/common/visual/RasterImageAssets.cpp",
+    "src/common/visual/SharedSvgCache.cpp",
+    "src/common/visual/SharedSvgCache.hpp",
+    "src/common/visual/SharedSvgCacheState.hpp",
+    "src/common/visual/VisualAssets.cpp",
+    "src/common/visual/VisualAssets.hpp",
     "res/FractalParams.json",
     "res/bifurx.svg",
     "artwork/Bifurx/Bifurx-LT-source.png",
@@ -183,7 +183,7 @@ LDFLAGS +=
 SOURCES += $(wildcard src/*.cpp)
 SOURCES += $(wildcard src/common/*.cpp)
 SOURCES += $(wildcard src/bifurx/*.cpp)
-SOURCES += $(wildcard src/visual/*.cpp)
+SOURCES += $(wildcard src/common/visual/*.cpp)
 SOURCES += $(wildcard src/theme/*.cpp)
 
 DISTRIBUTABLES += res
@@ -517,7 +517,12 @@ RELEASED_MANAGED_PATHS = {
 # Pro-owned files that depend on the source layout. The repository was
 # reorganized into src/common/ and per-module folders; Pro's own Makefile and
 # plugin sources predate that and are migrated only on request.
-LAYOUT_SOURCE_DIRS = ("src", "src/common", "src/bifurx", "src/visual", "src/theme")
+LAYOUT_SOURCE_DIRS = ("src", "src/common", "src/common/visual", "src/bifurx", "src/theme")
+# Directories that no longer exist in the source layout; their SOURCES lines are
+# dropped by --migrate-layout.
+LEGACY_SOURCE_DIRS = ("src/visual",)
+# Include-path prefixes that moved: old prefix -> new prefix (relative to src/).
+MOVED_INCLUDE_PREFIXES = {"visual/": "common/visual/"}
 LAYOUT_OWNED_FILES = ("Makefile", "src/plugin.cpp", "src/plugin.hpp")
 
 # Unmanaged generated/legacy files at pre-reorganization locations. They would
@@ -551,6 +556,13 @@ def migrate_pro_layout(relative: str, data: bytes) -> bytes:
             for directory in LAYOUT_SOURCE_DIRS
             if f"SOURCES += $(wildcard {directory}/*.cpp)" not in present
         ]
+        lines[:] = [
+            line for line in lines
+            if line.strip() not in {
+                f"SOURCES += $(wildcard {directory}/*.cpp)"
+                for directory in LEGACY_SOURCE_DIRS
+            }
+        ]
         if missing:
             last = max(
                 (i for i, line in enumerate(lines) if line.strip().startswith("SOURCES +=")),
@@ -561,11 +573,22 @@ def migrate_pro_layout(relative: str, data: bytes) -> bytes:
             lines[last + 1:last + 1] = missing
     elif relative.endswith((".cpp", ".hpp")):
         mapping = moved_include_map()
-        pattern = re.compile(r'^(\s*#\s*include\s+")([^"/]+)(")')
+        pattern = re.compile(r'^(\s*#\s*include\s+")([^"]+)(")')
         for i, line in enumerate(lines):
             match = pattern.match(line)
-            if match and match.group(2) in mapping:
-                lines[i] = match.group(1) + mapping[match.group(2)] + match.group(3) + line[match.end():]
+            if not match:
+                continue
+            target = match.group(2)
+            replacement = None
+            if "/" not in target and target in mapping:
+                replacement = mapping[target]
+            else:
+                for old_prefix, new_prefix in MOVED_INCLUDE_PREFIXES.items():
+                    if target.startswith(old_prefix):
+                        replacement = new_prefix + target[len(old_prefix):]
+                        break
+            if replacement is not None:
+                lines[i] = match.group(1) + replacement + match.group(3) + line[match.end():]
     return newline.join(lines).encode("utf-8")
 
 

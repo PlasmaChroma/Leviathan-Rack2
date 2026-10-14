@@ -2,7 +2,7 @@
 
 #include "../plugin.hpp"
 #include "../common/DebugTerminalTransport.hpp"
-#include "../wavepreview/WavePreviewTracer.hpp"
+#include "../common/wavepreview/WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <atomic>

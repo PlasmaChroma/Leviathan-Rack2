@@ -8,9 +8,9 @@
 #include "../common/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../third_party/qoi.h"
-#include "../visual/ApertureLight.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/ApertureLight.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <app/ModuleWidget.hpp>
 #include <app/RackWidget.hpp>

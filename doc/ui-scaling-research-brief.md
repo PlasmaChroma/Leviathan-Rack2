@@ -6,8 +6,8 @@ Use this as a prompt/brief for ChatGPT or another research assistant. The goal i
 
 This repo is a VCV Rack plugin. Several modules use normal Rack SVG panels for their main panel art, and those panel SVGs behave correctly across tested UI scales. We recently split labels into separate generated SVG overlays, rendered through a shared helper:
 
-- `src/visual/VisualAssets.hpp`
-- `src/visual/VisualAssets.cpp`
+- `src/common/visual/VisualAssets.hpp`
+- `src/common/visual/VisualAssets.cpp`
 - `visual_assets::createPanelLabelsWidget(...)`
 
 Modules currently using the labels helper include:
@@ -111,7 +111,7 @@ Please research VCV Rack 2 widget rendering behavior, especially:
 Start here:
 
 ```cpp
-// src/visual/VisualAssets.cpp
+// src/common/visual/VisualAssets.cpp
 struct FittedPanelSvgWidget final : TransparentWidget {
   std::shared_ptr<window::Svg> svg;
 

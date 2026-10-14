@@ -18,7 +18,7 @@ std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_ca
 // g++ -std=c++11 -O3 -DNDEBUG -Wno-unused-parameter -Isrc \
 //   -I../Rack-SDK/include -I../Rack-SDK/dep/include \
 //   tools/chimera_phase4_module_bench.cpp src/chimera/ChimeraService.cpp \
-//   src/visual/ApertureLight.cpp src/common/NvgGraphicsLifecycle.cpp \
+//   src/common/visual/ApertureLight.cpp src/common/NvgGraphicsLifecycle.cpp \
 //   -L../Rack-SDK -lRack -lGL -Wl,-rpath,$PWD/../Rack-SDK -pthread \
 //   -o /tmp/chimera_phase4_module_bench
 // Includes Chimera::process(), but not Rack's graph scheduler, GUI, or host SRC.

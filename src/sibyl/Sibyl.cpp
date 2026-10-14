@@ -18,8 +18,8 @@
 #include "SibylTransport.hpp"
 #include "../octavia/OctaviaObservationBus.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
 #ifndef SIBYL_MODULE_TEST
 #include "../common/DebugTerminalMetrics.hpp"
 #include "SibylProcessCapture.hpp"

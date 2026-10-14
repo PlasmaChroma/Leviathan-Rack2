@@ -1,4 +1,4 @@
-#include "../src/wavepreview/WavePreviewSimplifier.hpp"
+#include "../src/common/wavepreview/WavePreviewSimplifier.hpp"
 #include <cmath>
 #include <iostream>
 #include <vector>

@@ -1,8 +1,8 @@
 #include "../plugin.hpp"
 #include "../common/DebugTerminalMetrics.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/ApertureLight.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/ApertureLight.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include "HydraEngine.hpp"
 

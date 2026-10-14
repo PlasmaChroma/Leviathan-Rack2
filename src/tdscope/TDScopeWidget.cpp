@@ -1,6 +1,6 @@
 #include "../common/DebugTerminalMetrics.hpp"
 #include "TDScope.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <chrono>
 #include <cstdio>

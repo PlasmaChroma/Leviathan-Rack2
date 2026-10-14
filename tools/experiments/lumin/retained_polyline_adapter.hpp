@@ -3,7 +3,7 @@
 #define ShaderContourEngine ArchivedShaderContourEngine
 #include "flux_shader_candidate.hpp"
 #undef ShaderContourEngine
-#include "../../../src/render/PolylineStroke.hpp"
+#include "../../../src/common/render/PolylineStroke.hpp"
 namespace leviathan { namespace render {
 inline std::shared_ptr<lumin::PolylineDevice> probeDevice(){
  static std::weak_ptr<lumin::PolylineDevice> weak;

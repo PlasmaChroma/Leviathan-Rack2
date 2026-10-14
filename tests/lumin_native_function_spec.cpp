@@ -1,8 +1,8 @@
 #define LUMIN_FUNCTION_NO_MAIN
 #include "lumin_function_curve_spec.cpp"
 #undef LUMIN_FUNCTION_NO_MAIN
-#include "render/NativeFunctionContour.hpp"
-#include "render/FunctionContourPilot.hpp"
+#include "common/render/NativeFunctionContour.hpp"
+#include "common/render/FunctionContourPilot.hpp"
 static void nativeRun(NVGcontext* vg){
  lumin::FunctionCurve shader(lumin::FunctionCurve::Kernel::TwoStep);
  lumin::NativeFunctionContour native(&shader);

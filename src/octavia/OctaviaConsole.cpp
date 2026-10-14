@@ -2,7 +2,7 @@
 #include "../common/DebugTerminalMetrics.hpp"
 #include "OctaviaConsoleMailbox.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <ui/TextField.hpp>
 #include <ui/ScrollWidget.hpp>

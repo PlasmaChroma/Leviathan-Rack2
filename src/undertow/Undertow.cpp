@@ -1,7 +1,7 @@
 #include "Undertow.hpp"
 #include "../common/MathHelpers.hpp"
 #include "UndertowShape.hpp"
-#include "../wavepreview/WavePreviewTracer.hpp"
+#include "../common/wavepreview/WavePreviewTracer.hpp"
 
 namespace {
 

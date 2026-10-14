@@ -2,7 +2,7 @@
 // excludes Rack widget traversal, allocation warmup and geometry generation.
 #define PROC_HEADLESS_TEST 1
 #include "../src/proc/Proc.cpp"
-#include "../src/visual/SnapshotHistory.hpp"
+#include "../src/common/visual/SnapshotHistory.hpp"
 #include "preview_benchmark_utils.hpp"
 using Geometry = ProcPreviewGeometry<Proc>;
 using History = visual_assets::SnapshotHistory<128, 6>;

@@ -17,8 +17,8 @@
 #include "ChimeraRenderMetrics.hpp"
 #include "../common/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/ApertureLight.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/ApertureLight.hpp"
+#include "../common/visual/VisualAssets.hpp"
 #include <ui/TextField.hpp>
 #include <osdialog.h>
 #include <system.hpp>

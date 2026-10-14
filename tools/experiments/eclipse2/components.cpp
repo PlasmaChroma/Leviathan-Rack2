@@ -1,6 +1,6 @@
 #include "fixture.hpp"
 #include "reference.inc"
-#include "visual/Eclipse2RetainedCap.hpp"
+#include "common/visual/Eclipse2RetainedCap.hpp"
 #include "runtime_checks.inc"
 
 Plugin* pluginInstance = nullptr;

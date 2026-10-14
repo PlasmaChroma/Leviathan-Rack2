@@ -6,7 +6,7 @@
 #include <app/Scene.hpp>
 #include <window/Window.hpp>
 #undef PRIVATE
-#include "../src/visual/AdaptiveGlSurface.hpp"
+#include "../src/common/visual/AdaptiveGlSurface.hpp"
 #include "../src/common/GlResourceRetirement.hpp"
 #include "../src/common/NvgOwnedImage.hpp"
 #define NANOVG_GL2
@@ -345,5 +345,5 @@ static NVGLUframebuffer* createFramebufferProbe(NVGcontext* vg, int w, int h, in
   return nvgluCreateFramebuffer(vg, w, h, flags);
 }
 #define nvgluCreateFramebuffer createFramebufferProbe
-#include "../src/visual/AdaptiveGlSurface.cpp"
+#include "../src/common/visual/AdaptiveGlSurface.cpp"
 #undef nvgluCreateFramebuffer

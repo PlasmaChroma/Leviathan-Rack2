@@ -1,7 +1,7 @@
 #include "BifurxSpectrumNanoVG.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/PlasmaConduit.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/PlasmaConduit.hpp"
 
 namespace bifurx {
 

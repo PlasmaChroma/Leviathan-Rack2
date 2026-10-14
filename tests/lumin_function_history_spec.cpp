@@ -2,7 +2,7 @@
 #include "lumin_function_curve_spec.cpp"
 #undef LUMIN_FUNCTION_NO_MAIN
 #include "../tools/experiments/lumin/function_history.hpp"
-#include "visual/SnapshotHistory.hpp"
+#include "common/visual/SnapshotHistory.hpp"
 static bool useTwoStep=false;
 static void historyContracts(){
  lumin::FunctionHistory h;WavePreviewTracer<128,6> old;std::array<Vec,128> points;for(int i=0;i<128;++i)points[i]={float(i),float(i%5)};

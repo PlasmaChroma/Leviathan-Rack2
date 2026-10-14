@@ -31,7 +31,7 @@ noisy and sometimes worse; this is a median CPU improvement, not an FPS claim.
 The shadow was already only about 6.7 us per four knobs in component screening,
 so it remains unchanged rather than adding another retained texture for it.
 
-The production candidate is `src/visual/Eclipse2RingCache.hpp`, selectable through
+The production candidate is `src/common/visual/Eclipse2RingCache.hpp`, selectable through
 Integral Flux Debug > `Eclipse2 cached ring A/B (all modules)`. It starts off,
 requires debug mode, and is independent of the cap switch. Its static track is
 136x136 top-down premultiplied RGBA8 baked once at runtime and retained in memory.
@@ -41,7 +41,7 @@ Unsupported sizes, LED counts and arc ranges fall back to the original renderer.
 Image failures also retain the original draw. Toggle changes dirty idle knob
 framebuffers. All rendering remains in Draw, preserving module/component metrics.
 
-The runtime track and baseline share `src/visual/Eclipse2Track.hpp`, so edits to
+The runtime track and baseline share `src/common/visual/Eclipse2Track.hpp`, so edits to
 track drawing update both automatically. The probe still emits a reference bake
 under ignored `build/` and checks the runtime pixels against it; no RGBA assets
 are packaged. The live cached ring is called directly for the combined candidate.

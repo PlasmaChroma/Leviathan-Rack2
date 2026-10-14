@@ -3,9 +3,9 @@
 #include "../common/GlLifecycleUtils.hpp"
 #include "../common/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/AdaptiveGlSurface.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/AdaptiveGlSurface.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <nanovg_gl.h>
 

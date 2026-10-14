@@ -18,7 +18,7 @@ Local changes:
 - The owning translation unit redirects GL object deletion to the plugin's
   existing context-lease retirement service. Image decoding is disabled.
 
-The CPU core is also used by `src/render/HostStrokeBridge.cpp`, the preferred
+The CPU core is also used by `src/common/render/HostStrokeBridge.cpp`, the preferred
 Flux contour path with standard NanoVG fallback. That adapter has no private GL
 backend; see [current status](../../../../../doc/lumin-status.md) for its scoped
 host callback contract and validation limits.

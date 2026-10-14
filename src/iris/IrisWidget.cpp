@@ -3,10 +3,10 @@
 #include "../nautiloid/Nautiloid.hpp"
 #include "../common/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/PlasmaConduit.hpp"
-#include "../visual/PreviewSurface.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/PlasmaConduit.hpp"
+#include "../common/visual/PreviewSurface.hpp"
 
 #include <algorithm>
 #include <array>

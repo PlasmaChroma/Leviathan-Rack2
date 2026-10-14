@@ -1,6 +1,6 @@
 #include "ChromatideExpandedEditor.hpp"
 #include "ChromatideWidget.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 #include <algorithm>
 
 ChromatideExpandedEditorOverlay::ChromatideExpandedEditorOverlay() {

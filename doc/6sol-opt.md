@@ -8,7 +8,7 @@ Reviewed 23 September 2026. This is a source review and a reading of existing me
 
 Each default preview uses the NanoVG route. Its point array and simplified full/rise/fall paths rebuild when the audio-published preview version changes. Snapshot history draws behind the contour, which uses a `SettledContourFramebuffer`: it draws directly while changing, then caches after 100 ms of stability. The normal contour stroke tries `HostStrokeBridge` and falls back to an ordinary NanoVG stroke when admission fails. The moving dot and frequency label remain live overlays. OpenGL preview mode is optional and off by default.
 
-Relevant code: [widget and timings](../src/IntegralFluxWidget.cpp), [contour settlement](../src/visual/SettledContourFramebuffer.hpp), [host stroke bridge](../src/render/HostStrokeBridge.hpp), [snapshot history](../src/visual/SnapshotHistory.hpp).
+Relevant code: [widget and timings](../src/IntegralFluxWidget.cpp), [contour settlement](../src/common/visual/SettledContourFramebuffer.hpp), [host stroke bridge](../src/common/render/HostStrokeBridge.hpp), [snapshot history](../src/common/visual/SnapshotHistory.hpp).
 
 ## Ranked opportunities
 
@@ -18,7 +18,7 @@ Flux has four Eclipse2 attenuverter knobs. The retained cap and cached ring are 
 
 Run a same-patch live Rack comparison in alternating intervals: baseline, cap, cap plus ring, baseline. Capture idle and four-knob motion, module Draw median and p95, Eclipse component time, framebuffer rebuild counts, and frame rate. Check the cap and LEDs at several zoom levels, fractional placement, and after DAW editor close/reopen. Promote each switch separately only if appearance is acceptable and the whole-module result improves. Preserve the ordinary renderer as fallback for unsupported geometry or failed images.
 
-Sources: [Flux debug switches](../src/IntegralFluxWidget.cpp), [retained cap](../src/visual/Eclipse2RetainedCap.hpp), [ring cache](../src/visual/Eclipse2RingCache.hpp), [experiment record](lumin-status.md#eclipse2-live-ab-experiment).
+Sources: [Flux debug switches](../src/IntegralFluxWidget.cpp), [retained cap](../src/common/visual/Eclipse2RetainedCap.hpp), [ring cache](../src/common/visual/Eclipse2RingCache.hpp), [experiment record](lumin-status.md#eclipse2-live-ab-experiment).
 
 ### 2. Observe the existing aperture improvements live
 
@@ -26,7 +26,7 @@ Flux contains eight aperture lights. The shared renderer already draws changing 
 
 The remaining useful question is whether the combined path lowers **live** module cost when several LEDs change. Compare changing, steady, and off states with the shared bloom-mask baseline override. Record module Draw and separate normal/bloom component costs; check visual behavior and context recovery. The prior offline probes support the direction but do not establish a live frame-rate gain.
 
-Sources: [aperture draw and settlement](../src/visual/ApertureLight.cpp), [aperture investigation and promotion](lumin-status.md#aperturelight-investigation).
+Sources: [aperture draw and settlement](../src/common/visual/ApertureLight.cpp), [aperture investigation and promotion](lumin-status.md#aperturelight-investigation).
 
 ### 3. Complete component timing before judging further renderer changes
 

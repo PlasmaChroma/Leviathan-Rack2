@@ -1,6 +1,6 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "../visual/AdaptiveGlSurface.hpp"
+#include "../common/visual/AdaptiveGlSurface.hpp"
 
 #include <array>
 #include <chrono>

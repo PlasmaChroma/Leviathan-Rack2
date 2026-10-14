@@ -92,7 +92,7 @@ unavailable. The renderer-mode columns still distinguish the optional legacy pat
 ```
 
 Merge these keys into existing preferences. The adapter is
-[`LegacyCurvePreview`](../src/render/LegacyCurvePreview.hpp): a Rack-owned subtree
+[`LegacyCurvePreview`](../src/common/render/LegacyCurvePreview.hpp): a Rack-owned subtree
 containing the same contour and snapshot widgets, with shared extent propagation
 and explicit presentation. It adds one ordinary widget per preview. The legacy
 14-value contour key, 100 ms settlement, geometry preparation, outgoing-contour

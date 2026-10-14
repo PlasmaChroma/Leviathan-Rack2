@@ -1,6 +1,6 @@
 #include "Strand.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 struct StrandFrequencyDisplayWidget : widget::TransparentWidget {
     Strand* strandModule = nullptr;

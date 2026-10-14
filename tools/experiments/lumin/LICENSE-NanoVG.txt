@@ -17,4 +17,4 @@
 //
 
 
-Private contour rendering includes NanoVG by Mikko Mononen, via VCVRack/nanovg revision 0bebdb314aff9cfa28fde4744bcb037a2b3fd756. Alterations and provenance are documented in src/render/vendor/nanovg/README.md.
+Private contour rendering includes NanoVG by Mikko Mononen, via VCVRack/nanovg revision 0bebdb314aff9cfa28fde4744bcb037a2b3fd756. Alterations and provenance are documented in src/common/render/vendor/nanovg/README.md.

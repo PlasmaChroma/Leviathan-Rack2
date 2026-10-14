@@ -3,9 +3,9 @@
 static bool debugEnabled = true;
 bool isDragonKingDebugEnabled() { return debugEnabled; }
 
-#include "visual/VisualAssets.hpp"
-#include "visual/SharedSvgCache.hpp"
-#include "visual/Eclipse2Track.hpp"
+#include "common/visual/VisualAssets.hpp"
+#include "common/visual/SharedSvgCache.hpp"
+#include "common/visual/Eclipse2Track.hpp"
 #include "Eclipse2RingExperiment.hpp"
 
 // Use Rack's real framebuffer implementation with a minimal offline window.

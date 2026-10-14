@@ -1,14 +1,14 @@
-#include "../render/HostStrokeBridge.hpp"
+#include "../common/render/HostStrokeBridge.hpp"
 #include "Undertow.hpp"
 #include "UndertowDrawLog.hpp"
 #include "UndertowShape.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/PlasmaConduit.hpp"
-#include "../visual/PreviewSurface.hpp"
-#include "../wavepreview/WavePreviewTracer.hpp"
-#include "../visual/SnapshotHistory.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/PlasmaConduit.hpp"
+#include "../common/visual/PreviewSurface.hpp"
+#include "../common/wavepreview/WavePreviewTracer.hpp"
+#include "../common/visual/SnapshotHistory.hpp"
 #include <array>
 
 namespace {

@@ -5,8 +5,8 @@
 #include "ThemePersistence.hpp"
 #include "ThemePresets.hpp"
 #include "ThemeService.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <cmath>

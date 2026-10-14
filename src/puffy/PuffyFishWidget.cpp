@@ -4,7 +4,7 @@
 #include "PuffyDrawDiagnostics.hpp"
 #include "PuffyVisualPalette.hpp"
 #include "../common/NvgGraphicsLifecycle.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <cmath>

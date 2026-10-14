@@ -1,7 +1,7 @@
 #define LUMIN_FUNCTION_NO_MAIN
 #include "lumin_function_curve_spec.cpp"
 #undef LUMIN_FUNCTION_NO_MAIN
-#include "render/FunctionContourPilot.hpp"
+#include "common/render/FunctionContourPilot.hpp"
 static void pilotRun(NVGcontext* vg){
  lumin::FunctionContourPilot pilot;
  auto* target=nvgluCreateFramebuffer(vg,220,110,0);require(target,"pilot target");

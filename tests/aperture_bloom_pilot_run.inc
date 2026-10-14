@@ -1,4 +1,4 @@
-#include "visual/ApertureBloomMasks.hpp"
+#include "common/visual/ApertureBloomMasks.hpp"
 static void run(NVGcontext* vg){
  require(isApertureBloomMasksEnabled(),"shared masks enabled at startup");
  pilotDebug=false;setApertureBloomMasksEnabled(false);

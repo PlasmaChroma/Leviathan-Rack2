@@ -12,7 +12,7 @@ The governing repository instructions are in [AGENTS.md](AGENTS.md). This refere
 - Do not assume audio callbacks continue while Rack is stopped or bypassed, or that a widget exists. Browser previews can construct widgets with a null module; headless module operation must not depend on the widget.
 - State transitions must update all related public state consistently. Sample-rate changes, bypass, reset, cancellation, and teardown need explicit ownership and transition behavior.
 
-Module declarations and registration live in [src/plugin.hpp](src/plugin.hpp) and [src/plugin.cpp](src/plugin.cpp); public module metadata lives in [plugin.json](plugin.json). Follow nearby modules when introducing a model or splitting module, engine, and widget files. The [Makefile](Makefile) collects top-level `src/*.cpp`, `src/visual/*.cpp`, and `src/theme/*.cpp`; other subdirectories may require explicit source entries.
+Module declarations and registration live in [src/plugin.hpp](src/plugin.hpp) and [src/plugin.cpp](src/plugin.cpp); public module metadata lives in [plugin.json](plugin.json). Follow nearby modules when introducing a model or splitting module, engine, and widget files. The [Makefile](Makefile) collects top-level `src/*.cpp`, `src/common/visual/*.cpp`, and `src/theme/*.cpp`; other subdirectories may require explicit source entries.
 
 ## 2. SVG masters are the panel source of truth
 
@@ -98,7 +98,7 @@ Use the workflow already appropriate to the module; do not blindly run the stand
 
 The `Mm` helpers return millimeters. Convert once with `mm2px()` for Rack widget placement. Follow the existing module's fallback coordinates and anchor naming; keep anchors and runtime assets consistent. Do not repeatedly parse layout in `process()` or `draw()`.
 
-Use [visual/VisualAssets.hpp](src/visual/VisualAssets.hpp) for shared panel assembly. A typical constructor uses a scoped `SplitPanelRenderer`:
+Use [visual/VisualAssets.hpp](src/common/visual/VisualAssets.hpp) for shared panel assembly. A typical constructor uses a scoped `SplitPanelRenderer`:
 
 ```cpp
 setModule(module);
@@ -149,7 +149,7 @@ Some current rendering caches still invalidate on the aggregate color generation
 
 ## 5. Shared visual components and rendering
 
-Reuse the controls and visual language in [VisualAssets.hpp](src/visual/VisualAssets.hpp): Eclipse/Eclipse2 knobs, Halo/HaloKnob2 controls, Magitek2 input/output jacks, gold and aperture buttons, switches, sliders, and orb/Torx screws. Preserve existing parameter ranges, orientation, gestures, and light behavior when changing a component.
+Reuse the controls and visual language in [VisualAssets.hpp](src/common/visual/VisualAssets.hpp): Eclipse/Eclipse2 knobs, Halo/HaloKnob2 controls, Magitek2 input/output jacks, gold and aperture buttons, switches, sliders, and orb/Torx screws. Preserve existing parameter ranges, orientation, gestures, and light behavior when changing a component.
 
 `SmallGoldButton` supports per-instance cap colors through `setColor(nvgRGB(r, g, b))` on the UI thread. It derives shaded face, rim, glint, and socket colors once and invalidates only the affected framebuffers. Assigned alpha is ignored; the material and press animation own opacity. Unconfigured buttons retain the original gold palette exactly; `resetColor()` restores it. This API is inherited by `LoopGoldButton` and `SmallGoldApertureButton`; the aperture light's `setBaseColor()` remains independent of the cap color. For example, after `createParamCentered<SmallGoldButton>(...)`, call `button->setColor(nvgRGB(220, 55, 65))` before `addParam(button)` to give that instance a red cap.
 
@@ -157,25 +157,25 @@ Branding helpers support mirrored Perfect Wave anchors (`BRANDING_WAVE_LEFT_RAST
 
 | Shared facility | Intended use |
 | --- | --- |
-| [RasterImageAssets.cpp](src/visual/RasterImageAssets.cpp) and `VisualAssets.hpp` raster APIs | Image decoding, mipmapped raster handling, aspect-fit placement, indexed-PNG compatibility |
-| [SharedSvgCache.hpp](src/visual/SharedSvgCache.hpp) | Context-owned raster reuse for repeated SVG drawing, with zoom/pixel-ratio handling and fallback |
-| [PreviewSurface.hpp](src/visual/PreviewSurface.hpp) | Shared preview interiors/grids and opaque separation from animated panel layers |
-| [FractalGlassOverlay.hpp](src/visual/FractalGlassOverlay.hpp) | Shared fractal panel-field overlay for adopting modules |
-| [ApertureLight.hpp](src/visual/ApertureLight.hpp), [ApertureLightTransfer.hpp](src/visual/ApertureLightTransfer.hpp) | Shared aperture-light rendering and brightness transfer |
-| [PlasmaSwitch.hpp](src/visual/PlasmaSwitch.hpp), [PlasmaConduit.hpp](src/visual/PlasmaConduit.hpp) | Shared switch/conduit visuals |
-| [AdaptiveGlSurface.hpp](src/visual/AdaptiveGlSurface.hpp) | Managed offscreen GL surfaces and optional constrained batching |
-| [AdaptiveVisualUpdate.hpp](src/render/AdaptiveVisualUpdate.hpp) | UI frame-pressure tracking and staggered update gates |
-| [SettledContourFramebuffer.hpp](src/visual/SettledContourFramebuffer.hpp) | Caching contours separately from live markers/text/history |
-| [SnapshotHistory.hpp](src/visual/SnapshotHistory.hpp) | Retained tracer history using Rack-owned slot framebuffers |
-| [WavePreviewTracer.hpp](src/wavepreview/WavePreviewTracer.hpp), [WavePreviewSimplifier.hpp](src/wavepreview/WavePreviewSimplifier.hpp), [WavePreviewGeometryKey.hpp](src/wavepreview/WavePreviewGeometryKey.hpp) | Reusable waveform-preview geometry work |
+| [RasterImageAssets.cpp](src/common/visual/RasterImageAssets.cpp) and `VisualAssets.hpp` raster APIs | Image decoding, mipmapped raster handling, aspect-fit placement, indexed-PNG compatibility |
+| [SharedSvgCache.hpp](src/common/visual/SharedSvgCache.hpp) | Context-owned raster reuse for repeated SVG drawing, with zoom/pixel-ratio handling and fallback |
+| [PreviewSurface.hpp](src/common/visual/PreviewSurface.hpp) | Shared preview interiors/grids and opaque separation from animated panel layers |
+| [FractalGlassOverlay.hpp](src/common/visual/FractalGlassOverlay.hpp) | Shared fractal panel-field overlay for adopting modules |
+| [ApertureLight.hpp](src/common/visual/ApertureLight.hpp), [ApertureLightTransfer.hpp](src/common/visual/ApertureLightTransfer.hpp) | Shared aperture-light rendering and brightness transfer |
+| [PlasmaSwitch.hpp](src/common/visual/PlasmaSwitch.hpp), [PlasmaConduit.hpp](src/common/visual/PlasmaConduit.hpp) | Shared switch/conduit visuals |
+| [AdaptiveGlSurface.hpp](src/common/visual/AdaptiveGlSurface.hpp) | Managed offscreen GL surfaces and optional constrained batching |
+| [AdaptiveVisualUpdate.hpp](src/common/render/AdaptiveVisualUpdate.hpp) | UI frame-pressure tracking and staggered update gates |
+| [SettledContourFramebuffer.hpp](src/common/visual/SettledContourFramebuffer.hpp) | Caching contours separately from live markers/text/history |
+| [SnapshotHistory.hpp](src/common/visual/SnapshotHistory.hpp) | Retained tracer history using Rack-owned slot framebuffers |
+| [WavePreviewTracer.hpp](src/common/wavepreview/WavePreviewTracer.hpp), [WavePreviewSimplifier.hpp](src/common/wavepreview/WavePreviewSimplifier.hpp), [WavePreviewGeometryKey.hpp](src/common/wavepreview/WavePreviewGeometryKey.hpp) | Reusable waveform-preview geometry work |
 
 Keep static or slowly changing artwork in cached layers and live markers, interaction, and status in appropriate overlays. Mark caches dirty for changes that affect their pixels, size, scale, or graphics context. Avoid repainting a full panel merely because a small live indicator moved.
 
 UI `step()` and visible `draw()` are different workloads. Avoid expensive work on every frame when a parameter revision, geometry key, or slower update gate can drive it. Adaptive visual degradation is opt-in; it must not change DSP or lose user input. These helpers are available building blocks, not a mandate to convert every preview to GL or adaptive rendering.
 
-[RackVisualFramePressure.hpp](src/render/RackVisualFramePressure.hpp) supplies a shared UI-thread pressure sampler for participating modules. Reuse that adapter rather than letting each widget independently infer a different host frame rate.
+[RackVisualFramePressure.hpp](src/common/render/RackVisualFramePressure.hpp) supplies a shared UI-thread pressure sampler for participating modules. Reuse that adapter rather than letting each widget independently infer a different host frame rate.
 
-The `lumin` rendering code under `src/render` includes specialized stroke and analytic-contour paths. [HostStrokeBridge.hpp](src/render/HostStrokeBridge.hpp) has a specific host/version and stroke-state contract; [FunctionCurve.hpp](src/render/FunctionCurve.hpp) explicitly identifies its analytic family as experimental and the Flux pilot as opt-in. Read the implementation and associated experiment notes before adopting these paths. Their presence does not replace the standard NanoVG/framebuffer path or establish universal backend compatibility.
+The `lumin` rendering code under `src/render` includes specialized stroke and analytic-contour paths. [HostStrokeBridge.hpp](src/common/render/HostStrokeBridge.hpp) has a specific host/version and stroke-state contract; [FunctionCurve.hpp](src/common/render/FunctionCurve.hpp) explicitly identifies its analytic family as experimental and the Flux pilot as opt-in. Read the implementation and associated experiment notes before adopting these paths. Their presence does not replace the standard NanoVG/framebuffer path or establish universal backend compatibility.
 
 ## 6. Graphics ownership and host lifecycle
 
@@ -211,7 +211,7 @@ The `levi_math` namespace provides:
 
 New DSP should choose `tanhLegacy()` or `tanhAudio()` explicitly. Do not silently substitute one for the other in released modules. LUT storage is shared through `MathHelpers.cpp`; include the implementation in focused standalone tests that use those tables.
 
-### `FastAudioMath.hpp`
+### Scalar exp2/log2/pow helpers (`MathHelpers.hpp`, formerly `FastAudioMath.hpp`)
 
 These scalar helpers do not require Rack/SIMD headers and avoid allocation, lazy initialization, and libm calls:
 

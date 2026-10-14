@@ -1,7 +1,7 @@
 #include "VTune.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
 #include "BodyMapWidget.hpp"
 struct VTuneWidget final : ModuleWidget {
     explicit VTuneWidget(VTune* module) {

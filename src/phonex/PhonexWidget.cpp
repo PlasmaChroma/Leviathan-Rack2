@@ -2,7 +2,7 @@
 
 #include "../common/PanelSvgUtils.hpp"
 #include "PhonexRom.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <ui/TextField.hpp>
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "../plugin.hpp"
-#include "../wavepreview/WavePreviewTracer.hpp"
+#include "../common/wavepreview/WavePreviewTracer.hpp"
 #include <fstream>
 #include <iomanip>
 #include <ctime>

@@ -428,7 +428,7 @@ There is one integration detail that should be reconciled before adding Mandelwa
 | `res/mandelwake.labels.svg` | Label layer |
 | `res/mandelwake-sigil.svg` | Module iconography |
 
-The repository Makefile already discovers `src/*.cpp` and `src/visual/*.cpp` through wildcards, so ordinary new implementation files should compile without adding them individually. New test executables and aggregate test dependencies will require explicit Makefile entries consistent with the existing standalone and Rack-linked test targets. citeturn3view1
+The repository Makefile already discovers `src/*.cpp` and `src/common/visual/*.cpp` through wildcards, so ordinary new implementation files should compile without adding them individually. New test executables and aggregate test dependencies will require explicit Makefile entries consistent with the existing standalone and Rack-linked test targets. citeturn3view1
 
 ### Core classes
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "plugin.hpp"
-#include "visual/ApertureBloomMasks.hpp"
+#include "common/visual/ApertureBloomMasks.hpp"
 #include <array>
 namespace eclipse2_ring {
 enum class Mode { Baseline, Geometry, Masks, Static, Shader };

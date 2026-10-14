@@ -1175,8 +1175,8 @@
     "Archived shader vs NanoVG visual differences remain unresolved"
   ],
   "hashes": {
-    "src/visual/AdaptiveGlSurface.cpp": "07028a5dc855ba05449b4529bc0d0b0831cfc5ad8f83487da4e9b8a51bc7cda4",
-    "src/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
+    "src/common/visual/AdaptiveGlSurface.cpp": "07028a5dc855ba05449b4529bc0d0b0831cfc5ad8f83487da4e9b8a51bc7cda4",
+    "src/common/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
     "tests/adaptive_gl_batch_spec.cpp": "f6a5b2f09d8c6fc5eb25458be5650cb263a34b246d03ddb99b21b51558252c0c",
     "tools/experiments/lumin/flux_shader_surface_spec.cpp": "5d30605ad879e5cf6a0137f8b757ac30ec32e3c63b3abe934edb5ebf3a334562",
     "doc\\benchmarks\\lumin-batch-20260910\\first.log": "e368edd74897ffdf0cf24366fa6d2b3df2a5413cd97c7a0965f51bd98096becc",
@@ -1186,8 +1186,8 @@
   },
   "final_validation_note": "After the recorded benchmark, added a current-Rack-context preflight and a missing-context rejection test. Batch test, 549 lifecycle checks and native link passed again. Performance was not rerun for that defensive check.",
   "final_validation_hashes": {
-    "src/visual/AdaptiveGlSurface.cpp": "a2eb83a1da9596e03fc99784079f1d5d8443db056cc94dff285d23d4d05a9d46",
-    "src/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
+    "src/common/visual/AdaptiveGlSurface.cpp": "a2eb83a1da9596e03fc99784079f1d5d8443db056cc94dff285d23d4d05a9d46",
+    "src/common/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
     "tests/adaptive_gl_batch_spec.cpp": "0f026cd0dd7d71ecf97cb6bebd40e622cc1a6e746d04e4d5f772925c47e83146",
     "plugin.dll": "f1fb4d25e942330a9e93749466189fd9add17e96f1fc2015b49ed57feb814fb8"
   }

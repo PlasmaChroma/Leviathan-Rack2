@@ -23,7 +23,7 @@ Rack checks still needed for these new repairs: edit Bulkhead positions/walls wi
 
 **7 September 2026 — F07 and F09 fixed together in the working tree.** [The shared retirement service](src/GlResourceRetirement.cpp) is owned by the Rack scene, independently of module widgets. Adaptive surfaces and the HaloKnob2, Wyrm, Bifurx, and Nautiloid renderer owners now queue their persistent resources on ordinary removal. Maintenance waits for a strictly later Rack frame and checks the owning GLFW context before deletion, preserving queued NanoVG presentations even after the last affected module is removed. Context-create/destroy events invalidate lifetime leases, including when context pointers are reused. Lost-context paths free the malloc-owned framebuffer wrappers without issuing GL or NanoVG calls against the replacement context. Cold-path counters expose pending/deleted objects and freed wrappers. This covers the owners named in F07; it does not replace Rack's own `FramebufferWidget` resource ownership.
 
-[AdaptiveGlSurface](src/visual/AdaptiveGlSurface.cpp) now guards allocation and failure returns as well as rendering. It restores texture/unpack state (including the unpack buffer), renderbuffer and separate read/draw framebuffer bindings, and the generic vertex attributes declared by each callback. HaloKnob2 declares one attribute; Bifurx and TD.Scope declare four; the other callers need none. Full-target clears explicitly enable every color channel. Real-driver testing also exposed invalid draw-buffer restoration while the offscreen target was still bound; the guard now restores the original framebuffer bindings before popping saved draw/read-buffer selections.
+[AdaptiveGlSurface](src/common/visual/AdaptiveGlSurface.cpp) now guards allocation and failure returns as well as rendering. It restores texture/unpack state (including the unpack buffer), renderbuffer and separate read/draw framebuffer bindings, and the generic vertex attributes declared by each callback. HaloKnob2 declares one attribute; Bifurx and TD.Scope declare four; the other callers need none. Full-target clears explicitly enable every color channel. Real-driver testing also exposed invalid draw-buffer restoration while the offscreen target was still bound; the guard now restores the original framebuffer bindings before popping saved draw/read-buffer selections.
 
 Validation: native MINGW64 `make test-gl-lifecycle RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"` passed **549 checks** using an invisible GLFW window, actual NanoVG/GL objects, the production surface/retirement implementation, and a substituted Rack host fixture/frame clock. Coverage includes 119% zoom, growth/shrink/reuse, restrictive color masks, vertex and texture state, separate read/draw FBOs, unpack buffers, an injected allocation failure and recovery, a queued NanoVG presentation surviving widget removal, 100 render/remove cycles with zero outstanding queued wrappers, every supported raw-object type, missing current context, simulated context loss, pointer reuse, and context-destroy draining. Driver errors are checked. The existing Nautiloid lifecycle contracts passed 4/4, and the authoritative Windows `plugin.dll` compile/link passed. This opt-in test requires a window system and is intentionally separate from `test-fast`.
 
@@ -173,7 +173,7 @@ Rack smoke check (7 Sep 2026): lifetime logging was enabled and exercised succes
 
 ### F07 — Context-loss safety currently trades away ordinary widget reclamation
 
-Locations: [AdaptiveGlSurface.cpp:10](src/visual/AdaptiveGlSurface.cpp#L10), [AdaptiveGlSurface.cpp:15](src/visual/AdaptiveGlSurface.cpp#L15), [HaloKnob2.cpp:376](src/visual/HaloKnob2.cpp#L376), [WyrmRendererGL.cpp:1057](src/WyrmRendererGL.cpp#L1057), [BifurxGL.cpp:206](src/BifurxGL.cpp#L206), [NautiloidWidget.cpp:176](src/NautiloidWidget.cpp#L176).
+Locations: [AdaptiveGlSurface.cpp:10](src/common/visual/AdaptiveGlSurface.cpp#L10), [AdaptiveGlSurface.cpp:15](src/common/visual/AdaptiveGlSurface.cpp#L15), [HaloKnob2.cpp:376](src/common/visual/HaloKnob2.cpp#L376), [WyrmRendererGL.cpp:1057](src/WyrmRendererGL.cpp#L1057), [BifurxGL.cpp:206](src/BifurxGL.cpp#L206), [NautiloidWidget.cpp:176](src/NautiloidWidget.cpp#L176).
 
 `AdaptiveGlSurface::~AdaptiveGlSurface()` uses `reset(false)`, which drops `front` and `back` pointers without deleting GL resources or freeing the malloc-owned `NVGLUframebuffer` wrappers. Several owners also abandon their shader/buffer/texture names during ordinary widget destruction.
 
@@ -187,7 +187,7 @@ Verification: instrument object and wrapper counts during repeated add/remove cy
 
 ### F08 — Integral Flux drops HaloKnob2 step-time rendering from its draw breakdown
 
-Locations: [HaloKnob2.cpp:417](src/visual/HaloKnob2.cpp#L417), [HaloKnob2.cpp:911](src/visual/HaloKnob2.cpp#L911), [IntegralFluxWidget.cpp:2284](src/IntegralFluxWidget.cpp#L2284), [IntegralFluxWidget.cpp:2290](src/IntegralFluxWidget.cpp#L2290), [IntegralFluxWidget.cpp:2415](src/IntegralFluxWidget.cpp#L2415).
+Locations: [HaloKnob2.cpp:417](src/common/visual/HaloKnob2.cpp#L417), [HaloKnob2.cpp:911](src/common/visual/HaloKnob2.cpp#L911), [IntegralFluxWidget.cpp:2284](src/IntegralFluxWidget.cpp#L2284), [IntegralFluxWidget.cpp:2290](src/IntegralFluxWidget.cpp#L2290), [IntegralFluxWidget.cpp:2415](src/IntegralFluxWidget.cpp#L2415).
 
 HaloKnob2 now renders its adaptive GL surface during `step()` and accumulates `gHaloKnob2DrawMetrics` there. Flux resets those metrics at the beginning of `draw()`, then reads them afterward. Normal adaptive shader work from that step has already been erased. The NanoVG fallback's draw-time work remains observable, so comparing the two breakdowns can favor the shader path for an accounting reason.
 
@@ -199,7 +199,7 @@ Verification: change or zoom six HaloKnob2 controls and assert the reported adap
 
 ### F09 — AdaptiveGlSurface's GL guard does not cover the complete operation
 
-Locations: [AdaptiveGlSurface.cpp:94](src/visual/AdaptiveGlSurface.cpp#L94), [AdaptiveGlSurface.cpp:96](src/visual/AdaptiveGlSurface.cpp#L96), [AdaptiveGlSurface.cpp:116](src/visual/AdaptiveGlSurface.cpp#L116).
+Locations: [AdaptiveGlSurface.cpp:94](src/common/visual/AdaptiveGlSurface.cpp#L94), [AdaptiveGlSurface.cpp:96](src/common/visual/AdaptiveGlSurface.cpp#L96), [AdaptiveGlSurface.cpp:116](src/common/visual/AdaptiveGlSurface.cpp#L116).
 
 Two specific contract gaps remain:
 

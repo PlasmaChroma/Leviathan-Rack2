@@ -6,7 +6,7 @@
 #include <app/Scene.hpp>
 #include <window/Window.hpp>
 #undef PRIVATE
-#include "../src/visual/AdaptiveGlSurface.hpp"
+#include "../src/common/visual/AdaptiveGlSurface.hpp"
 #include "../src/common/GlResourceRetirement.hpp"
 #include "../tools/preview_benchmark_utils.hpp"
 #include <cstring>

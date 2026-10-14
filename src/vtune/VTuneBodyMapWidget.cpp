@@ -1,7 +1,7 @@
 #include "BodyMapWidget.hpp"
 #include "VTune.hpp"
-#include "../visual/VisualAssets.hpp"
-#include "../visual/ApertureLight.hpp"
+#include "../common/visual/VisualAssets.hpp"
+#include "../common/visual/ApertureLight.hpp"
 #include "../vessel/PitchColorMap.hpp"
 #include <cmath>
 #include <cstdio>

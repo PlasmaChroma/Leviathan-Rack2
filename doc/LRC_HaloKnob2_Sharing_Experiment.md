@@ -324,7 +324,7 @@ disturbing later stages.
 
 Allowed changes:
 
-- `src/visual/HaloKnob2.cpp` for debug-gated context/resource event counters;
+- `src/common/visual/HaloKnob2.cpp` for debug-gated context/resource event counters;
 - a small diagnostics-only helper under `src/` if local logging would otherwise
   obscure Halo rendering;
 - build/test wiring required by that helper;
@@ -364,8 +364,8 @@ Rollback: remove the dormant files and build/test registration.
 Allowed changes:
 
 - the accepted context-resource files;
-- `src/visual/HaloKnob2.cpp`;
-- `src/visual/VisualAssets.hpp` only if a declaration boundary is genuinely
+- `src/common/visual/HaloKnob2.cpp`;
+- `src/common/visual/VisualAssets.hpp` only if a declaration boundary is genuinely
   required;
 - focused tests and build wiring;
 - debug instrumentation and result documentation.

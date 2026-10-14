@@ -1,8 +1,8 @@
 #include "../theme/ThemedTextWidget.hpp"
 #include "Mandelwake.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/FractalGlassOverlay.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/FractalGlassOverlay.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <cerrno>

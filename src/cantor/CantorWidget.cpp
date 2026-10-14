@@ -1,7 +1,7 @@
 #include "Cantor.hpp"
 
 #include "../common/PanelSvgUtils.hpp"
-#include "../visual/VisualAssets.hpp"
+#include "../common/visual/VisualAssets.hpp"
 
 #include <cmath>
 #include <cstdio>

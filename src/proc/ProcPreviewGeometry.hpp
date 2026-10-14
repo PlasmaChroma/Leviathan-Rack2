@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../plugin.hpp"
-#include "../wavepreview/WavePreviewSimplifier.hpp"
+#include "../common/wavepreview/WavePreviewSimplifier.hpp"
 #include <array>
 
 // Shared by the live widget and offline benchmark; ShapeModel supplies Proc DSP math.

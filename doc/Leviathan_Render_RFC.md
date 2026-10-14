@@ -769,7 +769,7 @@ Also pause expansion when framework overhead exceeds its gate, continuous-update
 ## 16. Suggested code organization and first implementation backlog
 
 ```text
-src/render/
+src/common/render/
     RenderTypes.hpp
     RackRenderBridge.hpp/.cpp
     RenderDevice.hpp/.cpp
@@ -800,16 +800,16 @@ The guiding principle is: **shared infrastructure should remove repeated decisio
 
 These references support observations about existing implementations and host behavior. The architecture, defaults, APIs, requirements, and migration gates are original proposals in this RFC.
 
-- **S1 — Adaptive surface:** [header](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/visual/AdaptiveGlSurface.hpp), [implementation](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/visual/AdaptiveGlSurface.cpp).
-- **S2 — Settled contour:** [SettledContourFramebuffer.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/visual/SettledContourFramebuffer.hpp).
-- **S3 — Snapshot history:** [SnapshotHistory.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/visual/SnapshotHistory.hpp).
-- **S4 — Phosphor history:** [PhosphorPreview.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/visual/PhosphorPreview.hpp).
+- **S1 — Adaptive surface:** [header](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/common/visual/AdaptiveGlSurface.hpp), [implementation](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/common/visual/AdaptiveGlSurface.cpp).
+- **S2 — Settled contour:** [SettledContourFramebuffer.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/common/visual/SettledContourFramebuffer.hpp).
+- **S3 — Snapshot history:** [SnapshotHistory.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/common/visual/SnapshotHistory.hpp).
+- **S4 — Phosphor history:** [PhosphorPreview.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/common/visual/PhosphorPreview.hpp).
 - **S5 — Semantic geometry key:** [WavePreviewGeometryKey.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/b18d37b/src/WavePreviewGeometryKey.hpp).
 - **S6 — Wyrm geometry:** [WyrmRenderGeometry.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/WyrmRenderGeometry.hpp).
 - **S7 — Bifurx preparation data:** [BifurxRenderData.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/BifurxRenderData.hpp).
-- **S8 — Halo control:** [HaloKnob2.cpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/visual/HaloKnob2.cpp).
-- **S9 — Visual authoring:** [VisualAssets.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/visual/VisualAssets.hpp).
-- **S10 — Shared preview surfaces:** [PreviewSurface.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/visual/PreviewSurface.hpp).
+- **S8 — Halo control:** [HaloKnob2.cpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/common/visual/HaloKnob2.cpp).
+- **S9 — Visual authoring:** [VisualAssets.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/common/visual/VisualAssets.hpp).
+- **S10 — Shared preview surfaces:** [PreviewSurface.hpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/common/visual/PreviewSurface.hpp).
 - **S11 — Repository validation findings:** [gl_validation.md](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/gl_validation.md).
 - **S12 — Preview-cache engineering review:** [deepcache-review.md](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/deepcache-review.md).
 - **S13 — Validation helpers:** [GlLifecycleUtils.cpp](https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/expander/src/GlLifecycleUtils.cpp).

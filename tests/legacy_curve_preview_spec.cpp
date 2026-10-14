@@ -1,5 +1,5 @@
 // Rack-linked CPU test of recipe ownership/traversal. No graphics context needed.
-#include "render/LegacyCurvePreview.hpp"
+#include "common/render/LegacyCurvePreview.hpp"
 #include <cstdio>
 #include <cstdlib>
 

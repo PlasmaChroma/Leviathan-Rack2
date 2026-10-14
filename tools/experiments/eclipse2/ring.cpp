@@ -1,6 +1,6 @@
 #include "fixture.hpp"
 #include "Eclipse2RingShader.hpp"
-#include "visual/Eclipse2RingCache.hpp"
+#include "common/visual/Eclipse2RingCache.hpp"
 #include "reference.inc"
 Plugin* pluginInstance=nullptr;
 namespace rack { namespace app {

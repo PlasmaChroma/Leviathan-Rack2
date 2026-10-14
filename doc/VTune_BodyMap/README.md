@@ -220,7 +220,7 @@ These URLs document the interface basis, not an assertion that your current chec
 - `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/src/Vessel.hpp`
 - `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/src/Vessel.cpp`
 - `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/src/PanelSvgUtils.hpp`
-- `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/src/visual/VisualAssets.hpp`
+- `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/src/common/visual/VisualAssets.hpp`
 - `https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Rack2/refs/heads/expander/Makefile`
 - `https://raw.githubusercontent.com/VCVRack/Rack/v2/include/engine/Module.hpp`
 - `https://raw.githubusercontent.com/VCVRack/Rack/v2/include/widget/Widget.hpp`

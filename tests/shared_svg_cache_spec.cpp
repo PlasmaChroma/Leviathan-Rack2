@@ -1,4 +1,4 @@
-#include "../src/visual/SharedSvgCacheState.hpp"
+#include "../src/common/visual/SharedSvgCacheState.hpp"
 #include <cstdio>
 #include <cstdlib>
 

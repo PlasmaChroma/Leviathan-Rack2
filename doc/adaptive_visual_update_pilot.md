@@ -6,7 +6,7 @@ session-only switch, off by default, shared across Flux instances. Select the
 NanoVG preview renderer; the OpenGL preview does not participate. Reopening the
 menu shows the sampled FPS and pressure level. No patch serialization changes.
 
-The reusable UI-thread sampler in `src/render/RackVisualFramePressure.hpp`
+The reusable UI-thread sampler in `src/common/render/RackVisualFramePressure.hpp`
 observes Rack frame-start intervals once per frame across consumers. The target
 is the lower of the configured positive frame limit and monitor refresh rate,
 with a 60 Hz fallback if neither is available. A half-second moving average,
