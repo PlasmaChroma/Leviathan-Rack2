@@ -1,6 +1,6 @@
 #include "FractalGlassOverlay.hpp"
 
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
 #include "../../theme/ThemeService.hpp"
 #include "../../theme/ThemeUiPoller.hpp"

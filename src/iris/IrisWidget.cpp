@@ -1,12 +1,12 @@
 #include "Iris.hpp"
 #include "../common/UiExpanderUtils.hpp"
 #include "../nautiloid/Nautiloid.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../common/visual/VisualAssets.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
 #include "../common/visual/PlasmaConduit.hpp"
-#include "../common/visual/PreviewSurface.hpp"
+#include "../common/render/PreviewSurface.hpp"
 
 #include <algorithm>
 #include <array>

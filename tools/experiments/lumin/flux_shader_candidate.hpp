@@ -1,7 +1,7 @@
 #pragma once
 #include "PrivateContourEngine.hpp"
-#include "../../../src/common/visual/AdaptiveGlSurface.hpp"
-#include "../../../src/common/GlLifecycleUtils.hpp"
+#include "../../../src/common/render/AdaptiveGlSurface.hpp"
+#include "../../../src/common/render/GlLifecycleUtils.hpp"
 #include <array>
 #include <vector>
 

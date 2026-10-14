@@ -6,8 +6,8 @@
 #include <app/Scene.hpp>
 #include <window/Window.hpp>
 #undef PRIVATE
-#include "../src/common/visual/AdaptiveGlSurface.hpp"
-#include "../src/common/GlResourceRetirement.hpp"
+#include "../src/common/render/AdaptiveGlSurface.hpp"
+#include "../src/common/render/GlResourceRetirement.hpp"
 #include "../tools/preview_benchmark_utils.hpp"
 #include <cstring>
 #define NANOVG_GL2

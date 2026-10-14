@@ -1,6 +1,6 @@
 #pragma once
-#include "../GlResourceRetirement.hpp"
-#include "../GlLifecycleUtils.hpp"
+#include "GlResourceRetirement.hpp"
+#include "GlLifecycleUtils.hpp"
 #include <string>
 // Experimental analytic function family; Flux live pilot is opt-in.
 // No sampled curve texture, per-shape vertices, or polyline segment search.

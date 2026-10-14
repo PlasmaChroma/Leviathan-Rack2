@@ -5,7 +5,7 @@
 #include "DeepcacheThemeClassifier.hpp"
 #include "DeepcacheThemeIdentity.hpp"
 #include "../theme/ThemeService.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../third_party/qoi.h"
 #include "../common/visual/ApertureLight.hpp"

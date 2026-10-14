@@ -119,9 +119,9 @@ contracts that should not be forced into a generic abstraction.
 
 Existing shared foundations include:
 
-- `src/common/NvgGraphicsLifecycle.hpp` for context-owned NanoVG image handles;
-- `src/common/GlLifecycleUtils.hpp` for optional GL resource validity checks;
-- `src/common/visual/PreviewSurface.hpp` for cached preview backgrounds;
+- `src/common/render/NvgGraphicsLifecycle.hpp` for context-owned NanoVG image handles;
+- `src/common/render/GlLifecycleUtils.hpp` for optional GL resource validity checks;
+- `src/common/render/PreviewSurface.hpp` for cached preview backgrounds;
 - shared raster-image and panel rendering infrastructure;
 - debug gating through `isDragonKingDebugEnabled()`;
 - the debug terminal for small external diagnostic packets.

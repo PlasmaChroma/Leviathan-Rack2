@@ -7,7 +7,7 @@
 #include "PuffyVisualPalette.hpp"
 #include "../common/visual/ApertureLight.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
-#include "../common/visual/PreviewSurface.hpp"
+#include "../common/render/PreviewSurface.hpp"
 #include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>

@@ -9,7 +9,7 @@
 #include "SilSpectrumSnapshot.hpp"
 #include "../common/SpscLatestSnapshot.hpp"
 #include "../common/DebugTerminalMetrics.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>

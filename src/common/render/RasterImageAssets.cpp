@@ -1,5 +1,5 @@
-#include "VisualAssets.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../visual/VisualAssets.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
 
 #include <algorithm>

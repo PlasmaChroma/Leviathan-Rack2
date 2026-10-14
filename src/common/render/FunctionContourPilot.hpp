@@ -1,6 +1,6 @@
 #pragma once
 #include "FunctionCurve.hpp"
-#include "../visual/AdaptiveGlSurface.hpp"
+#include "AdaptiveGlSurface.hpp"
 #include <array>
 namespace lumin {
 // Opt-in current contour only. Existing point/history/marker paths stay intact.

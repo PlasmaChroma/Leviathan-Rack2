@@ -1,6 +1,6 @@
 #define NANOVG_GL2
 #include "Eclipse2RuntimeBake.hpp"
-#include "AdaptiveGlSurface.hpp"
+#include "../render/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 #include <GLFW/glfw3.h>
 

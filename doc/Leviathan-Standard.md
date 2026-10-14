@@ -157,16 +157,16 @@ Branding helpers support mirrored Perfect Wave anchors (`BRANDING_WAVE_LEFT_RAST
 
 | Shared facility | Intended use |
 | --- | --- |
-| [RasterImageAssets.cpp](src/common/visual/RasterImageAssets.cpp) and `VisualAssets.hpp` raster APIs | Image decoding, mipmapped raster handling, aspect-fit placement, indexed-PNG compatibility |
-| [SharedSvgCache.hpp](src/common/visual/SharedSvgCache.hpp) | Context-owned raster reuse for repeated SVG drawing, with zoom/pixel-ratio handling and fallback |
-| [PreviewSurface.hpp](src/common/visual/PreviewSurface.hpp) | Shared preview interiors/grids and opaque separation from animated panel layers |
+| [RasterImageAssets.cpp](src/common/render/RasterImageAssets.cpp) and `VisualAssets.hpp` raster APIs | Image decoding, mipmapped raster handling, aspect-fit placement, indexed-PNG compatibility |
+| [SharedSvgCache.hpp](src/common/render/SharedSvgCache.hpp) | Context-owned raster reuse for repeated SVG drawing, with zoom/pixel-ratio handling and fallback |
+| [PreviewSurface.hpp](src/common/render/PreviewSurface.hpp) | Shared preview interiors/grids and opaque separation from animated panel layers |
 | [FractalGlassOverlay.hpp](src/common/visual/FractalGlassOverlay.hpp) | Shared fractal panel-field overlay for adopting modules |
 | [ApertureLight.hpp](src/common/visual/ApertureLight.hpp), [ApertureLightTransfer.hpp](src/common/visual/ApertureLightTransfer.hpp) | Shared aperture-light rendering and brightness transfer |
 | [PlasmaSwitch.hpp](src/common/visual/PlasmaSwitch.hpp), [PlasmaConduit.hpp](src/common/visual/PlasmaConduit.hpp) | Shared switch/conduit visuals |
-| [AdaptiveGlSurface.hpp](src/common/visual/AdaptiveGlSurface.hpp) | Managed offscreen GL surfaces and optional constrained batching |
+| [AdaptiveGlSurface.hpp](src/common/render/AdaptiveGlSurface.hpp) | Managed offscreen GL surfaces and optional constrained batching |
 | [AdaptiveVisualUpdate.hpp](src/common/render/AdaptiveVisualUpdate.hpp) | UI frame-pressure tracking and staggered update gates |
-| [SettledContourFramebuffer.hpp](src/common/visual/SettledContourFramebuffer.hpp) | Caching contours separately from live markers/text/history |
-| [SnapshotHistory.hpp](src/common/visual/SnapshotHistory.hpp) | Retained tracer history using Rack-owned slot framebuffers |
+| [SettledContourFramebuffer.hpp](src/common/render/SettledContourFramebuffer.hpp) | Caching contours separately from live markers/text/history |
+| [SnapshotHistory.hpp](src/common/render/SnapshotHistory.hpp) | Retained tracer history using Rack-owned slot framebuffers |
 | [WavePreviewTracer.hpp](src/common/wavepreview/WavePreviewTracer.hpp), [WavePreviewSimplifier.hpp](src/common/wavepreview/WavePreviewSimplifier.hpp), [WavePreviewGeometryKey.hpp](src/common/wavepreview/WavePreviewGeometryKey.hpp) | Reusable waveform-preview geometry work |
 
 Keep static or slowly changing artwork in cached layers and live markers, interaction, and status in appropriate overlays. Mark caches dirty for changes that affect their pixels, size, scale, or graphics context. Avoid repainting a full panel merely because a small live indicator moved.
@@ -179,7 +179,7 @@ The `lumin` rendering code under `src/render` includes specialized stroke and an
 
 ## 6. Graphics ownership and host lifecycle
 
-Follow [NvgGraphicsLifecycle.hpp](src/common/NvgGraphicsLifecycle.hpp), [GlLifecycleUtils.hpp](src/common/GlLifecycleUtils.hpp), and [GlResourceRetirement.hpp](src/common/GlResourceRetirement.hpp).
+Follow [NvgGraphicsLifecycle.hpp](src/common/render/NvgGraphicsLifecycle.hpp), [GlLifecycleUtils.hpp](src/common/render/GlLifecycleUtils.hpp), and [GlResourceRetirement.hpp](src/common/render/GlResourceRetirement.hpp).
 
 - NanoVG image handles belong to their creating `NVGcontext*`. Never delete a handle through a different context.
 - On context replacement, clear or invalidate context-bound state and rebuild lazily. A cached integer handle is not proof that the underlying resource remains valid.

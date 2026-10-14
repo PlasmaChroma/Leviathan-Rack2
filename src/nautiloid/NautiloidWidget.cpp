@@ -1,9 +1,9 @@
 #include "Nautiloid.hpp"
 #include "NautiloidGpuPrecision.hpp"
-#include "../common/GlLifecycleUtils.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/GlLifecycleUtils.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../common/visual/AdaptiveGlSurface.hpp"
+#include "../common/render/AdaptiveGlSurface.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
 #include "../common/visual/VisualAssets.hpp"
 

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../plugin.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
-#include "../render/AdaptiveVisualUpdate.hpp"
+#include "NvgGraphicsLifecycle.hpp"
+#include "AdaptiveVisualUpdate.hpp"
 #include <array>
 
 namespace visual_assets {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 #include "../../plugin.hpp"
 #include "WavePreviewSimplifier.hpp"
 #include <algorithm>

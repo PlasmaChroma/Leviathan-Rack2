@@ -8,7 +8,7 @@ Reviewed 23 September 2026. This is a source review and a reading of existing me
 
 Each default preview uses the NanoVG route. Its point array and simplified full/rise/fall paths rebuild when the audio-published preview version changes. Snapshot history draws behind the contour, which uses a `SettledContourFramebuffer`: it draws directly while changing, then caches after 100 ms of stability. The normal contour stroke tries `HostStrokeBridge` and falls back to an ordinary NanoVG stroke when admission fails. The moving dot and frequency label remain live overlays. OpenGL preview mode is optional and off by default.
 
-Relevant code: [widget and timings](../src/IntegralFluxWidget.cpp), [contour settlement](../src/common/visual/SettledContourFramebuffer.hpp), [host stroke bridge](../src/common/render/HostStrokeBridge.hpp), [snapshot history](../src/common/visual/SnapshotHistory.hpp).
+Relevant code: [widget and timings](../src/IntegralFluxWidget.cpp), [contour settlement](../src/common/render/SettledContourFramebuffer.hpp), [host stroke bridge](../src/common/render/HostStrokeBridge.hpp), [snapshot history](../src/common/render/SnapshotHistory.hpp).
 
 ## Ranked opportunities
 

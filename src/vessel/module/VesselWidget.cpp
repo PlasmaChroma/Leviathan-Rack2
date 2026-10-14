@@ -1,6 +1,6 @@
 #include "Vessel.hpp"
 #include "../PitchColorMap.hpp"
-#include "../../common/NvgOwnedImage.hpp"
+#include "../../common/render/NvgOwnedImage.hpp"
 #include "../../common/PanelSvgUtils.hpp"
 #include "../../theme/ThemedTextWidget.hpp"
 #include "../../common/visual/FractalGlassOverlay.hpp"

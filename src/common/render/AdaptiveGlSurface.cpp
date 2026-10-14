@@ -1,7 +1,7 @@
 #include "AdaptiveGlSurface.hpp"
 
-#include "../GlLifecycleUtils.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "GlLifecycleUtils.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <nanovg_gl.h>
 #include <new>

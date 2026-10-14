@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../plugin.hpp"
+#include "../../plugin.hpp"
 #include <memory>
 
 namespace gl_lifecycle {

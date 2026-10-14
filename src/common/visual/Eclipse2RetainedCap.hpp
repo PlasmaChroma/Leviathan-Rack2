@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VisualAssets.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 #include <array>
 #include "Eclipse2RuntimeBake.hpp"
 #include "Eclipse2Track.hpp"

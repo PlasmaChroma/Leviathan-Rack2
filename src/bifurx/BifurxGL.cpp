@@ -1,6 +1,6 @@
 #include "Bifurx.hpp"
-#include "../common/GlLifecycleUtils.hpp"
-#include "../common/visual/AdaptiveGlSurface.hpp"
+#include "../common/render/GlLifecycleUtils.hpp"
+#include "../common/render/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>
 #include <array>

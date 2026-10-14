@@ -1,5 +1,5 @@
 // Real cache and PNG preflight; only the NanoVG resource boundary is mocked.
-#include "../src/common/visual/RasterImageAssets.cpp"
+#include "../src/common/render/RasterImageAssets.cpp"
 #include <cstdio>
 #include <cstdlib>
 #include <map>

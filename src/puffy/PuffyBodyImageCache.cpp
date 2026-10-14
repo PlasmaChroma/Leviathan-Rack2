@@ -2,7 +2,7 @@
 
 #include "PuffyEngine.hpp"
 #include "PuffyVisualPalette.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/visual/VisualAssets.hpp"
 
 #include <algorithm>

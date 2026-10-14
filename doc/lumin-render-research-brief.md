@@ -148,7 +148,7 @@ Avoid a generic OpenGL optimization checklist. The useful outcome is discovering
 
 This brief is self-contained. The repository is not assumed to be accessible to you. If source inspection would resolve a question, request the relevant file rather than inventing its contents. These are repository-relative paths the developer can attach:
 
-- `src/common/visual/AdaptiveGlSurface.hpp` and `.cpp`: surface lifecycle, batching, state guard.
+- `src/common/render/AdaptiveGlSurface.hpp` and `.cpp`: surface lifecycle, batching, state guard.
 - `src/common/render/FunctionContourPilot.hpp`: admission, caching, prepare/complete/present.
 - `src/common/render/FunctionCurve.hpp`: analytic shader and exact GL footprint.
 - `src/IntegralFluxWidget.cpp`: module-level batch and widget presentation integration.

@@ -2,7 +2,7 @@
 #include "CrownstepSettingsOverlay.hpp"
 #include "../common/MathHelpers.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/visual/VisualAssets.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
 

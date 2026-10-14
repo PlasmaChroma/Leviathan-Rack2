@@ -58,19 +58,19 @@ SOURCE_FILES = (
     "src/common/DebugTerminalTransport.cpp",
     "src/common/DebugTerminalTransport.hpp",
     "src/common/DebugTerminalMetrics.hpp",
-    "src/common/GlLifecycleUtils.cpp",
-    "src/common/GlLifecycleUtils.hpp",
-    "src/common/GlResourceRetirement.cpp",
-    "src/common/GlResourceRetirement.hpp",
+    "src/common/render/GlLifecycleUtils.cpp",
+    "src/common/render/GlLifecycleUtils.hpp",
+    "src/common/render/GlResourceRetirement.cpp",
+    "src/common/render/GlResourceRetirement.hpp",
     "src/common/fractal/SourceField.hpp",
     "src/common/fractal/ImageWavetable.hpp",
     "src/common/MathHelpers.cpp",
     "src/common/MathHelpers.hpp",
     "src/common/fractal/FractalColorMap.hpp",
     "src/common/fractal/BuiltinFractals.hpp",
-    "src/common/NanoSvgRasterizer.cpp",
-    "src/common/NvgGraphicsLifecycle.cpp",
-    "src/common/NvgGraphicsLifecycle.hpp",
+    "src/common/render/NanoSvgRasterizer.cpp",
+    "src/common/render/NvgGraphicsLifecycle.cpp",
+    "src/common/render/NvgGraphicsLifecycle.hpp",
     "src/common/PanelAnchorAtlas.hpp",
     "src/common/PanelSvgUtils.cpp",
     "src/common/PanelSvgUtils.hpp",
@@ -83,8 +83,8 @@ SOURCE_FILES = (
     "src/theme/ThemePresets.hpp",
     "src/theme/ThemeTypes.hpp",
     "src/theme/ThemeUiPoller.hpp",
-    "src/common/visual/AdaptiveGlSurface.cpp",
-    "src/common/visual/AdaptiveGlSurface.hpp",
+    "src/common/render/AdaptiveGlSurface.cpp",
+    "src/common/render/AdaptiveGlSurface.hpp",
     "src/common/visual/ApertureLight.cpp",
     "src/common/visual/ApertureLight.hpp",
     "src/common/visual/ApertureLightTransfer.hpp",
@@ -95,9 +95,9 @@ SOURCE_FILES = (
     "src/common/visual/Eclipse2RuntimeBake.hpp",
     "src/common/visual/Eclipse2Track.hpp",
     "src/common/visual/FractalGlassOverlay.cpp",
-    "src/common/visual/SharedSvgCache.cpp",
-    "src/common/visual/SharedSvgCache.hpp",
-    "src/common/visual/SharedSvgCacheState.hpp",
+    "src/common/render/SharedSvgCache.cpp",
+    "src/common/render/SharedSvgCache.hpp",
+    "src/common/render/SharedSvgCacheState.hpp",
     "src/common/visual/FractalGlassOverlay.hpp",
     "src/common/visual/HaloKnob2.cpp",
     "src/common/visual/HaloKnob2Metrics.hpp",
@@ -105,10 +105,10 @@ SOURCE_FILES = (
     "src/common/visual/PlasmaConduit.hpp",
     "src/common/visual/PlasmaSwitch.cpp",
     "src/common/visual/PlasmaSwitch.hpp",
-    "src/common/visual/RasterImageAssets.cpp",
-    "src/common/visual/SharedSvgCache.cpp",
-    "src/common/visual/SharedSvgCache.hpp",
-    "src/common/visual/SharedSvgCacheState.hpp",
+    "src/common/render/RasterImageAssets.cpp",
+    "src/common/render/SharedSvgCache.cpp",
+    "src/common/render/SharedSvgCache.hpp",
+    "src/common/render/SharedSvgCacheState.hpp",
     "src/common/visual/VisualAssets.cpp",
     "src/common/visual/VisualAssets.hpp",
     "res/FractalParams.json",
@@ -182,6 +182,7 @@ LDFLAGS +=
 
 SOURCES += $(wildcard src/*.cpp)
 SOURCES += $(wildcard src/common/*.cpp)
+SOURCES += $(wildcard src/common/render/*.cpp)
 SOURCES += $(wildcard src/bifurx/*.cpp)
 SOURCES += $(wildcard src/common/visual/*.cpp)
 SOURCES += $(wildcard src/theme/*.cpp)
@@ -517,7 +518,7 @@ RELEASED_MANAGED_PATHS = {
 # Pro-owned files that depend on the source layout. The repository was
 # reorganized into src/common/ and per-module folders; Pro's own Makefile and
 # plugin sources predate that and are migrated only on request.
-LAYOUT_SOURCE_DIRS = ("src", "src/common", "src/common/visual", "src/bifurx", "src/theme")
+LAYOUT_SOURCE_DIRS = ("src", "src/common", "src/common/render", "src/common/visual", "src/bifurx", "src/theme")
 # Directories that no longer exist in the source layout; their SOURCES lines are
 # dropped by --migrate-layout.
 LEGACY_SOURCE_DIRS = ("src/visual",)

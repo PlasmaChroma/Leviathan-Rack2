@@ -2,7 +2,7 @@
 
 #include "Chromatide.hpp"
 #include "ChromatideExpandedEditor.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include <rack.hpp>
 
 struct ChromatideEditorSurface final : widget::OpaqueWidget {

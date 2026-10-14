@@ -6,9 +6,9 @@
 #include "../common/visual/VisualAssets.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
 #include "../common/visual/PlasmaConduit.hpp"
-#include "../common/visual/PreviewSurface.hpp"
+#include "../common/render/PreviewSurface.hpp"
 #include "../common/wavepreview/WavePreviewTracer.hpp"
-#include "../common/visual/SnapshotHistory.hpp"
+#include "../common/render/SnapshotHistory.hpp"
 #include <array>
 
 namespace {

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../../src/common/visual/AdaptiveGlSurface.hpp"
+#include "../../../src/common/render/AdaptiveGlSurface.hpp"
 #include "flux_shader_candidate.hpp"
 namespace leviathan { namespace render {
 class ExperimentalShaderStroke {

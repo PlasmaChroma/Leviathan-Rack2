@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../visual/SettledContourFramebuffer.hpp"
-#include "../visual/SnapshotHistory.hpp"
+#include "SettledContourFramebuffer.hpp"
+#include "SnapshotHistory.hpp"
 
 namespace leviathan {
 namespace render {

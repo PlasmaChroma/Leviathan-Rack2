@@ -1,5 +1,5 @@
 #pragma once
-#include "../../../src/common/visual/AdaptiveGlSurface.hpp"
+#include "../../../src/common/render/AdaptiveGlSurface.hpp"
 #include "PrivateContourEngine.hpp"
 namespace leviathan { namespace render {
 class ExperimentalRoundStroke {

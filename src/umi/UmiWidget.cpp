@@ -1,6 +1,6 @@
 #include "../theme/ThemedTextWidget.hpp"
 #include "Umi.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../common/visual/VisualAssets.hpp"
 

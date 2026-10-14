@@ -1,5 +1,5 @@
 #include "VisualAssets.hpp"
-#include "SharedSvgCache.hpp"
+#include "../render/SharedSvgCache.hpp"
 #include "Eclipse2RetainedCap.hpp"
 #include "Eclipse2RingCache.hpp"
 #include "Eclipse2Track.hpp"
@@ -7,7 +7,7 @@
 #include "../../theme/ThemeUiPoller.hpp"
 #include "ApertureLightTransfer.hpp"
 #include "../MathHelpers.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
 #include "../../theme/ThemeService.hpp"
 

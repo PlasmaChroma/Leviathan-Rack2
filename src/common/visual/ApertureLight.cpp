@@ -1,7 +1,7 @@
 #include "ApertureLight.hpp"
 #include "ApertureLightTransfer.hpp"
 #include "ApertureBloomMasks.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 
 #include <cmath>
 

@@ -4,7 +4,7 @@
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "../common/PanelSvgUtils.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/visual/VisualAssets.hpp"
 #include "../common/visual/FractalGlassOverlay.hpp"
 #include "../common/visual/PlasmaConduit.hpp"

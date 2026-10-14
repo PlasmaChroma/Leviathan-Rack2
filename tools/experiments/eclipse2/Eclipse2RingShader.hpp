@@ -1,6 +1,6 @@
 #pragma once
 #include "common/visual/VisualAssets.hpp"
-#include "common/visual/AdaptiveGlSurface.hpp"
+#include "common/render/AdaptiveGlSurface.hpp"
 #include "common/GlLifecycleUtils.hpp"
 #include "Eclipse2RingExperiment.hpp"
 #include <array>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../GlLifecycleUtils.hpp"
+#include "../render/GlLifecycleUtils.hpp"
 #include <array>
 #include <cmath>
 

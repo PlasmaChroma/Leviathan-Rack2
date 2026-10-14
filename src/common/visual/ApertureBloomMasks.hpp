@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../plugin.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
 #include <array>
 #include <cmath>
 #include <vector>

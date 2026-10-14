@@ -1,7 +1,7 @@
 #include "VisualAssets.hpp"
 
-#include "../GlLifecycleUtils.hpp"
-#include "AdaptiveGlSurface.hpp"
+#include "../render/GlLifecycleUtils.hpp"
+#include "../render/AdaptiveGlSurface.hpp"
 
 #include <nanovg_gl.h>
 #include <nanosvgrast.h>

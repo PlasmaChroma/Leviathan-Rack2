@@ -1,7 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
 #include "../common/DebugTerminalTransport.hpp"
-#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
 
 #include <chrono>
 #include <unordered_map>
