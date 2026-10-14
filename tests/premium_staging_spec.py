@@ -44,9 +44,9 @@ class PremiumStagingSpec(unittest.TestCase):
         self.sdk = Path(self.temp.name) / "sdk"
         self.output = self.root / "build" / "premium-validation"
         for path, text in {
-            self.root / "src/Bifurx.cpp": "current main source",
+            self.root / "src/bifurx/Bifurx.cpp": "current main source",
             self.root / "plugin.dll": "normal binary",
-            self.pro / "src/Bifurx.cpp": "older Pro source",
+            self.pro / "src/bifurx/Bifurx.cpp": "older Pro source",
             self.pro / "src/plugin.cpp": "Pro bootstrap",
             self.pro / "src/plugin.hpp": "Pro declarations",
             self.pro / "Makefile": "FLAGS += -DLEVIATHAN_PRO_DRM=1\n",
@@ -59,7 +59,7 @@ class PremiumStagingSpec(unittest.TestCase):
             path.write_text(text)
         for context in (
             patch.object(prepare, "ROOT", self.root), patch.object(prepare, "OUTPUT", self.output),
-            patch.object(sync, "SOURCE_FILES", ("src/Bifurx.cpp",)),
+            patch.object(sync, "SOURCE_FILES", ("src/bifurx/Bifurx.cpp",)),
             patch.object(prepare, "generated_atlas", return_value=b"generated atlas"),
         ):
             context.start()
@@ -70,26 +70,26 @@ class PremiumStagingSpec(unittest.TestCase):
 
     def test_current_sources_with_pro_identity_and_external_header(self):
         self.stage()
-        self.assertEqual((self.output / "src/Bifurx.cpp").read_text(), "current main source")
+        self.assertEqual((self.output / "src/bifurx/Bifurx.cpp").read_text(), "current main source")
         self.assertEqual((self.output / "src/plugin.cpp").read_text(), "Pro bootstrap")
-        self.assertEqual((self.pro / "src/Bifurx.cpp").read_text(), "older Pro source")
+        self.assertEqual((self.pro / "src/bifurx/Bifurx.cpp").read_text(), "older Pro source")
         self.assertEqual((self.root / "plugin.dll").read_text(), "normal binary")
         self.assertFalse((self.output / "DRM").exists())
 
     def test_missing_header_fails_before_touching_snapshot(self):
         self.stage()
-        before = (self.output / "src/Bifurx.cpp").stat().st_mtime_ns
+        before = (self.output / "src/bifurx/Bifurx.cpp").stat().st_mtime_ns
         (self.drm / "drm.hpp").unlink()
         with self.assertRaisesRegex(RuntimeError, "Missing Premium build dependency"):
             self.stage()
-        self.assertEqual((self.output / "src/Bifurx.cpp").stat().st_mtime_ns, before)
+        self.assertEqual((self.output / "src/bifurx/Bifurx.cpp").stat().st_mtime_ns, before)
 
     def test_unchanged_snapshot_retains_objects_and_timestamps(self):
         self.stage()
-        obj = self.output / "build/src/Bifurx.cpp.o"
+        obj = self.output / "build/src/bifurx/Bifurx.cpp.o"
         obj.parent.mkdir(parents=True)
         obj.write_bytes(b"incremental object")
-        source = self.output / "src/Bifurx.cpp"
+        source = self.output / "src/bifurx/Bifurx.cpp"
         stamp = source.stat().st_mtime_ns
         self.stage()
         self.assertEqual(source.stat().st_mtime_ns, stamp)

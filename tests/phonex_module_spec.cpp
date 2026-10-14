@@ -1,4 +1,4 @@
-#include "../src/Phonex.hpp"
+#include "../src/phonex/Phonex.hpp"
 
 #include <cmath>
 #include <iostream>

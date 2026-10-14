@@ -1,4 +1,4 @@
-#include "../src/Doorstop.hpp"
+#include "../src/doorstop/Doorstop.hpp"
 
 #include <cmath>
 #include <iostream>

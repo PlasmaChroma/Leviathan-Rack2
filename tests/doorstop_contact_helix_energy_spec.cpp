@@ -1,4 +1,4 @@
-#include "../src/DoorstopContactHelixEngine.hpp"
+#include "../src/doorstop/DoorstopContactHelixEngine.hpp"
 #include <cmath>
 #include <iostream>
 int main() {

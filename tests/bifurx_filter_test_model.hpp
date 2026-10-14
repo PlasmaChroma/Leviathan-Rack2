@@ -2,8 +2,8 @@
 // Full production contracts live in bifurx_runtime_spec.cpp.
 #pragma once
 
-#include "../src/BifurxInputStage.hpp"
-#include "../src/BifurxOutputStage.hpp"
+#include "../src/bifurx/BifurxInputStage.hpp"
+#include "../src/bifurx/BifurxOutputStage.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -3,7 +3,7 @@
 #include <context.hpp>
 #include <engine/Engine.hpp>
 #undef PRIVATE
-#include "../../src/Vessel.hpp"
+#include "../../src/vessel/module/Vessel.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>

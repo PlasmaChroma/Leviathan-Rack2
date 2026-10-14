@@ -1,5 +1,5 @@
-#include "MoiraiEdit.hpp"
-#include "MoiraiPresets.hpp"
+#include "moirai/MoiraiEdit.hpp"
+#include "moirai/MoiraiPresets.hpp"
 
 #include <jansson.h>
 #include <iostream>

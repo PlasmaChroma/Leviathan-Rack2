@@ -11,13 +11,13 @@ bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_cache"; }
 #define CHIMERA_HEADLESS_TEST 1
 #define CHIMERA_MANUAL_CONTROL_TEST 1
-#include "../src/Chimera.cpp"
+#include "../src/chimera/Chimera.cpp"
 
 // Offline Rack-linked callback benchmark, intentionally outside test-fast.
 // Build on Linux with:
 // g++ -std=c++11 -O3 -DNDEBUG -Wno-unused-parameter -Isrc \
 //   -I../Rack-SDK/include -I../Rack-SDK/dep/include \
-//   tools/chimera_phase4_module_bench.cpp src/ChimeraService.cpp \
+//   tools/chimera_phase4_module_bench.cpp src/chimera/ChimeraService.cpp \
 //   src/visual/ApertureLight.cpp src/common/NvgGraphicsLifecycle.cpp \
 //   -L../Rack-SDK -lRack -lGL -Wl,-rpath,$PWD/../Rack-SDK -pthread \
 //   -o /tmp/chimera_phase4_module_bench

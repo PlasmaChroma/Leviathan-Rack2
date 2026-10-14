@@ -1,4 +1,4 @@
-#include "ChimeraCheckpointSession.hpp"
+#include "chimera/ChimeraCheckpointSession.hpp"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>

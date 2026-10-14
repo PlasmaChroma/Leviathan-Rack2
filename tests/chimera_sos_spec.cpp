@@ -1,4 +1,4 @@
-#include "ChimeraSlice.hpp"
+#include "chimera/ChimeraSlice.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <new>

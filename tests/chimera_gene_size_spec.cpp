@@ -1,4 +1,4 @@
-#include "ChimeraGrains.hpp"
+#include "chimera/ChimeraGrains.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>

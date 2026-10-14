@@ -13,6 +13,35 @@ LDFLAGS +=
 # Add .cpp files to the build
 SOURCES += $(wildcard src/*.cpp)
 SOURCES += $(wildcard src/common/*.cpp)
+SOURCES += $(wildcard src/temporaldeck/*.cpp)
+SOURCES += $(wildcard src/tdscope/*.cpp)
+SOURCES += $(wildcard src/integralflux/*.cpp)
+SOURCES += $(wildcard src/proc/*.cpp)
+SOURCES += $(wildcard src/undertow/*.cpp)
+SOURCES += $(wildcard src/deepcache/*.cpp)
+SOURCES += $(wildcard src/iris/*.cpp)
+SOURCES += $(wildcard src/nautiloid/*.cpp)
+SOURCES += $(wildcard src/puffy/*.cpp)
+SOURCES += $(wildcard src/crownstep/*.cpp)
+SOURCES += $(wildcard src/bifurx/*.cpp)
+SOURCES += $(wildcard src/wyrm/*.cpp)
+SOURCES += $(wildcard src/sil/*.cpp)
+SOURCES += $(wildcard src/chronomaw/*.cpp)
+SOURCES += $(wildcard src/bulkhead/*.cpp)
+SOURCES += $(wildcard src/umi/*.cpp)
+SOURCES += $(wildcard src/doorstop/*.cpp)
+SOURCES += $(wildcard src/chromatide/*.cpp)
+SOURCES += $(wildcard src/mandelwake/*.cpp)
+SOURCES += $(wildcard src/cantor/*.cpp)
+SOURCES += $(wildcard src/octavia/*.cpp)
+SOURCES += $(wildcard src/sibyl/*.cpp)
+SOURCES += $(wildcard src/moirai/*.cpp)
+SOURCES += $(wildcard src/phonex/*.cpp)
+SOURCES += $(wildcard src/chimera/*.cpp)
+SOURCES += $(wildcard src/strand/*.cpp)
+SOURCES += $(wildcard src/wavepreview/*.cpp)
+SOURCES += $(wildcard src/vtune/*.cpp)
+SOURCES += $(wildcard src/vessel/module/*.cpp)
 SOURCES += $(wildcard src/visual/*.cpp)
 SOURCES += src/render/HostStrokeBridge.cpp
 SOURCES += $(wildcard src/theme/*.cpp)
@@ -84,7 +113,7 @@ premium-dist: premium-prepare
 
 # Deliberately outside test-fast: normal development does not require DRM.
 test-premium: premium-prepare
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) $(if $(ARCH_X64),-march=nehalem,) $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -DLEVIATHAN_PRO_DRM=1 -I"$(PREMIUM_DRM_DIR)" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_license_spec.cpp src/BifurxDisplay.cpp src/BifurxPreview.cpp src/BifurxState.cpp src/BifurxRenderClient.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o build/premium-validation/bifurx_license_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) $(if $(ARCH_X64),-march=nehalem,) $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -DLEVIATHAN_PRO_DRM=1 -I"$(PREMIUM_DRM_DIR)" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_license_spec.cpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxPreview.cpp src/bifurx/BifurxState.cpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o build/premium-validation/bifurx_license_spec
 	$(call run_rack_test_bin,build/premium-validation/bifurx_license_spec)
 
 # Rack SDK 2.5 adds this Clang-only option globally. GCC emits a note for it
@@ -94,10 +123,10 @@ FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
 # Mandelwake's patch identity depends on exact float-to-fixed adapter rounding.
 # Keep global audio optimizations elsewhere, but do not let fast-math rewrite
 # its deterministic boundary calculations.
-build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
-build/src/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/src/mandelwake/Mandelwake.cpp.o build/src/mandelwake/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/src/chimera/Chimera.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 # Vessel's reference mechanics rely on finite checks and the energy ledger.
-build/src/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cpp)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/src/vessel/module/Vessel.cpp.o $(patsubst %.cpp,build/%.cpp.o,$(wildcard src/vessel/*.cpp)): FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
 	build/tests/strand_engine_spec \
@@ -280,21 +309,21 @@ phonex-phase4-audition:
 phonex-phase8-audition:
 	$(MAKE) --no-print-directory phonex-quality-audit PHONEX_QUALITY_TAG=phase8-audition
 
-build/tools/phonex_render: tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp | build
+build/tools/phonex_render: tools/phonex_render.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexEngine.hpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexFixtures.hpp src/phonex/PhonexTypes.hpp src/phonex/PhonexRom.cpp src/phonex/PhonexRom.hpp src/phonex/PhonexRomData.inc src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexSequenceCompiler.hpp src/phonex/PhonexPronunciation.cpp src/phonex/PhonexPronunciation.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexPronunciation.cpp -o $@
 
-build/tools/phonex_corpus_report: tools/phonex_corpus_report.cpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexTypes.hpp src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp | build
+build/tools/phonex_corpus_report: tools/phonex_corpus_report.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexRom.hpp src/phonex/PhonexRomData.inc src/phonex/PhonexTypes.hpp src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexSequenceCompiler.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_corpus_report.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_corpus_report.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexSequenceCompiler.cpp -o $@
 
-build/tools/phonex_benchmark: tools/phonex_benchmark.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp | build
+build/tools/phonex_benchmark: tools/phonex_benchmark.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexEngine.hpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexFixtures.hpp src/phonex/PhonexTypes.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_benchmark.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_benchmark.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexFixtures.cpp -o $@
 
-build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build
+build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/ReferenceSpringEngine.hpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/HelicalContinuumEngine.hpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopContactHelixEngine.hpp src/doorstop/DoorstopEngine.cpp src/doorstop/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
@@ -477,10 +506,10 @@ define run_rack_test_bin
 endef
 
 CROWNSTEP_MODULE_SOURCES := \
-	src/Crownstep.cpp \
-	src/CrownstepModule.cpp \
-	src/CrownstepPlayback.cpp \
-	src/CrownstepSerialization.cpp \
+	src/crownstep/Crownstep.cpp \
+	src/crownstep/CrownstepModule.cpp \
+	src/crownstep/CrownstepPlayback.cpp \
+	src/crownstep/CrownstepSerialization.cpp \
 	src/common/DebugTerminalTransport.cpp
 
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
@@ -510,7 +539,7 @@ build/tests/vessel_dual_bowl_spec: tests/vessel_dual_bowl_spec.cpp $(VESSEL_SOUR
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
 build/tests/vessel_passive_tail_spec: tests/vessel_passive_tail_spec.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
-build/src/VTune.cpp.o build/src/VTuneBodyMapModule.cpp.o build/src/VTuneBodyMapWidget.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/src/vtune/VTune.cpp.o build/src/vtune/VTuneBodyMapModule.cpp.o build/src/vtune/VTuneBodyMapWidget.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 build/tests/vtune_body_map_core_spec: tests/vtune_body_map_core_spec.cpp $(wildcard src/vtune/*.hpp) src/vessel/PitchColorMap.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Werror -pedantic -Isrc $< -o $@
 .PHONY: test-vtune-body-map
@@ -518,8 +547,8 @@ test-vtune-body-map: build/tests/vtune_body_map_core_spec
 	python3 tools/vtune/generate_body_map_data.py --check
 	$(call run_test_bin,build/tests/vtune_body_map_core_spec)
 build/tests/vessel_module_spec_fir109: VESSEL_MODULE_EXPERIMENT_FLAGS = -DVESSEL_EXPERIMENTAL_FIR109
-build/tests/vessel_module_spec build/tests/vessel_module_spec_fir109: tests/vessel_module_spec.cpp src/Vessel.cpp src/Vessel.hpp src/VTune.cpp src/VTune.hpp src/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
-	$(CXX) $(VESSEL_MODULE_EXPERIMENT_FLAGS) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp src/VTune.cpp src/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/vessel_module_spec build/tests/vessel_module_spec_fir109: tests/vessel_module_spec.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp src/vtune/VTune.cpp src/vtune/VTune.hpp src/vtune/VTuneBodyMapModule.cpp $(wildcard src/vtune/*.hpp) src/vessel/module/VesselExpanderProtocol.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build/tests
+	$(CXX) $(VESSEL_MODULE_EXPERIMENT_FLAGS) -std=c++17 -D_USE_MATH_DEFINES -O2 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp src/vtune/VTune.cpp src/vtune/VTuneBodyMapModule.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 test-vessel: build/tests/vessel_setup_cache_spec build/tests/vessel_observer_configuration_spec build/tests/vessel_strike_gradient_spec build/tests/vessel_passive_tail_spec check-vessel-friction-tables check-vessel-profiles build/tests/vessel_fast_paths_spec build/tests/vessel_engine_spec build/tests/vessel_host_rate_spec build/tests/vessel_host_rate_serial_spec build/tests/vessel_dual_bowl_spec build/tests/vessel_module_spec
 	$(call run_test_bin,build/tests/vessel_setup_cache_spec)
 	$(call run_test_bin,build/tests/vessel_observer_configuration_spec)
@@ -555,25 +584,25 @@ build/tools/vessel_benchmark_dual: tools/vessel/benchmark_dual.cpp $(VESSEL_SOUR
 build/tools/vessel_benchmark_passive_tail: tools/vessel/benchmark_passive_tail.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
-build/tools/vessel_benchmark_passive_module: tools/vessel/benchmark_passive_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+build/tools/vessel_benchmark_passive_module: tools/vessel/benchmark_passive_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_benchmark_active_module_serial: VESSEL_BENCH_OPT_FLAGS += -DVESSEL_SERIAL_FIR
-build/tools/vessel_capture_control_math: tools/vessel/capture_control_math.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+build/tools/vessel_capture_control_math: tools/vessel/capture_control_math.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-build/tools/vessel_benchmark_active_module build/tools/vessel_benchmark_active_module_serial: tools/vessel/benchmark_active_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_active_module build/tools/vessel_benchmark_active_module_serial: tools/vessel/benchmark_active_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-build/tools/vessel_benchmark_observer_module: tools/vessel/benchmark_observer_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_observer_module: tools/vessel/benchmark_observer_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-build/tools/vessel_benchmark_pitch_module: tools/vessel/benchmark_pitch_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_pitch_module: tools/vessel/benchmark_pitch_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
-build/tools/vessel_benchmark_strike_module: tools/vessel/benchmark_strike_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tools/vessel_benchmark_strike_module: tools/vessel/benchmark_strike_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 build/tools/vessel_characterize: tools/vessel/characterize.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	mkdir -p build/tools
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
@@ -621,7 +650,7 @@ test-chimera-phase1-sanitize: | build/tests
 
 .PHONY: test-chimera-phase2 test-chimera-phase2-sanitize test-chimera-phase3 test-chimera-phase3-sanitize test-chimera-module
 test-chimera-module: | build/tests
-	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -Wno-mismatched-new-delete -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_module_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -Wno-mismatched-new-delete -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_module_spec.cpp src/chimera/ChimeraService.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp src/chimera/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-phase3: test-chimera-sos | build/tests
@@ -649,7 +678,7 @@ test-chimera-rate-bridge: | build/tests
 
 .PHONY: test-chimera-wav
 test-chimera-wav: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/dep/include tests/chimera_wav_spec.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/dep/include tests/chimera_wav_spec.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-edit
@@ -659,7 +688,7 @@ test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test
 .PHONY: test-chimera-marker-display
 .PHONY: test-chimera-render
 test-chimera-render: test-raster-mipmap-cache | build/tests
-	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_render_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_render_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O1 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_render_spec.cpp src/chimera/ChimeraService.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp src/chimera/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_render_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_render_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-marker-display: | build/tests
@@ -671,12 +700,12 @@ test-chimera-playback-reader: | build/tests
 	build/tests/chimera_playback_reader_spec$(if $(ARCH_WIN),.exe,)
 
 test-chimera-edit: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_edit_spec.cpp src/ChimeraEdit.cpp -o build/tests/chimera_edit_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_edit_spec.cpp src/chimera/ChimeraEdit.cpp -o build/tests/chimera_edit_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_edit_spec$(if $(ARCH_WIN),.exe,)
 
 .PHONY: test-chimera-bundle
 test-chimera-bundle: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_bundle_spec.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_bundle_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_bundle_spec.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_bundle_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_bundle_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-recovery
@@ -685,7 +714,7 @@ test-chimera-checkpoints: | build/tests
 	$(call run_rack_test_bin,build/tests/chimera_checkpoint_session_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-recovery: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_recovery_spec.cpp src/ChimeraRecovery.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_recovery_spec.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-waveform
@@ -701,22 +730,22 @@ test-chimera-panel:
 
 .PHONY: test-chimera-full-save
 test-chimera-full-save: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_full_save_spec.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_full_save_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_full_save_spec.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_full_save_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_full_save_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-patch
 test-chimera-patch: | build/tests
-	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_patch_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_patch_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_patch_spec.cpp src/chimera/ChimeraService.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp src/chimera/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_patch_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_patch_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-dispatch
 test-chimera-dispatch: | build/tests
-	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_dispatch_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_dispatch_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_dispatch_spec.cpp src/chimera/ChimeraService.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp src/chimera/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_dispatch_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_dispatch_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: bench-chimera-phase6
 bench-chimera-phase6: | build/tests
-	$(CXX) -std=c++11 -O3 -DNDEBUG $(if $(ARCH_X64),-march=nehalem,) -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/chimera_phase6_module_bench.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_phase6_module_bench$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O3 -DNDEBUG $(if $(ARCH_X64),-march=nehalem,) -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/chimera_phase6_module_bench.cpp src/chimera/ChimeraService.cpp src/chimera/ChimeraBundle.cpp src/chimera/ChimeraRecovery.cpp src/chimera/ChimeraWav.cpp src/chimera/ChimeraWavConvenience.cpp src/chimera/ChimeraEdit.cpp src/common/DebugTerminalTransport.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/visual/RasterImageAssets.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_phase6_module_bench$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_phase6_module_bench$(if $(ARCH_WIN),.exe,))
 
 test-chimera-phase3-sanitize: | build/tests
@@ -730,7 +759,7 @@ test-chimera-phase2: test-chimera-overlap | build/tests
 	build/tests/chimera_reel_concurrency_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_jobs_spec.cpp -o build/tests/chimera_jobs_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_jobs_spec$(if $(ARCH_WIN),.exe,)
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/chimera/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-overlap
@@ -745,7 +774,7 @@ test-chimera-phase2-sanitize: | build/tests
 	build/tests/chimera_reel_concurrency_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc tests/chimera_jobs_spec.cpp -o build/tests/chimera_jobs_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_jobs_sanitize_spec$(if $(ARCH_WIN),.exe,)
-	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/chimera/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,))
 
 test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
@@ -940,46 +969,46 @@ test-odr: plugin.so
 build/tests:
 	@mkdir -p $@
 
-build/tests/octavia_console_mailbox_spec: tests/octavia_console_mailbox_spec.cpp src/OctaviaConsoleMailbox.cpp src/OctaviaConsoleMailbox.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_console_mailbox_spec.cpp src/OctaviaConsoleMailbox.cpp -o $@
+build/tests/octavia_console_mailbox_spec: tests/octavia_console_mailbox_spec.cpp src/octavia/OctaviaConsoleMailbox.cpp src/octavia/OctaviaConsoleMailbox.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_console_mailbox_spec.cpp src/octavia/OctaviaConsoleMailbox.cpp -o $@
 
-build/tests/octavia_cable_validation_spec: tests/octavia_cable_validation_spec.cpp src/OctaviaCableValidation.hpp | build/tests
+build/tests/octavia_cable_validation_spec: tests/octavia_cable_validation_spec.cpp src/octavia/OctaviaCableValidation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_cable_validation_spec.cpp -o $@
 
-build/tests/octavia_action_validation_spec: tests/octavia_action_validation_spec.cpp src/OctaviaActionValidation.hpp | build/tests
+build/tests/octavia_action_validation_spec: tests/octavia_action_validation_spec.cpp src/octavia/OctaviaActionValidation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_action_validation_spec.cpp -o $@
 
-build/tests/octavia_job_control_spec: tests/octavia_job_control_spec.cpp src/OctaviaJobControl.hpp | build/tests
+build/tests/octavia_job_control_spec: tests/octavia_job_control_spec.cpp src/octavia/OctaviaJobControl.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_job_control_spec.cpp -o $@
 
-build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@
+build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/octavia/OctaviaObservation.cpp src/octavia/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_spec.cpp src/octavia/OctaviaObservation.cpp -o $@
 
-build/tests/octavia_recording_spec: tests/octavia_recording_spec.cpp src/OctaviaRecording.cpp src/OctaviaRecording.hpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_recording_spec.cpp src/OctaviaRecording.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@
+build/tests/octavia_recording_spec: tests/octavia_recording_spec.cpp src/octavia/OctaviaRecording.cpp src/octavia/OctaviaRecording.hpp src/octavia/OctaviaAnalysis.cpp src/octavia/OctaviaAnalysis.hpp src/octavia/OctaviaObservation.cpp src/octavia/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_recording_spec.cpp src/octavia/OctaviaRecording.cpp src/octavia/OctaviaAnalysis.cpp src/octavia/OctaviaObservation.cpp -o $@
 
-build/tests/octavia_analysis_spec: tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@
+build/tests/octavia_analysis_spec: tests/octavia_analysis_spec.cpp src/octavia/OctaviaAnalysis.cpp src/octavia/OctaviaAnalysis.hpp src/octavia/OctaviaObservation.cpp src/octavia/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_analysis_spec.cpp src/octavia/OctaviaAnalysis.cpp src/octavia/OctaviaObservation.cpp -o $@
 
-build/tests/octavia_semantic_control_spec: tests/octavia_semantic_control_spec.cpp src/OctaviaSemanticControl.hpp src/SibylControl.hpp | build/tests
+build/tests/octavia_semantic_control_spec: tests/octavia_semantic_control_spec.cpp src/octavia/OctaviaSemanticControl.hpp src/sibyl/SibylControl.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_semantic_control_spec.cpp -o $@
 
-build/tests/octavia_observation_bus_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
+build/tests/octavia_observation_bus_spec: tests/octavia_observation_bus_spec.cpp src/octavia/OctaviaObservationBus.cpp src/octavia/OctaviaObservationBus.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_bus_spec.cpp src/octavia/OctaviaObservationBus.cpp -o $@
 
-build/tests/octavia_observation_bus_tsan_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
+build/tests/octavia_observation_bus_tsan_spec: tests/octavia_observation_bus_spec.cpp src/octavia/OctaviaObservationBus.cpp src/octavia/OctaviaObservationBus.hpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_bus_spec.cpp src/octavia/OctaviaObservationBus.cpp -o $@
 
-build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@
+build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp src/octavia/OctaviaObservation.cpp src/octavia/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_spec.cpp src/octavia/OctaviaObservation.cpp -o $@
 
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/common/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp src/SilSpectrumSnapshot.hpp | build/tests
+build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/common/SpscLatestSnapshot.hpp src/temporaldeck/TemporalDeckExpanderProtocol.hpp src/sil/SilSpectrumSnapshot.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread $< -o $@
 
-build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/common/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp src/SilSpectrumSnapshot.hpp | build/tests
+build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/common/SpscLatestSnapshot.hpp src/temporaldeck/TemporalDeckExpanderProtocol.hpp src/sil/SilSpectrumSnapshot.hpp | build/tests
 	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer $< -o $@
 
 build/tests/shared_svg_cache_spec: tests/shared_svg_cache_spec.cpp src/visual/SharedSvgCacheState.hpp | build/tests
@@ -993,63 +1022,63 @@ test-raster-mipmap-cache: | build/tests
 build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/common/NvgGraphicsLifecycle.cpp src/common/NvgGraphicsLifecycle.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@
 
-build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_json_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylJSON.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_json_spec.cpp src/sibyl/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_adoption_spec: tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp -o $@
+build/tests/sibyl_adoption_spec: tests/sibyl_adoption_spec.cpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylAdoption.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_adoption_spec.cpp src/sibyl/SibylAdoption.cpp -o $@
 
-build/tests/sibyl_clock_estimator_spec: tests/sibyl_clock_estimator_spec.cpp src/SibylClockEstimator.cpp src/SibylClockEstimator.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_clock_estimator_spec.cpp src/SibylClockEstimator.cpp -o $@
+build/tests/sibyl_clock_estimator_spec: tests/sibyl_clock_estimator_spec.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylClockEstimator.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_clock_estimator_spec.cpp src/sibyl/SibylClockEstimator.cpp -o $@
 
-build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp src/SibylHardwareControl.hpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp -o $@
+build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylHardwareControl.hpp src/sibyl/SibylAdoption.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_hardware_control_spec.cpp src/sibyl/SibylHardwareControl.cpp -o $@
 
-build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylAssignmentEdit.hpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylAssignmentEdit.hpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylNoteEdit.hpp src/sibyl/SibylEdit.hpp src/sibyl/SibylJSON.cpp src/sibyl/SibylJSON.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_composer_validation: tests/sibyl_composer_validation.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp $(wildcard src/Sibyl*.hpp) | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_composer_validation.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_composer_validation: tests/sibyl_composer_validation.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylJSON.cpp $(wildcard src/sibyl/Sibyl*.hpp) | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_composer_validation.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylTransport.hpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylAdoption.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/sibyl/SibylTransport.cpp src/sibyl/SibylTransport.hpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylAdoption.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_transport_spec.cpp src/sibyl/SibylTransport.cpp src/sibyl/SibylAdoption.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/SibylTiming.cpp src/SibylTiming.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_timing_spec.cpp src/SibylTiming.cpp -o $@
+build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTiming.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_timing_spec.cpp src/sibyl/SibylTiming.cpp -o $@
 
-build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp tests/sibyl_override_cases.hpp tests/sibyl_automation_cases.hpp tests/sibyl_harmony_cases.hpp tests/sibyl_voicing_cases.hpp tests/sibyl_combined_cases.hpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp src/SibylAssignmentEdit.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp tests/sibyl_override_cases.hpp tests/sibyl_automation_cases.hpp tests/sibyl_harmony_cases.hpp tests/sibyl_voicing_cases.hpp tests/sibyl_combined_cases.hpp src/sibyl/Sibyl.cpp src/sibyl/SibylEvolution.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp src/sibyl/SibylAssignmentEdit.hpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 # Release-like process-only benchmark; run explicitly, outside the correctness suite.
-SIBYL_BENCH_SOURCES := src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp
-build/tests/sibyl_process_benchmark: tests/sibyl_process_benchmark.cpp src/Sibyl.cpp $(wildcard src/Sibyl*.hpp) $(SIBYL_BENCH_SOURCES) | build/tests
+SIBYL_BENCH_SOURCES := src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp
+build/tests/sibyl_process_benchmark: tests/sibyl_process_benchmark.cpp src/sibyl/Sibyl.cpp $(wildcard src/sibyl/Sibyl*.hpp) $(SIBYL_BENCH_SOURCES) | build/tests
 	$(CXX) -std=c++17 -O3 -funsafe-math-optimizations -march=nehalem -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_process_benchmark.cpp $(SIBYL_BENCH_SOURCES) -L$(RACK_DIR) -lRack -o $@
 
-build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp tests/sibyl_override_cases.hpp tests/sibyl_automation_cases.hpp tests/sibyl_harmony_cases.hpp tests/sibyl_voicing_cases.hpp tests/sibyl_combined_cases.hpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp src/SibylAssignmentEdit.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp tests/sibyl_override_cases.hpp tests/sibyl_automation_cases.hpp tests/sibyl_harmony_cases.hpp tests/sibyl_voicing_cases.hpp tests/sibyl_combined_cases.hpp src/sibyl/Sibyl.cpp src/sibyl/SibylEvolution.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp src/sibyl/SibylAssignmentEdit.hpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/MoiraiCurves.hpp src/MoiraiTypes.hpp | build/tests
+build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/moirai/MoiraiCurves.hpp src/moirai/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_curves_spec.cpp -o $@
 
-build/tests/moirai_adoption_spec: tests/moirai_adoption_spec.cpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_adoption_spec.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
+build/tests/moirai_adoption_spec: tests/moirai_adoption_spec.cpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiEngine.hpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_adoption_spec.cpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -o $@
 
-build/tests/moirai_compiler_spec: tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
+build/tests/moirai_compiler_spec: tests/moirai_compiler_spec.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiCurves.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_compiler_spec.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -o $@
 
-build/tests/moirai_edit_spec: tests/moirai_edit_spec.cpp src/MoiraiEdit.cpp src/MoiraiEdit.hpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_edit_spec.cpp src/MoiraiEdit.cpp src/MoiraiJSON.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/moirai_edit_spec: tests/moirai_edit_spec.cpp src/moirai/MoiraiEdit.cpp src/moirai/MoiraiEdit.hpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiJSON.hpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_edit_spec.cpp src/moirai/MoiraiEdit.cpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/moirai_json_spec: tests/moirai_json_spec.cpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_json_spec.cpp src/MoiraiJSON.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/moirai_json_spec: tests/moirai_json_spec.cpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiJSON.hpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_json_spec.cpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/moirai_engine_spec: tests/moirai_engine_spec.cpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_engine_spec.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
+build/tests/moirai_engine_spec: tests/moirai_engine_spec.cpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiEngine.hpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiCurves.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_engine_spec.cpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -o $@
 
-build/tests/moirai_module_spec: tests/moirai_module_spec.cpp src/Moirai.cpp src/Moirai.hpp src/MoiraiEdit.cpp src/MoiraiEdit.hpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_module_spec.cpp src/Moirai.cpp src/MoiraiEdit.cpp src/MoiraiJSON.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/moirai_module_spec: tests/moirai_module_spec.cpp src/moirai/Moirai.cpp src/moirai/Moirai.hpp src/moirai/MoiraiEdit.cpp src/moirai/MoiraiEdit.hpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiJSON.hpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiEngine.hpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiCompiler.hpp src/moirai/MoiraiCurves.hpp src/moirai/MoiraiPresets.cpp src/moirai/MoiraiPresets.hpp src/moirai/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_module_spec.cpp src/moirai/Moirai.cpp src/moirai/MoiraiEdit.cpp src/moirai/MoiraiJSON.cpp src/moirai/MoiraiEngine.cpp src/moirai/MoiraiCompiler.cpp src/moirai/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/temporaldeck_arc_lights_spec: tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp | build/tests
+build/tests/temporaldeck_arc_lights_spec: tests/temporaldeck_arc_lights_spec.cpp src/temporaldeck/TemporalDeckArcLights.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/temporaldeck_engine_spec: tests/temporaldeck_engine_spec.cpp | build/tests
@@ -1061,59 +1090,59 @@ build/tests/temporaldeck_expander_preview_spec: tests/temporaldeck_expander_prev
 build/tests/temporaldeck_menu_utils_spec: tests/temporaldeck_menu_utils_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/temporaldeck_frame_input_spec: tests/temporaldeck_frame_input_spec.cpp src/TemporalDeckFrameInput.cpp | build/tests
+build/tests/temporaldeck_frame_input_spec: tests/temporaldeck_frame_input_spec.cpp src/temporaldeck/TemporalDeckFrameInput.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/temporaldeck_platter_input_spec: tests/temporaldeck_platter_input_spec.cpp src/TemporalDeckPlatterInput.cpp | build/tests
+build/tests/temporaldeck_platter_input_spec: tests/temporaldeck_platter_input_spec.cpp src/temporaldeck/TemporalDeckPlatterInput.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.cpp src/TemporalDeckSamplePrep.cpp | build/tests
+build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.cpp src/temporaldeck/TemporalDeckSamplePrep.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/sil_limiter_peak_window_spec: tests/sil_limiter_peak_window_spec.cpp src/SilLimiterPeakWindow.hpp | build/tests
+build/tests/sil_limiter_peak_window_spec: tests/sil_limiter_peak_window_spec.cpp src/sil/SilLimiterPeakWindow.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
 
 HYDRA_ENGINE_SOURCES := src/hydra/HydraEngine.cpp $(wildcard src/hydra/beads/dsp/*.cc) src/hydra/beads/resources.cc $(wildcard src/hydra/stmlib/dsp/*.cc) $(wildcard src/hydra/stmlib/utils/*.cc)
 build/tests/hydra_engine_spec: tests/hydra_engine_spec.cpp $(HYDRA_ENGINE_SOURCES) | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Isrc/hydra $^ -o $@
 
-build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
+build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/bulkhead/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/umi_engine_spec: tests/umi_engine_spec.cpp src/UmiEngine.cpp src/UmiLayout.cpp | build/tests
+build/tests/umi_engine_spec: tests/umi_engine_spec.cpp src/umi/UmiEngine.cpp src/umi/UmiLayout.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp src/visual/ApertureLightTransfer.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
-build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable.hpp src/IrisPolyphony.hpp src/IrisIO.cpp src/IrisIO.hpp src/IrisSourceField.cpp src/IrisSourceField.hpp | build/tests
-	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/IrisIO.cpp src/IrisSourceField.cpp -o $@
+build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/iris/IrisWavetable.hpp src/iris/IrisPolyphony.hpp src/iris/IrisIO.cpp src/iris/IrisIO.hpp src/iris/IrisSourceField.cpp src/iris/IrisSourceField.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp -o $@
 
-build/tests/iris_worker_completion_spec: tests/iris_worker_completion_spec.cpp src/IrisWorkerCompletion.hpp | build/tests
+build/tests/iris_worker_completion_spec: tests/iris_worker_completion_spec.cpp src/iris/IrisWorkerCompletion.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
 
-build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/iris/Iris.cpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/NautiloidRequestCoordinator.hpp src/NautiloidCachePolicy.hpp src/NautiloidFractal.hpp | build/tests
+build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/nautiloid/NautiloidRequestCoordinator.hpp src/nautiloid/NautiloidCachePolicy.hpp src/nautiloid/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_request_coordinator_spec.cpp -o $@
 
-build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
-	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
+build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/nautiloid/NautiloidLocationCode.cpp src/nautiloid/NautiloidLocationCode.hpp src/nautiloid/NautiloidFractal.hpp | build/tests
+	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/nautiloid/NautiloidLocationCode.cpp -o $@
 
-build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp src/NautiloidGpuPrecision.hpp | build/tests
+build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp src/nautiloid/NautiloidGpuPrecision.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_gpu_precision_spec.cpp -o $@
 
-build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/Nautiloid.hpp src/NautiloidLocationCode.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp src/Chromatide.cpp src/ChromatideCanvas.cpp src/common/UiExpanderUtils.hpp | build/tests
+build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/nautiloid/Nautiloid.cpp src/nautiloid/Nautiloid.hpp src/nautiloid/NautiloidLocationCode.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/iris/IrisSourceField.cpp src/chromatide/Chromatide.cpp src/chromatide/ChromatideCanvas.cpp src/common/UiExpanderUtils.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
-build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp src/IntegralFlux.hpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp src/integralflux/IntegralFlux.hpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/legacy_curve_preview_spec: tests/legacy_curve_preview_spec.cpp src/render/LegacyCurvePreview.hpp src/visual/SettledContourFramebuffer.hpp src/visual/SnapshotHistory.hpp src/WavePreviewTracer.hpp | build/tests
+build/tests/legacy_curve_preview_spec: tests/legacy_curve_preview_spec.cpp src/render/LegacyCurvePreview.hpp src/visual/SettledContourFramebuffer.hpp src/visual/SnapshotHistory.hpp src/wavepreview/WavePreviewTracer.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tools/preview_invalidation_benchmark: tools/preview_invalidation_benchmark.cpp src/WavePreviewGeometryKey.hpp src/WavePreviewTracer.hpp src/visual/SettledContourFramebuffer.hpp | build
+build/tools/preview_invalidation_benchmark: tools/preview_invalidation_benchmark.cpp src/wavepreview/WavePreviewGeometryKey.hpp src/wavepreview/WavePreviewTracer.hpp src/visual/SettledContourFramebuffer.hpp | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/preview_invalidation_benchmark.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
@@ -1127,7 +1156,7 @@ build/tests/bounded_polyline_spec: tools/experiments/lumin/bounded_polyline_spec
 build/tests/round_join_candidate_spec: tools/experiments/lumin/round_join_candidate_spec.cpp tools/experiments/lumin/round_join_candidate.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
-build/tools/flux_shader/flux_geometry.hpp: tools/experiments/lumin/prepare_flux_shader_geometry.py src/IntegralFluxWidget.cpp src/IntegralFlux.cpp
+build/tools/flux_shader/flux_geometry.hpp: tools/experiments/lumin/prepare_flux_shader_geometry.py src/integralflux/IntegralFluxWidget.cpp src/integralflux/IntegralFlux.cpp
 	python3 tools/experiments/lumin/prepare_flux_shader_geometry.py
 
 build/tests/flux_shader_surface_spec: tools/experiments/lumin/flux_shader_surface_spec.cpp tools/experiments/lumin/flux_shader_candidate.hpp tools/experiments/lumin/experimental_shader_stroke.hpp src/visual/AdaptiveGlSurface.cpp tools/experiments/lumin/PrivateContourEngine.cpp build/tools/flux_shader/flux_geometry.hpp | build/tests
@@ -1137,7 +1166,7 @@ build/tests/round_stroke_surface_spec: tools/experiments/lumin/round_stroke_surf
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/round_stroke_surface_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 # Offline only: pinned NanoVG inputs must first be placed in work/nanovg.
-build/tools/round_stroke/private.cpp: tools/experiments/lumin/prepare_round_stroke.py src/IntegralFluxWidget.cpp src/IntegralFlux.cpp work/nanovg/nanovg.c work/nanovg/nanovg.h work/nanovg/nanovg_gl.h work/nanovg/fontstash.h work/nanovg/stb_truetype.h work/nanovg/stb_image.h | build
+build/tools/round_stroke/private.cpp: tools/experiments/lumin/prepare_round_stroke.py src/integralflux/IntegralFluxWidget.cpp src/integralflux/IntegralFlux.cpp work/nanovg/nanovg.c work/nanovg/nanovg.h work/nanovg/nanovg_gl.h work/nanovg/fontstash.h work/nanovg/stb_truetype.h work/nanovg/stb_image.h | build
 	python3 tools/experiments/lumin/prepare_round_stroke.py
 
 build/tools/round_stroke_benchmark: tools/experiments/lumin/round_stroke_benchmark.cpp tools/experiments/lumin/private_stroke_api.hpp build/tools/round_stroke/private.cpp | build
@@ -1146,52 +1175,52 @@ build/tools/round_stroke_benchmark: tools/experiments/lumin/round_stroke_benchma
 build/tools/callback_bridge_spec: tools/experiments/lumin/callback_bridge_spec.cpp tools/experiments/lumin/callback_bridge.cpp tools/experiments/lumin/callback_bridge.hpp build/tools/round_stroke/private.cpp | build
 	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/callback_bridge_spec.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
-build/tools/proc_preview_render_benchmark: tools/proc_preview_render_benchmark.cpp tools/preview_benchmark_utils.hpp tools/experiments/lumin/round_join_candidate.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp src/WavePreviewSimplifier.hpp tools/experiments/lumin/BoundedPolyline.hpp | build
+build/tools/proc_preview_render_benchmark: tools/proc_preview_render_benchmark.cpp tools/preview_benchmark_utils.hpp tools/experiments/lumin/round_join_candidate.hpp src/proc/Proc.cpp src/proc/ProcPreviewGeometry.hpp src/wavepreview/WavePreviewSimplifier.hpp tools/experiments/lumin/BoundedPolyline.hpp | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/proc_preview_render_benchmark.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tools/PhosphorPreviewBaseline.hpp: tools/prepare_phosphor_baseline.py | build
 	python3 tools/prepare_phosphor_baseline.py
 
-build/tools/proc_phosphor_benchmark: tools/proc_phosphor_benchmark.cpp tools/preview_benchmark_utils.hpp build/tools/PhosphorPreviewBaseline.hpp src/visual/PhosphorPreview.hpp src/common/GlLifecycleUtils.cpp src/common/GlLifecycleUtils.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp | build
+build/tools/proc_phosphor_benchmark: tools/proc_phosphor_benchmark.cpp tools/preview_benchmark_utils.hpp build/tools/PhosphorPreviewBaseline.hpp src/visual/PhosphorPreview.hpp src/common/GlLifecycleUtils.cpp src/common/GlLifecycleUtils.hpp src/proc/Proc.cpp src/proc/ProcPreviewGeometry.hpp | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -Ibuild/tools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/proc_phosphor_benchmark.cpp src/common/GlLifecycleUtils.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/proc_runtime_spec: tests/proc_runtime_spec.cpp src/Proc.cpp src/ProcPreviewGeometry.hpp src/WavePreviewGeometryKey.hpp src/WavePreviewTracer.hpp src/visual/SettledContourFramebuffer.hpp src/common/MathHelpers.hpp | build/tests
+build/tests/proc_runtime_spec: tests/proc_runtime_spec.cpp src/proc/Proc.cpp src/proc/ProcPreviewGeometry.hpp src/wavepreview/WavePreviewGeometryKey.hpp src/wavepreview/WavePreviewTracer.hpp src/visual/SettledContourFramebuffer.hpp src/common/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/proc_runtime_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
+build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/temporaldeck/TemporalDeckPlatterInput.cpp src/temporaldeck/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp src/MandelwakeEngine.hpp src/MandelwakeFixedPoint.hpp src/MandelwakeTables.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp -o $@
+build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/mandelwake/MandelwakeEngine.cpp src/mandelwake/MandelwakeEngine.hpp src/mandelwake/MandelwakeFixedPoint.hpp src/mandelwake/MandelwakeTables.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/mandelwake_engine_spec.cpp src/mandelwake/MandelwakeEngine.cpp -o $@
 
-build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp $(MINGW_TEST_STACK_FLAGS) -o $@
+build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexEngine.hpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexFixtures.hpp src/phonex/PhonexTypes.hpp src/phonex/PhonexRom.cpp src/phonex/PhonexRom.hpp src/phonex/PhonexRomData.inc src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexSequenceCompiler.hpp src/phonex/PhonexPronunciation.cpp src/phonex/PhonexPronunciation.hpp src/phonex/PhonexSequenceMailbox.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexFixtures.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexPronunciation.cpp $(MINGW_TEST_STACK_FLAGS) -o $@
 
-build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
+build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/undertow/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
 
-build/tests/undertow_module_spec: tests/undertow_module_spec.cpp src/Undertow.cpp src/Undertow.hpp src/UndertowShape.hpp | build/tests
+build/tests/undertow_module_spec: tests/undertow_module_spec.cpp src/undertow/Undertow.cpp src/undertow/Undertow.hpp src/undertow/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/undertow_module_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/math_helpers_spec.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/PuffyEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/common/MathHelpers.cpp -o $@
+build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/puffy/PuffyEngine.cpp src/puffy/PuffyEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/puffy/PuffyEngine.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/puffy_module_spec: tests/puffy_module_spec.cpp src/Puffy.cpp src/Puffy.hpp src/PuffyEngine.cpp src/PuffyEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_module_spec.cpp src/Puffy.cpp src/PuffyEngine.cpp src/common/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/puffy_module_spec: tests/puffy_module_spec.cpp src/puffy/Puffy.cpp src/puffy/Puffy.hpp src/puffy/PuffyEngine.cpp src/puffy/PuffyEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_module_spec.cpp src/puffy/Puffy.cpp src/puffy/PuffyEngine.cpp src/common/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp src/PuffyCharacterController.hpp src/PuffyPose.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/puffy/PuffyCharacterController.cpp src/puffy/PuffyCharacterController.hpp src/puffy/PuffyPose.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/puffy/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp -o $@
+build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src/cantor/CantorCultureEngine.cpp src/cantor/CantorCultureEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/cantor_culture_engine_spec.cpp src/cantor/CantorCultureEngine.cpp -o $@
 
 build/tests/theme_color_clipboard_spec: tests/theme_color_clipboard_spec.cpp src/theme/ThemeColorClipboard.hpp src/theme/ThemeTypes.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/theme_color_clipboard_spec.cpp -o $@
@@ -1203,63 +1232,63 @@ build/tests/theme_persistence_spec: tests/theme_persistence_spec.cpp src/theme/T
 	# Match the plugin's SIMD target to avoid Rack SIMDe/native intrinsic alias conflicts.
 	$(CXX) -std=c++17 -O2 -march=nehalem -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/cantor/Cantor.cpp src/cantor/Cantor.hpp src/cantor/CantorCultureEngine.cpp src/cantor/CantorCultureEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/cantor/Cantor.cpp src/cantor/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/Wyrm.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/common/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/wyrm/Wyrm.cpp src/wyrm/Wyrm.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/wyrm/Wyrm.cpp src/common/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
+build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/temporaldeck/LongPlayStreamEngine.cpp src/temporaldeck/LongPlayStreamEngine.hpp src/temporaldeck/codec.cpp src/temporaldeck/codec.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/temporaldeck/LongPlayStreamEngine.cpp src/temporaldeck/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
-build/tests/octavia_server_lifecycle_spec: tests/octavia_server_lifecycle_spec.cpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
+build/tests/octavia_server_lifecycle_spec: tests/octavia_server_lifecycle_spec.cpp src/octavia/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 $< -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)
 
-build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/DoorstopVisualFeedback.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
+build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/doorstop/DoorstopEngine.cpp src/doorstop/DoorstopEngine.hpp src/doorstop/DoorstopVisualFeedback.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
+build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/ReferenceSpringEngine.hpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/HelicalContinuumEngine.hpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/DoorstopEngineRouter.hpp src/doorstop/DoorstopEngine.cpp src/doorstop/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/ReferenceSpringEngine.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
+build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/HelicalContinuumEngine.hpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/ReferenceSpringEngine.hpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/DoorstopEngineRouter.hpp src/doorstop/DoorstopEngine.cpp src/doorstop/DoorstopEngine.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/doorstop_contact_helix_engine_spec: tests/doorstop_contact_helix_engine_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_engine_spec.cpp src/DoorstopContactHelixEngine.cpp -o $@
+build/tests/doorstop_contact_helix_engine_spec: tests/doorstop_contact_helix_engine_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopContactHelixEngine.hpp src/doorstop/DoorstopEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_engine_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp -o $@
 
-build/tests/doorstop_contact_helix_energy_spec: tests/doorstop_contact_helix_energy_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopContactHelixEngine.hpp src/DoorstopEngine.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_energy_spec.cpp src/DoorstopContactHelixEngine.cpp -o $@
+build/tests/doorstop_contact_helix_energy_spec: tests/doorstop_contact_helix_energy_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopContactHelixEngine.hpp src/doorstop/DoorstopEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_energy_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp -o $@
 
-build/tests/doorstop_contact_helix_compat_spec: tests/doorstop_contact_helix_compat_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_compat_spec.cpp src/DoorstopContactHelixEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
+build/tests/doorstop_contact_helix_compat_spec: tests/doorstop_contact_helix_compat_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_contact_helix_compat_spec.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/DoorstopEngine.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
+build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp src/bifurx/BifurxInputStage.hpp src/bifurx/BifurxOutputStage.hpp src/common/MathHelpers.cpp src/common/MathHelpers.hpp | build/tests
 	@mkdir -p $(dir $@)
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/bifurx_filter_spec.cpp src/common/MathHelpers.cpp -o $@
 
-build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
+build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/wavepreview/WavePreviewSimplifier.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) tests/wave_preview_simplification_spec.cpp -o $@
 
-build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcachePlanner.hpp src/DeepcacheBrowserLogic.cpp src/DeepcacheBrowserLogic.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcacheBrowserLogic.cpp -o $@
+build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/deepcache/DeepcachePlanner.cpp src/deepcache/DeepcachePlanner.hpp src/deepcache/DeepcacheBrowserLogic.cpp src/deepcache/DeepcacheBrowserLogic.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread tests/deepcache_planner_spec.cpp src/deepcache/DeepcachePlanner.cpp src/deepcache/DeepcacheBrowserLogic.cpp -o $@
 
-build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheArchive.hpp src/DeepcacheQoi.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheQoi.cpp -o $@
+build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/deepcache/DeepcacheArchive.cpp src/deepcache/DeepcacheArchive.hpp src/deepcache/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/deepcache/DeepcacheArchive.cpp src/deepcache/DeepcacheQoi.cpp -o $@
 
-build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_spec.cpp src/DeepcacheThemeClassifier.cpp src/DeepcacheThemeClassifier.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_classifier_spec.cpp src/DeepcacheThemeClassifier.cpp -o $@
+build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_spec.cpp src/deepcache/DeepcacheThemeClassifier.cpp src/deepcache/DeepcacheThemeClassifier.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_classifier_spec.cpp src/deepcache/DeepcacheThemeClassifier.cpp -o $@
 
-build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/chromatide_spec: tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/iris/IrisSourceField.cpp src/deepcache/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/Chromatide.cpp src/iris/IrisSourceField.cpp src/deepcache/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 BIFURX_TEST_OPT_FLAGS ?= -O3 -funsafe-math-optimizations $(if $(ARCH_X64),-march=nehalem,)
-build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/Bifurx.hpp src/BifurxTypes.hpp src/BifurxDsp.hpp src/BifurxModule.hpp src/BifurxPreview.hpp src/BifurxDisplay.hpp src/BifurxDisplay.cpp src/BifurxRenderClient.hpp src/BifurxRenderClient.cpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/BifurxOversampling.hpp src/BifurxTransitionSmoother.hpp src/BifurxRenderData.hpp src/BifurxWorker.hpp src/BifurxWorker.cpp src/BifurxRenderPrep.hpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp | build/tests
+build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_runtime_spec.cpp src/bifurx/Bifurx.cpp src/bifurx/Bifurx.hpp src/bifurx/BifurxTypes.hpp src/bifurx/BifurxDsp.hpp src/bifurx/BifurxModule.hpp src/bifurx/BifurxPreview.hpp src/bifurx/BifurxDisplay.hpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxRenderClient.hpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxInputStage.hpp src/bifurx/BifurxOutputStage.hpp src/bifurx/BifurxOversampling.hpp src/bifurx/BifurxTransitionSmoother.hpp src/bifurx/BifurxRenderData.hpp src/bifurx/BifurxWorker.hpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.hpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp | build/tests
 	@mkdir -p $(dir $@)
-	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -DBIFURX_WORKER_TEST_HOOKS=1 -DBIFURX_DISPLAY_TEST_HOOKS=1 -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxDisplay.cpp src/BifurxPreview.cpp src/BifurxState.cpp src/BifurxRenderClient.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
-	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -DBIFURX_WORKER_TEST_HOOKS=1 -DBIFURX_DISPLAY_TEST_HOOKS=1 -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxDisplay.cpp src/BifurxPreview.cpp src/BifurxState.cpp src/BifurxRenderClient.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp > $@.d
+	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -DBIFURX_WORKER_TEST_HOOKS=1 -DBIFURX_DISPLAY_TEST_HOOKS=1 -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxPreview.cpp src/bifurx/BifurxState.cpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
+	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -DBIFURX_WORKER_TEST_HOOKS=1 -DBIFURX_DISPLAY_TEST_HOOKS=1 -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxPreview.cpp src/bifurx/BifurxState.cpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp > $@.d
 
-build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp | build/tests
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
+build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/chronomaw/Chronomaw.cpp src/chronomaw/ChronomawEngine.cpp | build/tests
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/chronomaw/Chronomaw.cpp src/chronomaw/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
@@ -1269,13 +1298,13 @@ build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/common/Pane
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) $(if $(ARCH_X64),-march=nehalem) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack $(if $(findstring mingw,$(CXX_MACHINE)),-lws2_32) -Wl,-rpath,/tmp/Rack2 -o $@
 
-build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopContactHelixEngine.cpp src/common/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/doorstop/Doorstop.cpp src/doorstop/DoorstopEngine.cpp src/doorstop/DoorstopEngineRouter.cpp src/doorstop/ReferenceSpringEngine.cpp src/doorstop/HelicalContinuumEngine.cpp src/doorstop/DoorstopContactHelixEngine.cpp src/common/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
-build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexSemantic.cpp src/Phonex.hpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp src/PhonexTypes.hpp src/OctaviaSemanticControl.hpp | build/tests build/tests/doorstop_runtime_spec
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexSemantic.cpp src/PhonexEngine.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
+build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/phonex/Phonex.cpp src/phonex/PhonexSemantic.cpp src/phonex/Phonex.hpp src/phonex/PhonexEngine.cpp src/phonex/PhonexEngine.hpp src/phonex/PhonexRom.cpp src/phonex/PhonexRom.hpp src/phonex/PhonexRomData.inc src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexSequenceCompiler.hpp src/phonex/PhonexPronunciation.cpp src/phonex/PhonexPronunciation.hpp src/phonex/PhonexSequenceMailbox.hpp src/phonex/PhonexTypes.hpp src/octavia/OctaviaSemanticControl.hpp | build/tests build/tests/doorstop_runtime_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/phonex_module_spec.cpp src/phonex/Phonex.cpp src/phonex/PhonexSemantic.cpp src/phonex/PhonexEngine.cpp src/phonex/PhonexRom.cpp src/phonex/PhonexSequenceCompiler.cpp src/phonex/PhonexPronunciation.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
-build/tools/snapshot_history_benchmark: tools/snapshot_history_benchmark.cpp tools/preview_benchmark_utils.hpp src/visual/SnapshotHistory.hpp src/WavePreviewTracer.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp | build
+build/tools/snapshot_history_benchmark: tools/snapshot_history_benchmark.cpp tools/preview_benchmark_utils.hpp src/visual/SnapshotHistory.hpp src/wavepreview/WavePreviewTracer.hpp src/proc/Proc.cpp src/proc/ProcPreviewGeometry.hpp | build
 	@mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/snapshot_history_benchmark.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
@@ -1318,10 +1347,10 @@ build/tests/debug_terminal_timing_spec: tests/debug_terminal_timing_spec.cpp src
 build/tests/halo_metrics_scope_spec: tests/halo_metrics_scope_spec.cpp src/visual/HaloKnob2Metrics.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
 
-build/tests/chromatide_qoi_preflight_spec: tests/chromatide_qoi_preflight_spec.cpp src/ChromatideCanvas.cpp src/ChromatideCanvas.hpp | build/tests
+build/tests/chromatide_qoi_preflight_spec: tests/chromatide_qoi_preflight_spec.cpp src/chromatide/ChromatideCanvas.cpp src/chromatide/ChromatideCanvas.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@
 
-build/tests/review_state_handoff_spec: tests/review_state_handoff_spec.cpp src/Bulkhead.cpp src/BulkheadGeometry.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp src/Bulkhead.hpp src/Chronomaw.hpp src/common/SpscLatestSnapshot.hpp | build/tests
+build/tests/review_state_handoff_spec: tests/review_state_handoff_spec.cpp src/bulkhead/Bulkhead.cpp src/bulkhead/BulkheadGeometry.cpp src/chronomaw/Chronomaw.cpp src/chronomaw/ChronomawEngine.cpp src/bulkhead/Bulkhead.hpp src/chronomaw/Chronomaw.hpp src/common/SpscLatestSnapshot.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 # Explicit retained shader candidate; not enabled in live modules.
@@ -1331,7 +1360,7 @@ build/tests/lumin_polyline_spec: tests/lumin_polyline_spec.cpp src/render/Polyli
 build/tests/lumin_function_curve_spec: tests/lumin_function_curve_spec.cpp tools/experiments/lumin/function_curve_candidate.hpp src/render/FunctionCurve.hpp tools/experiments/lumin/flux_shader_surface_spec.cpp src/visual/AdaptiveGlSurface.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_curve_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
-build/tools/flux_shader/proc_shape.hpp: tools/experiments/lumin/prepare_proc_shape.py src/Proc.cpp src/ProcPreviewGeometry.hpp
+build/tools/flux_shader/proc_shape.hpp: tools/experiments/lumin/prepare_proc_shape.py src/proc/Proc.cpp src/proc/ProcPreviewGeometry.hpp
 	python3 tools/experiments/lumin/prepare_proc_shape.py
 
 build/tests/lumin_function_history_spec: tests/lumin_function_history_spec.cpp tests/lumin_function_curve_spec.cpp tools/experiments/lumin/function_curve_candidate.hpp src/render/FunctionCurve.hpp tools/experiments/lumin/function_history.hpp src/visual/SnapshotHistory.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
@@ -1347,7 +1376,7 @@ build/tests/lumin_function_pilot_spec: tests/lumin_function_pilot_spec.cpp tests
 build/tests/adaptive_visual_update_spec: tests/adaptive_visual_update_spec.cpp src/render/AdaptiveVisualUpdate.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
 
-build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/UndertowShape.hpp src/WavePreviewSimplifier.hpp src/render/HostStrokeBridge.cpp src/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
+build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/undertow/UndertowShape.hpp src/wavepreview/WavePreviewSimplifier.hpp src/render/HostStrokeBridge.cpp src/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
 	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_host_stroke_bridge_spec.cpp src/render/HostStrokeBridge.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 build/tests/lumin_native_function_spec: tests/lumin_native_function_spec.cpp tests/lumin_function_curve_spec.cpp src/render/NativeFunctionContour.hpp src/render/FunctionCurve.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
@@ -1384,45 +1413,45 @@ build/tools/eclipse2/components build/tools/eclipse2/ring: src/visual/Eclipse2Ru
 test-bifurx-gl: build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,$<)
 
-build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_gl_spec.cpp tests/bifurx_runtime_spec.cpp tests/gl_surface_lifecycle_spec.cpp $(wildcard src/Bifurx*) src/visual/AdaptiveGlSurface.cpp | build/tests
+build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_gl_spec.cpp tests/bifurx_runtime_spec.cpp tests/gl_surface_lifecycle_spec.cpp $(wildcard src/bifurx/Bifurx*) src/visual/AdaptiveGlSurface.cpp | build/tests
 	@mkdir -p $(dir $@)
-	$(CXX) -std=c++17 -O2 -Wno-subobject-linkage -DBIFURX_DISPLAY_TEST_HOOKS=1 $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/BifurxDisplay.cpp src/BifurxPreview.cpp src/BifurxState.cpp src/BifurxRenderClient.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(ARCH_WIN),-lopengl32,-lGL) -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
+	$(CXX) -std=c++17 -O2 -Wno-subobject-linkage -DBIFURX_DISPLAY_TEST_HOOKS=1 $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxPreview.cpp src/bifurx/BifurxState.cpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(ARCH_WIN),-lopengl32,-lGL) -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
 
-	$(CXX) -std=c++17 -O2 -DBIFURX_DISPLAY_TEST_HOOKS=1 $(MINGW_TEST_CPPFLAGS) -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_gl_spec.cpp src/BifurxDisplay.cpp src/BifurxPreview.cpp src/BifurxState.cpp src/BifurxRenderClient.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp > $@.d
+	$(CXX) -std=c++17 -O2 -DBIFURX_DISPLAY_TEST_HOOKS=1 $(MINGW_TEST_CPPFLAGS) -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_gl_spec.cpp src/bifurx/BifurxDisplay.cpp src/bifurx/BifurxPreview.cpp src/bifurx/BifurxState.cpp src/bifurx/BifurxRenderClient.cpp src/bifurx/BifurxWorker.cpp src/bifurx/BifurxRenderPrep.cpp src/common/MathHelpers.cpp src/common/PanelSvgUtils.cpp src/common/PanelAnchorAtlas.cpp src/common/GlResourceRetirement.cpp src/common/GlLifecycleUtils.cpp src/common/NvgGraphicsLifecycle.cpp > $@.d
 # Each translation unit contributes prerequisites to the same test target.
 -include build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,).d
 -include build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,).d
 
-build/tests/octavia_presence_spec: tests/octavia_presence_spec.cpp src/OctaviaPresence.hpp | build/tests
+build/tests/octavia_presence_spec: tests/octavia_presence_spec.cpp src/octavia/OctaviaPresence.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc $< -o $@
 
-build/tests/octavia_presence_routes_spec: tests/octavia_presence_routes_spec.cpp src/OctaviaPresence.hpp src/OctaviaPresenceRoutes.hpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
+build/tests/octavia_presence_routes_spec: tests/octavia_presence_routes_spec.cpp src/octavia/OctaviaPresence.hpp src/octavia/OctaviaPresenceRoutes.hpp src/octavia/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)
 
-build/tests/sibyl_evolution_spec: tests/sibyl_evolution_spec.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
+build/tests/sibyl_evolution_spec: tests/sibyl_evolution_spec.cpp src/sibyl/SibylEvolution.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -o $@
 
-build/tests/sibyl_legacy_golden_spec: tests/sibyl_legacy_golden_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp src/SibylAssignmentEdit.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_legacy_golden_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_legacy_golden_spec: tests/sibyl_legacy_golden_spec.cpp src/sibyl/Sibyl.cpp src/sibyl/SibylEvolution.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp src/sibyl/SibylAssignmentEdit.hpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_legacy_golden_spec.cpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylClockEstimator.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylHardwareControl.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylTiming.cpp src/sibyl/SibylTransport.cpp src/octavia/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 
-build/tests/sibyl_codec_spec: tests/sibyl_codec_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_codec_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_codec_spec: tests/sibyl_codec_spec.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylJSON.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_codec_spec.cpp src/sibyl/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 
-build/tests/sibyl_note_edit_spec: tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylAssignmentEdit.hpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylAdoption.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylAdoption.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_note_edit_spec: tests/sibyl_note_edit_spec.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylAssignmentEdit.hpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylNoteEdit.hpp src/sibyl/SibylEdit.hpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylJSON.cpp src/sibyl/SibylJSON.hpp src/sibyl/SibylTypes.hpp src/sibyl/SibylCondition.hpp src/sibyl/SibylOverrides.hpp src/sibyl/SibylAutomation.hpp src/sibyl/SibylAutomationJSON.hpp src/sibyl/SibylHarmonyTypes.hpp src/sibyl/SibylHarmony.hpp src/sibyl/SibylHarmonyJSON.hpp src/sibyl/SibylHarmonyView.hpp src/sibyl/SibylHarmonyEdit.hpp src/sibyl/SibylVoicing.hpp src/sibyl/SibylVoicingEdit.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_note_edit_spec.cpp src/sibyl/SibylEdit.cpp src/sibyl/SibylNoteEdit.cpp src/sibyl/SibylAdoption.cpp src/sibyl/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 # Pitch codec/math headers participate in incremental Sibyl regression builds.
-build/tests/sibyl_codec_spec: tests/sibyl_tuning_cases.hpp src/SibylTuning.hpp src/SibylTuningJSON.hpp
-build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/SibylTuning.hpp src/SibylTuningJSON.hpp
+build/tests/sibyl_codec_spec: tests/sibyl_tuning_cases.hpp src/sibyl/SibylTuning.hpp src/sibyl/SibylTuningJSON.hpp
+build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/sibyl/SibylTuning.hpp src/sibyl/SibylTuningJSON.hpp
 build/tests/sibyl_module_spec: tests/sibyl_tuning_module_cases.hpp
 
 # P7 control-side pitch editing and query contracts.
-build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/SibylPitchEdit.hpp src/SibylRetune.hpp src/SibylPitchView.hpp src/SibylTuning.hpp src/SibylTuningJSON.hpp
+build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/sibyl/SibylPitchEdit.hpp src/sibyl/SibylRetune.hpp src/sibyl/SibylPitchView.hpp src/sibyl/SibylTuning.hpp src/sibyl/SibylTuningJSON.hpp
 build/tests/sibyl_note_edit_spec: tests/sibyl_pitch_edit_cases.hpp
 
-build/tests/sibyl_codec_spec build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: $(wildcard src/Sibyl*.hpp) $(wildcard tests/sibyl_*cases.hpp) tests/sibyl_native_fixture.hpp
+build/tests/sibyl_codec_spec build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: $(wildcard src/sibyl/Sibyl*.hpp) $(wildcard tests/sibyl_*cases.hpp) tests/sibyl_native_fixture.hpp
 
 .PHONY: test-chimera-opus test-chimera-fast-math test-chimera-rate-preparation
 test-chimera-opus: test-chimera-fast-math test-chimera-rate-preparation test-chimera-module test-chimera-patch test-chimera-wav test-chimera-bundle test-chimera-recovery test-chimera-checkpoints
@@ -1434,7 +1463,7 @@ test-chimera-fast-math: | build/tests
 	build/tests/chimera_fast_math_fast_spec$(if $(ARCH_WIN),.exe,)
 
 test-chimera-rate-preparation: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -DCHIMERA_RATE_SERVICE_TEST_HOOKS -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rate_preparation_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -pthread -o build/tests/chimera_rate_preparation_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DCHIMERA_RATE_SERVICE_TEST_HOOKS -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rate_preparation_spec.cpp src/chimera/ChimeraService.cpp -L$(RACK_DIR) -lRack -pthread -o build/tests/chimera_rate_preparation_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_rate_preparation_spec)
 
 .PHONY: test-chimera-morph
@@ -1455,11 +1484,11 @@ test-chimera-sos: | build/tests
 	build/tests/chimera_sos_spec$(if $(ARCH_WIN),.exe,)
 
 
-build/tests/deepcache_theme_identity_spec: tests/deepcache_theme_identity_spec.cpp src/DeepcacheThemeIdentity.hpp src/theme/ThemeTypes.hpp | build/tests
+build/tests/deepcache_theme_identity_spec: tests/deepcache_theme_identity_spec.cpp src/deepcache/DeepcacheThemeIdentity.hpp src/theme/ThemeTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_identity_spec.cpp -o $@
 
 # Uses the same JSON helpers as Temporal Deck's module serialization.
-build/tests/temporaldeck_settings_spec: tests/temporaldeck_settings_spec.cpp src/TemporalDeckSettings.hpp | build/tests
+build/tests/temporaldeck_settings_spec: tests/temporaldeck_settings_spec.cpp src/temporaldeck/TemporalDeckSettings.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 # Isolated shorter-filter experiment; production retains the 129-tap default.
@@ -1480,9 +1509,9 @@ test-vessel-fir109: $(VESSEL_FIR109_TESTS) build/tests/vessel_module_spec_fir109
 build/tools/vessel_fir_capture build/tools/vessel_fir_capture_109: tools/vessel/fir_capture.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	@mkdir -p build/tools
 	$(CXX) -std=c++11 $(VESSEL_BENCH_OPT_FLAGS) -Wall -Wextra $(if $(filter %_109,$@),-DVESSEL_EXPERIMENTAL_FIR109,) -fno-fast-math -fno-unsafe-math-optimizations -Isrc $< $(VESSEL_SOURCES) -o $@
-build/tools/vessel_benchmark_active_module_109: tools/vessel/benchmark_active_module.cpp src/Vessel.cpp src/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
+build/tools/vessel_benchmark_active_module_109: tools/vessel/benchmark_active_module.cpp src/vessel/module/Vessel.cpp src/vessel/module/Vessel.hpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
 	@mkdir -p build/tools
-	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -DVESSEL_EXPERIMENTAL_FIR109 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES $(VESSEL_BENCH_OPT_FLAGS) -DVESSEL_EXPERIMENTAL_FIR109 -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/vessel/module/Vessel.cpp $(VESSEL_SOURCES) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 # Work-count profiling is deliberately separate from uninstrumented timing.
 build/tools/vessel_contact_work build/tools/vessel_contact_work_profile: tools/vessel/profile_contact_work.cpp $(VESSEL_SOURCES) $(VESSEL_HEADERS) | build
@@ -1495,9 +1524,9 @@ test-vessel-contact-work: build/tests/vessel_contact_work_spec
 	$(call run_test_bin,build/tests/vessel_contact_work_spec)
 
 # Strand keeps non-finite input checks valid under the global audio flags.
-build/src/Strand.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+build/src/strand/Strand.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
-build/tests/strand_engine_spec: tests/strand_engine_spec.cpp src/StrandEngine.hpp | build/tests
+build/tests/strand_engine_spec: tests/strand_engine_spec.cpp src/strand/StrandEngine.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -o $@
 
 .PHONY: test-strand
@@ -1505,19 +1534,19 @@ test-strand: build/tests/strand_engine_spec build/tests/strand_module_spec
 	$(call run_test_bin,build/tests/strand_engine_spec)
 	$(call run_rack_test_bin,build/tests/strand_module_spec)
 
-build/tests/strand_module_spec: tests/strand_module_spec.cpp src/Strand.hpp src/StrandEngine.hpp | build/tests
+build/tests/strand_module_spec: tests/strand_module_spec.cpp src/strand/Strand.hpp src/strand/StrandEngine.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Wno-unused-parameter -D_USE_MATH_DEFINES -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -o $@
 
 .PHONY: test-sil-boost
 test-sil-boost: build/tests/sil_boost_spec
 	$(call run_rack_test_bin,build/tests/sil_boost_spec)
 
-build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/common/MathHelpers.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
+build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_boost_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 .PHONY: test-sil-perf
 test-sil-perf: build/tests/sil_perf_regression_spec
 	$(call run_rack_test_bin,build/tests/sil_perf_regression_spec)
 
-build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/Sil.cpp src/SilDspKernels.hpp src/common/MathHelpers.hpp src/SilLimiterPeakWindow.hpp src/SilLevelMeter.hpp | build/tests
+build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_perf_regression_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

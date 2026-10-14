@@ -1,7 +1,7 @@
 #pragma once
-#include "../src/SibylHarmonyView.hpp"
-#include "../src/SibylTuningCatalog.hpp"
-#include "../src/SibylVoicing.hpp"
+#include "../src/sibyl/SibylHarmonyView.hpp"
+#include "../src/sibyl/SibylTuningCatalog.hpp"
+#include "../src/sibyl/SibylVoicing.hpp"
 #include <random>
 
 #include "sibyl_native_fixture.hpp"

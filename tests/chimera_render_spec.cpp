@@ -10,7 +10,7 @@ std::string leviathanPluginUserRootPath() { return "build/tests/chimera_render_c
 namespace rack { Context::~Context() { delete event; rack::contextSet(nullptr); } }
 #define CHIMERA_MANUAL_CONTROL_TEST 1
 #define CHIMERA_HEADLESS_TEST 1
-#include "../src/Chimera.cpp"
+#include "../src/chimera/Chimera.cpp"
 static void need(bool ok, const char* message) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
 }

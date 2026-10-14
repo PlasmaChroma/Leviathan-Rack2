@@ -1,5 +1,5 @@
 #include "platter_spec_cases.hpp"
-#include "../src/TemporalDeckTest.hpp"
+#include "../src/temporaldeck/TemporalDeckTest.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
-#include "MoiraiCompiler.hpp"
-#include "MoiraiCurves.hpp"
-#include "MoiraiPresets.hpp"
+#include "moirai/MoiraiCompiler.hpp"
+#include "moirai/MoiraiCurves.hpp"
+#include "moirai/MoiraiPresets.hpp"
 
 #include <cmath>
 #include <iostream>

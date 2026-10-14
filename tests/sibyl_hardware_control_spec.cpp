@@ -1,4 +1,4 @@
-#include "SibylHardwareControl.hpp"
+#include "sibyl/SibylHardwareControl.hpp"
 
 #include <iostream>
 

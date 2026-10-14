@@ -1,4 +1,4 @@
-#include "../src/SibylJSON.hpp"
+#include "../src/sibyl/SibylJSON.hpp"
 #include <cassert>
 #include <iostream>
 #include "sibyl_tuning_cases.hpp"

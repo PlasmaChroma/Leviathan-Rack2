@@ -1,5 +1,5 @@
-#include "../src/DoorstopEngine.hpp"
-#include "../src/DoorstopVisualFeedback.hpp"
+#include "../src/doorstop/DoorstopEngine.hpp"
+#include "../src/doorstop/DoorstopVisualFeedback.hpp"
 
 #include <algorithm>
 #include <cmath>

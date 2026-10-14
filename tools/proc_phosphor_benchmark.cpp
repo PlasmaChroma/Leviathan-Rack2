@@ -1,5 +1,5 @@
 #define PROC_HEADLESS_TEST 1
-#include "../src/Proc.cpp"
+#include "../src/proc/Proc.cpp"
 #include "PhosphorPreviewBaseline.hpp"
 #include "preview_benchmark_utils.hpp"
 

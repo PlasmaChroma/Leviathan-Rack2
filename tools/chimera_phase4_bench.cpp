@@ -1,4 +1,4 @@
-#include "ChimeraSlice.hpp"
+#include "chimera/ChimeraSlice.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>

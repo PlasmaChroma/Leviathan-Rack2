@@ -1,5 +1,5 @@
-#include "../src/OctaviaPresenceRoutes.hpp"
-#include "../src/OctaviaServerLifecycle.hpp"
+#include "../src/octavia/OctaviaPresenceRoutes.hpp"
+#include "../src/octavia/OctaviaServerLifecycle.hpp"
 #include <iostream>
 #include <stdexcept>
 

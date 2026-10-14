@@ -1,4 +1,4 @@
-#include "Strand.hpp"
+#include "strand/Strand.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>

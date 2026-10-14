@@ -1,4 +1,4 @@
-#include "SibylTiming.hpp"
+#include "sibyl/SibylTiming.hpp"
 
 #include <cmath>
 #include <iostream>

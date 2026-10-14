@@ -1,4 +1,4 @@
-#include "../src/NautiloidGpuPrecision.hpp"
+#include "../src/nautiloid/NautiloidGpuPrecision.hpp"
 
 #include <cmath>
 #include <iostream>

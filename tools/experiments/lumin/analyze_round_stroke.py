@@ -41,7 +41,7 @@ for name in ('forward','reverse'):
       'maximum_mesh_error':float(final[4]),'maximum_relative_image_error':float(final[5]),'maximum_byte_error':int(final[6])}
     summary['sha256'][str(path.relative_to(root))]=hashlib.sha256(path.read_bytes()).hexdigest()
 for relative in ('tools/experiments/lumin/prepare_round_stroke.py','tools/experiments/lumin/round_stroke_benchmark.cpp','tools/experiments/lumin/private_stroke_api.hpp','tools/experiments/lumin/analyze_round_stroke.py',
- 'src/IntegralFluxWidget.cpp','src/IntegralFlux.cpp','build/tools/round_stroke/nanovg.c',
+ 'src/integralflux/IntegralFluxWidget.cpp','src/integralflux/IntegralFlux.cpp','build/tools/round_stroke/nanovg.c',
  'build/tools/round_stroke_benchmark.exe','work/nanovg/rack-2.6.6-nanovg-ref.json'):
     summary['sha256'][relative]=hashlib.sha256((root/relative).read_bytes()).hexdigest()
 tail_content=(folder/'tails.log').read_text()

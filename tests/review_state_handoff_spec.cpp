@@ -1,5 +1,5 @@
-#include "../src/Bulkhead.hpp"
-#include "../src/Chronomaw.hpp"
+#include "../src/bulkhead/Bulkhead.hpp"
+#include "../src/chronomaw/Chronomaw.hpp"
 #include <atomic>
 #include <cassert>
 #include <cmath>

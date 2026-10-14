@@ -1,5 +1,5 @@
-#include "../src/DeepcachePlanner.hpp"
-#include "../src/DeepcacheBrowserLogic.hpp"
+#include "../src/deepcache/DeepcachePlanner.hpp"
+#include "../src/deepcache/DeepcacheBrowserLogic.hpp"
 
 #include <iostream>
 #include <chrono>

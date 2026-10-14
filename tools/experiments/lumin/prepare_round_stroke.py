@@ -91,7 +91,7 @@ void privateStrokeCandidate(bool enabled) { offlineCandidateEnabled=enabled; }
 ''')
 
 # Extract the current methods rather than maintain a hand-copied Flux waveform.
-widget=(root/'src/IntegralFluxWidget.cpp').read_text()
+widget=(root/'src/integralflux/IntegralFluxWidget.cpp').read_text()
 for declaration in ('POINT_COUNT = 128;', 'PREVIEW_LUT_SIZE = 512;', 'WAVE_LINE_WIDTH = 1.4f;', 'WAVE_EDGE_PAD = 1.0f;'):
     if declaration not in widget:
         raise ValueError('Flux geometry constants changed: refresh the offline model')
@@ -104,7 +104,7 @@ def method(signature):
         depth+=(widget[end]=='{')-(widget[end]=='}')
         end+=1
     return widget[start:end]
-flux=(root/'src/IntegralFlux.cpp').read_text()
+flux=(root/'src/integralflux/IntegralFlux.cpp').read_text()
 functions=flux[flux.index('float IntegralFlux::shapeSignedForMode'):flux.index('IntegralFlux::FunctionShapeMode IntegralFlux::functionShapeModeFromParam')]
 fields='''
 struct FluxGeometry {

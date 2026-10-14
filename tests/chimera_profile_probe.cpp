@@ -1,6 +1,6 @@
 // Line protocol used by tools/chimera_phase1_vectors.py; no JSON dependency
 // enters the DSP layer. Each line is one independent profile evaluation.
-#include "ChimeraProfile.hpp"
+#include "chimera/ChimeraProfile.hpp"
 #include <iomanip>
 #include <iostream>
 #include <string>

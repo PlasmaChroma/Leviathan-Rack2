@@ -1,4 +1,4 @@
-#include "../src/CrownstepCore.hpp"
+#include "../src/crownstep/CrownstepCore.hpp"
 
 #include <chrono>
 #include <cmath>

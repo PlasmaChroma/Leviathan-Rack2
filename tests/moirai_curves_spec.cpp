@@ -1,4 +1,4 @@
-#include "MoiraiCurves.hpp"
+#include "moirai/MoiraiCurves.hpp"
 
 #include <cmath>
 #include <iostream>

@@ -1,5 +1,5 @@
 #pragma once
-#include "../src/SibylPitchView.hpp"
+#include "../src/sibyl/SibylPitchView.hpp"
 inline const char* pitchEditFixture() {
     return R"({"schemaVersion":4,"pitchSystems":{"tunings":{"t":{"kind":"equal","divisions":53,"period":{"ratio":"2/1"}},"u":{"kind":"table","period":{"ratio":"2/1"},"positions":[{"cents":0},{"cents":200},{"cents":700}]}},"scales":{"s":{"tuning":"t","steps":[0,9,17,22,31,39,48]}},"contexts":{"c":{"tuning":"t","scale":"s","anchor":{"pitchV":0}},"u":{"tuning":"u","anchor":{"pitchV":0}}},"defaultContext":"c"},"tracks":[{"id":"v","channel":0}],"patterns":{"p":{"length":4,"resolution":"1/4","steps":[{"step":0,"tuned":{"step":0}},{"step":1,"tuned":{"step":17}},{"step":2,"tuned":{"step":31}}]},"dest":{"length":4,"resolution":"1/4","pitchContext":"u","steps":[]},"l":{"length":4,"resolution":"1/4","steps":[{"step":0,"pitchV":0.58}]}},"arrangement":[{"id":"s","lengthBeats":4,"tracks":{"v":"p"}}]})";
 }

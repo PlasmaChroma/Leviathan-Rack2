@@ -1,4 +1,4 @@
-#include "../src/SibylVoicing.hpp"
+#include "../src/sibyl/SibylVoicing.hpp"
 #include <random>
 namespace {
 void testVoicing() {

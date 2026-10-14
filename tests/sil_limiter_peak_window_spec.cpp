@@ -1,4 +1,4 @@
-#include "../src/SilLimiterPeakWindow.hpp"
+#include "../src/sil/SilLimiterPeakWindow.hpp"
 
 #include <algorithm>
 #include <cstdio>

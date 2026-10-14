@@ -1,4 +1,4 @@
-#include "ChimeraPlaybackReader.hpp"
+#include "chimera/ChimeraPlaybackReader.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>

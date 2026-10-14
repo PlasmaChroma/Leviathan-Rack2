@@ -36,7 +36,7 @@ bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_module_cache"; }
 #define CHIMERA_MANUAL_CONTROL_TEST 1 // Deterministic state/ownership fixtures.
 #define CHIMERA_HEADLESS_TEST 1
-#include "../src/Chimera.cpp"
+#include "../src/chimera/Chimera.cpp"
 
 static void need(bool ok, const char* what) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", what); std::exit(1); }

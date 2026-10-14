@@ -1,4 +1,4 @@
-#include "PuffyCharacterController.hpp"
+#include "puffy/PuffyCharacterController.hpp"
 
 #include <algorithm>
 #include <cmath>

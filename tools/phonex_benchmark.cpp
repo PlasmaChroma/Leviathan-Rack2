@@ -1,5 +1,5 @@
-#include "../src/PhonexEngine.hpp"
-#include "../src/PhonexFixtures.hpp"
+#include "../src/phonex/PhonexEngine.hpp"
+#include "../src/phonex/PhonexFixtures.hpp"
 
 #include <algorithm>
 #include <array>

@@ -1,4 +1,4 @@
-#include "ChimeraWaveform.hpp"
+#include "chimera/ChimeraWaveform.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>

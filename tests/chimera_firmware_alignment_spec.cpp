@@ -1,5 +1,5 @@
-#include "ChimeraCore.hpp"
-#include "ChimeraGrains.hpp"
+#include "chimera/ChimeraCore.hpp"
+#include "chimera/ChimeraGrains.hpp"
 #include "../firmware/Morphagene/reconstruction/audited_components.hpp"
 #include <cstdio>
 #include <cstdlib>

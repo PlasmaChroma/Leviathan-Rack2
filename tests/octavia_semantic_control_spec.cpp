@@ -1,5 +1,5 @@
-#include "OctaviaSemanticControl.hpp"
-#include "SibylControl.hpp"
+#include "octavia/OctaviaSemanticControl.hpp"
+#include "sibyl/SibylControl.hpp"
 
 #include <iostream>
 #include <string>

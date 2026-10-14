@@ -14,7 +14,7 @@ import struct
 ROOT = Path(__file__).resolve().parents[1]
 VECTORS = ROOT / 'doc/Morphagene-Codex/reference_vectors.json'
 IDS = ROOT / 'tests/chimera_ids_v1.json'
-TYPES = ROOT / 'src/ChimeraTypes.hpp'
+TYPES = ROOT / 'src/chimera/ChimeraTypes.hpp'
 
 
 def check_ids() -> None:

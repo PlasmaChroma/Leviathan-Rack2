@@ -1,5 +1,5 @@
-#include "ChimeraWaveformService.hpp"
-#include "ChimeraJobs.hpp"
+#include "chimera/ChimeraWaveformService.hpp"
+#include "chimera/ChimeraJobs.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <limits>

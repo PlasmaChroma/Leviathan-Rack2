@@ -1,7 +1,7 @@
 // Offscreen backend comparison. Includes deposit passes and NanoVG flushes,
 // excludes Rack widget traversal, allocation warmup and geometry generation.
 #define PROC_HEADLESS_TEST 1
-#include "../src/Proc.cpp"
+#include "../src/proc/Proc.cpp"
 #include "../src/visual/SnapshotHistory.hpp"
 #include "preview_benchmark_utils.hpp"
 using Geometry = ProcPreviewGeometry<Proc>;

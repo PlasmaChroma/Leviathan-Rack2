@@ -1,4 +1,4 @@
-#include "SibylClockEstimator.hpp"
+#include "sibyl/SibylClockEstimator.hpp"
 
 #include <cmath>
 #include <iostream>

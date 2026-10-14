@@ -1,6 +1,6 @@
-#include "../src/ReferenceSpringEngine.hpp"
-#include "../src/HelicalContinuumEngine.hpp"
-#include "../src/DoorstopContactHelixEngine.hpp"
+#include "../src/doorstop/ReferenceSpringEngine.hpp"
+#include "../src/doorstop/HelicalContinuumEngine.hpp"
+#include "../src/doorstop/DoorstopContactHelixEngine.hpp"
 
 #include <algorithm>
 #include <cstdint>

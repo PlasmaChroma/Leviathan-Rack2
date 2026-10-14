@@ -1,5 +1,5 @@
 #pragma once
-#include "../src/SibylTuning.hpp"
+#include "../src/sibyl/SibylTuning.hpp"
 #include <cmath>
 
 inline void tuningCases() {

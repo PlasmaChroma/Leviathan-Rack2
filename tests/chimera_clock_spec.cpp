@@ -1,4 +1,4 @@
-#include "../src/ChimeraClock.hpp"
+#include "../src/chimera/ChimeraClock.hpp"
 #include <cstdio>
 #include <cstdlib>
 

@@ -45,10 +45,10 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
-#include "../src/Bifurx.hpp"
-#include "../src/BifurxWorker.hpp"
-#include "../src/Bifurx.cpp"
-#include "../src/BifurxRenderPrep.hpp"
+#include "../src/bifurx/Bifurx.hpp"
+#include "../src/bifurx/BifurxWorker.hpp"
+#include "../src/bifurx/Bifurx.cpp"
+#include "../src/bifurx/BifurxRenderPrep.hpp"
 
 using namespace bifurx;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ChimeraGeneSize.hpp"
+#include "chimera/ChimeraGeneSize.hpp"
 #include <cmath>
 #include <cstdio>
 

@@ -1,8 +1,8 @@
 #include <context.hpp>
 #include <engine/Engine.hpp>
 #undef PRIVATE
-#include "../src/Vessel.hpp"
-#include "../src/VTune.hpp"
+#include "../src/vessel/module/Vessel.hpp"
+#include "../src/vtune/VTune.hpp"
 #include "../src/vessel/SeedProfiles.hpp"
 #include "../src/vessel/RubIntensity.hpp"
 #include "../src/vessel/EnergyMeter.hpp"

@@ -1,4 +1,4 @@
-#include "../src/IrisWorkerCompletion.hpp"
+#include "../src/iris/IrisWorkerCompletion.hpp"
 
 #include <iostream>
 #include <string>

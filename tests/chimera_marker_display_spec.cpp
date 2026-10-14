@@ -1,4 +1,4 @@
-#include "ChimeraMarkerDisplay.hpp"
+#include "chimera/ChimeraMarkerDisplay.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <thread>

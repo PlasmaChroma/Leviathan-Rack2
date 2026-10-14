@@ -1,4 +1,4 @@
-#include "SibylEdit.hpp"
+#include "sibyl/SibylEdit.hpp"
 
 #include <jansson.h>
 #include <iostream>

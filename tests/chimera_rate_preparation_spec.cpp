@@ -1,5 +1,5 @@
-#include "ChimeraService.hpp"
-#include "ChimeraRateBridge.hpp"
+#include "chimera/ChimeraService.hpp"
+#include "chimera/ChimeraRateBridge.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>

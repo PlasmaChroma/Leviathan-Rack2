@@ -1,4 +1,4 @@
-#include "../src/DeepcacheThemeClassifier.hpp"
+#include "../src/deepcache/DeepcacheThemeClassifier.hpp"
 
 #include <cstdio>
 #include <fstream>

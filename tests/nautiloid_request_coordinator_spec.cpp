@@ -1,6 +1,6 @@
-#include "../src/NautiloidRequestCoordinator.hpp"
-#include "../src/NautiloidCachePolicy.hpp"
-#include "../src/NautiloidFractal.hpp"
+#include "../src/nautiloid/NautiloidRequestCoordinator.hpp"
+#include "../src/nautiloid/NautiloidCachePolicy.hpp"
+#include "../src/nautiloid/NautiloidFractal.hpp"
 
 #include <iostream>
 #include <string>

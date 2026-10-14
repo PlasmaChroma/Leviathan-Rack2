@@ -1,6 +1,6 @@
-#include "MoiraiCompiler.hpp"
-#include "MoiraiEngine.hpp"
-#include "MoiraiPresets.hpp"
+#include "moirai/MoiraiCompiler.hpp"
+#include "moirai/MoiraiEngine.hpp"
+#include "moirai/MoiraiPresets.hpp"
 
 #include <iostream>
 #include <atomic>

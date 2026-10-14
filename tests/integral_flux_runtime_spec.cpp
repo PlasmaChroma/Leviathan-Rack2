@@ -39,7 +39,7 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
-#include "../src/IntegralFlux.hpp"
+#include "../src/integralflux/IntegralFlux.hpp"
 
 namespace {
 

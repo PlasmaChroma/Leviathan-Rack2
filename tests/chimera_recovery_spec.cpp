@@ -1,5 +1,5 @@
-#include "ChimeraRecovery.hpp"
-#include "ChimeraCheckpointSession.hpp"
+#include "chimera/ChimeraRecovery.hpp"
+#include "chimera/ChimeraCheckpointSession.hpp"
 #include <system.hpp>
 #include <chrono>
 #include <cstdio>

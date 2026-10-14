@@ -1,4 +1,4 @@
-#include "../src/MandelwakeEngine.hpp"
+#include "../src/mandelwake/MandelwakeEngine.hpp"
 
 #include <array>
 #include <cmath>

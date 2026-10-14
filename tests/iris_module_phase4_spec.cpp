@@ -1,4 +1,4 @@
-#include "../src/Iris.hpp"
+#include "../src/iris/Iris.hpp"
 
 #include <chrono>
 #include <functional>

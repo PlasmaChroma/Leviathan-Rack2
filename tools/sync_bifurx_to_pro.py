@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -26,34 +27,34 @@ LEGACY_MANIFEST_NAME = ".bifurx-sync-manifest.json"
 GENERATED_ATLAS_PATH = "src/common/PanelAnchorAtlas.cpp"
 
 SOURCE_FILES = (
-    "src/Bifurx.cpp",
-    "src/BifurxDisplay.cpp",
-    "src/BifurxRenderClient.cpp",
-    "src/BifurxRenderClient.hpp",
-    "src/BifurxTypes.hpp",
-    "src/BifurxDsp.hpp",
-    "src/BifurxModule.hpp",
-    "src/BifurxDisplay.hpp",
-    "src/BifurxPreview.hpp",
-    "src/BifurxPreview.cpp",
-    "src/BifurxState.cpp",
-    "src/BifurxSpectrumNanoVG.hpp",
-    "src/BifurxSpectrumNanoVG.cpp",
-    "src/BifurxDebug.hpp",
-    "src/BifurxDebug.cpp",
-    "src/Bifurx.hpp",
-    "src/BifurxLicense.hpp",
-    "src/BifurxGL.cpp",
-    "src/BifurxInputStage.hpp",
-    "src/BifurxOutputStage.hpp",
-    "src/BifurxOversampling.hpp",
-    "src/BifurxRenderData.hpp",
-    "src/BifurxRenderPrep.cpp",
-    "src/BifurxRenderPrep.hpp",
-    "src/BifurxTransitionSmoother.hpp",
-    "src/BifurxUI.cpp",
-    "src/BifurxWorker.cpp",
-    "src/BifurxWorker.hpp",
+    "src/bifurx/Bifurx.cpp",
+    "src/bifurx/BifurxDisplay.cpp",
+    "src/bifurx/BifurxRenderClient.cpp",
+    "src/bifurx/BifurxRenderClient.hpp",
+    "src/bifurx/BifurxTypes.hpp",
+    "src/bifurx/BifurxDsp.hpp",
+    "src/bifurx/BifurxModule.hpp",
+    "src/bifurx/BifurxDisplay.hpp",
+    "src/bifurx/BifurxPreview.hpp",
+    "src/bifurx/BifurxPreview.cpp",
+    "src/bifurx/BifurxState.cpp",
+    "src/bifurx/BifurxSpectrumNanoVG.hpp",
+    "src/bifurx/BifurxSpectrumNanoVG.cpp",
+    "src/bifurx/BifurxDebug.hpp",
+    "src/bifurx/BifurxDebug.cpp",
+    "src/bifurx/Bifurx.hpp",
+    "src/bifurx/BifurxLicense.hpp",
+    "src/bifurx/BifurxGL.cpp",
+    "src/bifurx/BifurxInputStage.hpp",
+    "src/bifurx/BifurxOutputStage.hpp",
+    "src/bifurx/BifurxOversampling.hpp",
+    "src/bifurx/BifurxRenderData.hpp",
+    "src/bifurx/BifurxRenderPrep.cpp",
+    "src/bifurx/BifurxRenderPrep.hpp",
+    "src/bifurx/BifurxTransitionSmoother.hpp",
+    "src/bifurx/BifurxUI.cpp",
+    "src/bifurx/BifurxWorker.cpp",
+    "src/bifurx/BifurxWorker.hpp",
     "src/common/DebugTerminalTransport.cpp",
     "src/common/DebugTerminalTransport.hpp",
     "src/common/DebugTerminalMetrics.hpp",
@@ -61,19 +62,19 @@ SOURCE_FILES = (
     "src/common/GlLifecycleUtils.hpp",
     "src/common/GlResourceRetirement.cpp",
     "src/common/GlResourceRetirement.hpp",
-    "src/IrisSourceField.hpp",
-    "src/IrisWavetable.hpp",
+    "src/iris/IrisSourceField.hpp",
+    "src/iris/IrisWavetable.hpp",
     "src/common/MathHelpers.cpp",
     "src/common/MathHelpers.hpp",
-    "src/NautiloidColor.hpp",
-    "src/NautiloidFractal.hpp",
+    "src/nautiloid/NautiloidColor.hpp",
+    "src/nautiloid/NautiloidFractal.hpp",
     "src/common/NanoSvgRasterizer.cpp",
     "src/common/NvgGraphicsLifecycle.cpp",
     "src/common/NvgGraphicsLifecycle.hpp",
     "src/common/PanelAnchorAtlas.hpp",
     "src/common/PanelSvgUtils.cpp",
     "src/common/PanelSvgUtils.hpp",
-    "src/UndertowShape.hpp",
+    "src/undertow/UndertowShape.hpp",
     "src/theme/ThemeService.cpp",
     "src/theme/ThemeService.hpp",
     "src/theme/ThemePersistence.cpp",
@@ -181,6 +182,7 @@ LDFLAGS +=
 
 SOURCES += $(wildcard src/*.cpp)
 SOURCES += $(wildcard src/common/*.cpp)
+SOURCES += $(wildcard src/bifurx/*.cpp)
 SOURCES += $(wildcard src/visual/*.cpp)
 SOURCES += $(wildcard src/theme/*.cpp)
 
@@ -262,6 +264,11 @@ Run with `--check` to report drift without writing. Files listed in
 `Leviathan-Rack2`. Per-module ownership prevents one synchronizer from deleting
 a shared file still claimed by another module. `src/common/PanelAnchorAtlas.cpp` is
 regenerated from the union of panel SVGs in this repository.
+
+When the source layout in `Leviathan-Rack2` changes (for example moving shared files into
+`src/common/` or a module into `src/<module>/`), the Pro-owned `Makefile` and plugin sources must
+be updated too. Run `python3 tools/sync_bifurx_to_pro.py --migrate-layout` once; without it the
+synchronizer stops with an explanatory error instead of producing a broken tree.
 
 The `Makefile`, `plugin.json`, `src/plugin.cpp`, `src/plugin.hpp`, this file,
 and other Pro-only files remain owned by this repository after initial setup.
@@ -362,8 +369,8 @@ struct PreviewBuildLogTimer {
 """
 
 PLUGIN_CPP = r"""#include "plugin.hpp"
-#include "BifurxLicense.hpp"
-#include "BifurxWorker.hpp"
+#include "bifurx/BifurxLicense.hpp"
+#include "bifurx/BifurxWorker.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
 
@@ -507,6 +514,60 @@ RELEASED_MANAGED_PATHS = {
     GENERATED_ATLAS_PATH,
 }
 
+# Pro-owned files that depend on the source layout. The repository was
+# reorganized into src/common/ and per-module folders; Pro's own Makefile and
+# plugin sources predate that and are migrated only on request.
+LAYOUT_SOURCE_DIRS = ("src", "src/common", "src/bifurx", "src/visual", "src/theme")
+LAYOUT_OWNED_FILES = ("Makefile", "src/plugin.cpp", "src/plugin.hpp")
+
+# Unmanaged generated/legacy files at pre-reorganization locations. They would
+# otherwise be compiled next to their relocated copies and duplicate symbols.
+LEGACY_UNMANAGED_PATHS = ("src/PanelAnchorAtlas.cpp",)
+
+
+def moved_include_map() -> dict[str, str]:
+    """Bare header name -> include path relative to src/, for relocated files."""
+    mapping: dict[str, str] = {}
+    for relative in SOURCE_FILES:
+        if not relative.startswith("src/") or not relative.endswith((".hpp", ".h")):
+            continue
+        under_src = relative[len("src/"):]
+        if "/" in under_src:
+            mapping[under_src.rsplit("/", 1)[1]] = under_src
+    return mapping
+
+
+def migrate_pro_layout(relative: str, data: bytes) -> bytes:
+    """Return Pro-owned file content updated for the current source layout."""
+    text = data.decode("utf-8")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.replace("\r\n", "\n").split("\n")
+    if relative == "Makefile":
+        present = {
+            line.strip() for line in lines if line.strip().startswith("SOURCES +=")
+        }
+        missing = [
+            f"SOURCES += $(wildcard {directory}/*.cpp)"
+            for directory in LAYOUT_SOURCE_DIRS
+            if f"SOURCES += $(wildcard {directory}/*.cpp)" not in present
+        ]
+        if missing:
+            last = max(
+                (i for i, line in enumerate(lines) if line.strip().startswith("SOURCES +=")),
+                default=None,
+            )
+            if last is None:
+                raise RuntimeError("Pro Makefile has no SOURCES entries to extend")
+            lines[last + 1:last + 1] = missing
+    elif relative.endswith((".cpp", ".hpp")):
+        mapping = moved_include_map()
+        pattern = re.compile(r'^(\s*#\s*include\s+")([^"/]+)(")')
+        for i, line in enumerate(lines):
+            match = pattern.match(line)
+            if match and match.group(2) in mapping:
+                lines[i] = match.group(1) + mapping[match.group(2)] + match.group(3) + line[match.end():]
+    return newline.join(lines).encode("utf-8")
+
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -624,7 +685,13 @@ def initialize(destination: Path, dry_run: bool) -> list[str]:
     return changes
 
 
-def synchronize(repo_root: Path, destination: Path, init: bool, dry_run: bool) -> tuple[list[str], bool]:
+def synchronize(
+    repo_root: Path,
+    destination: Path,
+    init: bool,
+    dry_run: bool,
+    migrate_layout: bool = False,
+) -> tuple[list[str], bool]:
     if not destination.is_dir() or not (destination / ".git").exists():
         raise RuntimeError(f"destination is not an existing Git repository: {destination}")
     changes: list[str] = []
@@ -632,6 +699,23 @@ def synchronize(repo_root: Path, destination: Path, init: bool, dry_run: bool) -
         changes.extend(initialize(destination, dry_run))
     elif not (destination / "Makefile").is_file() or not (destination / "plugin.json").is_file():
         raise RuntimeError("destination plugin is not initialized; run once with --init")
+
+    for relative in LAYOUT_OWNED_FILES:
+        path = safe_path(destination, relative)
+        if not path.is_file():
+            continue
+        current = path.read_bytes()
+        migrated = migrate_pro_layout(relative, current)
+        if migrated == current:
+            continue
+        if not migrate_layout:
+            raise RuntimeError(
+                f"{relative} uses the pre-reorganization source layout; "
+                "re-run with --migrate-layout to update Pro-owned files"
+            )
+        changes.append(f"migrate {relative}")
+        if not dry_run:
+            write_atomic(path, migrated)
 
     expected = expected_files(repo_root)
     previous, previous_manifest_path = read_previous_manifest(destination)
@@ -654,6 +738,15 @@ def synchronize(repo_root: Path, destination: Path, init: bool, dry_run: bool) -
         if relative not in other_ownership
     )
     for relative in stale:
+        path = safe_path(destination, relative)
+        if path.is_file() or path.is_symlink():
+            changes.append(f"remove {relative}")
+            if not dry_run:
+                path.unlink()
+
+    for relative in LEGACY_UNMANAGED_PATHS:
+        if relative in expected or relative in other_ownership:
+            continue
         path = safe_path(destination, relative)
         if path.is_file() or path.is_symlink():
             changes.append(f"remove {relative}")
@@ -712,13 +805,18 @@ def main() -> int:
         help="destination Git repository (default: ../Leviathan-Pro)",
     )
     parser.add_argument("--init", action="store_true", help="create one-time plugin scaffold files when absent")
+    parser.add_argument(
+        "--migrate-layout",
+        action="store_true",
+        help="update Pro-owned Makefile/plugin sources for the reorganized src/ layout",
+    )
     parser.add_argument("--dry-run", action="store_true", help="report changes without writing")
     parser.add_argument("--check", action="store_true", help="report drift without writing and exit nonzero if found")
     args = parser.parse_args()
     destination = args.dest.resolve()
     dry_run = args.dry_run or args.check
     try:
-        changes, _ = synchronize(repo_root, destination, args.init, dry_run)
+        changes, _ = synchronize(repo_root, destination, args.init, dry_run, args.migrate_layout)
     except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

@@ -1,4 +1,4 @@
-#include "../src/Wyrm.hpp"
+#include "../src/wyrm/Wyrm.hpp"
 
 #include <algorithm>
 #include <cmath>

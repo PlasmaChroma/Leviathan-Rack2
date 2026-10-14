@@ -1,4 +1,4 @@
-#include "ChimeraProfile.hpp"
+#include "chimera/ChimeraProfile.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>

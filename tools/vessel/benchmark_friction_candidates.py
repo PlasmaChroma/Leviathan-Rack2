@@ -31,7 +31,7 @@ for name,(folder,variant) in variants.items():
     command=['g++','-std=c++17','-D_USE_MATH_DEFINES','-O3','-march=nehalem','-Wall','-Wextra','-Wno-unused-parameter',
              '-fno-fast-math','-fno-unsafe-math-optimizations','-I'+str(tree),'-I'+str(ROOT/'src'),
              '-I'+str(sdk/'include'),'-I'+str(sdk/'dep/include'),str(ROOT/'tools/vessel/benchmark_active_module.cpp'),
-             str(ROOT/'src/Vessel.cpp'),*map(str,sorted((tree/'vessel').glob('*.cpp'))),
+             str(ROOT/'src/vessel/module/Vessel.cpp'),*map(str,sorted((tree/'vessel').glob('*.cpp'))),
              '-L'+str(sdk),'-lRack','-Wl,-rpath,'+str(sdk),'-o',str(binary)]
     subprocess.run(command,check=True)
     binaries[name]=binary

@@ -1,6 +1,6 @@
 #include "../src/common/SpscLatestSnapshot.hpp"
-#include "../src/TemporalDeckExpanderProtocol.hpp"
-#include "../src/SilSpectrumSnapshot.hpp"
+#include "../src/temporaldeck/TemporalDeckExpanderProtocol.hpp"
+#include "../src/sil/SilSpectrumSnapshot.hpp"
 
 #include <atomic>
 #include <cstdio>

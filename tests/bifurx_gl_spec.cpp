@@ -5,7 +5,7 @@
 #define main bifurx_runtime_main
 #include "bifurx_runtime_spec.cpp"
 #undef main
-#include "../src/BifurxGL.cpp"
+#include "../src/bifurx/BifurxGL.cpp"
 bool isExtraGlValidationEnabled() { return false; }
 
 int main() {

@@ -1,6 +1,6 @@
-#include "../src/Nautiloid.hpp"
-#include "../src/Iris.hpp"
-#include "../src/Chromatide.hpp"
+#include "../src/nautiloid/Nautiloid.hpp"
+#include "../src/iris/Iris.hpp"
+#include "../src/chromatide/Chromatide.hpp"
 #include "../src/common/UiExpanderUtils.hpp"
 
 #include <chrono>

@@ -1,5 +1,5 @@
-#include "ChimeraEdit.hpp"
-#include "ChimeraPlaybackReader.hpp"
+#include "chimera/ChimeraEdit.hpp"
+#include "chimera/ChimeraPlaybackReader.hpp"
 #include <cstring>
 #include <limits>
 #include <cstdio>

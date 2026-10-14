@@ -1,5 +1,5 @@
-#include "../src/ChromatideCanvas.hpp"
-#include "../src/Chromatide.hpp"
+#include "../src/chromatide/ChromatideCanvas.hpp"
+#include "../src/chromatide/Chromatide.hpp"
 #include <iostream>
 #include <cassert>
 #include <cmath>

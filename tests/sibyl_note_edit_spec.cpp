@@ -1,5 +1,5 @@
-#include "../src/SibylNoteEdit.hpp"
-#include "../src/SibylAdoption.hpp"
+#include "../src/sibyl/SibylNoteEdit.hpp"
+#include "../src/sibyl/SibylAdoption.hpp"
 #include <cassert>
 #include <iostream>
 using namespace sibyl;

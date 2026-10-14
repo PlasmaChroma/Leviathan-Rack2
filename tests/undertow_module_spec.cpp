@@ -40,7 +40,7 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
-#include "../src/Undertow.cpp"
+#include "../src/undertow/Undertow.cpp"
 
 namespace {
 

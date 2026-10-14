@@ -40,7 +40,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
 #define SIL_HEADLESS_TEST 1
-#include "../src/Sil.cpp"
+#include "../src/sil/Sil.cpp"
 
 static void require(bool ok, const char* message) {
     if (!ok) { std::cerr << message << "\n"; std::exit(1); }

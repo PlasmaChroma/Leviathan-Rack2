@@ -1,7 +1,7 @@
 // Compile the identical harness against retained and current Sibyl sources.
 // Measurements include the process call and timer overhead, excluding UI/audio devices.
 #define SIBYL_MODULE_TEST
-#include "Sibyl.cpp"
+#include "sibyl/Sibyl.cpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>

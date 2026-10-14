@@ -1,4 +1,4 @@
-#include "SibylAdoption.hpp"
+#include "sibyl/SibylAdoption.hpp"
 
 #include <cmath>
 #include <iostream>

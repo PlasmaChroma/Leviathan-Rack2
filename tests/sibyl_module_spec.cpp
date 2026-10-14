@@ -1,5 +1,5 @@
 #define SIBYL_MODULE_TEST
-#include "../src/Sibyl.cpp"
+#include "../src/sibyl/Sibyl.cpp"
 
 #include <cmath>
 #include <cstdlib>

@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckSettings.hpp"
+#include "../src/temporaldeck/TemporalDeckSettings.hpp"
 #include <cstdlib>
 #include <iostream>
 

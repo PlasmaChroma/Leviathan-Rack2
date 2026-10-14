@@ -1,4 +1,4 @@
-#include "../src/Cantor.hpp"
+#include "../src/cantor/Cantor.hpp"
 
 #include <cmath>
 #include <iostream>

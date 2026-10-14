@@ -1,4 +1,4 @@
-#include "../src/DoorstopEngineRouter.hpp"
+#include "../src/doorstop/DoorstopEngineRouter.hpp"
 #include <iostream>
 int main(){
 	static_assert(int(doorstop::EngineMode::ReferenceV1)==0,"V1 changed"); static_assert(int(doorstop::EngineMode::Legacy)==1,"legacy changed"); static_assert(int(doorstop::EngineMode::ReferenceV2)==2,"V2 changed"); static_assert(int(doorstop::EngineMode::ReferenceV3)==3,"V3 changed"); static_assert(int(doorstop::EngineMode::ReferenceV4)==4,"V4 not appended");

@@ -1,5 +1,5 @@
-#include "ChimeraRateBridge.hpp"
-#include "ChimeraCore.hpp"
+#include "chimera/ChimeraRateBridge.hpp"
+#include "chimera/ChimeraCore.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

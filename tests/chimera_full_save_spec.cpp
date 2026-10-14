@@ -1,4 +1,4 @@
-#include "ChimeraBundle.hpp"
+#include "chimera/ChimeraBundle.hpp"
 #include <system.hpp>
 #include <chrono>
 #include <cstdio>

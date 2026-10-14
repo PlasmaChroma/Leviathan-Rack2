@@ -1,7 +1,7 @@
-#include "../src/IrisWavetable.hpp"
-#include "../src/IrisIO.hpp"
-#include "../src/IrisPolyphony.hpp"
-#include "../src/NautiloidFractal.hpp"
+#include "../src/iris/IrisWavetable.hpp"
+#include "../src/iris/IrisIO.hpp"
+#include "../src/iris/IrisPolyphony.hpp"
+#include "../src/nautiloid/NautiloidFractal.hpp"
 
 #define QOI_IMPLEMENTATION
 #include "../src/third_party/qoi.h"

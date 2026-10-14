@@ -1,9 +1,9 @@
-#include "../src/PhonexEngine.hpp"
-#include "../src/PhonexFixtures.hpp"
-#include "../src/PhonexRom.hpp"
-#include "../src/PhonexPronunciation.hpp"
-#include "../src/PhonexSequenceCompiler.hpp"
-#include "../src/PhonexSequenceMailbox.hpp"
+#include "../src/phonex/PhonexEngine.hpp"
+#include "../src/phonex/PhonexFixtures.hpp"
+#include "../src/phonex/PhonexRom.hpp"
+#include "../src/phonex/PhonexPronunciation.hpp"
+#include "../src/phonex/PhonexSequenceCompiler.hpp"
+#include "../src/phonex/PhonexSequenceMailbox.hpp"
 
 #include <algorithm>
 #include <array>

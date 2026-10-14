@@ -4,8 +4,8 @@
 #include "callback_bridge.hpp"
 #include "flux_geometry.hpp"
 #include <cstring>
-#include "UndertowShape.hpp"
-#include "WavePreviewSimplifier.hpp"
+#include "undertow/UndertowShape.hpp"
+#include "wavepreview/WavePreviewSimplifier.hpp"
 
 static lumin::HostStrokeBridge* liveBridge=nullptr;
 using Points=std::vector<Vec>;

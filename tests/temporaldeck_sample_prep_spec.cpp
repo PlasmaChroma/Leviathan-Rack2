@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckSamplePrep.hpp"
+#include "../src/temporaldeck/TemporalDeckSamplePrep.hpp"
 
 #include <cmath>
 #include <iostream>

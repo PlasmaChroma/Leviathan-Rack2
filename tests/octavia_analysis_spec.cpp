@@ -1,4 +1,4 @@
-#include "OctaviaAnalysis.hpp"
+#include "octavia/OctaviaAnalysis.hpp"
 
 #include <cmath>
 #include <iostream>

@@ -1,4 +1,4 @@
-#include "ChimeraJobs.hpp"
+#include "chimera/ChimeraJobs.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>

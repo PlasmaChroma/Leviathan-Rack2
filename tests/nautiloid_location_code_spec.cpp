@@ -1,5 +1,5 @@
-#include "../src/NautiloidLocationCode.hpp"
-#include "../src/NautiloidFractal.hpp"
+#include "../src/nautiloid/NautiloidLocationCode.hpp"
+#include "../src/nautiloid/NautiloidFractal.hpp"
 
 #include <array>
 #include <cmath>

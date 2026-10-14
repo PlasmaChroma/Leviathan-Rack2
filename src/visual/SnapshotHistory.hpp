@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../WavePreviewTracer.hpp"
+#include "../wavepreview/WavePreviewTracer.hpp"
 
 namespace visual_assets {
 

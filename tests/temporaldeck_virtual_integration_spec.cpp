@@ -1,6 +1,6 @@
-#include "../src/TemporalDeckEngine.hpp"
-#include "../src/TemporalDeckPlatterInput.hpp"
-#include "../src/TemporalDeckTransportControl.hpp"
+#include "../src/temporaldeck/TemporalDeckEngine.hpp"
+#include "../src/temporaldeck/TemporalDeckPlatterInput.hpp"
+#include "../src/temporaldeck/TemporalDeckTransportControl.hpp"
 
 #include <cmath>
 #include <iostream>

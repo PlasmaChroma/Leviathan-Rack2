@@ -13,7 +13,7 @@ bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_cache"; }
 #define CHIMERA_HEADLESS_TEST 1
 #define CHIMERA_MANUAL_CONTROL_TEST 1
-#include "../src/Chimera.cpp"
+#include "../src/chimera/Chimera.cpp"
 
 // Rack-linked optimized callback benchmark. Includes the prepared host-rate
 // adapter and active 48 kHz Slice, but not Rack's graph scheduler or GUI.

@@ -1,4 +1,4 @@
-#include "ChimeraService.hpp"
+#include "chimera/ChimeraService.hpp"
 #include <cstdio>
 #include <cstdlib>
 

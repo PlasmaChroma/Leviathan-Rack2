@@ -1,4 +1,4 @@
-#include "../src/SibylEvolution.hpp"
+#include "../src/sibyl/SibylEvolution.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>

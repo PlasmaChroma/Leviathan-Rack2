@@ -1,5 +1,5 @@
 // Phase 0 harness now compiles Phase 1's real Rack-independent type contract.
-#include "ChimeraTypes.hpp"
+#include "chimera/ChimeraTypes.hpp"
 #include <type_traits>
 
 static_assert(std::is_trivially_copyable<chimera::StereoFrame>::value, "frame must be POD");

@@ -12,7 +12,12 @@ import hashlib
 import json
 from pathlib import Path
 
-from sync_bifurx_to_pro import expected_files, generated_atlas
+from sync_bifurx_to_pro import (
+    LAYOUT_OWNED_FILES,
+    expected_files,
+    generated_atlas,
+    migrate_pro_layout,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "build" / "premium-validation"
@@ -38,6 +43,11 @@ def stage(pro_root: Path, drm_dir: Path, rack_dir: Path) -> Path:
 
     payload = expected_files(ROOT)
     payload.update({p: (pro_root / p).read_bytes() for p in PRO_FILES})
+    # Staging validates the current layout even before Pro's own files have
+    # been migrated; the Pro repository itself is never modified here.
+    for relative in LAYOUT_OWNED_FILES:
+        if relative in payload:
+            payload[relative] = migrate_pro_layout(relative, payload[relative])
     # Premium validation always exercises licensing, even if the caller passes
     # the local Pro testing switch. Set it before Pro evaluates its Makefile.
     payload["Makefile"] = b'override PRO_DRM := 1\n' + payload["Makefile"]

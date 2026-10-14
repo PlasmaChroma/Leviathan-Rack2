@@ -1,6 +1,6 @@
 from pathlib import Path
 root=Path(__file__).resolve().parents[3]
-src=(root/'src/Proc.cpp').read_text()
+src=(root/'src/proc/Proc.cpp').read_text()
 (root/'build/tools/flux_shader').mkdir(parents=True,exist_ok=True)
 def extract(sig):
  a=src.index(sig);b=src.index('{',a);d=1;e=b+1

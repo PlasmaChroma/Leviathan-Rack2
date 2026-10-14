@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../NautiloidFractal.hpp"
+#include "../nautiloid/NautiloidFractal.hpp"
 #include "../plugin.hpp"
 #include "../theme/ThemeTypes.hpp"
 

@@ -40,7 +40,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
 #define PROC_HEADLESS_TEST 1
-#include "../src/Proc.cpp"
+#include "../src/proc/Proc.cpp"
 
 namespace {
 

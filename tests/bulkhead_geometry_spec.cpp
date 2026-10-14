@@ -1,4 +1,4 @@
-#include "../src/BulkheadGeometry.hpp"
+#include "../src/bulkhead/BulkheadGeometry.hpp"
 
 #include <cmath>
 #include <iostream>

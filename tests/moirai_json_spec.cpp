@@ -1,5 +1,5 @@
-#include "MoiraiJSON.hpp"
-#include "MoiraiPresets.hpp"
+#include "moirai/MoiraiJSON.hpp"
+#include "moirai/MoiraiPresets.hpp"
 
 #include <iostream>
 

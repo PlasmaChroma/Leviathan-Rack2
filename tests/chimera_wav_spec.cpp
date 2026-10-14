@@ -1,4 +1,4 @@
-#include "ChimeraWav.hpp"
+#include "chimera/ChimeraWav.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

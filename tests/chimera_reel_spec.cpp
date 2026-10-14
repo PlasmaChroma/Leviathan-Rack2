@@ -1,4 +1,4 @@
-#include "ChimeraReel.hpp"
+#include "chimera/ChimeraReel.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <new>

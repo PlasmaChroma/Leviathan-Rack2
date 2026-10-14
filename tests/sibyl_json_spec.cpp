@@ -1,4 +1,4 @@
-#include "SibylJSON.hpp"
+#include "sibyl/SibylJSON.hpp"
 #include <jansson.h>
 #include <cstdlib>
 

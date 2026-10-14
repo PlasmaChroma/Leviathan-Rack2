@@ -1,4 +1,4 @@
-#include "../src/ChromatideCanvas.hpp"
+#include "../src/chromatide/ChromatideCanvas.hpp"
 #include "../src/third_party/qoi.h"
 #include <cassert>
 #include <cstdlib>

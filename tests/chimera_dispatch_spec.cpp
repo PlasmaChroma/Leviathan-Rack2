@@ -17,7 +17,7 @@ bool isDragonKingDebugEnabled() { return false; }
 static std::string checkpointRoot;
 std::string leviathanPluginUserRootPath() { return checkpointRoot; }
 #define CHIMERA_HEADLESS_TEST 1
-#include "../src/Chimera.cpp"
+#include "../src/chimera/Chimera.cpp"
 
 static void need(bool value, const char* message) {
     if (!value) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }

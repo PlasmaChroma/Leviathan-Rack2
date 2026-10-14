@@ -1,6 +1,6 @@
 // Uses the live Proc geometry/stroke implementation, with its actual DSP math.
 #define PROC_HEADLESS_TEST 1
-#include "../src/Proc.cpp"
+#include "../src/proc/Proc.cpp"
 #include <chrono>
 #include <thread>
 #include <cstdio>

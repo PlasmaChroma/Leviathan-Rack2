@@ -1,5 +1,5 @@
 #include "../src/plugin.hpp"
-#include "../src/BifurxLicense.hpp"
+#include "../src/bifurx/BifurxLicense.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -18,7 +18,7 @@ ModuleTeardownTimer::ModuleTeardownTimer(const char* name) : moduleName(name) {}
 void ModuleTeardownTimer::begin(int) {}
 ModuleTeardownTimer::~ModuleTeardownTimer() {}
 
-#include "../src/Bifurx.cpp"
+#include "../src/bifurx/Bifurx.cpp"
 
 int main() {
 	int failures = 0;

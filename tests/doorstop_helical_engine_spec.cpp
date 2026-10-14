@@ -1,5 +1,5 @@
-#include "../src/HelicalContinuumEngine.hpp"
-#include "../src/DoorstopEngineRouter.hpp"
+#include "../src/doorstop/HelicalContinuumEngine.hpp"
+#include "../src/doorstop/DoorstopEngineRouter.hpp"
 
 #include <algorithm>
 #include <array>

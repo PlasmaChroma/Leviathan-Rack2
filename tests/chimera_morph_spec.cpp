@@ -1,5 +1,5 @@
-#include "ChimeraGrains.hpp"
-#include "ChimeraOptionsText.hpp"
+#include "chimera/ChimeraGrains.hpp"
+#include "chimera/ChimeraOptionsText.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <limits>

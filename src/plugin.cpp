@@ -1,6 +1,6 @@
 #include "plugin.hpp"
-#include "BifurxWorker.hpp"
-#include "ChimeraService.hpp"
+#include "bifurx/BifurxWorker.hpp"
+#include "chimera/ChimeraService.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
 

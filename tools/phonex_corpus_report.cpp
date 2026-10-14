@@ -1,5 +1,5 @@
-#include "../src/PhonexRom.hpp"
-#include "../src/PhonexSequenceCompiler.hpp"
+#include "../src/phonex/PhonexRom.hpp"
+#include "../src/phonex/PhonexSequenceCompiler.hpp"
 
 #include <iomanip>
 #include <iostream>

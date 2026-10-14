@@ -1,5 +1,5 @@
-#include "../src/LongPlayStreamEngine.hpp"
-#include "../src/TemporalDeckEngine.hpp"
+#include "../src/temporaldeck/LongPlayStreamEngine.hpp"
+#include "../src/temporaldeck/TemporalDeckEngine.hpp"
 
 #include <chrono>
 #include <cmath>

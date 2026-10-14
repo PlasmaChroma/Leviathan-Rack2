@@ -139,7 +139,7 @@ Leviathan-Pro has a separate in-memory service because it is a separate plugin. 
 
 ### Theme invalidation and Deep Cache
 
-[DeepcacheThemeIdentity.hpp](src/DeepcacheThemeIdentity.hpp) hashes rendered theme values rather than process-local generations or preset names. Persistent preview identities must remain meaningful after restart; do not replace them with generation counters.
+[DeepcacheThemeIdentity.hpp](src/deepcache/DeepcacheThemeIdentity.hpp) hashes rendered theme values rather than process-local generations or preset names. Persistent preview identities must remain meaningful after restart; do not replace them with generation counters.
 
 Theme invalidation applies to the exact plugin slug **`Leviathan`**. Leviathan-Pro's raster previews are intentionally excluded. Other plugins do not need Leviathan theme metadata to use the cache.
 
@@ -167,7 +167,7 @@ Branding helpers support mirrored Perfect Wave anchors (`BRANDING_WAVE_LEFT_RAST
 | [AdaptiveVisualUpdate.hpp](src/render/AdaptiveVisualUpdate.hpp) | UI frame-pressure tracking and staggered update gates |
 | [SettledContourFramebuffer.hpp](src/visual/SettledContourFramebuffer.hpp) | Caching contours separately from live markers/text/history |
 | [SnapshotHistory.hpp](src/visual/SnapshotHistory.hpp) | Retained tracer history using Rack-owned slot framebuffers |
-| [WavePreviewTracer.hpp](src/WavePreviewTracer.hpp), [WavePreviewSimplifier.hpp](src/WavePreviewSimplifier.hpp), [WavePreviewGeometryKey.hpp](src/WavePreviewGeometryKey.hpp) | Reusable waveform-preview geometry work |
+| [WavePreviewTracer.hpp](src/wavepreview/WavePreviewTracer.hpp), [WavePreviewSimplifier.hpp](src/wavepreview/WavePreviewSimplifier.hpp), [WavePreviewGeometryKey.hpp](src/wavepreview/WavePreviewGeometryKey.hpp) | Reusable waveform-preview geometry work |
 
 Keep static or slowly changing artwork in cached layers and live markers, interaction, and status in appropriate overlays. Mark caches dirty for changes that affect their pixels, size, scale, or graphics context. Avoid repainting a full panel merely because a small live indicator moved.
 

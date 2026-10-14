@@ -1,4 +1,4 @@
-#include "OctaviaJobControl.hpp"
+#include "octavia/OctaviaJobControl.hpp"
 
 #include <atomic>
 #include <iostream>

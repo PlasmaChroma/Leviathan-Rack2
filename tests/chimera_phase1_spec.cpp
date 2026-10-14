@@ -1,4 +1,4 @@
-#include "ChimeraCore.hpp"
+#include "chimera/ChimeraCore.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

@@ -1,7 +1,7 @@
-diff --git a/src/IntegralFluxWidget.cpp b/src/IntegralFluxWidget.cpp
+diff --git a/src/integralflux/IntegralFluxWidget.cpp b/src/integralflux/IntegralFluxWidget.cpp
 index fa0dfd5..064ee4c 100644
---- a/src/IntegralFluxWidget.cpp
-+++ b/src/IntegralFluxWidget.cpp
+--- a/src/integralflux/IntegralFluxWidget.cpp
++++ b/src/integralflux/IntegralFluxWidget.cpp
 @@ -11,6 +11,7 @@
  #include "visual/SettledContourFramebuffer.hpp"
  #include "visual/SnapshotHistory.hpp"
