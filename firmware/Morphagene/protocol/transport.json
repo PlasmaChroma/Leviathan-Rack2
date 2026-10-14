@@ -1,0 +1,38 @@
+{
+  "wav_frames": 5909088,
+  "wav_seconds": 123.106,
+  "carrier_start_sample": 48000,
+  "symbol_count": 732636,
+  "maximum_phase_error_degrees": 0.0,
+  "preamble_zero_bytes": 1508,
+  "trailer_zero_bytes": 1515,
+  "payload_stream_start": 1516,
+  "payload_stream_end": 181644,
+  "wav_sha256": "dc6cb0731ef21725c83c6d24c7cd2e98ad7c6ffccc55071ec3bf0c8e318894a8",
+  "archive_sha256": "a653d8c67f8061fe6b2ffaf6a978584c02a8219eda2a0b690ca0f1272d380a36",
+  "flash_sha256": "44037eb2cf24b5fc411135e487a6fa226498a8478db981659bb53341cb967609",
+  "flash_base": "0x8020000",
+  "flash_bytes": 164864,
+  "packet_count": 644,
+  "packet_payload_bytes": 256,
+  "crc_valid_packets": 644,
+  "stream_bytes": 183159,
+  "modulation": "QPSK",
+  "samples_per_symbol": 8,
+  "sample_rate": 48000,
+  "carrier_hz": 6000,
+  "phase_dibits": {
+    "45": "10",
+    "135": "00",
+    "225": "01",
+    "315": "11"
+  },
+  "packing": "MSB first",
+  "crc": "IEEE CRC-32 / zlib.crc32, stored big-endian",
+  "missing": [
+    "resident bootloader",
+    "per-device calibration/settings",
+    "live RAM",
+    "SD card recordings"
+  ]
+}

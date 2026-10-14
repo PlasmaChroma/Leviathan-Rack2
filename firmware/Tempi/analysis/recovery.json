@@ -1,0 +1,66 @@
+{
+  "source": "tempi71.wav",
+  "source_size": 13254574,
+  "source_sha256": "dfea58ec1694b63f645dc85af62d0971077942b281ae445c04ebaa2bebcbd09c",
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "sample_rate": 40000,
+  "samples": 6627265,
+  "duration_seconds": 165.681625,
+  "halfcycle_length_counts": {
+    "350": 1394,
+    "10": 521267,
+    "3": 295565
+  },
+  "payload_ascii_bytes": 102104,
+  "payload_sha256": "fee378dcb92fa2f85bf4ef8bdb35f12b61920612576f9aca302ab46bcf00a5c8",
+  "data_bits": 816832,
+  "records": 2323,
+  "record_types": {
+    "0": 2320,
+    "4": 2,
+    "1": 1
+  },
+  "recovered_bytes": 37110,
+  "regions": [
+    {
+      "start": "0x000800",
+      "end_inclusive": "0x0097DF",
+      "length": 36832,
+      "file": "tempi71_000800_0097df.bin",
+      "sha256": "bb758bd099e200cf1f806b1ba274aa47f2375f7874422a66ccb55d22418daf04"
+    },
+    {
+      "start": "0x00FD40",
+      "end_inclusive": "0x00FE3F",
+      "length": 256,
+      "file": "tempi71_00fd40_00fe3f.bin",
+      "sha256": "7bb18a582c1e84a28b8ad45f4e9f65068762b6c88672a72e88fcced18fee2410"
+    },
+    {
+      "start": "0x200000",
+      "end_inclusive": "0x200007",
+      "length": 8,
+      "file": "tempi71_200000_200007.bin",
+      "sha256": "12a3ae445661ce5dee78d0650d33362dec29c4f82af05e7e57fb595bbbacf0ca"
+    },
+    {
+      "start": "0x300000",
+      "end_inclusive": "0x30000D",
+      "length": 14,
+      "file": "tempi71_300000_30000d.bin",
+      "sha256": "ca74e464836082c7e58dd218a7953e60a979e1a223d73fdcaf1f402aa5c32907"
+    }
+  ],
+  "data_bursts": 583,
+  "data_burst_bit_length_counts": {
+    "1408": 579,
+    "704": 1,
+    "352": 1,
+    "448": 1,
+    "96": 1
+  },
+  "pcm_round_trip_exact": true,
+  "missing_bootloader_range": "0x000000..0x0007FF",
+  "warning": "FF-filled flash gaps are NOT recovered bytes. Presence mask is authoritative."
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "start": "0x0092B8",
+    "end": "0x009317",
+    "analyst_label": "runtime initialization block",
+    "hex": "40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 01 01 01 01 01 01 ff 00 66 c0 63 ff ff 01 ff ff 01 3f 01 04 09 01 01 00"
+  },
+  {
+    "start": "0x009442",
+    "end": "0x009481",
+    "analyst_label": "tempo-control integer table",
+    "hex": "40 0d 03 00 20 bf 02 00 d0 fb 01 00 80 38 01 00 70 11 01 00 40 9c 00 00 e0 2e 00 00 10 27 00 00 34 21 00 00 70 17 00 00 88 13 00 00 ac 0d 00 00 c4 09 00 00 d6 06 00 00 e8 03 00 00 fa 00 00 00"
+  },
+  {
+    "start": "0x009482",
+    "end": "0x0094BF",
+    "analyst_label": "runtime initialization block",
+    "hex": "40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 40 1f 00 00 ff 00 00 00 00 00 01 01 01 01 01 01 01 01 01 01 01 01 01 00 00 00 00 00 00 02 2d 00 00 ff ff ff ff 01 00 64 ff 01"
+  },
+  {
+    "start": "0x00977E",
+    "end": "0x00978F",
+    "analyst_label": "runtime initialization block",
+    "hex": "03 04 05 02 01 00 01 02 05 04 03 00 0a 0a 0a 0a 0a 0a"
+  },
+  {
+    "start": "0x0097AC",
+    "end": "0x0097CD",
+    "analyst_label": "runtime initialization blocks",
+    "hex": "ff ff 00 00 ff ff 00 00 ff ff 00 00 01 0a 0a 0a 0a 0a 0a 01 01 01 01 01 01 01 01 01 01 01 01 01 01 00"
+  },
+  {
+    "start": "0x00FD40",
+    "end": "0x00FD4C",
+    "analyst_label": "constant prefix",
+    "hex": "ff 00 ff 00 ff 00 ff 00 ff 00 ff 00 00"
+  },
+  {
+    "start": "0x00FD4D",
+    "end": "0x00FDAC",
+    "analyst_label": "factory phase bank A",
+    "hex": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 02 03 04 05 00 00 00 00 00 00"
+  },
+  {
+    "start": "0x00FDAD",
+    "end": "0x00FE0C",
+    "analyst_label": "factory ratio bank A",
+    "hex": "00 00 00 00 00 00 00 fc f4 e4 c4 84 fc f8 f0 e8 d8 d0 00 fc f8 f4 f0 ec fc f4 ec e4 dc d4 f8 f0 e8 e0 d8 d0 fc f8 f0 e4 d0 b0 00 04 0c 1c 3c 7c 04 08 10 18 28 30 00 04 08 0c 10 14 04 0c 14 1c 24 2c 08 10 18 20 28 30 04 08 10 1c 30 50 04 08 0c fc f8 f4 fe fe fe fe fe fe fc fb fa f9 f8 f7"
+  },
+  {
+    "start": "0x00FE0D",
+    "end": "0x00FE18",
+    "analyst_label": "channel button masks",
+    "hex": "04 00 20 00 00 80 02 00 40 00 00 40"
+  },
+  {
+    "start": "0x00FE19",
+    "end": "0x00FE3F",
+    "analyst_label": "LED / bit masks and remaining constants",
+    "hex": "af 00 50 00 40 00 80 00 04 00 08 00 20 00 00 20 00 80 02 00 00 02 00 08 10 00 00 10 00 40 01 00 00 01 00 04 60 00 00"
+  }
+]

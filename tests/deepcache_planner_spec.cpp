@@ -1,5 +1,5 @@
-#include "../src/DeepcachePlanner.hpp"
-#include "../src/DeepcacheBrowserLogic.hpp"
+#include "../src/deepcache/DeepcachePlanner.hpp"
+#include "../src/deepcache/DeepcacheBrowserLogic.hpp"
 
 #include <iostream>
 #include <chrono>
@@ -56,6 +56,20 @@ TestResult testDeduplicationAndInvalidEntries() {
 	        "requests=" + std::to_string(result.requests.size()) +
 	            " duplicates=" + std::to_string(result.duplicateCount) +
 	            " invalid=" + std::to_string(result.invalidCount)};
+}
+
+TestResult testIndexedCandidatesAreNotConstructionMisses() {
+	PreviewPlanInput input;
+	input.generation = 43;
+	input.visibleModelIndices.insert(2);
+	input.indexedModelIndices.insert(0);
+	input.indexedModelIndices.insert(2);
+	auto result = deepcache::planPreviewRequests(descriptors(), input);
+	const bool pass = result.requests.size() == 2 &&
+	                  result.requests[0].modelIndex == 1 &&
+	                  result.requests[1].modelIndex == 3;
+	return {"indexed disk hits are excluded from construction planning", pass,
+	        "planned=" + std::to_string(result.requests.size())};
 }
 
 TestResult testGenerationAndPromotion() {
@@ -267,7 +281,7 @@ std::vector<deepcache::BrowserModelRecord> browserRecords() {
 TestResult testBrowserFilterParity() {
 	const auto records = browserRecords();
 	deepcache::BrowserFilter filter;
-	filter.brand = "Alpha Brand";
+	filter.brands = {"Alpha Brand"};
 	filter.tagIds = {1, 2};
 	filter.favoritesOnly = true;
 	deepcache::normalizeBrowserFilter(filter);
@@ -287,6 +301,30 @@ TestResult testBrowserFilterParity() {
 	        "combined=" + std::to_string(combined) + " tagAlias=" + std::to_string(tagAliasSearch)};
 }
 
+TestResult testBrowserMultiBrandFilter() {
+	const auto records = browserRecords();
+	deepcache::BrowserFilter filter;
+	const bool allBrands = deepcache::browserModelMatches(records[0], filter) &&
+	                       deepcache::browserModelMatches(records[1], filter) &&
+	                       deepcache::browserModelMatches(records[2], filter);
+	filter.brands = {"Alpha Brand", "Zeta Brand"};
+	const bool selectedBrands = deepcache::browserModelMatches(records[0], filter) &&
+	                            deepcache::browserModelMatches(records[1], filter) &&
+	                            deepcache::browserModelMatches(records[2], filter);
+	filter.brands.erase("Alpha Brand");
+	const bool uncheckedBrand = !deepcache::browserModelMatches(records[0], filter) &&
+	                            !deepcache::browserModelMatches(records[1], filter) &&
+	                            deepcache::browserModelMatches(records[2], filter);
+	filter.brands.clear();
+	const bool clearedToAll = deepcache::browserModelMatches(records[0], filter) &&
+	                          deepcache::browserModelMatches(records[1], filter) &&
+	                          deepcache::browserModelMatches(records[2], filter);
+	return {"browser supports inclusive multi-brand filtering with empty meaning all",
+	        allBrands && selectedBrands && uncheckedBrand && clearedToAll,
+	        "all=" + std::to_string(allBrands) + " selected=" + std::to_string(selectedBrands) +
+	          " unchecked=" + std::to_string(uncheckedBrand) + " cleared=" + std::to_string(clearedToAll)};
+}
+
 TestResult testDisplayEligibilityIsFilterIndependent() {
 	auto records = browserRecords();
 	const bool normal = deepcache::browserModelIsDisplayEligible(records[0]);
@@ -300,6 +338,27 @@ TestResult testDisplayEligibilityIsFilterIndependent() {
 	        normal && hidden && disabled && blocked,
 	        "normal=" + std::to_string(normal) + " hidden=" + std::to_string(hidden) +
 	          " disabled=" + std::to_string(disabled) + " blocked=" + std::to_string(blocked)};
+}
+
+TestResult testBrowserUnhideIncludesUnavailableModels() {
+	auto records = browserRecords();
+	records[1].enabled = false;
+	records[2].whitelisted = false;
+	deepcache::BrowserFilter filter;
+	const bool excludedByDefault = !deepcache::browserModelMatches(records[1], filter) &&
+	                               !deepcache::browserModelMatches(records[2], filter) &&
+	                               !deepcache::browserModelMatches(records[3], filter);
+	filter.unhide = true;
+	const bool allIncluded = deepcache::browserModelMatches(records[1], filter) &&
+	                         deepcache::browserModelMatches(records[2], filter) &&
+	                         deepcache::browserModelMatches(records[3], filter);
+	filter.favoritesOnly = true;
+	const bool otherFiltersStillApply = !deepcache::browserModelMatches(records[1], filter) &&
+	                                    deepcache::browserModelMatches(records[3], filter);
+	return {"browser Unhide includes hidden, disabled, and non-whitelisted models",
+	        excludedByDefault && allIncluded && otherFiltersStillApply,
+	        "default=" + std::to_string(excludedByDefault) + " unhide=" + std::to_string(allIncluded) +
+	          " composed=" + std::to_string(otherFiltersStillApply)};
 }
 
 TestResult testBrowserSortParity() {
@@ -324,6 +383,7 @@ int main() {
 	const std::vector<TestResult> tests = {
 		testPriorityOrdering(),
 		testDeduplicationAndInvalidEntries(),
+		testIndexedCandidatesAreNotConstructionMisses(),
 		testGenerationAndPromotion(),
 		testStableCacheKey(),
 		testCanonicalPreviewRenderScale(),
@@ -333,7 +393,9 @@ int main() {
 		testMemoryBackendLifecycle(),
 		testWorkerPauseAndReplacement(),
 		testBrowserFilterParity(),
+		testBrowserMultiBrandFilter(),
 		testDisplayEligibilityIsFilterIndependent(),
+		testBrowserUnhideIncludesUnavailableModels(),
 		testBrowserSortParity(),
 	};
 

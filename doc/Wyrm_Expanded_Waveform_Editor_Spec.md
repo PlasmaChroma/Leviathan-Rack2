@@ -1,5 +1,9 @@
 # Wyrm Expanded Waveform Editor Overlay
 
+> Historical implementation specification. The animated `WyrmSand` system was
+> removed in August 2026; references to its shared state and widget names below
+> describe the architecture at the time this overlay was originally designed.
+
 **Implementation specification for Codex / Terra 5.6**  
 **Target:** Leviathan VCV Rack plugin, current Wyrm implementation  
 **Feature type:** UI-only waveform editor expansion  

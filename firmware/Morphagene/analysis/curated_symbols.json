@@ -1,0 +1,164 @@
+[
+  {
+    "name": "Reset_Handler",
+    "address": "0x8021414",
+    "kind": "function",
+    "evidence": "Copy RAM initializer, zero BSS, then system init/main"
+  },
+  {
+    "name": "system_initialize",
+    "address": "0x802145c",
+    "kind": "function",
+    "evidence": "Clock/peripheral register setup"
+  },
+  {
+    "name": "main",
+    "address": "0x8022b68",
+    "kind": "function",
+    "evidence": "Main entry from reset"
+  },
+  {
+    "name": "audio_dma_configure",
+    "address": "0x8025b04",
+    "kind": "function",
+    "evidence": "Receives TX, RX and halfword count"
+  },
+  {
+    "name": "audio_dma_irq",
+    "address": "0x8025b9c",
+    "kind": "function",
+    "evidence": "Calls DSP for two halves of 32-halfword buffers"
+  },
+  {
+    "name": "cv_dma_irq",
+    "address": "0x8025d58",
+    "kind": "function",
+    "evidence": "Converts 32-float half buffers to 12-bit CV words"
+  },
+  {
+    "name": "control_adc_irq",
+    "address": "0x80263e4",
+    "kind": "function",
+    "evidence": "Six moving sums, 16/16/64/64/4/64 conversions"
+  },
+  {
+    "name": "dsp_initialize",
+    "address": "0x8026730",
+    "kind": "function",
+    "evidence": "State, rate defaults and SDRAM initialization"
+  },
+  {
+    "name": "splice_insert_variant",
+    "address": "0x8026c80",
+    "kind": "function",
+    "evidence": "Sorted splice-marker insertion; not generic audio initialization"
+  },
+  {
+    "name": "process_audio_block",
+    "address": "0x8027518",
+    "kind": "function",
+    "evidence": "Large DSP entry; original odd entry 0x08027519 includes Thumb flag"
+  },
+  {
+    "name": "options",
+    "address": "0x200012a8",
+    "kind": "data",
+    "evidence": "Parsed runtime options, outside startup initializer"
+  },
+  {
+    "name": "adc_sos",
+    "address": "0x20021c68",
+    "kind": "data",
+    "evidence": "16-conversion average"
+  },
+  {
+    "name": "adc_morph",
+    "address": "0x20021c6c",
+    "kind": "data",
+    "evidence": "16-conversion average"
+  },
+  {
+    "name": "adc_organize",
+    "address": "0x20021c70",
+    "kind": "data",
+    "evidence": "64-conversion average"
+  },
+  {
+    "name": "adc_varispeed",
+    "address": "0x20021c74",
+    "kind": "data",
+    "evidence": "64-conversion average"
+  },
+  {
+    "name": "adc_slide",
+    "address": "0x20021c78",
+    "kind": "data",
+    "evidence": "4-conversion average"
+  },
+  {
+    "name": "adc_gene_size",
+    "address": "0x20021c7c",
+    "kind": "data",
+    "evidence": "64-conversion average"
+  },
+  {
+    "name": "whole_splice_flag",
+    "address": "0x20021e14",
+    "kind": "data",
+    "evidence": "Distinct endpoint mode"
+  },
+  {
+    "name": "morph_launch_factor",
+    "address": "0x20021f48",
+    "kind": "data",
+    "evidence": "Not the playback increment"
+  },
+  {
+    "name": "gene_duration",
+    "address": "0x20021f90",
+    "kind": "data",
+    "evidence": "Output-time duration in ordinary mode"
+  },
+  {
+    "name": "morph_smoothed",
+    "address": "0x20022084",
+    "kind": "data",
+    "evidence": "0.01 per-frame smoother"
+  },
+  {
+    "name": "rate_target",
+    "address": "0x200220e8",
+    "kind": "data",
+    "evidence": "Base Vari-Speed target"
+  },
+  {
+    "name": "rng_state",
+    "address": "0x200220f8",
+    "kind": "data",
+    "evidence": "32-bit LCG"
+  },
+  {
+    "name": "reel_left_pointer",
+    "address": "0x200220fc",
+    "kind": "data",
+    "evidence": "Initialized to 0xd0000000"
+  },
+  {
+    "name": "reel_right_pointer",
+    "address": "0x20022100",
+    "kind": "data",
+    "evidence": "Initialized to 0xd1000000"
+  },
+  {
+    "name": "morph_chord_ratios",
+    "address": "0x20022124",
+    "kind": "data",
+    "evidence": "Three live ratios, not options struct"
+  },
+  {
+    "name": "splice_markers",
+    "address": "0x2002215c",
+    "kind": "data",
+    "evidence": "Sorted sample offsets; full bounds/state policies still under analysis"
+  }
+]

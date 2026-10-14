@@ -1,0 +1,3523 @@
+{
+  "header": {
+    "type": 3,
+    "machine": 40,
+    "version": 1,
+    "entry": 8528,
+    "phoff": 52,
+    "shoff": 106068,
+    "flags": 83887104,
+    "ehsize": 52,
+    "phentsize": 32,
+    "phnum": 6,
+    "shentsize": 40,
+    "shnum": 34,
+    "shstrndx": 33
+  },
+  "sections": [
+    {
+      "nameoff": 0,
+      "type": 0,
+      "flags": 0,
+      "addr": 0,
+      "offset": 0,
+      "size": 0,
+      "link": 0,
+      "info": 0,
+      "align": 0,
+      "entsize": 0,
+      "name": ""
+    },
+    {
+      "nameoff": 27,
+      "type": 7,
+      "flags": 2,
+      "addr": 244,
+      "offset": 244,
+      "size": 36,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".note.gnu.build-id"
+    },
+    {
+      "nameoff": 46,
+      "type": 1879048182,
+      "flags": 2,
+      "addr": 280,
+      "offset": 280,
+      "size": 972,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".gnu.hash"
+    },
+    {
+      "nameoff": 56,
+      "type": 11,
+      "flags": 2,
+      "addr": 1252,
+      "offset": 1252,
+      "size": 2304,
+      "link": 4,
+      "info": 3,
+      "align": 4,
+      "entsize": 16,
+      "name": ".dynsym"
+    },
+    {
+      "nameoff": 64,
+      "type": 3,
+      "flags": 2,
+      "addr": 3556,
+      "offset": 3556,
+      "size": 2534,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".dynstr"
+    },
+    {
+      "nameoff": 72,
+      "type": 1879048191,
+      "flags": 2,
+      "addr": 6090,
+      "offset": 6090,
+      "size": 288,
+      "link": 3,
+      "info": 0,
+      "align": 2,
+      "entsize": 2,
+      "name": ".gnu.version"
+    },
+    {
+      "nameoff": 85,
+      "type": 1879048190,
+      "flags": 2,
+      "addr": 6380,
+      "offset": 6380,
+      "size": 32,
+      "link": 4,
+      "info": 1,
+      "align": 4,
+      "entsize": 0,
+      "name": ".gnu.version_r"
+    },
+    {
+      "nameoff": 100,
+      "type": 9,
+      "flags": 2,
+      "addr": 6412,
+      "offset": 6412,
+      "size": 1280,
+      "link": 3,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.dyn"
+    },
+    {
+      "nameoff": 109,
+      "type": 9,
+      "flags": 66,
+      "addr": 7692,
+      "offset": 7692,
+      "size": 320,
+      "link": 3,
+      "info": 18,
+      "align": 4,
+      "entsize": 8,
+      "name": ".rel.plt"
+    },
+    {
+      "nameoff": 118,
+      "type": 1,
+      "flags": 6,
+      "addr": 8012,
+      "offset": 8012,
+      "size": 12,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".init"
+    },
+    {
+      "nameoff": 113,
+      "type": 1,
+      "flags": 6,
+      "addr": 8024,
+      "offset": 8024,
+      "size": 500,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".plt"
+    },
+    {
+      "nameoff": 124,
+      "type": 1,
+      "flags": 6,
+      "addr": 8528,
+      "offset": 8528,
+      "size": 14332,
+      "link": 0,
+      "info": 0,
+      "align": 8,
+      "entsize": 0,
+      "name": ".text"
+    },
+    {
+      "nameoff": 130,
+      "type": 1,
+      "flags": 6,
+      "addr": 22860,
+      "offset": 22860,
+      "size": 8,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".fini"
+    },
+    {
+      "nameoff": 136,
+      "type": 1,
+      "flags": 2,
+      "addr": 22868,
+      "offset": 22868,
+      "size": 7040,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".rodata"
+    },
+    {
+      "nameoff": 144,
+      "type": 1,
+      "flags": 2,
+      "addr": 29908,
+      "offset": 29908,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".eh_frame"
+    },
+    {
+      "nameoff": 154,
+      "type": 14,
+      "flags": 3,
+      "addr": 98040,
+      "offset": 32504,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".init_array"
+    },
+    {
+      "nameoff": 166,
+      "type": 15,
+      "flags": 3,
+      "addr": 98044,
+      "offset": 32508,
+      "size": 4,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".fini_array"
+    },
+    {
+      "nameoff": 178,
+      "type": 6,
+      "flags": 3,
+      "addr": 98048,
+      "offset": 32512,
+      "size": 256,
+      "link": 4,
+      "info": 0,
+      "align": 4,
+      "entsize": 8,
+      "name": ".dynamic"
+    },
+    {
+      "nameoff": 187,
+      "type": 1,
+      "flags": 3,
+      "addr": 98304,
+      "offset": 32768,
+      "size": 212,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 4,
+      "name": ".got"
+    },
+    {
+      "nameoff": 192,
+      "type": 1,
+      "flags": 3,
+      "addr": 98516,
+      "offset": 32980,
+      "size": 64,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".data"
+    },
+    {
+      "nameoff": 198,
+      "type": 8,
+      "flags": 3,
+      "addr": 98580,
+      "offset": 33044,
+      "size": 208092,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".bss"
+    },
+    {
+      "nameoff": 203,
+      "type": 1,
+      "flags": 48,
+      "addr": 0,
+      "offset": 33044,
+      "size": 35,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 1,
+      "name": ".comment"
+    },
+    {
+      "nameoff": 212,
+      "type": 1879048195,
+      "flags": 0,
+      "addr": 0,
+      "offset": 33079,
+      "size": 49,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".ARM.attributes"
+    },
+    {
+      "nameoff": 228,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 33128,
+      "size": 32,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_aranges"
+    },
+    {
+      "nameoff": 243,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 33160,
+      "size": 21070,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_info"
+    },
+    {
+      "nameoff": 255,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 54230,
+      "size": 1291,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_abbrev"
+    },
+    {
+      "nameoff": 269,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 55521,
+      "size": 9929,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_line"
+    },
+    {
+      "nameoff": 281,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 65452,
+      "size": 2160,
+      "link": 0,
+      "info": 0,
+      "align": 4,
+      "entsize": 0,
+      "name": ".debug_frame"
+    },
+    {
+      "nameoff": 294,
+      "type": 1,
+      "flags": 48,
+      "addr": 0,
+      "offset": 67612,
+      "size": 5265,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 1,
+      "name": ".debug_str"
+    },
+    {
+      "nameoff": 305,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 72877,
+      "size": 20291,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_loc"
+    },
+    {
+      "nameoff": 316,
+      "type": 1,
+      "flags": 0,
+      "addr": 0,
+      "offset": 93168,
+      "size": 1984,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".debug_ranges"
+    },
+    {
+      "nameoff": 1,
+      "type": 2,
+      "flags": 0,
+      "addr": 0,
+      "offset": 95152,
+      "size": 7024,
+      "link": 32,
+      "info": 298,
+      "align": 4,
+      "entsize": 16,
+      "name": ".symtab"
+    },
+    {
+      "nameoff": 9,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 102176,
+      "size": 3562,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".strtab"
+    },
+    {
+      "nameoff": 17,
+      "type": 3,
+      "flags": 0,
+      "addr": 0,
+      "offset": 105738,
+      "size": 330,
+      "link": 0,
+      "info": 0,
+      "align": 1,
+      "entsize": 0,
+      "name": ".shstrtab"
+    }
+  ],
+  "symbols": [
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "raise",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__cxa_finalize",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "printf",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fopen",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "nanosleep",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "inlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "geteuid",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "stderr",
+      "value": 0,
+      "size": 0,
+      "type": 1,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fread",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "strerror",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "open",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "mmap",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fprintf",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "posix_memalign",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "__errno_location",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "fclose",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "inlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "dsp_add",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "munmap",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "s_signal",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_domainsignalin",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "class_addmethod",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "close",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_pad",
+      "value": 13436,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peri_read_nb",
+      "value": 12224,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_write_read_rs",
+      "value": 19528,
+      "size": 664,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_clk",
+      "value": 98540,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_setTriggerOut",
+      "value": 9880,
+      "size": 20,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_bsc0",
+      "value": 98552,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_init",
+      "value": 20932,
+      "size": 768,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set_pud",
+      "value": 18724,
+      "size": 272,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_bsc1",
+      "value": 98556,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_transfern",
+      "value": 15296,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set_eds_multi",
+      "value": 12852,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_fsel",
+      "value": 12452,
+      "size": 76,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "main_out_stereo_tilde_perform",
+      "value": 8824,
+      "size": 428,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_setDataMode",
+      "value": 14240,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_begin",
+      "value": 13840,
+      "size": 200,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "main_out_stereo_tilde_new",
+      "value": 9396,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_write_multi",
+      "value": 13612,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_eds_multi",
+      "value": 12776,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pwm_set_data",
+      "value": 20736,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_st",
+      "value": 98560,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_write_mask",
+      "value": 13652,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_fen",
+      "value": 12964,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_get_pud",
+      "value": 13708,
+      "size": 132,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set",
+      "value": 12528,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfern",
+      "value": 16868,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_transfer",
+      "value": 14264,
+      "size": 244,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_ren",
+      "value": 12920,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peripherals",
+      "value": 98524,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set_pad",
+      "value": 13476,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_delayMicroseconds",
+      "value": 18500,
+      "size": 224,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pwm_set_range",
+      "value": 20600,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_write",
+      "value": 15368,
+      "size": 228,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_setRevLed",
+      "value": 9952,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peripherals_size",
+      "value": 98528,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "wndArray",
+      "value": 98612,
+      "size": 208060,
+      "type": 1,
+      "bind": 1,
+      "section": 20,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pwm_set_mode",
+      "value": 20424,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_end",
+      "value": 14040,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_multi",
+      "value": 12632,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_begin",
+      "value": 17076,
+      "size": 164,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_CalcClockDivider",
+      "value": 15868,
+      "size": 108,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_setClockDivider",
+      "value": 14160,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_setClockDivider",
+      "value": 15976,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_pudclk",
+      "value": 18996,
+      "size": 84,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_aren",
+      "value": 13228,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_read_register_rs",
+      "value": 19080,
+      "size": 448,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfer",
+      "value": 16880,
+      "size": 196,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_setFwdLed",
+      "value": 9900,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_setBitOrder",
+      "value": 14144,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio",
+      "value": 98532,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "shiftFilter",
+      "value": 10056,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_chipSelect",
+      "value": 15308,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_fen",
+      "value": 13008,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peri_set_bits",
+      "value": 12408,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_aren",
+      "value": 13272,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "getOnsetModeName",
+      "value": 9728,
+      "size": 152,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_write",
+      "value": 17456,
+      "size": 368,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "main_out_stereo_tilde_dsp",
+      "value": 9252,
+      "size": 108,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_setSlaveAddress",
+      "value": 17288,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_write",
+      "value": 13596,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_len",
+      "value": 13140,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peri_read",
+      "value": 12160,
+      "size": 64,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_regbase",
+      "value": 11956,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_writenb",
+      "value": 16096,
+      "size": 240,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "main_out_stereo_tilde_free",
+      "value": 9360,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peri_write_nb",
+      "value": 12360,
+      "size": 48,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi0",
+      "value": 98548,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_lev",
+      "value": 12656,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "strikeFilter",
+      "value": 10288,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi1",
+      "value": 98568,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "makingWndArray",
+      "value": 10404,
+      "size": 1172,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_read",
+      "value": 17824,
+      "size": 532,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_hen",
+      "value": 13052,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_set_debug",
+      "value": 12132,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "captureFilter",
+      "value": 10172,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pwm_set_clock",
+      "value": 20224,
+      "size": 200,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfernb",
+      "value": 16336,
+      "size": 532,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_eds",
+      "value": 12716,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_afen",
+      "value": 13316,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_st_delay",
+      "value": 20192,
+      "size": 32,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_begin",
+      "value": 15596,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "_setPlusLed",
+      "value": 10004,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_set_baudrate",
+      "value": 17416,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pwm",
+      "value": 98536,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_end",
+      "value": 15772,
+      "size": 96,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "main_out_stereo_tilde_setup",
+      "value": 11576,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_pads",
+      "value": 98544,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux",
+      "value": 98564,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peri_write",
+      "value": 12280,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "getModeName",
+      "value": 9532,
+      "size": 196,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_afen",
+      "value": 13360,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_writenb",
+      "value": 14940,
+      "size": 356,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_pud",
+      "value": 13404,
+      "size": 32,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_setClockDivider",
+      "value": 17312,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_i2c_end",
+      "value": 17240,
+      "size": 48,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_st_read",
+      "value": 18356,
+      "size": 144,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_peripherals_base",
+      "value": 98576,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_setChipSelectPolarity",
+      "value": 15332,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_transfernb",
+      "value": 14508,
+      "size": 432,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_len",
+      "value": 13184,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set_eds",
+      "value": 12812,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "malloc_aligned",
+      "value": 20872,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_aux_spi_write",
+      "value": 15992,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_ren",
+      "value": 12876,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_close",
+      "value": 21700,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_delay",
+      "value": 13512,
+      "size": 84,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr",
+      "value": 12568,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_clr_hen",
+      "value": 13096,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_version",
+      "value": 12148,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_gpio_set_multi",
+      "value": 12608,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "bcm2835_spi_set_speed_hz",
+      "value": 14184,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".dynsym"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/8/../../../arm-linux-gnueabihf/crti.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "call_weak_fn",
+      "value": 8528,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "/usr/lib/gcc/arm-linux-gnueabihf/8/../../../arm-linux-gnueabihf/crtn.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "deregister_tm_clones",
+      "value": 8564,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "register_tm_clones",
+      "value": 8632,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "value": 8712,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "completed.10783",
+      "value": 98580,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "__do_global_dtors_aux_fini_array_entry",
+      "value": 98044,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 16,
+      "table": ".symtab"
+    },
+    {
+      "name": "frame_dummy",
+      "value": 8816,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__frame_dummy_init_array_entry",
+      "value": 98040,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 15,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo~.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "SAW",
+      "value": 22868,
+      "size": 2060,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "GAUSS",
+      "value": 24928,
+      "size": 2060,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "SQUARE",
+      "value": 26988,
+      "size": 2060,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "pVal.9051",
+      "value": 98520,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "pVal.9056",
+      "value": 98521,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "pVal.9061",
+      "value": 98522,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_class",
+      "value": 98584,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "time.9052",
+      "value": 98588,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "time.9057",
+      "value": 98592,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "time.9062",
+      "value": 98596,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_close.part.4",
+      "value": 11752,
+      "size": 84,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "mapmem.constprop.5",
+      "value": 11836,
+      "size": 120,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_pud.part.1",
+      "value": 12336,
+      "size": 24,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "CSWTCH.158",
+      "value": 29252,
+      "size": 3,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_byte_reverse_table",
+      "value": 29256,
+      "size": 256,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "CSWTCH.159",
+      "value": 29512,
+      "size": 12,
+      "type": 1,
+      "bind": 0,
+      "section": 13,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_bit_order",
+      "value": 98572,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "debug",
+      "value": 98600,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "pud_type_rpi4",
+      "value": 98601,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "pud_compat_setting",
+      "value": 98602,
+      "size": 1,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "spi1_speed",
+      "value": 98604,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "i2c_byte_wait_us",
+      "value": 98608,
+      "size": 4,
+      "type": 1,
+      "bind": 0,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "_udivsi3.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": ".udivsi3_skip_div0_test",
+      "value": 21744,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shift",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "_divsi3.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": ".divsi3_skip_div0_test",
+      "value": 22276,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shift",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "_dvmd_lnx.o",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "crtstuff.c",
+      "value": 0,
+      "size": 0,
+      "type": 4,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__FRAME_END__",
+      "value": 29908,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 14,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_uidiv",
+      "value": 21744,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_fini",
+      "value": 22860,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 12,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idivmod",
+      "value": 22812,
+      "size": 32,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_ldiv0",
+      "value": 22844,
+      "size": 16,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__udivsi3",
+      "value": 21744,
+      "size": 492,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__dso_handle",
+      "value": 98516,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "__divsi3",
+      "value": 22268,
+      "size": 544,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idiv0",
+      "value": 22844,
+      "size": 16,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_DYNAMIC",
+      "value": 98048,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_uidivmod",
+      "value": 22236,
+      "size": 32,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__TMC_END__",
+      "value": 98580,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "_GLOBAL_OFFSET_TABLE_",
+      "value": 98304,
+      "size": 0,
+      "type": 1,
+      "bind": 0,
+      "section": 65521,
+      "table": ".symtab"
+    },
+    {
+      "name": "__aeabi_idiv",
+      "value": 22268,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_init",
+      "value": 8012,
+      "size": 0,
+      "type": 2,
+      "bind": 0,
+      "section": 9,
+      "table": ".symtab"
+    },
+    {
+      "name": "gensym",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_begin",
+      "value": 15596,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "raise@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_setDataMode",
+      "value": 14240,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_hen",
+      "value": 13096,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_st_read",
+      "value": 18356,
+      "size": 144,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_write",
+      "value": 17456,
+      "size": 368,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__cxa_finalize@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "captureFilter",
+      "value": 10172,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_lev",
+      "value": 12656,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_pudclk",
+      "value": 18996,
+      "size": 84,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_deregisterTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_len",
+      "value": 13140,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_ren",
+      "value": 12920,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pads",
+      "value": 98544,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "printf@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "fopen@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_version",
+      "value": 12148,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_fen",
+      "value": 13008,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pwm_set_range",
+      "value": 20600,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peri_read",
+      "value": 12160,
+      "size": 64,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_setFwdLed",
+      "value": 9900,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set",
+      "value": 12528,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "pd_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "nanosleep@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "malloc_aligned",
+      "value": 20872,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pwm_set_mode",
+      "value": 20424,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr",
+      "value": 12568,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_st",
+      "value": 98560,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set_multi",
+      "value": 12608,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux",
+      "value": 98564,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_bsc0",
+      "value": 98552,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_pud",
+      "value": 13404,
+      "size": 32,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "makingWndArray",
+      "value": 10404,
+      "size": 1172,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_transfern",
+      "value": 15296,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_setClockDivider",
+      "value": 14160,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_new",
+      "value": 9396,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "inlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "_setRevLed",
+      "value": 9952,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peripherals_size",
+      "value": 98528,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "strikeFilter",
+      "value": 10288,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pwm_set_clock",
+      "value": 20224,
+      "size": 200,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_aren",
+      "value": 13228,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_setClockDivider",
+      "value": 17312,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_clk",
+      "value": 98540,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_write_mask",
+      "value": 13652,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peripherals",
+      "value": 98524,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "geteuid@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi0",
+      "value": 98548,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "stderr@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 1,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_end",
+      "value": 17240,
+      "size": 48,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peri_write",
+      "value": 12280,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_close",
+      "value": 21700,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfern",
+      "value": 16868,
+      "size": 12,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set_eds",
+      "value": 12812,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_fen",
+      "value": 12964,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_setClockDivider",
+      "value": 15976,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_pad",
+      "value": 13436,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_setPlusLed",
+      "value": 10004,
+      "size": 52,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fread@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_perform",
+      "value": 8824,
+      "size": 428,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_eds_multi",
+      "value": 12776,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peripherals_base",
+      "value": 98576,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_write_read_rs",
+      "value": 19528,
+      "size": 664,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_end",
+      "value": 14040,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "strerror@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_delay",
+      "value": 13512,
+      "size": 84,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "shiftFilter",
+      "value": 10056,
+      "size": 116,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "__gmon_start__",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_setSlaveAddress",
+      "value": 17288,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "open@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfernb",
+      "value": 16336,
+      "size": 532,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_multi",
+      "value": 12632,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_set_speed_hz",
+      "value": 14184,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_write_multi",
+      "value": 13612,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "mmap@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_setChipSelectPolarity",
+      "value": 15332,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set_eds_multi",
+      "value": 12852,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_setTriggerOut",
+      "value": 9880,
+      "size": 20,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_begin",
+      "value": 17076,
+      "size": 164,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_end",
+      "value": 15772,
+      "size": 96,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pwm_set_data",
+      "value": 20736,
+      "size": 136,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fprintf@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peri_set_bits",
+      "value": 12408,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "posix_memalign@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "__errno_location@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "wndArray",
+      "value": 98612,
+      "size": 208060,
+      "type": 1,
+      "bind": 1,
+      "section": 20,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_set_debug",
+      "value": 12132,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_get_pud",
+      "value": 13708,
+      "size": 132,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "getModeName",
+      "value": 9532,
+      "size": 196,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_transfernb",
+      "value": 14508,
+      "size": 432,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_chipSelect",
+      "value": 15308,
+      "size": 24,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_set_baudrate",
+      "value": 17416,
+      "size": 40,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_write",
+      "value": 13596,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set_pad",
+      "value": 13476,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_dsp",
+      "value": 9252,
+      "size": 108,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_setBitOrder",
+      "value": 14144,
+      "size": 16,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_read",
+      "value": 17824,
+      "size": 532,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_regbase",
+      "value": 11956,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "fclose@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_bsc1",
+      "value": 98556,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_afen",
+      "value": 13360,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "outlet_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "inlet_free",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_eds",
+      "value": 12716,
+      "size": 60,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "dsp_add",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_afen",
+      "value": 13316,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "munmap@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_pwm",
+      "value": 98536,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio",
+      "value": 98532,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_writenb",
+      "value": 16096,
+      "size": 240,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_write",
+      "value": 15992,
+      "size": 104,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_free",
+      "value": 9360,
+      "size": 36,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_new",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_fsel",
+      "value": 12452,
+      "size": 76,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "s_signal",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peri_read_nb",
+      "value": 12224,
+      "size": 56,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_hen",
+      "value": 13052,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_init",
+      "value": 20932,
+      "size": 768,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_write",
+      "value": 15368,
+      "size": 228,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_domainsignalin",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_ren",
+      "value": 12876,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi1",
+      "value": 98568,
+      "size": 4,
+      "type": 1,
+      "bind": 1,
+      "section": 19,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_delayMicroseconds",
+      "value": 18500,
+      "size": 224,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_writenb",
+      "value": 14940,
+      "size": 356,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_peri_write_nb",
+      "value": 12360,
+      "size": 48,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "_ITM_registerTMCloneTable",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 2,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_transfer",
+      "value": 14264,
+      "size": 244,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_st_delay",
+      "value": 20192,
+      "size": 32,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_CalcClockDivider",
+      "value": 15868,
+      "size": 108,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "class_addmethod",
+      "value": 0,
+      "size": 0,
+      "type": 0,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_aren",
+      "value": 13272,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_spi_begin",
+      "value": 13840,
+      "size": 200,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "close@@GLIBC_2.4",
+      "value": 0,
+      "size": 0,
+      "type": 2,
+      "bind": 1,
+      "section": 0,
+      "table": ".symtab"
+    },
+    {
+      "name": "getOnsetModeName",
+      "value": 9728,
+      "size": 152,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "main_out_stereo_tilde_setup",
+      "value": 11576,
+      "size": 176,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_aux_spi_transfer",
+      "value": 16880,
+      "size": 196,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_clr_len",
+      "value": 13184,
+      "size": 44,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_gpio_set_pud",
+      "value": 18724,
+      "size": 272,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    },
+    {
+      "name": "bcm2835_i2c_read_register_rs",
+      "value": 19080,
+      "size": 448,
+      "type": 2,
+      "bind": 1,
+      "section": 11,
+      "table": ".symtab"
+    }
+  ]
+}

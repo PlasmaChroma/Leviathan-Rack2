@@ -1,0 +1,110 @@
+
+#ARB
+/*
+    Instruō arbhar V2 Configuration
+    ------------------------------------------------------------------
+    Preset Name: arbhar Accumulative Recording 
+    Config generated on: 2025-02-11 19:05:51
+    ------------------------------------------------------------------
+    arbhar's user interface has been developed with live performance in mind, giving direct and immediate control over all parameters of the granular playback engine. However, there are various audio-processing parameters, as well as control approaches, that might not need immediate influence. Nevertheless, these parameters allow for changes to arbhar's configuration that will enable particular workflow and performance approaches.
+
+    This preset configuration tool outlines these parameters in the [ details ] drop-downs, that give an overview of the possible parameter settings.
+    In order to generate the configuration and saving the preset file to use with the arbhar, ensure to generate the code at the bottom of this page and to download the preset file.
+
+    Please note that a valid arbhar preset file has to have the #ARB identification at the beginning of the file (identical to the identification at the top of this file).
+
+    <em>Some parameters are accessed via button and knob combinations. These button and knob combinations will be referred to as <b>PARAM_TEMPORARY</b> throughout this configuration file.</em>
+
+*/
+
+{
+    /* Preset Name: */
+    PRESET_NAME: "arbhar Accumulative Recording"
+    
+    /* Load Configuration: Presets, Layers, and Scenes */
+    PARAMETER: LoadConfiguration: 1
+
+    /* Mono and Stereo Input Modes */
+    PARAMETER: InputMode: 0
+
+    /* Analogue Emulation Mode */
+    PARAMETER: AnalogEmulation: 1
+
+    /* Phase Switch on Output 2 */
+    PARAMETER: PhaseSwitch: 0
+
+    /* Capture Modes: Momentary, Latching, and Retrigger */
+    PARAMETER: CaptureCVMode: 1
+
+    /* Capture Button Modes: Latching or Momentary */
+    PARAMETER: CaptureButtonMode: 0
+
+    /* Activate Capture On Button Up */
+    PARAMETER: ActivateCaptureOnButtonUp: 0
+
+    /* Accumulative Capture Mode */
+    PARAMETER: AccumulativeCaptureMode: 1
+
+    /* Link Accumulative Capture and Button Mode: */
+    PARAMETER: LinkAccumulativeRecordingCaptureAsGate: 0
+
+    /* Onset Control Modes */
+    PARAMETER: OnsetMode: 4
+
+    /* Strike Button to Trigger Signal */
+    PARAMETER: StrikeButtonToTrigger: 0
+
+    /* Trigger Delay On Strike Input */
+    PARAMETER: StrikeCVDelay: 10
+
+    /* Scan and Follow Mode */
+    PARAMETER: FollowMode: 0
+
+    /* Follow Mode Speed Control */
+    PARAMETER: FollowSpeedDirection: 1
+
+    /* Follow Mode Scan Offset */
+    PARAMETER: FollowScanOffset: 0
+
+    /* Follow Mode Scan Offset and Speed Control */
+    PARAMETER: FollowPositionOffsetWithScanCV: 1
+
+    /* Follow Mode Looping */
+    PARAMETER: FollowLoop: 1
+
+    /* Follow Mode Loop Length */
+    PARAMETER: FollowSetLoopLengthWithHold: 1
+
+    /* Random Timing of Grains */
+    PARAMETER: RandomTimingWithRandomIntensity: 1
+
+    /* Random Amplitude of Grains */
+    PARAMETER: RandomAmpWithRandomIntensity: 0
+
+    /* Mod CV Input Modes */
+    PARAMETER: ModCV: 3
+
+    /* Reverb Reset */
+    PARAMETER: ReverbReset: 0
+
+    /* Panning Default Value */
+    PARAMETER: PanningDefaultValueInPerCent: 0
+
+    /* Reverb Default Value */
+    PARAMETER: ReverbDefaultValueInPerCent: 0
+
+    /* Delay Default Value */
+    PARAMETER: DelayDefaultValueInPerCent: 0
+
+    /* Effect Order */
+    PARAMETER: EffectOrder: 0
+
+    /* Centre Frequency of Wavetable Mode */
+    PARAMETER: WavetableCentreFrequency: 130.813
+
+    /* Quantised Random Pitch Deviation Table */
+    PARAMETER: QuantiseTable: 1 -2 2 -1 3 -4 4 -3 5 -7 6 -6 7 -5 8 -9 9 -8 10 -11 11 -10 12 -12
+
+}
+    
+    

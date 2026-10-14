@@ -1,0 +1,1652 @@
+{
+  "status": "Live pilot confirmed; current update path slower, state boundary dominates",
+  "captures": {
+    "integral_flux_draw_1_20260910_183832_0.csv": {
+      "full": {
+        "schema_version": 1,
+        "source": "C:\\tools\\msys64\\home\\Plasm\\Leviathan\\doc\\benchmarks\\lumin-function-live-20260910\\integral_flux_draw_1_20260910_183832_0.csv",
+        "sha256": "9f1c6e66be3f49944e195820f37e0c267c74c1dfe2bd4eb215cad386376f08d4",
+        "module_id": "1979052068",
+        "instance_id": "1",
+        "selection": {
+          "start_row_inclusive": 0,
+          "end_row_exclusive": null,
+          "first_row": 0,
+          "last_row": 1234,
+          "rows": 1235
+        },
+        "settings": {
+          "preview_render_mode": [
+            0.0
+          ],
+          "preview_tracer_enabled": [
+            1.0
+          ],
+          "preview_tracer_mode": [
+            2.0
+          ],
+          "halo_nanovg_forced": [
+            0.0
+          ],
+          "lumen_preview_adapter": [
+            1.0
+          ],
+          "ch1_function_requested": [
+            0.0,
+            1.0
+          ],
+          "ch4_function_requested": [
+            0.0,
+            1.0
+          ]
+        },
+        "cpu_timings_us": {
+          "total_draw_us": {
+            "samples": 1235,
+            "p50": 282.0,
+            "p95": 985.68,
+            "p99": 1234.8840000000007,
+            "max": 173908.406
+          },
+          "module_widget_draw_us": {
+            "samples": 1235,
+            "p50": 276.5,
+            "p95": 976.42,
+            "p99": 1212.672000000002,
+            "max": 173904.5
+          },
+          "debug_submit_us": {
+            "samples": 1235,
+            "p50": 0.3,
+            "p95": 0.6,
+            "p99": 21.35200000000018,
+            "max": 112.1
+          },
+          "debug_overlay_us": {
+            "samples": 1235,
+            "p50": 4.2,
+            "p95": 8.0,
+            "p99": 11.2,
+            "max": 144.6
+          },
+          "gear_draw_us": {
+            "samples": 1235,
+            "p50": 12.9,
+            "p95": 20.429999999999996,
+            "p99": 30.366000000000007,
+            "max": 2047.2
+          },
+          "eclipse_draw_us": {
+            "samples": 1235,
+            "p50": 4.1,
+            "p95": 7.1,
+            "p99": 10.732000000000017,
+            "max": 4819.5
+          },
+          "eclipse_shadow_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "aperture_draw_us": {
+            "samples": 1235,
+            "p50": 40.3,
+            "p95": 104.21999999999998,
+            "p99": 129.69400000000007,
+            "max": 4982.8
+          },
+          "linear_point_draw_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 15.1
+          },
+          "shape_glyph_draw_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 125.2
+          },
+          "plasma_switch_draw_us": {
+            "samples": 1235,
+            "p50": 4.5,
+            "p95": 74.7,
+            "p99": 99.69800000000002,
+            "max": 1867.6
+          },
+          "preview_draw_us": {
+            "samples": 1235,
+            "p50": 35.5,
+            "p95": 648.8199999999999,
+            "p99": 821.2940000000001,
+            "max": 173702.016
+          },
+          "ch1_preview_draw_us": {
+            "samples": 1235,
+            "p50": 20.2,
+            "p95": 459.46,
+            "p99": 562.698,
+            "max": 171779.703
+          },
+          "ch4_preview_draw_us": {
+            "samples": 1235,
+            "p50": 11.9,
+            "p95": 259.73,
+            "p99": 451.5100000000019,
+            "max": 1921.8
+          },
+          "preview_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 18.9
+          },
+          "ch1_preview_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 6.6
+          },
+          "ch4_preview_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 12.3
+          },
+          "plasma_switch_shadow_us": {
+            "samples": 1235,
+            "p50": 1.6,
+            "p95": 2.6,
+            "p99": 4.0,
+            "max": 407.7
+          },
+          "plasma_switch_image_ensure_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 1.2,
+            "p99": 1.4,
+            "max": 1246.8
+          },
+          "plasma_switch_image_paint_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 2.5,
+            "p99": 3.1,
+            "max": 7.4
+          },
+          "plasma_switch_body_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 6.5,
+            "p99": 8.3,
+            "max": 23.1
+          },
+          "plasma_switch_orb_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 14.9,
+            "p99": 20.732000000000017,
+            "max": 31.7
+          },
+          "halo_gl_surface_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 16.329999999999995,
+            "p99": 20.694000000000074,
+            "max": 32772.203
+          },
+          "halo_nanovg_surface_draw_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "halo_center_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "halo_cap_reflection_framebuffer_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "history_draw_us": {
+            "samples": 1235,
+            "p50": 0.6,
+            "p95": 66.43999999999997,
+            "p99": 128.54400000000027,
+            "max": 701.6
+          },
+          "contour_draw_us": {
+            "samples": 1235,
+            "p50": 4.4,
+            "p95": 580.5199999999999,
+            "p99": 691.7,
+            "max": 173673.7
+          },
+          "ch1_history_draw_us": {
+            "samples": 1235,
+            "p50": 0.4,
+            "p95": 41.73,
+            "p99": 78.49000000000012,
+            "max": 515.9
+          },
+          "ch1_contour_draw_us": {
+            "samples": 1235,
+            "p50": 2.6,
+            "p95": 391.0499999999996,
+            "p99": 486.52600000000007,
+            "max": 171762.9
+          },
+          "ch4_history_draw_us": {
+            "samples": 1235,
+            "p50": 0.2,
+            "p95": 24.75999999999999,
+            "p99": 47.48800000000015,
+            "max": 701.3
+          },
+          "ch4_contour_draw_us": {
+            "samples": 1235,
+            "p50": 1.6,
+            "p95": 215.91999999999993,
+            "p99": 371.484000000001,
+            "max": 1910.8
+          },
+          "halo_step_surface_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 264.82,
+            "p99": 335.6500000000002,
+            "max": 59845.902
+          },
+          "ch1_function_capture_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 218.13999999999993,
+            "p99": 307.58000000000027,
+            "max": 543.6
+          },
+          "ch1_function_setup_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 4.6,
+            "p99": 8.5,
+            "max": 23.3
+          },
+          "ch1_function_target_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 12.629999999999995,
+            "p99": 22.3,
+            "max": 326.5
+          },
+          "ch1_function_shader_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 18.439999999999962,
+            "p99": 39.59800000000003,
+            "max": 170914.2
+          },
+          "ch1_function_restore_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 148.85999999999999,
+            "p99": 208.75400000000016,
+            "max": 306.6
+          },
+          "ch4_function_capture_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 96.11999999999999,
+            "p99": 203.31200000000027,
+            "max": 336.2
+          },
+          "ch4_function_setup_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 2.1,
+            "p99": 4.1,
+            "max": 13.3
+          },
+          "ch4_function_target_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 6.4,
+            "p99": 10.864000000000033,
+            "max": 181.2
+          },
+          "ch4_function_shader_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 9.45999999999999,
+            "p99": 14.330000000000041,
+            "max": 1525.9
+          },
+          "ch4_function_restore_us": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 98.91999999999999,
+            "p99": 141.38200000000023,
+            "max": 274.2
+          }
+        },
+        "smoothed_timings_us": {
+          "ui_step_ema_us": {
+            "samples": 1235,
+            "p50": 45.204,
+            "p95": 307.7147,
+            "p99": 5256.300100000082,
+            "max": 60228.801
+          },
+          "ui_draw_ema_us": {
+            "samples": 1235,
+            "p50": 325.334,
+            "p95": 816.6264,
+            "p99": 15884.70166000019,
+            "max": 69679.102
+          }
+        },
+        "counters": {
+          "preview_dirty_requests": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "preview_point_rebuilds": {
+            "total": 494,
+            "rows_with_work": 318
+          },
+          "preview_tracer_captures": {
+            "total": 492,
+            "rows_with_work": 317
+          },
+          "preview_tracer_accepted_captures": {
+            "total": 246,
+            "rows_with_work": 159
+          },
+          "history_rasterizations": {
+            "total": 246,
+            "rows_with_work": 159
+          },
+          "ch1_history_rasterizations": {
+            "total": 125,
+            "rows_with_work": 125
+          },
+          "ch4_history_rasterizations": {
+            "total": 121,
+            "rows_with_work": 121
+          },
+          "halo_gl_surface_framebuffer_draws": {
+            "total": 183,
+            "rows_with_work": 177
+          },
+          "halo_nanovg_surface_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "halo_center_framebuffer_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "halo_cap_reflection_framebuffer_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "ch1_function_used": {
+            "total": 819,
+            "rows_with_work": 819
+          },
+          "ch1_function_updated": {
+            "total": 258,
+            "rows_with_work": 258
+          },
+          "ch1_function_cache_hit": {
+            "total": 561,
+            "rows_with_work": 561
+          },
+          "ch1_function_fallback": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "ch4_function_used": {
+            "total": 819,
+            "rows_with_work": 819
+          },
+          "ch4_function_updated": {
+            "total": 250,
+            "rows_with_work": 250
+          },
+          "ch4_function_cache_hit": {
+            "total": 569,
+            "rows_with_work": 569
+          },
+          "ch4_function_fallback": {
+            "total": 0,
+            "rows_with_work": 0
+          }
+        },
+        "gauges": {
+          "history_trails": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 12.0,
+            "p99": 12.0,
+            "max": 12.0
+          },
+          "ch1_history_trails": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 6.0,
+            "p99": 6.0,
+            "max": 6.0
+          },
+          "ch4_history_trails": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 6.0,
+            "p99": 6.0,
+            "max": 6.0
+          },
+          "history_submitted_points": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 419.5999999999999,
+            "p99": 460.0,
+            "max": 466.0
+          },
+          "halo_dirty_draw_count": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 6.0
+          },
+          "halo_active_draw_count": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "max": 1.0
+          },
+          "halo_dragging_draw_count": {
+            "samples": 1235,
+            "p50": 0.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "max": 1.0
+          }
+        },
+        "missing_columns": [
+          "round_stroke_private_draws",
+          "round_stroke_fallbacks",
+          "round_stroke_enabled"
+        ],
+        "warnings": [
+          "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+          "Timing scopes are nested; do not add component percentiles or EMA timings.",
+          "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs.",
+          "Renderer/settings changed inside this interval; select homogeneous intervals before comparing.",
+          "Missing columns are unavailable, not zero; older logs may also have different attribution."
+        ]
+      },
+      "groups": {
+        "pilot_both_updated": {
+          "rows": 175,
+          "timings": {
+            "module_widget_draw_us": {
+              "samples": 175,
+              "p50": 843.3,
+              "p95": 1145.4699999999998,
+              "p99": 1288.028,
+              "max": 1746.7
+            },
+            "preview_draw_us": {
+              "samples": 175,
+              "p50": 585.6,
+              "p95": 824.0899999999999,
+              "p99": 937.3459999999999,
+              "max": 1228.0
+            },
+            "contour_draw_us": {
+              "samples": 175,
+              "p50": 514.4,
+              "p95": 709.7399999999998,
+              "p99": 825.356,
+              "max": 1068.3
+            },
+            "history_draw_us": {
+              "samples": 175,
+              "p50": 19.6,
+              "p95": 104.13999999999997,
+              "p99": 114.82999999999986,
+              "max": 129.7
+            },
+            "ch1_function_capture_us": {
+              "samples": 175,
+              "p50": 169.1,
+              "p95": 306.5,
+              "p99": 421.63399999999893,
+              "max": 543.6
+            },
+            "ch1_function_setup_us": {
+              "samples": 175,
+              "p50": 4.0,
+              "p95": 8.7,
+              "p99": 18.24399999999996,
+              "max": 23.3
+            },
+            "ch1_function_target_us": {
+              "samples": 175,
+              "p50": 11.0,
+              "p95": 22.67999999999999,
+              "p99": 25.637999999999987,
+              "max": 123.6
+            },
+            "ch1_function_shader_us": {
+              "samples": 175,
+              "p50": 12.8,
+              "p95": 40.03,
+              "p99": 46.226,
+              "max": 65.0
+            },
+            "ch1_function_restore_us": {
+              "samples": 175,
+              "p50": 135.4,
+              "p95": 212.10999999999999,
+              "p99": 226.152,
+              "max": 228.4
+            },
+            "ch4_function_capture_us": {
+              "samples": 175,
+              "p50": 59.1,
+              "p95": 117.23999999999998,
+              "p99": 147.57199999999997,
+              "max": 179.1
+            },
+            "ch4_function_setup_us": {
+              "samples": 175,
+              "p50": 1.4,
+              "p95": 2.0,
+              "p99": 3.077999999999997,
+              "max": 5.8
+            },
+            "ch4_function_target_us": {
+              "samples": 175,
+              "p50": 4.8,
+              "p95": 6.959999999999996,
+              "p99": 8.451999999999998,
+              "max": 10.6
+            },
+            "ch4_function_shader_us": {
+              "samples": 175,
+              "p50": 7.3,
+              "p95": 11.189999999999994,
+              "p99": 13.641999999999983,
+              "max": 16.8
+            },
+            "ch4_function_restore_us": {
+              "samples": 175,
+              "p50": 81.3,
+              "p95": 126.63,
+              "p99": 142.63,
+              "max": 274.2
+            }
+          },
+          "state_cpu_us": {
+            "samples": 175,
+            "p50": 453.5,
+            "p95": 646.7799999999999,
+            "p99": 763.0179999999999,
+            "max": 983.1999999999999
+          },
+          "shader_cpu_us": {
+            "samples": 175,
+            "p50": 20.5,
+            "p95": 51.089999999999996,
+            "p99": 57.08599999999999,
+            "max": 75.4
+          },
+          "state_share_of_contour": {
+            "samples": 175,
+            "p50": 0.9089013632718526,
+            "p95": 0.9259171053628933,
+            "p99": 0.933494956298069,
+            "max": 0.9578280044101433
+          }
+        },
+        "pilot_both_cache_hit": {
+          "rows": 487,
+          "timings": {
+            "module_widget_draw_us": {
+              "samples": 487,
+              "p50": 225.9,
+              "p95": 374.82,
+              "p99": 423.96999999999997,
+              "max": 579.2
+            },
+            "preview_draw_us": {
+              "samples": 487,
+              "p50": 30.2,
+              "p95": 52.07,
+              "p99": 63.955999999999996,
+              "max": 99.1
+            },
+            "contour_draw_us": {
+              "samples": 487,
+              "p50": 4.5,
+              "p95": 6.869999999999999,
+              "p99": 13.839999999999986,
+              "max": 35.1
+            },
+            "history_draw_us": {
+              "samples": 487,
+              "p50": 0.6,
+              "p95": 14.8,
+              "p99": 17.2,
+              "max": 26.8
+            },
+            "ch1_function_capture_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_setup_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_target_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_shader_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_restore_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_capture_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_setup_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_target_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_shader_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_restore_us": {
+              "samples": 487,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            }
+          },
+          "state_cpu_us": {
+            "samples": 487,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "shader_cpu_us": {
+            "samples": 487,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "state_share_of_contour": {
+            "samples": 487,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          }
+        },
+        "baseline_active_after_row0": {
+          "rows": 0,
+          "timings": {}
+        },
+        "baseline_both_rebuilt_after_row0": {
+          "rows": 0,
+          "timings": {}
+        }
+      }
+    },
+    "integral_flux_draw_1_20260910_183901_0.csv": {
+      "full": {
+        "schema_version": 1,
+        "source": "C:\\tools\\msys64\\home\\Plasm\\Leviathan\\doc\\benchmarks\\lumin-function-live-20260910\\integral_flux_draw_1_20260910_183901_0.csv",
+        "sha256": "8a2c76f5cd99eaf54eea71f038b33d723d5b10fb8aba513db24c417bdc6419f8",
+        "module_id": "1979052068",
+        "instance_id": "1",
+        "selection": {
+          "start_row_inclusive": 0,
+          "end_row_exclusive": null,
+          "first_row": 0,
+          "last_row": 2992,
+          "rows": 2993
+        },
+        "settings": {
+          "preview_render_mode": [
+            0.0
+          ],
+          "preview_tracer_enabled": [
+            1.0
+          ],
+          "preview_tracer_mode": [
+            2.0
+          ],
+          "halo_nanovg_forced": [
+            0.0
+          ],
+          "lumen_preview_adapter": [
+            1.0
+          ],
+          "ch1_function_requested": [
+            0.0,
+            1.0
+          ],
+          "ch4_function_requested": [
+            0.0,
+            1.0
+          ]
+        },
+        "cpu_timings_us": {
+          "total_draw_us": {
+            "samples": 2993,
+            "p50": 282.5,
+            "p95": 974.0600000000002,
+            "p99": 1220.3439999999991,
+            "max": 28445.602
+          },
+          "module_widget_draw_us": {
+            "samples": 2993,
+            "p50": 275.4,
+            "p95": 964.52,
+            "p99": 1211.0919999999994,
+            "max": 28439.002
+          },
+          "debug_submit_us": {
+            "samples": 2993,
+            "p50": 0.4,
+            "p95": 0.7,
+            "p99": 21.90799999999999,
+            "max": 105.7
+          },
+          "debug_overlay_us": {
+            "samples": 2993,
+            "p50": 4.7,
+            "p95": 7.5,
+            "p99": 10.8,
+            "max": 59.9
+          },
+          "gear_draw_us": {
+            "samples": 2993,
+            "p50": 13.6,
+            "p95": 19.4,
+            "p99": 29.3,
+            "max": 2938.9
+          },
+          "eclipse_draw_us": {
+            "samples": 2993,
+            "p50": 4.2,
+            "p95": 6.5,
+            "p99": 9.123999999999977,
+            "max": 1761.6
+          },
+          "eclipse_shadow_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "aperture_draw_us": {
+            "samples": 2993,
+            "p50": 40.6,
+            "p95": 99.68,
+            "p99": 115.94799999999996,
+            "max": 2847.9
+          },
+          "linear_point_draw_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 7.7
+          },
+          "shape_glyph_draw_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 91.5
+          },
+          "plasma_switch_draw_us": {
+            "samples": 2993,
+            "p50": 4.4,
+            "p95": 74.7,
+            "p99": 91.908,
+            "max": 2378.9
+          },
+          "preview_draw_us": {
+            "samples": 2993,
+            "p50": 38.9,
+            "p95": 665.3000000000002,
+            "p99": 848.5079999999998,
+            "max": 6394.3
+          },
+          "ch1_preview_draw_us": {
+            "samples": 2993,
+            "p50": 23.8,
+            "p95": 452.8800000000001,
+            "p99": 559.8159999999999,
+            "max": 3641.2
+          },
+          "ch4_preview_draw_us": {
+            "samples": 2993,
+            "p50": 14.0,
+            "p95": 222.76000000000002,
+            "p99": 290.93999999999994,
+            "max": 2752.5
+          },
+          "preview_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 81.4
+          },
+          "ch1_preview_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 81.1
+          },
+          "ch4_preview_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 9.8
+          },
+          "plasma_switch_shadow_us": {
+            "samples": 2993,
+            "p50": 1.5,
+            "p95": 2.3,
+            "p99": 2.9,
+            "max": 439.4
+          },
+          "plasma_switch_image_ensure_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 1.2,
+            "p99": 1.5,
+            "max": 1558.3
+          },
+          "plasma_switch_image_paint_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 2.5,
+            "p99": 2.8079999999999927,
+            "max": 32.1
+          },
+          "plasma_switch_body_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 6.5,
+            "p99": 7.1,
+            "max": 23.9
+          },
+          "plasma_switch_orb_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 15.0,
+            "p99": 19.22399999999998,
+            "max": 94.5
+          },
+          "halo_gl_surface_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 17.1,
+            "max": 19910.602
+          },
+          "halo_nanovg_surface_draw_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "halo_center_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "halo_cap_reflection_framebuffer_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "history_draw_us": {
+            "samples": 2993,
+            "p50": 0.6,
+            "p95": 62.6,
+            "p99": 103.06399999999994,
+            "max": 797.0
+          },
+          "contour_draw_us": {
+            "samples": 2993,
+            "p50": 5.7,
+            "p95": 575.3600000000001,
+            "p99": 713.124,
+            "max": 6363.1
+          },
+          "ch1_history_draw_us": {
+            "samples": 2993,
+            "p50": 0.4,
+            "p95": 40.440000000000005,
+            "p99": 72.33999999999996,
+            "max": 796.5
+          },
+          "ch1_contour_draw_us": {
+            "samples": 2993,
+            "p50": 3.2,
+            "p95": 392.8,
+            "p99": 490.01599999999996,
+            "max": 3624.5
+          },
+          "ch4_history_draw_us": {
+            "samples": 2993,
+            "p50": 0.2,
+            "p95": 20.2,
+            "p99": 30.515999999999984,
+            "max": 670.1
+          },
+          "ch4_contour_draw_us": {
+            "samples": 2993,
+            "p50": 2.2,
+            "p95": 192.66000000000003,
+            "p99": 241.432,
+            "max": 2738.6
+          },
+          "halo_step_surface_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 295.5039999999999,
+            "max": 38183.602
+          },
+          "ch1_function_capture_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 225.76000000000002,
+            "p99": 302.4119999999999,
+            "max": 428.0
+          },
+          "ch1_function_setup_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 5.0,
+            "p99": 8.3,
+            "max": 26.2
+          },
+          "ch1_function_target_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 13.7,
+            "p99": 22.70799999999999,
+            "max": 430.6
+          },
+          "ch1_function_shader_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 20.8,
+            "p99": 38.1,
+            "max": 2712.5
+          },
+          "ch1_function_restore_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 147.00000000000006,
+            "p99": 207.03199999999998,
+            "max": 413.7
+          },
+          "ch4_function_capture_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 71.0,
+            "p99": 115.73199999999997,
+            "max": 170.4
+          },
+          "ch4_function_setup_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 1.5,
+            "p99": 2.007999999999993,
+            "max": 4.4
+          },
+          "ch4_function_target_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 5.5,
+            "p99": 6.707999999999993,
+            "max": 215.4
+          },
+          "ch4_function_shader_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 8.1,
+            "p99": 11.2,
+            "max": 2253.2
+          },
+          "ch4_function_restore_us": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 97.4,
+            "p99": 121.208,
+            "max": 247.5
+          }
+        },
+        "smoothed_timings_us": {
+          "ui_step_ema_us": {
+            "samples": 2993,
+            "p50": 45.858,
+            "p95": 105.57740000000008,
+            "p99": 351.74024,
+            "max": 38478.5
+          },
+          "ui_draw_ema_us": {
+            "samples": 2993,
+            "p50": 290.239,
+            "p95": 775.8822,
+            "p99": 907.8632799999998,
+            "max": 43333.598
+          }
+        },
+        "counters": {
+          "preview_dirty_requests": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "preview_point_rebuilds": {
+            "total": 1125,
+            "rows_with_work": 604
+          },
+          "preview_tracer_captures": {
+            "total": 1123,
+            "rows_with_work": 603
+          },
+          "preview_tracer_accepted_captures": {
+            "total": 557,
+            "rows_with_work": 300
+          },
+          "history_rasterizations": {
+            "total": 557,
+            "rows_with_work": 300
+          },
+          "ch1_history_rasterizations": {
+            "total": 300,
+            "rows_with_work": 300
+          },
+          "ch4_history_rasterizations": {
+            "total": 257,
+            "rows_with_work": 257
+          },
+          "halo_gl_surface_framebuffer_draws": {
+            "total": 102,
+            "rows_with_work": 97
+          },
+          "halo_nanovg_surface_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "halo_center_framebuffer_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "halo_cap_reflection_framebuffer_draws": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "ch1_function_used": {
+            "total": 2486,
+            "rows_with_work": 2486
+          },
+          "ch1_function_updated": {
+            "total": 523,
+            "rows_with_work": 523
+          },
+          "ch1_function_cache_hit": {
+            "total": 1963,
+            "rows_with_work": 1963
+          },
+          "ch1_function_fallback": {
+            "total": 0,
+            "rows_with_work": 0
+          },
+          "ch4_function_used": {
+            "total": 2486,
+            "rows_with_work": 2486
+          },
+          "ch4_function_updated": {
+            "total": 521,
+            "rows_with_work": 521
+          },
+          "ch4_function_cache_hit": {
+            "total": 1965,
+            "rows_with_work": 1965
+          },
+          "ch4_function_fallback": {
+            "total": 0,
+            "rows_with_work": 0
+          }
+        },
+        "gauges": {
+          "history_trails": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 12.0,
+            "p99": 12.0,
+            "max": 12.0
+          },
+          "ch1_history_trails": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 6.0,
+            "p99": 6.0,
+            "max": 6.0
+          },
+          "ch4_history_trails": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 6.0,
+            "p99": 6.0,
+            "max": 6.0
+          },
+          "history_submitted_points": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 423.0,
+            "p99": 459.0,
+            "max": 468.0
+          },
+          "halo_dirty_draw_count": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 6.0
+          },
+          "halo_active_draw_count": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "max": 1.0
+          },
+          "halo_dragging_draw_count": {
+            "samples": 2993,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 1.0,
+            "max": 1.0
+          }
+        },
+        "missing_columns": [
+          "round_stroke_private_draws",
+          "round_stroke_fallbacks",
+          "round_stroke_enabled"
+        ],
+        "warnings": [
+          "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+          "Timing scopes are nested; do not add component percentiles or EMA timings.",
+          "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs.",
+          "Renderer/settings changed inside this interval; select homogeneous intervals before comparing.",
+          "Missing columns are unavailable, not zero; older logs may also have different attribution."
+        ]
+      },
+      "groups": {
+        "pilot_both_updated": {
+          "rows": 520,
+          "timings": {
+            "module_widget_draw_us": {
+              "samples": 520,
+              "p50": 788.65,
+              "p95": 1204.875,
+              "p99": 1437.9299999999944,
+              "max": 1641.6
+            },
+            "preview_draw_us": {
+              "samples": 520,
+              "p50": 550.5999999999999,
+              "p95": 856.8149999999999,
+              "p99": 1061.4199999999998,
+              "max": 1396.7
+            },
+            "contour_draw_us": {
+              "samples": 520,
+              "p50": 482.65,
+              "p95": 716.035,
+              "p99": 848.917999999999,
+              "max": 949.3
+            },
+            "history_draw_us": {
+              "samples": 520,
+              "p50": 23.5,
+              "p95": 101.05999999999995,
+              "p99": 360.44799999998577,
+              "max": 736.6
+            },
+            "ch1_function_capture_us": {
+              "samples": 520,
+              "p50": 158.45,
+              "p95": 311.305,
+              "p99": 380.56699999999995,
+              "max": 428.0
+            },
+            "ch1_function_setup_us": {
+              "samples": 520,
+              "p50": 4.0,
+              "p95": 8.304999999999996,
+              "p99": 14.738999999999896,
+              "max": 26.2
+            },
+            "ch1_function_target_us": {
+              "samples": 520,
+              "p50": 10.7,
+              "p95": 22.8,
+              "p99": 27.22399999999998,
+              "max": 41.1
+            },
+            "ch1_function_shader_us": {
+              "samples": 520,
+              "p50": 12.6,
+              "p95": 38.324999999999974,
+              "p99": 44.40499999999997,
+              "max": 102.2
+            },
+            "ch1_function_restore_us": {
+              "samples": 520,
+              "p50": 123.65,
+              "p95": 208.47499999999994,
+              "p99": 230.1579999999999,
+              "max": 309.6
+            },
+            "ch4_function_capture_us": {
+              "samples": 520,
+              "p50": 55.349999999999994,
+              "p95": 116.905,
+              "p99": 136.35999999999967,
+              "max": 170.4
+            },
+            "ch4_function_setup_us": {
+              "samples": 520,
+              "p50": 1.2,
+              "p95": 2.1,
+              "p99": 3.0,
+              "max": 4.4
+            },
+            "ch4_function_target_us": {
+              "samples": 520,
+              "p50": 4.3,
+              "p95": 6.9,
+              "p99": 8.480999999999995,
+              "max": 215.4
+            },
+            "ch4_function_shader_us": {
+              "samples": 520,
+              "p50": 6.7,
+              "p95": 11.504999999999995,
+              "p99": 15.804999999999973,
+              "max": 40.8
+            },
+            "ch4_function_restore_us": {
+              "samples": 520,
+              "p50": 76.8,
+              "p95": 121.505,
+              "p99": 147.6119999999997,
+              "max": 217.8
+            }
+          },
+          "state_cpu_us": {
+            "samples": 520,
+            "p50": 427.5,
+            "p95": 644.5499999999997,
+            "p99": 751.6789999999992,
+            "max": 840.1
+          },
+          "shader_cpu_us": {
+            "samples": 520,
+            "p50": 20.5,
+            "p95": 49.30999999999999,
+            "p99": 56.733999999999924,
+            "max": 111.2
+          },
+          "state_share_of_contour": {
+            "samples": 520,
+            "p50": 0.9085139452656987,
+            "p95": 0.9294339453558947,
+            "p99": 0.9407116131834103,
+            "max": 0.950308238371007
+          }
+        },
+        "pilot_both_cache_hit": {
+          "rows": 1963,
+          "timings": {
+            "module_widget_draw_us": {
+              "samples": 1963,
+              "p50": 255.1,
+              "p95": 395.16999999999985,
+              "p99": 439.12799999999993,
+              "max": 636.8
+            },
+            "preview_draw_us": {
+              "samples": 1963,
+              "p50": 34.7,
+              "p95": 56.9,
+              "p99": 71.838,
+              "max": 133.7
+            },
+            "contour_draw_us": {
+              "samples": 1963,
+              "p50": 5.0,
+              "p95": 7.0,
+              "p99": 9.1,
+              "max": 78.3
+            },
+            "history_draw_us": {
+              "samples": 1963,
+              "p50": 0.5,
+              "p95": 13.0,
+              "p99": 17.6,
+              "max": 91.9
+            },
+            "ch1_function_capture_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_setup_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_target_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_shader_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_restore_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_capture_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_setup_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_target_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_shader_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_restore_us": {
+              "samples": 1963,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            }
+          },
+          "state_cpu_us": {
+            "samples": 1963,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "shader_cpu_us": {
+            "samples": 1963,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "state_share_of_contour": {
+            "samples": 1963,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          }
+        },
+        "baseline_active_after_row0": {
+          "rows": 83,
+          "timings": {
+            "module_widget_draw_us": {
+              "samples": 83,
+              "p50": 305.2,
+              "p95": 791.9699999999996,
+              "p99": 1073.6419999999976,
+              "max": 1354.0
+            },
+            "preview_draw_us": {
+              "samples": 83,
+              "p50": 72.4,
+              "p95": 587.7699999999988,
+              "p99": 786.9759999999993,
+              "max": 863.4
+            },
+            "contour_draw_us": {
+              "samples": 83,
+              "p50": 24.7,
+              "p95": 39.12999999999998,
+              "p99": 41.75799999999994,
+              "max": 48.4
+            },
+            "history_draw_us": {
+              "samples": 83,
+              "p50": 14.7,
+              "p95": 448.1299999999999,
+              "p99": 638.3299999999986,
+              "max": 797.0
+            },
+            "ch1_function_capture_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_setup_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_target_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_shader_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch1_function_restore_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_capture_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_setup_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_target_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_shader_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            },
+            "ch4_function_restore_us": {
+              "samples": 83,
+              "p50": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "max": 0.0
+            }
+          },
+          "state_cpu_us": {
+            "samples": 83,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "shader_cpu_us": {
+            "samples": 83,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          },
+          "state_share_of_contour": {
+            "samples": 83,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          }
+        },
+        "baseline_both_rebuilt_after_row0": {
+          "rows": 0,
+          "timings": {}
+        }
+      }
+    }
+  },
+  "user_visual_report": "User reports no detectable preview-widget quality drop on first inspection.",
+  "limitations": [
+    "Both files contain an off then on transition",
+    "Short first baseline contains only initial geometry rebuild",
+    "Latest baseline has 83 single-preview rebuild rows after initialization, while shader section has 520 dual-preview rebuild rows",
+    "Do not compare these as controlled equal-work A/B percentages",
+    "CPU timings, not GPU timings; phase percentiles must not be added",
+    "Current source geometry and histories remain unchanged by pilot"
+  ]
+}

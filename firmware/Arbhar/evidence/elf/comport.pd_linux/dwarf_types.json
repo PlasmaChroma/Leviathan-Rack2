@@ -1,0 +1,1113 @@
+[
+  {
+    "name": "_IO_FILE",
+    "tag": "DW_TAG_structure_type",
+    "offset": 237,
+    "size": "152",
+    "members": [
+      {
+        "name": "_flags",
+        "type": "int",
+        "offset": "0",
+        "value": null,
+        "source_line": "242"
+      },
+      {
+        "name": "_IO_read_ptr",
+        "type": "char*",
+        "offset": "4",
+        "value": null,
+        "source_line": "247"
+      },
+      {
+        "name": "_IO_read_end",
+        "type": "char*",
+        "offset": "8",
+        "value": null,
+        "source_line": "248"
+      },
+      {
+        "name": "_IO_read_base",
+        "type": "char*",
+        "offset": "12",
+        "value": null,
+        "source_line": "249"
+      },
+      {
+        "name": "_IO_write_base",
+        "type": "char*",
+        "offset": "16",
+        "value": null,
+        "source_line": "250"
+      },
+      {
+        "name": "_IO_write_ptr",
+        "type": "char*",
+        "offset": "20",
+        "value": null,
+        "source_line": "251"
+      },
+      {
+        "name": "_IO_write_end",
+        "type": "char*",
+        "offset": "24",
+        "value": null,
+        "source_line": "252"
+      },
+      {
+        "name": "_IO_buf_base",
+        "type": "char*",
+        "offset": "28",
+        "value": null,
+        "source_line": "253"
+      },
+      {
+        "name": "_IO_buf_end",
+        "type": "char*",
+        "offset": "32",
+        "value": null,
+        "source_line": "254"
+      },
+      {
+        "name": "_IO_save_base",
+        "type": "char*",
+        "offset": "36",
+        "value": null,
+        "source_line": "256"
+      },
+      {
+        "name": "_IO_backup_base",
+        "type": "char*",
+        "offset": "40",
+        "value": null,
+        "source_line": "257"
+      },
+      {
+        "name": "_IO_save_end",
+        "type": "char*",
+        "offset": "44",
+        "value": null,
+        "source_line": "258"
+      },
+      {
+        "name": "_markers",
+        "type": "_IO_marker*",
+        "offset": "48",
+        "value": null,
+        "source_line": "260"
+      },
+      {
+        "name": "_chain",
+        "type": "_IO_FILE*",
+        "offset": "52",
+        "value": null,
+        "source_line": "262"
+      },
+      {
+        "name": "_fileno",
+        "type": "int",
+        "offset": "56",
+        "value": null,
+        "source_line": "264"
+      },
+      {
+        "name": "_flags2",
+        "type": "int",
+        "offset": "60",
+        "value": null,
+        "source_line": "268"
+      },
+      {
+        "name": "_old_offset",
+        "type": "__off_t",
+        "offset": "64",
+        "value": null,
+        "source_line": "270"
+      },
+      {
+        "name": "_cur_column",
+        "type": "short unsigned int",
+        "offset": "68",
+        "value": null,
+        "source_line": "274"
+      },
+      {
+        "name": "_vtable_offset",
+        "type": "signed char",
+        "offset": "70",
+        "value": null,
+        "source_line": "275"
+      },
+      {
+        "name": "_shortbuf",
+        "type": "char[1]",
+        "offset": "71",
+        "value": null,
+        "source_line": "276"
+      },
+      {
+        "name": "_lock",
+        "type": "_IO_lock_t*",
+        "offset": "72",
+        "value": null,
+        "source_line": "280"
+      },
+      {
+        "name": "_offset",
+        "type": "__off64_t",
+        "offset": "80",
+        "value": null,
+        "source_line": "289"
+      },
+      {
+        "name": "__pad1",
+        "type": "?*",
+        "offset": "88",
+        "value": null,
+        "source_line": "297"
+      },
+      {
+        "name": "__pad2",
+        "type": "?*",
+        "offset": "92",
+        "value": null,
+        "source_line": "298"
+      },
+      {
+        "name": "__pad3",
+        "type": "?*",
+        "offset": "96",
+        "value": null,
+        "source_line": "299"
+      },
+      {
+        "name": "__pad4",
+        "type": "?*",
+        "offset": "100",
+        "value": null,
+        "source_line": "300"
+      },
+      {
+        "name": "__pad5",
+        "type": "size_t",
+        "offset": "104",
+        "value": null,
+        "source_line": "302"
+      },
+      {
+        "name": "_mode",
+        "type": "int",
+        "offset": "108",
+        "value": null,
+        "source_line": "303"
+      },
+      {
+        "name": "_unused2",
+        "type": "char[40]",
+        "offset": "112",
+        "value": null,
+        "source_line": "305"
+      }
+    ]
+  },
+  {
+    "name": "_IO_marker",
+    "tag": "DW_TAG_structure_type",
+    "offset": 625,
+    "size": "12",
+    "members": [
+      {
+        "name": "_next",
+        "type": "_IO_marker*",
+        "offset": "0",
+        "value": null,
+        "source_line": "157"
+      },
+      {
+        "name": "_sbuf",
+        "type": "_IO_FILE*",
+        "offset": "4",
+        "value": null,
+        "source_line": "158"
+      },
+      {
+        "name": "_pos",
+        "type": "int",
+        "offset": "8",
+        "value": null,
+        "source_line": "162"
+      }
+    ]
+  },
+  {
+    "name": "_IO_FILE_plus",
+    "tag": "DW_TAG_structure_type",
+    "offset": 724,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_symbol",
+    "tag": "DW_TAG_structure_type",
+    "offset": 874,
+    "size": "12",
+    "members": [
+      {
+        "name": "s_name",
+        "type": "char*",
+        "offset": "0",
+        "value": null,
+        "source_line": "109"
+      },
+      {
+        "name": "s_thing",
+        "type": "_class**",
+        "offset": "4",
+        "value": null,
+        "source_line": "110"
+      },
+      {
+        "name": "s_next",
+        "type": "_symbol*",
+        "offset": "8",
+        "value": null,
+        "source_line": "111"
+      }
+    ]
+  },
+  {
+    "name": "_class",
+    "tag": "DW_TAG_structure_type",
+    "offset": 923,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_union_type",
+    "offset": 957,
+    "size": "4",
+    "members": [
+      {
+        "name": "gs_glist",
+        "type": "_glist*",
+        "offset": null,
+        "value": null,
+        "source_line": "130"
+      },
+      {
+        "name": "gs_array",
+        "type": "_array*",
+        "offset": null,
+        "value": null,
+        "source_line": "131"
+      }
+    ]
+  },
+  {
+    "name": "_glist",
+    "tag": "DW_TAG_structure_type",
+    "offset": 988,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_array",
+    "tag": "DW_TAG_structure_type",
+    "offset": 999,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_gstub",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1010,
+    "size": "12",
+    "members": [
+      {
+        "name": "gs_un",
+        "type": "DW_TAG_union_type",
+        "offset": "0",
+        "value": null,
+        "source_line": "132"
+      },
+      {
+        "name": "gs_which",
+        "type": "int",
+        "offset": "4",
+        "value": null,
+        "source_line": "133"
+      },
+      {
+        "name": "gs_refcount",
+        "type": "int",
+        "offset": "8",
+        "value": null,
+        "source_line": "134"
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_union_type",
+    "offset": 1070,
+    "size": "4",
+    "members": [
+      {
+        "name": "gp_scalar",
+        "type": "_scalar*",
+        "offset": null,
+        "value": null,
+        "source_line": "141"
+      },
+      {
+        "name": "gp_w",
+        "type": "word*",
+        "offset": null,
+        "value": null,
+        "source_line": "142"
+      }
+    ]
+  },
+  {
+    "name": "_scalar",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1101,
+    "size": "16",
+    "members": [
+      {
+        "name": "sc_gobj",
+        "type": "t_gobj",
+        "offset": "0",
+        "value": null,
+        "source_line": "214"
+      },
+      {
+        "name": "sc_template",
+        "type": "t_symbol*",
+        "offset": "8",
+        "value": null,
+        "source_line": "215"
+      },
+      {
+        "name": "sc_vec",
+        "type": "t_word[1]",
+        "offset": "12",
+        "value": null,
+        "source_line": "216"
+      }
+    ]
+  },
+  {
+    "name": "word",
+    "tag": "DW_TAG_union_type",
+    "offset": 1156,
+    "size": "4",
+    "members": [
+      {
+        "name": "w_float",
+        "type": "t_float",
+        "offset": null,
+        "value": null,
+        "source_line": "150"
+      },
+      {
+        "name": "w_symbol",
+        "type": "t_symbol*",
+        "offset": null,
+        "value": null,
+        "source_line": "151"
+      },
+      {
+        "name": "w_gpointer",
+        "type": "t_gpointer*",
+        "offset": null,
+        "value": null,
+        "source_line": "152"
+      },
+      {
+        "name": "w_array",
+        "type": "_array*",
+        "offset": null,
+        "value": null,
+        "source_line": "153"
+      },
+      {
+        "name": "w_binbuf",
+        "type": "_binbuf*",
+        "offset": null,
+        "value": null,
+        "source_line": "154"
+      },
+      {
+        "name": "w_index",
+        "type": "int",
+        "offset": null,
+        "value": null,
+        "source_line": "155"
+      }
+    ]
+  },
+  {
+    "name": "_gpointer",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1241,
+    "size": "12",
+    "members": [
+      {
+        "name": "gp_un",
+        "type": "DW_TAG_union_type",
+        "offset": "0",
+        "value": null,
+        "source_line": "143"
+      },
+      {
+        "name": "gp_valid",
+        "type": "int",
+        "offset": "4",
+        "value": null,
+        "source_line": "144"
+      },
+      {
+        "name": "gp_stub",
+        "type": "t_gstub*",
+        "offset": "8",
+        "value": null,
+        "source_line": "145"
+      }
+    ]
+  },
+  {
+    "name": "_binbuf",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1319,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1341,
+    "size": "4",
+    "members": [
+      {
+        "name": "A_NULL",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "A_FLOAT",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "A_SYMBOL",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "A_POINTER",
+        "type": "?",
+        "offset": null,
+        "value": "3",
+        "source_line": null
+      },
+      {
+        "name": "A_SEMI",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "A_COMMA",
+        "type": "?",
+        "offset": null,
+        "value": "5",
+        "source_line": null
+      },
+      {
+        "name": "A_DEFFLOAT",
+        "type": "?",
+        "offset": null,
+        "value": "6",
+        "source_line": null
+      },
+      {
+        "name": "A_DEFSYM",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "A_DOLLAR",
+        "type": "?",
+        "offset": null,
+        "value": "8",
+        "source_line": null
+      },
+      {
+        "name": "A_DOLLSYM",
+        "type": "?",
+        "offset": null,
+        "value": "9",
+        "source_line": null
+      },
+      {
+        "name": "A_GIMME",
+        "type": "?",
+        "offset": null,
+        "value": "10",
+        "source_line": null
+      },
+      {
+        "name": "A_CANT",
+        "type": "?",
+        "offset": null,
+        "value": "11",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "_atom",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1437,
+    "size": "8",
+    "members": [
+      {
+        "name": "a_type",
+        "type": "t_atomtype",
+        "offset": "0",
+        "value": null,
+        "source_line": "178"
+      },
+      {
+        "name": "a_w",
+        "type": "word",
+        "offset": "4",
+        "value": null,
+        "source_line": "179"
+      }
+    ]
+  },
+  {
+    "name": "_gobj",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1496,
+    "size": "8",
+    "members": [
+      {
+        "name": "g_pd",
+        "type": "t_pd",
+        "offset": "0",
+        "value": null,
+        "source_line": "208"
+      },
+      {
+        "name": "g_next",
+        "type": "_gobj*",
+        "offset": "4",
+        "value": null,
+        "source_line": "209"
+      }
+    ]
+  },
+  {
+    "name": "_text",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1566,
+    "size": "28",
+    "members": [
+      {
+        "name": "te_g",
+        "type": "t_gobj",
+        "offset": "0",
+        "value": null,
+        "source_line": "221"
+      },
+      {
+        "name": "te_binbuf",
+        "type": "_binbuf*",
+        "offset": "8",
+        "value": null,
+        "source_line": "222"
+      },
+      {
+        "name": "te_outlet",
+        "type": "_outlet*",
+        "offset": "12",
+        "value": null,
+        "source_line": "223"
+      },
+      {
+        "name": "te_inlet",
+        "type": "_inlet*",
+        "offset": "16",
+        "value": null,
+        "source_line": "224"
+      },
+      {
+        "name": "te_xpix",
+        "type": "short int",
+        "offset": "20",
+        "value": null,
+        "source_line": "225"
+      },
+      {
+        "name": "te_ypix",
+        "type": "short int",
+        "offset": "22",
+        "value": null,
+        "source_line": "226"
+      },
+      {
+        "name": "te_width",
+        "type": "short int",
+        "offset": "24",
+        "value": null,
+        "source_line": "227"
+      },
+      {
+        "name": "te_type",
+        "type": "unsigned int",
+        "offset": "24",
+        "value": null,
+        "source_line": "228"
+      }
+    ]
+  },
+  {
+    "name": "_outlet",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1678,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_inlet",
+    "tag": "DW_TAG_structure_type",
+    "offset": 1689,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "timeval",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2039,
+    "size": "8",
+    "members": [
+      {
+        "name": "tv_sec",
+        "type": "__time_t",
+        "offset": "0",
+        "value": null,
+        "source_line": "32"
+      },
+      {
+        "name": "tv_usec",
+        "type": "__suseconds_t",
+        "offset": "4",
+        "value": null,
+        "source_line": "33"
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2087,
+    "size": "128",
+    "members": [
+      {
+        "name": "__fds_bits",
+        "type": "__fd_mask[32]",
+        "offset": "0",
+        "value": null,
+        "source_line": "74"
+      }
+    ]
+  },
+  {
+    "name": "timezone",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2135,
+    "size": "8",
+    "members": [
+      {
+        "name": "tz_minuteswest",
+        "type": "int",
+        "offset": "0",
+        "value": null,
+        "source_line": "57"
+      },
+      {
+        "name": "tz_dsttime",
+        "type": "int",
+        "offset": "4",
+        "value": null,
+        "source_line": "58"
+      }
+    ]
+  },
+  {
+    "name": "termios",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2216,
+    "size": "60",
+    "members": [
+      {
+        "name": "c_iflag",
+        "type": "tcflag_t",
+        "offset": "0",
+        "value": null,
+        "source_line": "30"
+      },
+      {
+        "name": "c_oflag",
+        "type": "tcflag_t",
+        "offset": "4",
+        "value": null,
+        "source_line": "31"
+      },
+      {
+        "name": "c_cflag",
+        "type": "tcflag_t",
+        "offset": "8",
+        "value": null,
+        "source_line": "32"
+      },
+      {
+        "name": "c_lflag",
+        "type": "tcflag_t",
+        "offset": "12",
+        "value": null,
+        "source_line": "33"
+      },
+      {
+        "name": "c_line",
+        "type": "cc_t",
+        "offset": "16",
+        "value": null,
+        "source_line": "34"
+      },
+      {
+        "name": "c_cc",
+        "type": "cc_t[32]",
+        "offset": "17",
+        "value": null,
+        "source_line": "35"
+      },
+      {
+        "name": "c_ispeed",
+        "type": "speed_t",
+        "offset": "52",
+        "value": null,
+        "source_line": "36"
+      },
+      {
+        "name": "c_ospeed",
+        "type": "speed_t",
+        "offset": "56",
+        "value": null,
+        "source_line": "37"
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2403,
+    "size": "36",
+    "members": [
+      {
+        "name": "gl_pathc",
+        "type": "size_t",
+        "offset": "0",
+        "value": null,
+        "source_line": "84"
+      },
+      {
+        "name": "gl_pathv",
+        "type": "char**",
+        "offset": "4",
+        "value": null,
+        "source_line": "85"
+      },
+      {
+        "name": "gl_offs",
+        "type": "size_t",
+        "offset": "8",
+        "value": null,
+        "source_line": "86"
+      },
+      {
+        "name": "gl_flags",
+        "type": "int",
+        "offset": "12",
+        "value": null,
+        "source_line": "87"
+      },
+      {
+        "name": "gl_closedir",
+        "type": "DW_TAG_subroutine_type*",
+        "offset": "16",
+        "value": null,
+        "source_line": "91"
+      },
+      {
+        "name": "gl_readdir",
+        "type": "DW_TAG_subroutine_type*",
+        "offset": "20",
+        "value": null,
+        "source_line": "95"
+      },
+      {
+        "name": "gl_opendir",
+        "type": "DW_TAG_subroutine_type*",
+        "offset": "24",
+        "value": null,
+        "source_line": "97"
+      },
+      {
+        "name": "gl_lstat",
+        "type": "DW_TAG_subroutine_type*",
+        "offset": "28",
+        "value": null,
+        "source_line": "102"
+      },
+      {
+        "name": "gl_stat",
+        "type": "DW_TAG_subroutine_type*",
+        "offset": "32",
+        "value": null,
+        "source_line": "103"
+      }
+    ]
+  },
+  {
+    "name": "comport",
+    "tag": "DW_TAG_structure_type",
+    "offset": 2616,
+    "size": "4352",
+    "members": [
+      {
+        "name": "x_obj",
+        "type": "t_object",
+        "offset": "0",
+        "value": null,
+        "source_line": "52"
+      },
+      {
+        "name": "n",
+        "type": "long int",
+        "offset": "28",
+        "value": null,
+        "source_line": "53"
+      },
+      {
+        "name": "comhandle",
+        "type": "int",
+        "offset": "32",
+        "value": null,
+        "source_line": "60"
+      },
+      {
+        "name": "oldcom_termio",
+        "type": "termios",
+        "offset": "36",
+        "value": null,
+        "source_line": "61"
+      },
+      {
+        "name": "com_termio",
+        "type": "termios",
+        "offset": "96",
+        "value": null,
+        "source_line": "62"
+      },
+      {
+        "name": "serial_device",
+        "type": "t_symbol*",
+        "offset": "156",
+        "value": null,
+        "source_line": "64"
+      },
+      {
+        "name": "serial_device_prefix",
+        "type": "char[4096]",
+        "offset": "160",
+        "value": null,
+        "source_line": "65"
+      },
+      {
+        "name": "comport",
+        "type": "short int",
+        "offset": "4256",
+        "value": null,
+        "source_line": "66"
+      },
+      {
+        "name": "baud",
+        "type": "t_float",
+        "offset": "4260",
+        "value": null,
+        "source_line": "67"
+      },
+      {
+        "name": "data_bits",
+        "type": "t_float",
+        "offset": "4264",
+        "value": null,
+        "source_line": "68"
+      },
+      {
+        "name": "parity_bit",
+        "type": "t_float",
+        "offset": "4268",
+        "value": null,
+        "source_line": "69"
+      },
+      {
+        "name": "stop_bits",
+        "type": "t_float",
+        "offset": "4272",
+        "value": null,
+        "source_line": "70"
+      },
+      {
+        "name": "xonxoff",
+        "type": "int",
+        "offset": "4276",
+        "value": null,
+        "source_line": "71"
+      },
+      {
+        "name": "ctsrts",
+        "type": "int",
+        "offset": "4280",
+        "value": null,
+        "source_line": "72"
+      },
+      {
+        "name": "hupcl",
+        "type": "int",
+        "offset": "4284",
+        "value": null,
+        "source_line": "73"
+      },
+      {
+        "name": "rxerrors",
+        "type": "short int",
+        "offset": "4288",
+        "value": null,
+        "source_line": "74"
+      },
+      {
+        "name": "x_clock",
+        "type": "_clock*",
+        "offset": "4292",
+        "value": null,
+        "source_line": "75"
+      },
+      {
+        "name": "x_hit",
+        "type": "int",
+        "offset": "4296",
+        "value": null,
+        "source_line": "76"
+      },
+      {
+        "name": "x_retries",
+        "type": "int",
+        "offset": "4300",
+        "value": null,
+        "source_line": "77"
+      },
+      {
+        "name": "x_retry_count",
+        "type": "int",
+        "offset": "4304",
+        "value": null,
+        "source_line": "78"
+      },
+      {
+        "name": "x_deltime",
+        "type": "double",
+        "offset": "4312",
+        "value": null,
+        "source_line": "79"
+      },
+      {
+        "name": "verbose",
+        "type": "int",
+        "offset": "4320",
+        "value": null,
+        "source_line": "80"
+      },
+      {
+        "name": "x_data_outlet",
+        "type": "_outlet*",
+        "offset": "4324",
+        "value": null,
+        "source_line": "81"
+      },
+      {
+        "name": "x_status_outlet",
+        "type": "_outlet*",
+        "offset": "4328",
+        "value": null,
+        "source_line": "82"
+      },
+      {
+        "name": "x_inbuf",
+        "type": "unsigned char*",
+        "offset": "4332",
+        "value": null,
+        "source_line": "83"
+      },
+      {
+        "name": "x_outbuf",
+        "type": "unsigned char*",
+        "offset": "4336",
+        "value": null,
+        "source_line": "84"
+      },
+      {
+        "name": "x_inbuf_len",
+        "type": "int",
+        "offset": "4340",
+        "value": null,
+        "source_line": "85"
+      },
+      {
+        "name": "x_outbuf_len",
+        "type": "int",
+        "offset": "4344",
+        "value": null,
+        "source_line": "86"
+      },
+      {
+        "name": "x_outbuf_wr_index",
+        "type": "int",
+        "offset": "4348",
+        "value": null,
+        "source_line": "87"
+      }
+    ]
+  },
+  {
+    "name": "_clock",
+    "tag": "DW_TAG_structure_type",
+    "offset": 3015,
+    "size": null,
+    "members": []
+  }
+]

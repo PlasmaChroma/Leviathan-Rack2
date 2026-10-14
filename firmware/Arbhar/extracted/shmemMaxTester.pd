@@ -1,0 +1,14 @@
+#N canvas 245 563 610 328 12;
+#X obj 115 50 shmem 90521 6.24e+06;
+#X obj 115 81 shmem 90522 6.24e+06;
+#X obj 115 114 shmem 90523 6.24e+06;
+#X obj 116 151 shmem 90524 6.24e+06;
+#X obj 115 190 shmem 90525 6.24e+06;
+#X obj 116 227 shmem 90526 6.24e+06;
+#X obj 275 50 shmem 90527 6.24e+06;
+#X obj 274 82 shmem 90528 6.24e+06;
+#X obj 273 115 shmem 90529 6.24e+06;
+#X obj 271 147 shmem 90560 6.24e+06;
+#X obj 273 187 shmem 90561 6.24e+06;
+#X obj 275 225 shmem 90562 6.24e+06;
+#X text 36 14 2.496e+07;

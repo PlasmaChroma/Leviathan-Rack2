@@ -1,0 +1,479 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="71.12mm"
+   height="128.5mm"
+   viewBox="0 0 7112 12850"
+   version="1.1"
+   id="sibyl-master"
+   sodipodi:docname="Sibyl.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview34"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="3.421466"
+     inkscape:cx="75.990818"
+     inkscape:cy="129.03825"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="sibyl-master"
+     showgrid="false" />
+  <defs
+     id="defs11">
+    <linearGradient
+       id="sibyl-bg"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#0e1320"
+         id="stop1" />
+      <stop
+         offset="0.5"
+         stop-color="#080b14"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#040508"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="sibyl-edge"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="0">
+      <stop
+         offset="0"
+         stop-color="#7254d9"
+         id="stop4" />
+      <stop
+         offset="0.5"
+         stop-color="#30d7de"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#7254d9"
+         id="stop6" />
+    </linearGradient>
+    <linearGradient
+       id="sibyl-title"
+       gradientUnits="userSpaceOnUse"
+       x1="2900"
+       y1="447.27814"
+       x2="4212"
+       y2="447.27814">
+      <stop
+         offset="0"
+         stop-color="#7a5cff"
+         id="stop7" />
+      <stop
+         offset="1"
+         stop-color="#1cccd9"
+         id="stop8" />
+    </linearGradient>
+    <linearGradient
+       id="sibyl-section"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#141c2e"
+         stop-opacity="0.6"
+         id="stop9" />
+      <stop
+         offset="1"
+         stop-color="#0a0d17"
+         stop-opacity="0.8"
+         id="stop10" />
+    </linearGradient>
+    <radialGradient
+       id="oracle-halo"
+       cx="50%"
+       cy="50%"
+       r="50%">
+      <stop
+         offset="0"
+         stop-color="#43e2e6"
+         stop-opacity="0.18"
+         id="stop11" />
+      <stop
+         offset="0.55"
+         stop-color="#7358df"
+         stop-opacity="0.08"
+         id="stop12" />
+      <stop
+         offset="1"
+         stop-color="#11172a"
+         stop-opacity="0"
+         id="stop13" />
+    </radialGradient>
+  </defs>
+  <g
+     id="panel_art"
+     inkscape:label="Panel artwork">
+    <g id="theme_background"><rect
+       x="0"
+       y="0"
+       width="7112"
+       height="12850"
+       fill="#000000"
+       id="rect11" /></g>
+    <rect
+       x="45"
+       y="45"
+       width="7022"
+       height="12760"
+       rx="90"
+       fill="none"
+       stroke="url(#sibyl-edge)"
+       stroke-width="34"
+       opacity="0.8"
+       id="rect12" />
+    <g
+       id="glass_input">
+      <rect
+         x="191.00006"
+         y="6380"
+         width="3340"
+         height="5310"
+         rx="122.94476"
+         fill="#5740bf"
+         fill-opacity="1"
+         opacity="0.33"
+         stroke="none"
+         id="rect15"
+         style="stroke-width:0.914862" />
+    </g>
+    <g
+       id="glass_output">
+      <rect
+         x="3581"
+         y="6380"
+         width="3340"
+         height="5310"
+         rx="126.75517"
+         fill="#1cccd9"
+         fill-opacity="0.5"
+         opacity="0.33"
+         stroke="none"
+         id="rect16"
+         style="stroke-width:0.92893" />
+    </g>
+  </g>
+  <g
+     id="labels"
+     inkscape:label="Labels"
+     font-family="Rubik, sans-serif"
+     text-anchor="middle"
+     fill="#dce6f2">
+    <text
+       id="reworked_module_title_text"
+       x="3556"
+       y="447.27814"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;fill:url(#sibyl-title);stroke-width:28.1347">Sibyl</text>
+    <text
+       id="reworked_module_description"
+       x="3556"
+       y="815.19421"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff">polyphonic oracle</text>
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="781.00006"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       id="text18"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
+<text
+       x="1861"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       id="text19"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUN</text>
+<text
+       x="2941"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       id="text20"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RST</text>
+<text
+       x="781.00006"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text24"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
+<text
+       x="1861"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text25"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">S.CV</text>
+<text
+       x="2941"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text26"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M1</text>
+<text
+       x="781.00006"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text30"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M2</text>
+<text
+       x="1861"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text31"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M3</text>
+<text
+       x="2941"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text32"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M4</text>
+</g>
+<g id="theme_text_output" inkscape:label="Output Text">
+<text
+       x="4109.6953"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text21"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
+<text
+       x="5239.6953"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text22"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">GATE</text>
+<text
+       x="6369.6953"
+       y="7660.0259"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text23"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
+<text
+       x="4109.6953"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text27"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD1</text>
+<text
+       x="5239.6953"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text28"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD2</text>
+<text
+       x="6369.6953"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text29"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD3</text>
+<text
+       x="4109.6953"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text33"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
+<text
+       x="5239.6953"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text34"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SCENE</text>
+<text
+       x="6369.6953"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       fill="#e2d4fd"
+       id="text35"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">EOC</text>
+</g>
+  </g>
+  <g
+     id="components"
+     inkscape:label="Component anchors"
+     style="display:inline">
+    <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="1524"
+       y="11943.102"
+       width="3271.933"
+       height="1224.054"
+       style="display:none" />
+    <rect
+       id="BRANDING_AI_CHIP_RASTER"
+       x="4928"
+       y="12225.129"
+       width="660"
+       height="660"
+       style="display:none" />
+    <rect
+       id="SIBYL_DISPLAY"
+       x="135.00006"
+       y="930"
+       width="6842"
+       height="5000"
+       rx="126.08105"
+       style="fill:#0e3736;fill-opacity:0.75;stroke-width:1.04617" />
+    <circle
+       id="CLOCK_INPUT"
+       cx="781.00006"
+       cy="8850"
+       r="400" />
+    <circle
+       id="RUN_INPUT"
+       cx="1861"
+       cy="6900"
+       r="400" />
+    <circle
+       id="RESET_INPUT"
+       cx="2941"
+       cy="6900"
+       r="400" />
+    <circle
+       id="SCENE_TRIG_INPUT"
+       cx="781.00006"
+       cy="6900"
+       r="400" />
+    <circle
+       id="SCENE_TRIG_BUTTON"
+       cx="781.00006"
+       cy="8100"
+       r="120" />
+    <circle
+       id="VOICING_MENU_BUTTON"
+       cx="3556"
+       cy="6250"
+       r="270" />
+    <circle
+       id="RUN_BUTTON"
+       cx="1861"
+       cy="8100"
+       r="120" />
+    <circle
+       id="RESET_BUTTON"
+       cx="2941"
+       cy="8100"
+       r="120" />
+    <circle
+       id="LOOP_BUTTON"
+       cx="781.00006"
+       cy="10050"
+       r="120" />
+    <circle
+       id="SCENE_CV_INPUT"
+       cx="1861"
+       cy="8850"
+       r="400" />
+    <circle
+       id="MACRO_1_INPUT"
+       cx="2941"
+       cy="8850"
+       r="400" />
+    <circle
+       id="MACRO_2_INPUT"
+       cx="781.00006"
+       cy="10800"
+       r="400" />
+    <circle
+       id="MACRO_3_INPUT"
+       cx="1861"
+       cy="10800"
+       r="400" />
+    <circle
+       id="MACRO_4_INPUT"
+       cx="2941"
+       cy="10800"
+       r="400" />
+    <circle
+       id="V_OCT_OUTPUT"
+       cx="4109.6953"
+       cy="6900"
+       r="400" />
+    <circle
+       id="GATE_OUTPUT"
+       cx="5239.6953"
+       cy="6900"
+       r="400" />
+    <circle
+       id="VELOCITY_OUTPUT"
+       cx="6369.6953"
+       cy="6900"
+       r="400" />
+    <circle
+       id="MOD_OUTPUT"
+       cx="4109.6953"
+       cy="8850"
+       r="400" />
+    <circle
+       id="MOD_2_OUTPUT"
+       cx="5239.6953"
+       cy="8850"
+       r="400" />
+    <circle
+       id="MOD_3_OUTPUT"
+       cx="6369.6953"
+       cy="8850"
+       r="400" />
+    <circle
+       id="CLOCK_OUTPUT"
+       cx="4109.6953"
+       cy="10800"
+       r="400" />
+    <circle
+       id="SCENE_OUTPUT"
+       cx="5239.6953"
+       cy="10800"
+       r="400" />
+    <circle
+       id="EOC_OUTPUT"
+       cx="6369.6953"
+       cy="10800"
+       r="400" />
+  </g>
+</svg>

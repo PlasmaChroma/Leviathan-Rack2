@@ -1,0 +1,11 @@
+{
+  "patches": 59,
+  "canvases": 120,
+  "objects": 5596,
+  "connections": 5727,
+  "invalid_endpoint_references": [],
+  "presets": 17,
+  "factory_presets": 6,
+  "saved_arrays": 3,
+  "shmem_references": 150
+}

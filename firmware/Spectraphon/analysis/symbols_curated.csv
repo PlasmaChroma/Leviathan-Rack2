@@ -1,0 +1,44 @@
+address,name,kind,confidence,evidence
+0x0802af74,fatfs_like_open,function,high,"File API inferred from arguments, call sites and object use"
+0x0802b264,fatfs_like_read,function,high,Buffer/length/bytes-read API
+0x0802b4cc,fatfs_like_write,function,high,Buffer/length/bytes-written API
+0x0802b794,fatfs_like_sync,function,medium,Filesystem finalization path
+0x0802b840,fatfs_like_close,function,high,File lifetime end
+0x0802b944,fatfs_like_seek,function,high,Offset positioning
+0x0802bef8,fatfs_like_findfirst,function,high,Pattern enumeration
+0x0802bf88,fatfs_like_truncate,function,medium,End-of-file finalization path
+0x0802c4e0,application_state_init,function,high,Application state initialization
+0x0802cd0c,array_linear_A,function,high,64-coefficient interpolation and Focus transform
+0x0802ce5c,array_linear_B,function,high,Mirrored reader
+0x0802cfac,array_planar_A,function,high,Four-frame bilinear interpolation
+0x0802d0f8,array_planar_B,function,high,Mirrored reader
+0x0802d280,ui_state_service_candidate,function,medium,Persistent UI state interactions; not fully translated
+0x0802d464,control_acquisition_candidate,function,medium,Control/CV conversion path
+0x0802d900,button_clock_state_service,function,medium,Button and clock state processing
+0x0802e750,audio_block_process,function,high,64-frame audio callback target
+0x08032678,audio_half_callback_offset128,function,high,Leaf wrapper passes word offset 128
+0x08032680,audio_half_callback_offset0,function,high,Leaf wrapper passes word offset 0
+0x08032688,gpio_clock_callback,function,high,GPIO 64/128 branch to two clock counters
+0x08033094,riff_wave_parse,function,high,RIFF/WAVE/fmt/data parsing
+0x080332e4,persistent_file_open_candidate,function,medium,Settings/file path; semantics incomplete
+0x080333c4,restore_factory_array_A,function,high,Copies default spectral data
+0x080333fc,restore_factory_array_B,function,high,Copies default spectral data
+0x08033434,wave_decode_samples,function,high,PCM and float conversion branches
+0x080336f0,wave_header_initialize,function,high,Actual entry includes instructions before push at +4
+0x080337cc,wave_header_finalize,function,high,RIFF header size/format and finalization
+0x08033ab0,wave_read_rewind_wrapper,function,high,Generic reader wrapper
+0x08033af8,save_unsaved_array_slots,function,high,"Per-side slot enumeration, normalization and 16-bit write"
+0x08034060,application_main,function,high,Reset-handler call target
+0x08035b40,system_init,function,high,Processor/peripheral low-level initialization
+0x08036430,reset_handler,function,high,"Vector, data copying and BSS zero"
+0x08036480,default_handler,function,high,Unused interrupt vector target
+0x08036494,libc_init_array_candidate,function,high,Startup constructors
+0x08036674,waveform_ramp_1024,object,high,Waveform; output-shape association requires further call-site tracing
+0x08037674,waveform_sine_1024,object,high,Full-period sine waveform
+0x08038674,waveform_triangle_1024,object,high,Triangle-like sampled waveform; preserve exact deviations
+0x08039674,waveform_shaped_1024,object,high,Strongly shaped periodic waveform; do not assign a panel label without tracing
+0x0803a674,sine_8192,object,high,Interpolated sine reference used by oscillator/analyzer
+0x08042674,noise_rate_256,object,high,Geometric coefficients used in Noise path; 24 steps per octave
+0x08042a74,focus_exponent_1024,object,high,Linear Array Focus bit-domain power exponents
+0x08043a74,exp2_2048,object,high,One-octave exponential table
+0x08045a98,factory_spectra_64x64,object,high,Default spectral Array: 64 frames of 64 float32 coefficients

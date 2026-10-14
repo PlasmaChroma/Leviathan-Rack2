@@ -1,4 +1,5 @@
-#include "../src/DoorstopEngine.hpp"
+#include "../src/doorstop/DoorstopEngine.hpp"
+#include "../src/doorstop/DoorstopVisualFeedback.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -55,6 +56,91 @@ StrikeStats renderStrike(float sampleRate, float velocity, float maxSeconds = 10
 		}
 	}
 	return stats;
+}
+
+float worstRetriggerSubBassPeak(float antiThumpCutoffHz, float velocity) {
+	constexpr float sampleRate = 48000.f;
+	constexpr float dt = 1.f / sampleRate;
+	constexpr float analysisCutoffHz = 60.f;
+	const float analysisAlpha = 1.f - std::exp(
+		-2.f * 3.14159265358979323846f * analysisCutoffHz * dt);
+	float worstPeak = 0.f;
+
+	// Sweep two periods of the 16 Hz spring cycle. Keeping only the body
+	// path makes this a focused guard against the sub-bass excursion rather
+	// than a test of the intentionally bright modal and impact components.
+	for (int delaySamples = 0; delaySamples <= 6000; delaySamples += 64) {
+		doorstop::Engine engine;
+		engine.setSoundModel(doorstop::SoundModel::Classic);
+		auto& tuning = engine.getTuning();
+		tuning.antiThumpCutoffHz = antiThumpCutoffHz;
+		tuning.bodyGain = 0.72f;
+		tuning.modalGain = 0.f;
+		tuning.impactGain = 0.f;
+		tuning.outputDrive = 0.25f;
+		engine.setSampleRate(sampleRate);
+		engine.strike(velocity);
+		for (int i = 0; i < delaySamples; ++i) {
+			engine.process(dt);
+		}
+		engine.strike(velocity);
+
+		float lowpass = 0.f;
+		for (int i = 0; i < 6000; ++i) {
+			const float sample = engine.process(dt).outputVolts;
+			lowpass += (sample - lowpass) * analysisAlpha;
+			worstPeak = std::max(worstPeak, std::fabs(lowpass));
+		}
+	}
+	return worstPeak;
+}
+
+float bodyStrikePeak(float antiThumpCutoffHz, float velocity) {
+	constexpr float sampleRate = 48000.f;
+	constexpr float dt = 1.f / sampleRate;
+	doorstop::Engine engine;
+	engine.setSoundModel(doorstop::SoundModel::Classic);
+	auto& tuning = engine.getTuning();
+	tuning.antiThumpCutoffHz = antiThumpCutoffHz;
+	tuning.bodyGain = 0.72f;
+	tuning.modalGain = 0.f;
+	tuning.impactGain = 0.f;
+	tuning.outputDrive = 0.25f;
+	engine.setSampleRate(sampleRate);
+	engine.strike(velocity);
+	float peak = 0.f;
+	for (int i = 0; i < 12000; ++i) {
+		peak = std::max(peak, std::fabs(engine.process(dt).outputVolts));
+	}
+	return peak;
+}
+
+Result retriggerSubBassIsLimited() {
+	doorstop::Engine defaults;
+	const float guardedPeak10V = worstRetriggerSubBassPeak(
+		defaults.getTuning().antiThumpCutoffHz, 1.f);
+	const float legacyPeak10V = worstRetriggerSubBassPeak(0.1f, 1.f);
+	const float guardedPeak8V = worstRetriggerSubBassPeak(
+		defaults.getTuning().antiThumpCutoffHz, 0.8f);
+	const float legacyPeak8V = worstRetriggerSubBassPeak(0.1f, 0.8f);
+	const float defaultHitPeak = bodyStrikePeak(
+		defaults.getTuning().antiThumpCutoffHz, 0.5f);
+	const float legacyDefaultHitPeak = bodyStrikePeak(0.1f, 0.5f);
+	const float defaultHitChange = std::fabs(defaultHitPeak - legacyDefaultHitPeak)
+		/ std::max(legacyDefaultHitPeak, 1e-6f);
+	const bool pass = closeEnough(defaults.getTuning().dcBlockerCutoffHz, 10.f)
+		&& closeEnough(defaults.getTuning().antiThumpCutoffHz, 35.f)
+		&& closeEnough(defaults.getTuning().antiThumpOnsetShaped, 0.30f)
+		&& closeEnough(defaults.getTuning().antiThumpFullShaped, 0.75f)
+		&& guardedPeak10V < legacyPeak10V * 0.75f
+		&& guardedPeak8V < legacyPeak8V * 0.75f
+		&& defaultHitChange < 0.01f;
+	return {"Velocity-aware anti-thump limits hard retriggers only", pass,
+		"10V=" + std::to_string(guardedPeak10V)
+			+ "/" + std::to_string(legacyPeak10V)
+			+ " 8V=" + std::to_string(guardedPeak8V)
+			+ "/" + std::to_string(legacyPeak8V)
+			+ " defaultChange=" + std::to_string(defaultHitChange)};
 }
 
 Result velocityCurve() {
@@ -478,7 +564,35 @@ Result probabilisticMixModel() {
 		engine.getSoundModel() == doorstop::SoundModel::ProbabilisticMix
 			&& selectedAll && finite,
 		"seen=" + std::to_string(seen[0]) + std::to_string(seen[1])
-			+ std::to_string(seen[2]) + std::to_string(seen[3])};
+				+ std::to_string(seen[2]) + std::to_string(seen[3])};
+}
+
+Result probabilisticMixDistribution() {
+	doorstop::Engine engine;
+	engine.setSoundModel(doorstop::SoundModel::ProbabilisticMix);
+	std::array<int, 4> counts {{0, 0, 0, 0}};
+	constexpr int strikeCount = 100000;
+	for (int strike = 0; strike < strikeCount; ++strike) {
+		engine.strike(0.5f);
+		const int selected = int(engine.getLastStrikeModel());
+		if (selected >= 0 && selected < int(counts.size())) {
+			counts[selected]++;
+		}
+	}
+	const std::array<float, 4> expected {{0.19f, 0.27f, 0.27f, 0.27f}};
+	bool withinTolerance = true;
+	std::string detail;
+	for (int i = 0; i < int(counts.size()); ++i) {
+		const float observed = float(counts[i]) / float(strikeCount);
+		withinTolerance = withinTolerance
+			&& std::fabs(observed - expected[i]) < 0.01f;
+		if (!detail.empty()) {
+			detail += " ";
+		}
+		detail += std::to_string(i) + "=" + std::to_string(observed);
+	}
+	return {"Probabilistic mix follows the 19/27/27/27 weighting",
+		withinTolerance, detail};
 }
 
 Result abusiveRetriggerStability() {
@@ -513,6 +627,58 @@ Result abusiveRetriggerStability() {
 	return {"Random abusive retriggers remain bounded", pass, detail};
 }
 
+Result visualEnergyIsTriggerChargedAndMonotonic() {
+	constexpr float dt = 1.f / 48000.f;
+	float energy = doorstop::updateVisualEnergyEnvelope(
+		0.f, 0.65f, true, true, false, dt);
+	const bool chargedByTrigger = closeEnough(energy, 0.65f);
+	bool monotonicallyDecaying = true;
+	for (int i = 0; i < 48000; ++i) {
+		const float previous = energy;
+		// Resonator activity is deliberately erratic: it must not recharge the bar.
+		const float activity = (i & 1) ? 1.f : 0.05f;
+		energy = doorstop::updateVisualEnergyEnvelope(
+			energy, activity, false, true, false, dt);
+		monotonicallyDecaying = monotonicallyDecaying && energy <= previous;
+	}
+	const bool smoothlyDecayed = energy > 0.f && energy < 0.25f;
+	float settledEnergy = 0.65f;
+	for (int i = 0; i < 24000; ++i) {
+		settledEnergy = doorstop::updateVisualEnergyEnvelope(
+			settledEnergy, 0.f, false, true, false, dt);
+	}
+	const bool settledSpringPullsBarDown = settledEnergy < 0.02f;
+	const float beforeLowerTrigger = energy;
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, beforeLowerTrigger * 0.5f, true, true, false, dt);
+	const bool lowerTriggerDoesNotReduce = closeEnough(energy, beforeLowerTrigger);
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, 0.9f, true, true, false, dt);
+	const bool strongerTriggerRaises = closeEnough(energy, 0.9f);
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, 1.f, false, true, true, dt);
+	const bool sleepingClears = closeEnough(energy, 0.f);
+	return {"Visual energy rises only on triggers and otherwise decays",
+		chargedByTrigger && monotonicallyDecaying && smoothlyDecayed
+			&& settledSpringPullsBarDown
+			&& lowerTriggerDoesNotReduce && strongerTriggerRaises && sleepingClears,
+		"after1s=" + std::to_string(beforeLowerTrigger)
+			+ " settled=" + std::to_string(settledEnergy)};
+}
+
+Result visualEnergyPreservesEarlierModelScale() {
+	const float raw = 0.01f;
+	const float earlier = doorstop::shapeVisualEnergyActivity(raw, true);
+	const float v3 = doorstop::shapeVisualEnergyActivity(raw, false);
+	constexpr float dt = 1.f / 48000.f;
+	const float earlierAfterOneSample = doorstop::updateVisualEnergyEnvelope(
+		earlier, 0.f, false, false, false, dt);
+	return {"Earlier models retain their expanded low-energy meter scale",
+		earlier > 0.1f && closeEnough(v3, raw)
+			&& earlierAfterOneSample > earlier * 0.999f,
+		"earlier=" + std::to_string(earlier) + " v3=" + std::to_string(v3)};
+}
+
 } // namespace
 
 int main() {
@@ -525,6 +691,7 @@ int main() {
 	results.push_back(zeroStrikeSleeps());
 	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());
+	results.push_back(retriggerSubBassIsLimited());
 	results.push_back(sampleRateStability());
 	results.push_back(fullyBrokenInStability());
 	results.push_back(nonFiniteRecoveryPreservesBreakIn());
@@ -532,7 +699,10 @@ int main() {
 	results.push_back(coilContactModel());
 	results.push_back(dispersiveSpringModel());
 	results.push_back(probabilisticMixModel());
+	results.push_back(probabilisticMixDistribution());
 	results.push_back(abusiveRetriggerStability());
+	results.push_back(visualEnergyIsTriggerChargedAndMonotonic());
+	results.push_back(visualEnergyPreservesEarlierModelScale());
 
 	int failed = 0;
 	std::cout << "Doorstop Engine Spec\n";

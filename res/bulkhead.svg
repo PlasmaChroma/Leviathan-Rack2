@@ -182,23 +182,23 @@
    stop-color="#182682"
    id="stop_wave_3" />
     </linearGradient>
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
@@ -258,7 +258,7 @@
    inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
-  
+
   <g
    id="panel_art"
    style="display:inline">
@@ -266,20 +266,20 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect
+      <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
    width="8154.6191"
    height="12887.627"
    rx="0"
    ry="0"
-   fill="url(#bgGrad)"
+   fill="#000000"
    id="black_background"
-   style="display:inline;fill:url(#bgGrad);stroke-width:25.2425"
-   sodipodi:insensitive="true" />
+   style="display:inline;fill:#000000;stroke-width:25.2425"
+   sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"
-   style="display:inline;opacity:0.5"
+   style="display:none;opacity:0.5"
    transform="matrix(1.0032752,0,0,1.0029283,-33.142975,1109.6544)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
@@ -292,7 +292,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -309,20 +309,20 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
    id="path164" />
       </g></g>
-      
+
     </g>
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
   </g>
   <g
    id="panel_labels_reworked"
@@ -345,38 +345,38 @@
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         <text
    id="reworked_module_description"
    x="4061.354"
@@ -387,7 +387,7 @@
      id="tspan2"
      x="4061.354"
      y="815.19421">reverb</tspan></text>
-        
+
       </g>
 <g
    id="bulkhead_panel_mockup"
@@ -401,16 +401,16 @@
    rx="0"
    ry="0"
    style="display:inline;fill:#080b10;fill-opacity:0.95;stroke:#1cccd9;stroke-width:36.4263;stroke-opacity:0.65" />
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
+
   <g
    id="knob_mockups"
    style="fill:none;stroke:#ffffff;stroke-width:34;stroke-opacity:0.72"
@@ -435,39 +435,14 @@
    cx="4705"
    cy="8170"
    r="205" />
-    
+
     <circle
    id="motion_knob_art"
    cx="7375"
    cy="8170"
    r="205" />
   </g>
-  <g
-   id="knob_labels"
-   style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82"
-   transform="translate(-0.01821617,830.00035)">
-    <text
-   x="700"
-   y="8510"
-   id="text1">DECAY</text>
-    <text
-   x="2035"
-   y="8510"
-   id="text2">DIFF</text>
-    <text
-   x="3370"
-   y="8510"
-   id="text3">MIX</text>
-    <text
-   x="4705"
-   y="8510"
-   id="text4">ABS</text>
-    
-    <text
-   x="7375"
-   y="8510"
-   id="text6">MOTION</text>
-  </g>
+
   <g
    id="jack_mockups"
    style="fill:none;stroke:#ffffff;stroke-opacity:0.72;stroke-width:30">
@@ -522,8 +497,37 @@
    cy="11350"
    r="195" />
   </g>
-  <g
-   id="jack_labels"
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<g
+   id="knob_labels"
+   style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82"
+   transform="translate(-0.01821617,830.00035)">
+    <text
+   x="700"
+   y="8510"
+   id="text1">DECAY</text>
+    <text
+   x="2035"
+   y="8510"
+   id="text2">DIFF</text>
+    <text
+   x="3370"
+   y="8510"
+   id="text3">MIX</text>
+    <text
+   x="4705"
+   y="8510"
+   id="text4">ABS</text>
+
+    <text
+   x="7375"
+   y="8510"
+   id="text6">MOTION</text>
+  </g>
+<g
+   id="jack_labels_input"
    style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
     <text
    x="900"
@@ -557,6 +561,23 @@
    x="1940"
    y="11725"
    id="text14">IN R</text>
+
+
+  </g>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<g
+   id="jack_labels_output"
+   style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
+
+
+
+
+
+
+
+
     <text
    x="6100"
    y="11725"
@@ -566,6 +587,7 @@
    y="11725"
    id="text16">OUT R</text>
   </g>
+    </g>
 </g>
 <g
    id="components"
@@ -601,7 +623,7 @@
    cy="9000"
    r="205"
    style="fill:#a95555;fill-opacity:0.95" />
-  
+
   <circle
    id="motion_param"
    cx="7375"
@@ -677,4 +699,9 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" /></svg>
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
+<g id="perfect_wave_raster_anchors" style="display:none">
+  <rect id="BRANDING_WAVE_LEFT_RASTER" x="1173.610" y="12338.190" width="1306.748" height="511.810" />
+  <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5647.674" y="12338.190" width="1306.748" height="511.810" />
+</g>
+</svg>

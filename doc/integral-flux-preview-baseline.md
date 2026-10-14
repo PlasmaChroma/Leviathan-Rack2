@@ -1,0 +1,239 @@
+# Integral Flux preview baseline — 2026-09-05
+
+Captured logs begin at filename timestamp 20:59:54. Two instances, 1,536 complete
+rows each. Original CSV snapshots and SHA-256 digests are preserved under
+[benchmarks/integral-flux-baseline](benchmarks/integral-flux-baseline/summary.json).
+These are draw-call CPU timings, not GPU completion or application frame times.
+The CSV has no per-row timestamps, zoom, curve parameters or marker-visibility
+fields, so duration and exact workload cannot be reconstructed from it alone.
+
+Both instances: preview_render_mode=0 (NanoVG), tracer enabled, tracer_mode=0
+(stock curve cache), halo_nanovg_forced=0. No recorded knob dragging. This is a
+baseline of the existing NanoVG path, not the optional combined GL framebuffer.
+
+| CPU timing, µs | Instance 1 median | Instance 1 p95 | Instance 2 median | Instance 2 p95 |
+| --- | ---: | ---: | ---: | ---: |
+| ModuleWidget subtree | 135.3 | 172.7 | 217.2 | 272.1 |
+| Total instrumented draw | 142.65 | 181.7 | 222.7 | 279.5 |
+| Both previews | 28.0 | 34.0 | 110.8 | 129.7 |
+| CH1 preview | 14.3 | 17.9 | 48.15 | 65.1 |
+| CH4 preview | 13.4 | 16.4 | 60.6 | 71.0 |
+| Preview framebuffer | 0 | 0 | 0 | 0 |
+
+Median within-row preview share of ModuleWidget subtree time: 20.8% for instance
+1 and 50.3% for instance 2. Preview time includes waveform, tracer, marker and
+frequency label. It is not the potential saving from contour caching alone.
+Per-channel timings are nested within preview timings, which are nested within
+module timing; do not add them as separate costs.
+
+Large total-draw outliers (up to 22.5 ms) cluster around rows 10–16. Preview
+durations stay comparatively small in those rows; other visual components show
+large spikes. This suggests initial visual/cache work, but the log does not prove
+the underlying cause. Means are inflated by these outliers. Excluding the first
+60 rows leaves median preview times at 28.0 / 111.1 µs, so the difference between
+the two instances persists beyond startup.
+
+## Counter attribution limitation
+
+Instance 1 reports 2,222 rebuilds and 2,218 tracer captures; instance 2 reports
+zero. These cannot be interpreted as per-instance activity. The step counters in
+IntegralFluxWidget.cpp are thread-local globals shared by all Flux instances,
+incremented in preview step(), then cleared after each module draw. The first
+drawn module can consume counts accumulated across multiple instances. Also,
+the capture counter increments after every capture call, even when throttling
+rejects it: it counts attempts, not accepted captures.
+
+The timing counters are reset immediately before each ModuleWidget::draw(), so
+the two previews' draw timings are still useful per-module baseline measurements.
+Before using rebuild/capture counts to verify invalidation, fix their ownership
+and distinguish attempts from successful captures.
+
+## Next comparison
+
+Keep both instances, patch settings, zoom, tracer mode, debug settings and capture
+procedure consistent. Compare the same median/p95 preview and subtree timings
+after the geometry-key and settled-contour changes. Preserve live marker/history
+updates. More detailed contour/history/label timing would clarify the expected
+savings, especially for the more expensive second instance.
+
+No rendering or telemetry implementation was changed while inspecting this baseline.
+
+## Logging-only correction for the next capture
+
+Step diagnostics now belong to each IntegralFlux instance and are consumed only
+by that module's draw. This fixes attribution for preview dirty requests,
+point rebuilds, capture attempts, linear-point dirty requests and glyph dirty
+requests. Collection is gated by Dragon King debug mode.
+
+The existing `preview_tracer_captures` column retains its historical meaning of
+**attempts**. A new column, `preview_tracer_accepted_captures`, is appended and
+counts only successful captures. Existing column order and draw timing scopes
+are preserved. No renderer, geometry invalidation, DSP or saved-state changes.
+
+Native Windows plugin build and all nine Integral Flux runtime checks passed,
+including a two-instance consumption test with a real throttled tracer capture.
+The next capture should establish the corrected-counter baseline before any
+rendering optimization is applied.
+
+## Corrected capture — 21:06:48
+
+Two complete 1,399-row logs contain the new accepted-capture column. Snapshots
+and hashes are in [corrected baseline summary](benchmarks/integral-flux-corrected-baseline/summary.json).
+Both still use NanoVG and stock tracing, with no logged knob dragging.
+
+| Measurement | Instance 1 | Instance 2 |
+| --- | ---: | ---: |
+| Preview median / p95, µs | 29.5 / 35.6 | 113.5 / 129.9 |
+| Module subtree median / p95, µs | 161.1 / 219.9 | 243.8 / 301.3 |
+| Point rebuilds | 2 | 2,014 |
+| Capture attempts | 0 | 2,012 |
+| Accepted captures | 0 | 778 |
+| Preview framebuffer time | 0 | 0 |
+
+The attribution now matches distinct workloads: instance 1 only initializes its
+two contours; instance 2 repeatedly rebuilds and attempts captures. Accepted counts
+never exceed attempts, and throttling rejects 1,234 of instance 2's attempts.
+The previous log had attributed the shared activity to instance 1, illustrating
+why its old per-instance step counters were misleading.
+
+The preview cost separation persists: 29.5 vs 113.6 µs median after excluding the
+first 60 rows. This supports testing settled-contour reuse on instance 1 and
+geometry-key invalidation on instance 2. The log still cannot distinguish
+rate-only updates from actual contour changes in instance 2, nor separate live
+curve cost from tracer/marker/text cost. Do not assume all 2,014 rebuilds are
+redundant or all 113.5 µs is recoverable.
+
+Use this corrected capture as the pre-rendering-change baseline. Small timing
+differences from the previous session are not an optimization result; no renderer
+change occurred between these captures.
+
+## Settled-contour port ready for comparison
+
+Integral Flux's two NanoVG contours now use Proc's shared 100 ms settlement
+framebuffer. The key includes effective rise fraction, signed curve, Maths/Shark
+Fin mode, dimensions, highlight selection/color and transform/display scale.
+Marker, frequency label and tracer history remain outside the contour cache.
+The optional combined OpenGL preview path is unchanged.
+
+This pass deliberately preserves version-based geometry rebuilds and capture
+scheduling, isolating contour rendering from the later invalidation experiment.
+The corrected per-instance log counters remain intact. Existing
+preview_framebuffer_us and per-channel framebuffer fields now also measure
+NanoVG contour-cache generation; this work is included in preview_draw_us and
+module draw timing, not additional to them. Cached geometry reduction statistics
+retain their prior meaning.
+
+Windows plugin.dll, all nine Integral Flux runtime checks and shared settlement
+checks passed. Built, not installed. Capture the same two-instance patch with the
+same renderer/tracer and zoom settings to compare against the 21:06:48 baseline.
+
+## Settled-cache capture — 21:13:45
+
+User briefly stopped some modulation during this recording. Two complete
+1,697-row logs, still NanoVG with stock tracing. Snapshots and summary are in
+[settled capture](benchmarks/integral-flux-settled-capture/summary.json).
+
+| Combined preview CPU time | Corrected baseline median / p95 | With cache median / p95 |
+| --- | ---: | ---: |
+| Instance 1, stable | 29.5 / 35.6 µs | 9.6 / 14.9 µs |
+| Instance 2, mixed workload | 113.5 / 129.9 µs | 112.3 / 132.1 µs |
+
+Instance 1 still reports only its two initialization rebuilds and no captures.
+Its contour framebuffer work appears once, at row 1 (27.9 µs combined). Median
+preview CPU cost falls 19.9 µs, about 67%; p95 falls 20.7 µs. Module subtree median
+falls from 161.1 to 143.9 µs. The similar stable workload and one-time framebuffer
+work provide live evidence that contour reuse is helping. This is CPU submission
+time, not a measured FPS or GPU-completion gain.
+
+Instance 2's full-recording median is not a matched workload comparison because
+this capture includes a modulation pause. CH4 alone records a contour framebuffer
+render at row 1039 (13.3 µs). Its drawing drops below 10 µs for 300 consecutive
+rows, 1054–1353, then returns to normal modulated cost. CH1 continues updating.
+CH4 medians: 60.6 µs in rows 950–1038, approximately 4.2 µs during the low-cost
+interval, and 61.6 µs in rows 1401–1696. The delay between the cache render and
+the lowest draw cost is consistent with existing tracer history fading out.
+
+Do not assign the entire paused-CH4 reduction to the cache: stopping modulation
+also removes history drawing and rebuild work. An uncached paused interval was
+not captured. Nevertheless, the stable first instance supplies an independent
+before/after comparison, while CH4 shows the expected transition into and out of
+the settled state without repeatedly rebuilding the framebuffer.
+
+Instance 2 reports 2,229 rebuilds, 2,227 capture attempts and 860 accepted captures.
+Version-based invalidation remains a separate possible optimization; these counts
+alone do not establish whether actual geometry changed. No further code changes
+were made while analyzing this capture.
+
+## Stock history component capture — 2026-09-05 21:39
+
+Raw CSV snapshots and computed medians/p95 are in
+[benchmarks/flux-history-20260905](benchmarks/flux-history-20260905/summary.json).
+Instance 1 has 1,912 complete rows; instance 2 has 1,981. Both use NanoVG,
+stock tracing enabled. All new component columns are present.
+
+| Workload | Rows | Preview median | History median | Contour median |
+| --- | ---: | ---: | ---: | ---: |
+| Instance 1, stable, both channels | 1,912 | 11.5 µs | 0.4 µs | 2.3 µs |
+| Instance 2, both channels submitting six trails each | 1,634 | 114.7 µs | 88.3 µs | 17.3 µs |
+| Instance 2, CH4 expired while CH1 traces, CH4 only | 267 | 4.3 µs | 0.2 µs | 1.4 µs |
+
+With both histories full, combined history has p95 103.6 µs and a median
+525 submitted polyline points across 12 trails. Median per-row history share
+of combined preview CPU time is 76.8%. CH4's full-history medians are
+62.05 µs preview, 49.1 µs history, and 9.3 µs contour.
+
+CH4 submits no history in rows 1406–1672, while CH1 keeps six trails. History
+returns afterward. The stable reference instance never submits a trail.
+These observations corroborate Undertow's history-dominated modulation result
+and distinguish the history work from the already settled current contour.
+The logs measure CPU submission, not GPU completion; no zoom metadata is
+recorded here, so this is a within-capture comparison, not a normalized
+cross-module speed comparison. Rare contour spikes remain (up to 1.28 ms in
+the stable instance); their cause cannot be assigned from these fields alone.
+
+Next candidate: an optional retained snapshot history experiment in the shared
+tracer infrastructure. Rasterize each accepted snapshot once, composite with
+its existing age-based opacity, and reuse expired slots. Preserve capture
+cadence, ordering, color and lifetime. Benchmark capture cost plus steady-state
+compositing against current vector history before adopting it. Use Flux as the
+initial live test and verify Proc/Undertow afterward. This capture justifies the
+experiment; it does not establish that a raster backend will be faster.
+
+## Retained snapshots live capture — 2026-09-05 21:52
+
+Preserved both the 21:52:18 mode-switch captures and 21:52:40 snapshot captures
+(two instances each) in
+[benchmarks/flux-snapshots-20260905](benchmarks/flux-snapshots-20260905/summary.json).
+Compare instance 2 rows with six trails per channel (12 total), so the stopped
+CH4 section does not artificially reduce the snapshot modulation result.
+
+| Capture / mode | Rows | Preview median / p95 | History median / p95 | Contour median |
+| --- | ---: | ---: | ---: | ---: |
+| 21:52:18 vector | 598 | 111.8 / 129.0 µs | 86.6 / 102.2 µs | 17.0 µs |
+| 21:52:18 snapshot | 691 | 42.3 / 66.9 µs | 17.3 / 40.8 µs | 17.8 µs |
+| 21:52:40 snapshot | 1,410 | 31.6 / 53.6 µs | 7.0 / 28.3 µs | 17.3 µs |
+
+The within-capture switch lowers median preview CPU time by 62% and history
+by 80%. The later run is faster again, but these logs cannot identify why;
+use the within-capture comparison as the stronger evidence. Median represented
+point counts are 510, 532 and 512 respectively, so snapshot savings do not
+come from a smaller source polyline workload.
+
+In the later run, the 518 full-history rows that rasterize snapshots have
+43.8 / 59.7 µs preview median / p95 and 19.15 / 31.5 µs history. The 892
+reuse-only rows have 30.3 / 40.0 µs preview and 6.5 / 9.0 µs history. Thus
+snapshot creation remains included in the aggregate comparison and does not
+erase the observed CPU gain.
+
+All 1,712 rows in the later modulated instance contain exactly 862 accepted
+captures and 862 history rasterizations. During CH4 release, its trail count
+falls from six to zero across rows 746–763, with zero CH4 rasterizations in
+that interval. History cost decreases with the remaining composites. The
+255 rows with CH4 history expired and CH1 still at six trails have CH4 preview
+median 4.9 µs and history median 0.2 µs.
+
+Conclusion: retained snapshots deliver a clear live CPU improvement on this
+workload and exhibit the intended capture-only rasterization schedule. This
+is not a GPU-completion measurement or a visual/context-lifecycle validation.
+Next: confirm appearance and zoom/editor reopen behavior, checkpoint the Flux
+experiment, then reuse the helper in Proc and Undertow with local verification.

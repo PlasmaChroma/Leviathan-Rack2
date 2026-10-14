@@ -1,0 +1,321 @@
+#include "ThemePersistence.hpp"
+
+#include "ThemeService.hpp"
+#include "ThemePresets.hpp"
+#include "../plugin.hpp"
+
+#include <algorithm>
+#include <cerrno>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <jansson.h>
+#include <sys/stat.h>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
+namespace leviathan {
+namespace theme {
+namespace persistence {
+namespace {
+
+ThemeDocument gDocument = defaultDocument();
+bool gMayOverwriteDocument = true;
+double gNextExternalThemeCheckAt = -1.0;
+
+struct FileStamp {
+	bool exists = false;
+	std::uint64_t size = 0u;
+	std::uint64_t modifiedLow = 0u;
+	std::uint64_t modifiedHigh = 0u;
+
+	bool operator==(const FileStamp& other) const {
+		return exists == other.exists && size == other.size
+			&& modifiedLow == other.modifiedLow
+			&& modifiedHigh == other.modifiedHigh;
+	}
+	bool operator!=(const FileStamp& other) const { return !(*this == other); }
+};
+
+FileStamp gObservedThemeStamp;
+bool gObservedThemeStampValid = false;
+
+constexpr double kExternalThemeCheckPeriodSec = 0.25;
+
+std::string userThemePath() {
+	return system::join(asset::user(), "Leviathan/theme.json");
+}
+
+bool followsExternalThemeDocument() {
+	return pluginInstance && pluginInstance->slug == "Leviathan-Pro";
+}
+
+FileStamp fileStamp(const std::string& path) {
+	FileStamp stamp;
+#if defined(_WIN32)
+	WIN32_FILE_ATTRIBUTE_DATA data = {};
+	const std::wstring widePath = string::UTF8toUTF16(path);
+	if (!GetFileAttributesExW(widePath.c_str(), GetFileExInfoStandard, &data)
+		|| (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+		return stamp;
+	}
+	stamp.exists = true;
+	stamp.size = (std::uint64_t(data.nFileSizeHigh) << 32u) | data.nFileSizeLow;
+	stamp.modifiedLow = data.ftLastWriteTime.dwLowDateTime;
+	stamp.modifiedHigh = data.ftLastWriteTime.dwHighDateTime;
+#else
+	struct stat data = {};
+	if (::stat(path.c_str(), &data) != 0 || !S_ISREG(data.st_mode)) return stamp;
+	stamp.exists = true;
+	stamp.size = std::uint64_t(data.st_size);
+	stamp.modifiedLow = std::uint64_t(data.st_mtime);
+#if defined(__APPLE__)
+	stamp.modifiedHigh = std::uint64_t(data.st_mtimespec.tv_nsec);
+#else
+	stamp.modifiedHigh = std::uint64_t(data.st_mtim.tv_nsec);
+#endif
+#endif
+	return stamp;
+}
+
+void initializeDocument(LoadStatus status, ThemeDocument document) {
+	gDocument = status == LoadStatus::Loaded ? document : defaultDocument();
+	gMayOverwriteDocument = status != LoadStatus::FutureSchema;
+	// Factory preset IDs describe the current built-in preset, not a frozen copy
+	// of its colors from the plugin version that last wrote theme.json. Refresh
+	// those snapshots on startup while preserving modified and user presets.
+	if (status == LoadStatus::Loaded) {
+		if (const FactoryPreset* preset = findFactoryPreset(gDocument.activePreset.c_str())) {
+			gDocument.active = preset->snapshot;
+		}
+	}
+	if (status == LoadStatus::Invalid && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: invalid theme.json; using canonical defaults");
+	if (status == LoadStatus::FutureSchema && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: future theme.json schema preserved; using canonical defaults");
+	initialize(gDocument.active, gDocument.activePreset.c_str());
+}
+
+int hexNibble(char c) {
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+	if (c >= 'A' && c <= 'F') return 10 + c - 'A';
+	return -1;
+}
+
+bool parseColor(json_t* value, ThemeColor* color) {
+	if (!color || !json_is_string(value)) return false;
+	const char* raw = json_string_value(value);
+	if (!raw) return false;
+	std::string text(raw);
+	if (!text.empty() && text[0] == '#') text.erase(text.begin());
+	if (text.size() != 6u) return false;
+	int digits[6];
+	for (int i = 0; i < 6; ++i) {
+		digits[i] = hexNibble(text[std::size_t(i)]);
+		if (digits[i] < 0) return false;
+	}
+	color->r = std::uint8_t(digits[0] * 16 + digits[1]);
+	color->g = std::uint8_t(digits[2] * 16 + digits[3]);
+	color->b = std::uint8_t(digits[4] * 16 + digits[5]);
+	return true;
+}
+
+std::string colorText(ThemeColor color) {
+	char buffer[8];
+	std::snprintf(buffer, sizeof(buffer), "#%02X%02X%02X", color.r, color.g, color.b);
+	return buffer;
+}
+
+void readSnapshot(json_t* object, ThemeSnapshot* snapshot) {
+	if (!snapshot || !json_is_object(object)) return;
+	ThemeSnapshot candidate = *snapshot;
+	parseColor(json_object_get(object, "input"), &candidate.colors.input);
+	parseColor(json_object_get(object, "output"), &candidate.colors.output);
+	// V1's single text color seeds both roles; explicit V2 fields win.
+	ThemeColor legacyText = candidate.colors.textInput;
+	if (parseColor(json_object_get(object, "text"), &legacyText))
+		candidate.colors.textInput = candidate.colors.textOutput = legacyText;
+	parseColor(json_object_get(object, "textInput"), &candidate.colors.textInput);
+	parseColor(json_object_get(object, "textOutput"), &candidate.colors.textOutput);
+	parseColor(json_object_get(object, "background"), &candidate.colors.background);
+	json_t* backgroundEnabled = json_object_get(object, "backgroundEnabled");
+	if (json_is_boolean(backgroundEnabled))
+		candidate.colors.backgroundEnabled = json_is_true(backgroundEnabled);
+	json_t* texture = json_object_get(object, "textureAmount");
+	if (json_is_number(texture)) candidate.surface.textureAmount = float(json_number_value(texture));
+	*snapshot = canonicalize(candidate);
+}
+
+json_t* snapshotToJson(const ThemeSnapshot& snapshot) {
+	const ThemeSnapshot normalized = canonicalize(snapshot);
+	json_t* object = json_object();
+	json_object_set_new(object, "input", json_string(colorText(normalized.colors.input).c_str()));
+	json_object_set_new(object, "output", json_string(colorText(normalized.colors.output).c_str()));
+	json_object_set_new(object, "textInput", json_string(colorText(normalized.colors.textInput).c_str()));
+	json_object_set_new(object, "textOutput", json_string(colorText(normalized.colors.textOutput).c_str()));
+	json_object_set_new(object, "background", json_string(colorText(normalized.colors.background).c_str()));
+	json_object_set_new(object, "backgroundEnabled", json_boolean(normalized.colors.backgroundEnabled));
+	json_object_set_new(object, "textureAmount", json_real(normalized.surface.textureAmount));
+	return object;
+}
+
+bool isKnownActivePreset(const std::string& value) {
+	if (value == "modified" || value == "factory:leviathan" || value == "factory:abyssal"
+		|| value == "factory:monochrome" || value == "factory:ultraviolet") return true;
+	if (value.size() == 6u && value.compare(0u, 5u, "user:") == 0)
+		return value[5] >= '1' && value[5] <= '8';
+	return false;
+}
+
+} // namespace
+
+ThemeDocument defaultDocument() {
+	return ThemeDocument{};
+}
+
+LoadStatus loadDocument(const std::string& path, ThemeDocument* document) {
+	if (!document) return LoadStatus::Invalid;
+	FILE* file = std::fopen(path.c_str(), "rb");
+	if (!file) return errno == ENOENT ? LoadStatus::Missing : LoadStatus::Invalid;
+	json_error_t error;
+	json_t* root = json_loadf(file, 0, &error);
+	std::fclose(file);
+	if (!json_is_object(root)) {
+		if (root) json_decref(root);
+		return LoadStatus::Invalid;
+	}
+
+	json_t* schema = json_object_get(root, "schemaVersion");
+	if (json_is_integer(schema) && json_integer_value(schema) > kThemeSchemaVersion) {
+		json_decref(root);
+		return LoadStatus::FutureSchema;
+	}
+
+	ThemeDocument candidate = defaultDocument();
+	json_t* activePreset = json_object_get(root, "activePreset");
+	if (json_is_string(activePreset)) {
+		const std::string value = json_string_value(activePreset);
+		if (isKnownActivePreset(value)) candidate.activePreset = value;
+	}
+	readSnapshot(json_object_get(root, "active"), &candidate.active);
+
+	json_t* presets = json_object_get(root, "userPresets");
+	if (json_is_array(presets)) {
+		const std::size_t count = std::min<std::size_t>(candidate.userPresets.size(), json_array_size(presets));
+		for (std::size_t i = 0; i < count; ++i) {
+			json_t* preset = json_array_get(presets, i);
+			if (!json_is_object(preset)) continue;
+			json_t* name = json_object_get(preset, "name");
+			if (!json_is_string(name)) continue;
+			const std::string presetName = json_string_value(name);
+			if (presetName.empty()) continue;
+			candidate.userPresets[i].occupied = true;
+			candidate.userPresets[i].name = presetName;
+			readSnapshot(preset, &candidate.userPresets[i].theme);
+		}
+	}
+	json_decref(root);
+	*document = candidate;
+	return LoadStatus::Loaded;
+}
+
+bool saveDocumentAtomic(const std::string& path, const ThemeDocument& document) {
+	const std::string directory = system::getDirectory(path);
+	if (!system::createDirectories(directory) && !system::isDirectory(directory)) return false;
+	const std::string temporary = path + ".tmp";
+	json_t* root = json_object();
+	json_object_set_new(root, "schemaVersion", json_integer(kThemeSchemaVersion));
+	json_object_set_new(root, "activePreset", json_string(document.activePreset.c_str()));
+	json_object_set_new(root, "active", snapshotToJson(document.active));
+	json_t* presets = json_array();
+	for (const UserPresetSlot& slot : document.userPresets) {
+		if (!slot.occupied) {
+			json_array_append_new(presets, json_null());
+			continue;
+		}
+		json_t* preset = snapshotToJson(slot.theme);
+		json_object_set_new(preset, "name", json_string(slot.name.c_str()));
+		json_array_append_new(presets, preset);
+	}
+	json_object_set_new(root, "userPresets", presets);
+
+	FILE* file = std::fopen(temporary.c_str(), "wb");
+	bool written = false;
+	if (file) {
+		written = json_dumpf(root, file, JSON_INDENT(2) | JSON_SORT_KEYS) == 0;
+		written = std::fflush(file) == 0 && written;
+		written = std::fclose(file) == 0 && written;
+	}
+	json_decref(root);
+	if (!written || !system::rename(temporary, path)) {
+		system::remove(temporary);
+		return false;
+	}
+	return true;
+}
+
+void initializeFromUserStorage() {
+	ThemeDocument document = defaultDocument();
+	const std::string path = userThemePath();
+	const LoadStatus status = loadDocument(path, &document);
+	initializeDocument(status, document);
+	gObservedThemeStamp = fileStamp(path);
+	gObservedThemeStampValid = true;
+	gNextExternalThemeCheckAt = -1.0;
+}
+
+void refreshExternalThemeIfChanged() {
+	if (!followsExternalThemeDocument()) return;
+	const double now = system::getTime();
+	if (std::isfinite(now) && gNextExternalThemeCheckAt >= 0.0
+		&& now < gNextExternalThemeCheckAt) {
+		return;
+	}
+	gNextExternalThemeCheckAt = std::isfinite(now)
+		? now + kExternalThemeCheckPeriodSec : -1.0;
+
+	const std::string path = userThemePath();
+	const FileStamp stamp = fileStamp(path);
+	if (gObservedThemeStampValid && stamp == gObservedThemeStamp) return;
+	gObservedThemeStamp = stamp;
+	gObservedThemeStampValid = true;
+
+	ThemeDocument document = defaultDocument();
+	const LoadStatus status = loadDocument(path, &document);
+	initializeDocument(status, document);
+}
+
+void saveToUserStorage() {
+	if (!gMayOverwriteDocument) return;
+	const ThemeSnapshot current = read().snapshot;
+	if (current != gDocument.active) gDocument.activePreset = "modified";
+	gDocument.active = current;
+	if (!saveDocumentAtomic(userThemePath(), gDocument) && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: failed to save theme.json");
+}
+
+bool applyFactoryPresetAndSave(const char* presetId) {
+	const FactoryPreset* preset = findFactoryPreset(presetId);
+	if (!preset) return false;
+	applyPreset(preset->snapshot, preset->id);
+	gDocument.activePreset = preset->id;
+	gDocument.active = read().snapshot;
+	if (!gMayOverwriteDocument) return true;
+	if (!saveDocumentAtomic(userThemePath(), gDocument) && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: failed to save factory preset");
+	return true;
+}
+
+void resetToCanonicalAndSave() {
+	applyFactoryPresetAndSave("factory:leviathan");
+}
+
+} // namespace persistence
+} // namespace theme
+} // namespace leviathan

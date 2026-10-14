@@ -1,0 +1,21 @@
+{
+  "scope": "Derived from host probes and extracted tables, NOT hardware measurements",
+  "float32_fma_available": true,
+  "sqrt_zero_bits": "0x9fc00000",
+  "sqrt_zero_value": -8.131516293641283e-20,
+  "compensation_at_r1": 0.958531379699707,
+  "sqrt_probe": {
+    "samples": 20001,
+    "domain": "float32-rounded powers2^e, e=-100..100 at.01 increments",
+    "maximum_absolute_relative_error": 0.06066017177982119,
+    "minimum_relative_error": 0.0,
+    "maximum_relative_error": 0.06066017177982119
+  },
+  "analysis_reference_endpoints_hz": [
+    20.00000048428774,
+    319.89171355962753
+  ],
+  "table_count": 9,
+  "inventory_function_candidates": 306,
+  "inventory_issues": 19
+}

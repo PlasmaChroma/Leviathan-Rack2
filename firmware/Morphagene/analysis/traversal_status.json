@@ -1,0 +1,9 @@
+{
+  "instruction_count": 23200,
+  "decoded_bytes": 62984,
+  "entry_count": 204,
+  "call_edges": 756,
+  "indirect_transfers": 18,
+  "overlapping_targets": [],
+  "scope": "vectors, verified DSP entry, direct edges; unresolved indirect targets omitted; not a complete CFG"
+}

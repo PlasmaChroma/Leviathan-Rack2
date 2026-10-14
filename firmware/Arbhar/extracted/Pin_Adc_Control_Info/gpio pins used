@@ -1,0 +1,38 @@
+GPIO pins for controls
+
+In:
+
+Shift: 33
+Capture Button: 42
+Capture CV: 32
+Strike: 38
+Strike CV: 36
+Switch XY: 23
+Switch AB: 26
+
+Out:
+Trigger: 34
++ W: 40
++ Y: 41
+Fwd W: 37
+Fwd Y: 22
+Rev W: 35
+Rev Y: 13
+
+
+Button Combinations
+
+Double Shift: Track and Snap
+
+Capture: Record
+Strike: Trigger Grain
+
+Shift+Capture:
+Layer: OnsetMode
+Scan: Toggle FollowMode
+Hold: Output Phase Switch
+Dub: Switch Capture behaviour from
+Strike: save/load to SD t<2000
+Strike: export/import to USB t>2000
+
+Shift+Strike: undo/delete/load

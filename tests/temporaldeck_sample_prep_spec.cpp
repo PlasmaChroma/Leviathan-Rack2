@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckSamplePrep.hpp"
+#include "../src/temporaldeck/TemporalDeckSamplePrep.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -113,6 +113,43 @@ TestResult testBuildPreparedEmptyLiveBuffer() {
           "left=" + std::to_string(prepared.left.size()) + " expected=" + std::to_string(expected)};
 }
 
+TestResult testLongPlayRuntimeModeCannotLeakIntoRamPreparation() {
+  DecodedSampleFile decoded;
+  decoded.channels = 2;
+  decoded.frames = 200;
+  decoded.sampleRate = 10.f;
+  decoded.left.assign(decoded.frames, 0.1f);
+  decoded.right.assign(decoded.frames, -0.1f);
+
+  PreparedSampleData prepared;
+  bool ok = temporaldeck::buildPreparedSample(
+    decoded, 10.f, TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK, &prepared);
+  const int expectedFrames = int(
+    temporaldeck_modes::usableBufferSecondsForMode(TemporalDeckEngine::BUFFER_DURATION_10S) * 10.f);
+  bool pass = ok && prepared.bufferMode == TemporalDeckEngine::BUFFER_DURATION_10S &&
+              prepared.frames == expectedFrames && prepared.truncated;
+  return {"LongPlay runtime mode is sanitized before RAM sample preparation", pass,
+          "mode=" + std::to_string(prepared.bufferMode) +
+            " frames=" + std::to_string(prepared.frames) +
+            " expected=" + std::to_string(expectedFrames)};
+}
+
+TestResult testLongPlayEmptyPreparationBuildsSmallGuard() {
+  PreparedSampleData prepared;
+  const float sampleRate = 48000.f;
+  const bool ok = temporaldeck::buildPreparedEmptyBuffer(
+    sampleRate, TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK, &prepared);
+  const int expectedFrames = int(std::round(sampleRate *
+    temporaldeck_modes::realBufferSecondsForMode(TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK)));
+  const bool pass = ok && prepared.valid &&
+    prepared.bufferMode == TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK &&
+    int(prepared.left.size()) == expectedFrames && int(prepared.right.size()) == expectedFrames;
+  return {"LongPlay empty preparation retains its one-second stream guard", pass,
+          "mode=" + std::to_string(prepared.bufferMode) +
+            " frames=" + std::to_string(prepared.left.size()) +
+            " expected=" + std::to_string(expectedFrames)};
+}
+
 } // namespace
 
 int main() {
@@ -123,6 +160,8 @@ int main() {
   tests.push_back(testInvalidInputClearsPreparedOutput());
   tests.push_back(testFileBufferScalingIsInvertible());
   tests.push_back(testBuildPreparedEmptyLiveBuffer());
+  tests.push_back(testLongPlayRuntimeModeCannotLeakIntoRamPreparation());
+  tests.push_back(testLongPlayEmptyPreparationBuildsSmallGuard());
 
   int failed = 0;
   std::cout << "TemporalDeck Sample Prep Spec\n";

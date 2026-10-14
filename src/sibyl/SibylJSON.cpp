@@ -1,0 +1,1671 @@
+#include "SibylJSON.hpp"
+#include "SibylAutomationJSON.hpp"
+#include "SibylHarmonyJSON.hpp"
+#include "SibylTuningJSON.hpp"
+#include <jansson.h>
+#include <cmath>
+#include <set>
+#include <regex>
+#include <limits>
+#include <unordered_set>
+#include <algorithm>
+
+namespace sibyl {
+
+static void addError(ParseResult& res, const std::string& path, const std::string& msg, const std::string& code = "validation_failed") {
+    res.errors.push_back({path, msg, code});
+    res.valid = false;
+}
+
+static void addWarning(ParseResult& res, const std::string& path, const std::string& msg) {
+    res.warnings.push_back({path, msg, "unknown_field"});
+}
+
+static std::string childPath(const std::string& parent, const std::string& key) {
+    return parent.empty() ? key : parent + "." + key;
+}
+
+static void warnUnknownFields(json_t* object, const std::string& path,
+                              std::initializer_list<const char*> known, ParseResult& res) {
+    if (!json_is_object(object)) return;
+    std::unordered_set<std::string> allowed;
+    for (const char* key : known) allowed.emplace(key);
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value) {
+        if (!allowed.count(key))
+            addWarning(res, childPath(path, key), "Unknown field ignored for forward compatibility");
+    }
+}
+
+static bool requireObjectIfPresent(json_t* parent, const char* key, const std::string& path, ParseResult& res) {
+    json_t* value = json_object_get(parent, key);
+    if (value && !json_is_object(value)) {
+        addError(res, childPath(path, key), "Expected object");
+        return false;
+    }
+    return value != nullptr;
+}
+
+static void validateStringField(json_t* object, const char* key, const std::string& path,
+                                size_t maxLength, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_string(value)) addError(res, fieldPath, "Expected string");
+    else if (json_string_length(value) > maxLength) addError(res, fieldPath, "String exceeds maximum length of " + std::to_string(maxLength));
+}
+
+static void validateNumberField(json_t* object, const char* key, const std::string& path,
+                                double minimum, double maximum, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_number(value)) { addError(res, fieldPath, "Expected number"); return; }
+    double number = json_number_value(value);
+    if (!std::isfinite(number) || number < minimum || number > maximum)
+        addError(res, fieldPath, "Value out of range " + std::to_string(minimum) + " to " + std::to_string(maximum));
+}
+
+static void validateIntegerField(json_t* object, const char* key, const std::string& path,
+                                 json_int_t minimum, json_int_t maximum, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_integer(value)) { addError(res, fieldPath, "Expected integer"); return; }
+    json_int_t number = json_integer_value(value);
+    if (number < minimum || number > maximum)
+        addError(res, fieldPath, "Integer out of range " + std::to_string(minimum) + " to " + std::to_string(maximum));
+}
+
+static void validateBooleanField(json_t* object, const char* key, const std::string& path, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (value && !json_is_boolean(value)) addError(res, childPath(path, key), "Expected boolean");
+}
+
+static bool isOneOf(const std::string& value, std::initializer_list<const char*> allowed) {
+    for (const char* candidate : allowed) if (value == candidate) return true;
+    return false;
+}
+
+static void validateEnumField(json_t* object, const char* key, const std::string& path,
+                              std::initializer_list<const char*> allowed, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_string(value)) { addError(res, fieldPath, "Expected string enum"); return; }
+    if (!isOneOf(json_string_value(value), allowed)) addError(res, fieldPath, "Unsupported enum value: " + std::string(json_string_value(value)));
+}
+
+static bool validId(const std::string& value) { return !value.empty() && value.size() <= 64; }
+
+static AssignmentOverrides parseOverrides(json_t* object, const std::string& path, ParseResult& res) {
+    AssignmentOverrides result;
+    if (!object) return result;
+    result.present = true;
+    tuning_json::offsets(object,result.pitchOffsets,res,path);
+    if (!json_is_object(object)) { addError(res, path, "Expected overrides object", "invalid_override"); return result; }
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value) {
+        if (pitchOffsetField(key)>=0) continue;
+        const int field = overrideFieldIndex(key);
+        if (field < 0) { addError(res, path + "." + key, "Unknown override field", "invalid_override"); continue; }
+        const auto& info = overrideFields()[field];
+        const double number = json_number_value(value);
+        if (!json_is_number(value) || (field == TRANSPOSE && !json_is_integer(value)) ||
+                !std::isfinite(number) || number < info.minimum || number > info.maximum) {
+            addError(res, path + "." + key, "Override has invalid type or value outside authored bounds", "invalid_override");
+            continue;
+        }
+        result.fields |= uint16_t(1u << field);
+        result.values[field] = float(number);
+    }
+    return result;
+}
+
+static json_t* overridesToJson(const AssignmentOverrides& overrides) {
+    json_t* object = json_object();
+    tuning_json::writeOffsets(object,overrides.pitchOffsets);
+    for (int field = 0; field < OVERRIDE_COUNT; ++field) if (overrides.fields & (1u << field)) {
+        json_object_set_new(object, overrideFields()[field].name, field == TRANSPOSE ?
+            json_integer(int(overrides.values[field])) : json_real(overrides.values[field]));
+    }
+    return object;
+}
+
+static Condition parseCondition(json_t* object, const std::string& path, ParseResult& res) {
+    Condition result;
+    if (!object) return result;
+    result.present = true;
+    auto fail = [&](const std::string& p, const char* message) {
+        addError(res, p, message, "invalid_condition");
+    };
+    if (!json_is_object(object)) { fail(path, "Expected condition object"); return result; }
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value)
+        if (std::string(key) != "all") fail(path + "." + key, "Unknown condition field");
+    json_t* all = json_object_get(object, "all");
+    if (!json_is_array(all) || json_array_size(all) > 8) {
+        fail(path + ".all", "Expected array of at most eight tests"); return result;
+    }
+    size_t i; json_t* test;
+    json_array_foreach(all, i, test) {
+        const std::string p = path + ".all[" + std::to_string(i) + "]";
+        if (!json_is_object(test)) { fail(p, "Expected test object"); continue; }
+        json_object_foreach(test, key, value)
+            if (!isOneOf(key, {"scope", "every", "offset", "is"})) fail(p + "." + key, "Unknown test field");
+        ConditionTest compiled;
+        json_t* scope = json_object_get(test, "scope");
+        if (!json_is_string(scope) || !isOneOf(json_string_value(scope), {"patternPass", "sceneRepeat", "arrangementLoop"}))
+            fail(p + ".scope", "Expected patternPass, sceneRepeat, or arrangementLoop");
+        else if (std::string(json_string_value(scope)) == "sceneRepeat") compiled.scope = ConditionScope::SCENE_REPEAT;
+        else if (std::string(json_string_value(scope)) == "arrangementLoop") compiled.scope = ConditionScope::ARRANGEMENT_LOOP;
+        json_t* is = json_object_get(test, "is");
+        json_t* every = json_object_get(test, "every");
+        json_t* offset = json_object_get(test, "offset");
+        if (is) {
+            if (every || offset) fail(p, "Use is or every/offset, never both");
+            if (!json_is_string(is) || !isOneOf(json_string_value(is), {"first", "last"})) fail(p + ".is", "Expected first or last");
+            else {
+                compiled.kind = std::string(json_string_value(is)) == "first" ? ConditionTestKind::FIRST : ConditionTestKind::LAST;
+                if (compiled.kind == ConditionTestKind::LAST && compiled.scope != ConditionScope::SCENE_REPEAT)
+                    fail(p + ".is", "last is only valid for sceneRepeat");
+            }
+        } else {
+            if (!json_is_integer(every) || json_integer_value(every) < 1 || json_integer_value(every) > 1024)
+                fail(p + ".every", "Expected integer 1 through 1024");
+            else compiled.every = int(json_integer_value(every));
+            if (offset) {
+                if (!json_is_integer(offset) || json_integer_value(offset) < 1 || json_integer_value(offset) > compiled.every)
+                    fail(p + ".offset", "Expected integer 1 through every");
+                else compiled.offset = int(json_integer_value(offset));
+            }
+        }
+        result.tests[result.count++] = compiled;
+    }
+    return result;
+}
+
+static json_t* conditionToJson(const Condition& condition) {
+    json_t* object = json_object();
+    json_t* all = json_array();
+    for (unsigned i = 0; i < condition.count; ++i) {
+        const auto& test = condition.tests[i];
+        json_t* item = json_object();
+        const char* scope = test.scope == ConditionScope::PATTERN_PASS ? "patternPass" :
+            test.scope == ConditionScope::SCENE_REPEAT ? "sceneRepeat" : "arrangementLoop";
+        json_object_set_new(item, "scope", json_string(scope));
+        if (test.kind == ConditionTestKind::EVERY) {
+            json_object_set_new(item, "every", json_integer(test.every));
+            json_object_set_new(item, "offset", json_integer(test.offset));
+        } else json_object_set_new(item, "is", json_string(test.kind == ConditionTestKind::FIRST ? "first" : "last"));
+        json_array_append_new(all, item);
+    }
+    json_object_set_new(object, "all", all);
+    return object;
+}
+
+bool normalizeNoteIds(json_t* pattern, const std::string& path, ParseResult& res, json_t* previous) {
+    if (!json_object_get(pattern, "length")) json_object_set_new(pattern, "length", json_integer(16));
+    if (!json_object_get(pattern, "resolution")) json_object_set_new(pattern, "resolution", json_string("1/16"));
+    json_t* steps = json_object_get(pattern, "steps");
+    if (steps && !json_is_array(steps)) return true; // Schema validator diagnoses this.
+    json_int_t next = 1;
+    json_t* counter = json_object_get(pattern, "nextNoteId");
+    if (counter && (!json_is_integer(counter) || json_integer_value(counter) < 1 || json_integer_value(counter) > INT32_MAX)) {
+        addError(res, path + ".nextNoteId", "Expected positive integer through INT32_MAX"); return false;
+    }
+    if (counter) next = json_integer_value(counter);
+    if (previous) next = std::max(next, json_integer_value(json_object_get(previous, "nextNoteId")));
+    std::vector<json_t*> ordered;
+    size_t i; json_t* note;
+    json_array_foreach(steps, i, note) {
+        if (json_is_object(note)) ordered.push_back(note);
+    }
+    std::stable_sort(ordered.begin(), ordered.end(), [](json_t* a, json_t* b) {
+        return json_integer_value(json_object_get(a, "step")) < json_integer_value(json_object_get(b, "step"));
+    });
+    std::set<std::string> used;
+    for (auto* n : ordered) {
+        json_t* id = json_object_get(n, "id");
+        if (!id) continue;
+        bool valid = json_is_string(id) && json_string_length(id) > 0 && json_string_length(id) <= 64;
+        if (valid) for (size_t c = 0; c < json_string_length(id); ++c) {
+            unsigned char ch = json_string_value(id)[c];
+            if (ch < 32 || ch == 127 || (ch == 0xc2 && c + 1 < json_string_length(id)
+                    && (unsigned char)json_string_value(id)[c + 1] >= 0x80 && (unsigned char)json_string_value(id)[c + 1] <= 0x9f)) valid = false;
+        }
+        if (!valid) { addError(res, path + ".steps.id", "Note ID must be 1–64 UTF-8 bytes without controls"); return false; }
+        if (!used.insert(json_string_value(id)).second) {
+            addError(res, path + ".steps.id", "Duplicate note ID", "duplicate_note_id"); return false;
+        }
+    }
+    // Older full-pattern clients retain identity at unchanged occupied steps.
+    if (previous) for (auto* n : ordered) if (!json_object_get(n, "id")) {
+        json_t* old;
+        json_array_foreach(json_object_get(previous, "steps"), i, old) {
+            json_t* id = json_object_get(old, "id");
+            if (json_is_string(id) && json_equal(json_object_get(n, "step"), json_object_get(old, "step"))
+                    && used.insert(json_string_value(id)).second) {
+                json_object_set(n, "id", id); break;
+            }
+        }
+    }
+    auto skipOccupied = [&]() {
+        while (used.count("n" + std::to_string(next))) {
+            if (next == INT32_MAX) return false;
+            ++next;
+        }
+        return true;
+    };
+    for (auto* n : ordered) if (!json_object_get(n, "id")) {
+        if (!skipOccupied() || next == INT32_MAX) {
+            addError(res, path + ".nextNoteId", "Automatic note ID counter exhausted", "capacity_exceeded"); return false;
+        }
+        std::string id = "n" + std::to_string(next++);
+        used.insert(id); json_object_set_new(n, "id", json_string(id.c_str()));
+    }
+    if (!skipOccupied()) { addError(res, path + ".nextNoteId", "Automatic note ID counter exhausted", "capacity_exceeded"); return false; }
+    json_object_set_new(pattern, "nextNoteId", json_integer(next));
+    // Only sort a structurally valid array; never erase a malformed event.
+    if (steps && ordered.size() == json_array_size(steps)) {
+        json_t* sorted = json_array();
+        for (auto* n : ordered) json_array_append(sorted, n);
+        json_object_set_new(pattern, "steps", sorted);
+    }
+    return true;
+}
+
+json_t* normalizeComposition(json_t* input, ParseResult& res) {
+    if (!json_is_object(input)) { addError(res, "$", "Composition must be an object"); return nullptr; }
+    json_t* inner = json_object_get(input, "composition");
+    json_t* format = json_object_get(input, "format");
+    if (format && (!json_is_string(format) || std::string(json_string_value(format)) != "Leviathan.SibylComposition" || !inner)) {
+        addError(res, "format", "Unsupported composition envelope", "unsupported_schema"); return nullptr;
+    }
+    json_t* source = inner ? inner : input;
+    if (!json_is_object(source)) { addError(res, "composition", "Expected object"); return nullptr; }
+    json_t* outerVersion = inner ? json_object_get(input, "schemaVersion") : nullptr;
+    json_t* innerVersion = json_object_get(source, "schemaVersion");
+    for (auto* v : {outerVersion, innerVersion}) if (v && (!json_is_integer(v) || (json_integer_value(v) != 2 && json_integer_value(v) != 3 && json_integer_value(v) != 4))) {
+        addError(res, "schemaVersion", "Supported schema versions are 2, 3 and 4", "unsupported_schema"); return nullptr;
+    }
+    if (outerVersion && innerVersion && !json_equal(outerVersion, innerVersion)) {
+        addError(res, "schemaVersion", "Envelope and composition versions disagree", "unsupported_schema"); return nullptr;
+    }
+    int version = innerVersion ? json_integer_value(innerVersion) : outerVersion ? json_integer_value(outerVersion) : 2;
+    bool valid = true;
+    auto feature = [&](json_t* obj, const char* key, const std::string& path, bool implemented) {
+        if (!json_object_get(obj, key)) return;
+        if (version < 3 || !implemented) {
+            addError(res, childPath(path, key), version < 3 ? "This field requires schemaVersion 3" : "Feature is not implemented in this milestone",
+                version < 3 ? "schema_version_required" : "unsupported_feature"); valid = false;
+        }
+    };
+    auto nativeFeature = [&](json_t* obj, const char* key, const std::string& path) {
+        if (json_object_get(obj,key) && version < 4) {
+            addError(res, childPath(path,key), "This field requires schemaVersion 4", "schema_version_required"); valid=false;
+        }
+    };
+    nativeFeature(source,"pitchSystems","");
+    const char* progressionKey;json_t* progressionValue;
+    json_object_foreach(json_object_get(json_object_get(source,"harmony"),"progressions"),progressionKey,progressionValue) {
+      const std::string pp="harmony.progressions."+std::string(progressionKey);
+      nativeFeature(progressionValue,"pitchContext",pp);
+      size_t ci;json_t* chord;json_array_foreach(json_object_get(progressionValue,"chords"),ci,chord) {nativeFeature(chord,"rootPitch",pp);nativeFeature(chord,"tones",pp);}
+    }
+    feature(source, "automation", "", true); feature(source, "harmony", "", true);
+    const char* key; json_t* pattern;
+    json_object_foreach(json_object_get(source, "patterns"), key, pattern) {
+        const std::string path = "patterns." + std::string(key);
+        feature(pattern, "nextNoteId", path, true);
+        nativeFeature(pattern,"pitchContext",path);
+        size_t index; json_t* note;
+        json_array_foreach(json_object_get(pattern, "steps"), index, note) {
+            std::string np = path + ".steps[" + std::to_string(index) + "]";
+            feature(note, "id", np, true); feature(note, "transposeSemitones", np, true);
+            nativeFeature(note,"tuned",np);
+            for (const char* field : {"transposeSteps","transposePeriods","transposeCents"}) {
+                nativeFeature(note,field,np);
+            }
+            json_t* harmonic=json_object_get(note,"harmonic");
+            auto roleName=harmony_json::string(json_object_get(harmonic,"role"));
+            if(!roleName.empty()&&roleName!="root"&&roleName!="third"&&roleName!="fifth")nativeFeature(harmonic,"role",np+".harmonic");
+            nativeFeature(harmonic,"toneId",np+".harmonic");nativeFeature(harmonic,"periods",np+".harmonic");
+            nativeFeature(json_object_get(harmonic,"reference"),"tuned",np+".harmonic.reference");
+            for(const char* endpoint:{"min","max"}) if(json_is_object(json_object_get(json_object_get(harmonic,"range"),endpoint))) nativeFeature(harmonic,"range",np+".harmonic");
+            feature(note, "condition", np, true); feature(note, "harmonic", np, true);
+        }
+    }
+    size_t index; json_t* scene;
+    json_array_foreach(json_object_get(source, "arrangement"), index, scene) {
+        std::string path = "arrangement[" + std::to_string(index) + "]";
+        feature(scene, "harmony", path, true);
+        json_t* assignment;
+        json_object_foreach(json_object_get(scene, "tracks"), key, assignment) {
+            feature(assignment, "overrides", path + ".tracks." + key, true);
+            for(const char* f : {"transposeSteps","transposePeriods","transposeCents"})
+                nativeFeature(json_object_get(assignment,"overrides"),f,path+".tracks."+key+".overrides");
+        }
+    }
+    if (!valid) return nullptr;
+    json_t* normalized = json_deep_copy(source);
+    json_object_set_new(normalized, "schemaVersion", json_integer(4));
+    for (const char* section : {"meta", "clock", "transport", "patterns", "macros"})
+        if (!json_object_get(normalized, section)) json_object_set_new(normalized, section, json_object());
+    for (const char* section : {"tracks", "arrangement"})
+        if (!json_object_get(normalized, section)) json_object_set_new(normalized, section, json_array());
+    json_object_foreach(json_object_get(normalized, "patterns"), key, pattern) {
+        if (!normalizeNoteIds(pattern, "patterns." + std::string(key), res)) { json_decref(normalized); return nullptr; }
+    }
+    return normalized;
+}
+
+static uint8_t observationMonitorBit(const std::string& name) {
+	if (name == "masterL") return 1u << 0;
+	if (name == "masterR") return 1u << 1;
+	if (name == "A") return 1u << 2;
+	if (name == "B") return 1u << 3;
+	if (name == "C") return 1u << 4;
+	if (name == "D") return 1u << 5;
+	return 0;
+}
+
+static void validateCompositionSchema(json_t* root, ParseResult& res) {
+    if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
+    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros", "automation", "harmony", "pitchSystems"}, res);
+
+    if (requireObjectIfPresent(root, "meta", "", res)) {
+        json_t* meta = json_object_get(root, "meta");
+        warnUnknownFields(meta, "meta", {"title", "prompt", "bpm", "root", "rootOctave", "scale", "swing", "seed", "lastEditor", "editSummary"}, res);
+        validateStringField(meta, "title", "meta", 2048, res);
+        validateStringField(meta, "prompt", "meta", 2048, res);
+        validateNumberField(meta, "bpm", "meta", 20.0, 400.0, res);
+        validateStringField(meta, "root", "meta", 2, res);
+        json_t* rootName = json_object_get(meta, "root");
+        if (json_is_string(rootName) && !std::regex_match(std::string(json_string_value(rootName)), std::regex("^[A-G][b#]?$")))
+            addError(res, "meta.root", "Root must match [A-G][b#]?");
+        validateIntegerField(meta, "rootOctave", "meta", -1, 9, res);
+        validateEnumField(meta, "scale", "meta", {"chromatic", "major", "natural_minor", "harmonic_minor", "melodic_minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian", "major_pentatonic", "minor_pentatonic"}, res);
+        validateNumberField(meta, "swing", "meta", 0.0, 0.49, res);
+        validateIntegerField(meta, "seed", "meta", 0, INT64_MAX, res);
+    }
+    if (requireObjectIfPresent(root, "clock", "", res)) {
+        json_t* clock = json_object_get(root, "clock");
+        warnUnknownFields(clock, "clock", {"externalPpqn", "outputPpqn", "externalTimeoutMs", "onExternalStop"}, res);
+        validateIntegerField(clock, "externalPpqn", "clock", 1, 960, res);
+        validateIntegerField(clock, "outputPpqn", "clock", 1, 960, res);
+        validateNumberField(clock, "externalTimeoutMs", "clock", 1.0, 60000.0, res);
+        validateEnumField(clock, "onExternalStop", "clock", {"hold", "freeRun", "internal"}, res);
+    }
+    if (requireObjectIfPresent(root, "transport", "", res)) {
+        json_t* transport = json_object_get(root, "transport");
+        warnUnknownFields(transport, "transport", {"running", "loop", "defaultApplyAt"}, res);
+        validateBooleanField(transport, "running", "transport", res);
+        validateBooleanField(transport, "loop", "transport", res);
+        validateEnumField(transport, "defaultApplyAt", "transport", {"nextBeat", "nextStep", "nextScene", "immediate"}, res);
+    }
+
+    std::set<std::string> trackIds;
+    json_t* tracks = json_object_get(root, "tracks");
+    if (tracks && !json_is_array(tracks)) addError(res, "tracks", "Expected array");
+    else if (tracks) {
+        if (json_array_size(tracks) > 16) addError(res, "tracks", "Maximum 16 tracks allowed");
+        std::set<int> channels;
+        size_t index; json_t* track;
+        json_array_foreach(tracks, index, track) {
+            std::string path = "tracks[" + std::to_string(index) + "]";
+            if (!json_is_object(track)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(track, path, {"id", "channel", "defaultGate", "defaultVelocity"}, res);
+            validateStringField(track, "id", path, 64, res);
+            validateIntegerField(track, "channel", path, 0, 15, res);
+            validateNumberField(track, "defaultGate", path, 0.0, 1024.0, res);
+            validateNumberField(track, "defaultVelocity", path, 0.0, 1.0, res);
+            json_t* id = json_object_get(track, "id");
+            if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Track id is required and must be 1-64 characters");
+            else if (!trackIds.insert(json_string_value(id)).second) addError(res, path + ".id", "Duplicate track id");
+            json_t* channel = json_object_get(track, "channel");
+            if (!channel) addError(res, path + ".channel", "Required field is missing");
+            else if (json_is_integer(channel) && !channels.insert((int)json_integer_value(channel)).second) addError(res, path + ".channel", "Duplicate channel");
+        }
+    }
+
+    std::set<std::string> patternIds;
+    json_t* patterns = json_object_get(root, "patterns");
+    if (patterns && !json_is_object(patterns)) addError(res, "patterns", "Expected object");
+    else if (patterns) {
+        if (json_object_size(patterns) > 256) addError(res, "patterns", "Maximum 256 patterns allowed");
+        const char* patternId; json_t* pattern;
+        json_object_foreach(patterns, patternId, pattern) {
+            std::string path = "patterns." + std::string(patternId);
+            patternIds.insert(patternId);
+            if (!validId(patternId)) addError(res, path, "Pattern id must be 1-64 characters");
+            if (!json_is_object(pattern)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(pattern, path, {"pitchContext", "nextNoteId", "length", "resolution", "steps", "evolution"}, res);
+            if (requireObjectIfPresent(pattern, "evolution", path, res)) {
+                json_t* evolution = json_object_get(pattern, "evolution");
+                const std::string ep = path + ".evolution";
+                warnUnknownFields(evolution, ep, {"probability", "velocity", "gate", "glideMs", "mod", "mod2", "mod3"}, res);
+                validateNumberField(evolution, "probability", ep, 0.0, 1.0, res);
+                validateNumberField(evolution, "velocity", ep, 0.0, 1.0, res);
+                validateNumberField(evolution, "gate", ep, 0.0, 1024.0, res);
+                validateNumberField(evolution, "glideMs", ep, 0.0, 3600000.0, res);
+                for (const char* lane : {"mod", "mod2", "mod3"})
+                    validateNumberField(evolution, lane, ep, 0.0, 20.0, res);
+            }
+            validateIntegerField(pattern, "length", path, 1, 1024, res);
+            validateStringField(pattern, "resolution", path, 5, res);
+            json_t* resolution = json_object_get(pattern, "resolution");
+            if (json_is_string(resolution) && !std::regex_match(std::string(json_string_value(resolution)), std::regex("^1/(1|2|4|8|16|32|64)[dt]?$")))
+                addError(res, path + ".resolution", "Unsupported resolution");
+            int length = json_is_integer(json_object_get(pattern, "length")) ? (int)json_integer_value(json_object_get(pattern, "length")) : 0;
+            json_t* steps = json_object_get(pattern, "steps");
+            if (steps && !json_is_array(steps)) { addError(res, path + ".steps", "Expected array"); continue; }
+            if (!steps) continue;
+            if (json_array_size(steps) > 1024) addError(res, path + ".steps", "Maximum 1024 events allowed");
+            std::set<int> seenSteps;
+            size_t stepIndex; json_t* step;
+            json_array_foreach(steps, stepIndex, step) {
+                std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
+                if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
+                warnUnknownFields(step, stepPath, {"transposeSteps", "transposePeriods", "transposeCents", "tuned", "harmonic", "condition", "id", "transposeSemitones", "step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
+                parseCondition(json_object_get(step, "condition"), stepPath + ".condition", res);
+                validateIntegerField(step, "transposeSemitones", stepPath, -120, 120, res);
+                validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
+                json_t* stepNumber = json_object_get(step, "step");
+                if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
+                else if (json_is_integer(stepNumber) && !seenSteps.insert((int)json_integer_value(stepNumber)).second) addError(res, stepPath + ".step", "Duplicate step index");
+                int pitchCount = (json_object_get(step, "pitchV") ? 1 : 0) + (json_object_get(step, "degree") ? 1 : 0) + (json_object_get(step, "note") ? 1 : 0) + (json_object_get(step, "harmonic") ? 1 : 0) + (json_object_get(step, "tuned") ? 1 : 0);
+                if (pitchCount != 1) addError(res, stepPath, "Exactly one of pitchV, degree, note, harmonic, or tuned is required");
+                validateNumberField(step, "pitchV", stepPath, -10.0, 10.0, res);
+                validateIntegerField(step, "degree", stepPath, INT32_MIN, INT32_MAX, res);
+                validateIntegerField(step, "octave", stepPath, INT32_MIN, INT32_MAX, res);
+                if (json_object_get(step, "octave") && !json_object_get(step, "degree")) addError(res, stepPath + ".octave", "octave is valid only with degree");
+                validateStringField(step, "note", stepPath, 5, res);
+                json_t* note = json_object_get(step, "note");
+                if (json_is_string(note) && !std::regex_match(std::string(json_string_value(note)), std::regex("^[A-G][b#]?(-1|[0-9])$"))) addError(res, stepPath + ".note", "Invalid scientific pitch; expected octave -1 through 9");
+                validateNumberField(step, "gate", stepPath, 0.0, 1024.0, res);
+                validateNumberField(step, "velocity", stepPath, 0.0, 1.0, res);
+                validateNumberField(step, "mod", stepPath, -10.0, 10.0, res);
+                validateNumberField(step, "mod2", stepPath, -10.0, 10.0, res);
+                validateNumberField(step, "mod3", stepPath, -10.0, 10.0, res);
+                validateNumberField(step, "probability", stepPath, 0.0, 1.0, res);
+                validateBooleanField(step, "tie", stepPath, res);
+                validateBooleanField(step, "evolve", stepPath, res);
+                validateNumberField(step, "glideMs", stepPath, 0.0, 3600000.0, res);
+                validateNumberField(step, "microshift", stepPath, -0.499999999, 0.499999999, res);
+                validateIntegerField(step, "ratchets", stepPath, 1, 16, res);
+                json_t* gate = json_object_get(step, "gate");
+                json_t* ratchets = json_object_get(step, "ratchets");
+                if (json_is_number(gate) && json_is_integer(ratchets) &&
+                    json_number_value(gate) > 1.0 && json_integer_value(ratchets) > 1)
+                    addError(res, stepPath + ".gate", "Gate above 1 step is incompatible with ratchets");
+                json_t* observation = json_object_get(step, "observation");
+                if (observation) {
+                    const std::string observationPath = stepPath + ".observation";
+                    if (!json_is_object(observation)) {
+                        addError(res, observationPath, "Expected object");
+                    } else {
+                        warnUnknownFields(observation, observationPath,
+                            {"octaviaModuleId", "monitors", "preFrames", "postFrames", "label"}, res);
+                        validateIntegerField(observation, "octaviaModuleId", observationPath, 0, INT64_MAX, res);
+                        validateIntegerField(observation, "preFrames", observationPath, 0, 262143, res);
+                        validateIntegerField(observation, "postFrames", observationPath, 0, 262143, res);
+                        validateStringField(observation, "label", observationPath, 63, res);
+                        json_t* target = json_object_get(observation, "octaviaModuleId");
+                        json_t* monitors = json_object_get(observation, "monitors");
+                        if (!target) addError(res, observationPath + ".octaviaModuleId", "Required field is missing");
+                        if (!json_is_array(monitors) || json_array_size(monitors) == 0
+                                || json_array_size(monitors) > 6) {
+                            addError(res, observationPath + ".monitors",
+                                "Expected a non-empty array of at most six monitor names");
+                        } else {
+                            uint8_t mask = 0;
+                            size_t monitorIndex; json_t* monitor;
+                            json_array_foreach(monitors, monitorIndex, monitor) {
+                                if (!json_is_string(monitor)
+                                        || !observationMonitorBit(json_string_value(monitor))) {
+                                    addError(res, observationPath + ".monitors[" +
+                                        std::to_string(monitorIndex) + "]", "Unknown monitor name");
+                                    continue;
+                                }
+                                const uint8_t bit = observationMonitorBit(json_string_value(monitor));
+                                if (mask & bit) addError(res, observationPath + ".monitors[" +
+                                    std::to_string(monitorIndex) + "]", "Duplicate monitor name");
+                                mask |= bit;
+                            }
+                        }
+                        const uint64_t pre = json_is_integer(json_object_get(observation, "preFrames"))
+                            ? uint64_t(json_integer_value(json_object_get(observation, "preFrames"))) : 0;
+                        const uint64_t post = json_is_integer(json_object_get(observation, "postFrames"))
+                            ? uint64_t(json_integer_value(json_object_get(observation, "postFrames"))) : 0;
+                        if (pre + post + 1 > 262144)
+                            addError(res, observationPath, "Combined pre/post window exceeds observation history");
+                    }
+                }
+            }
+        }
+    }
+
+    json_t* arrangement = json_object_get(root, "arrangement");
+    if (arrangement && !json_is_array(arrangement)) addError(res, "arrangement", "Expected array");
+    else if (arrangement) {
+        if (json_array_size(arrangement) > 256) addError(res, "arrangement", "Maximum 256 scenes allowed");
+        std::set<std::string> sceneIds;
+        size_t index; json_t* scene;
+        json_array_foreach(arrangement, index, scene) {
+            std::string path = "arrangement[" + std::to_string(index) + "]";
+            if (!json_is_object(scene)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(scene, path, {"id", "name", "description", "lengthBeats", "repeats", "phaseMode", "tracks", "harmony"}, res);
+            validateStringField(scene, "id", path, 64, res);
+            validateStringField(scene, "name", path, 64, res);
+            validateStringField(scene, "description", path, 512, res);
+            validateNumberField(scene, "lengthBeats", path, std::numeric_limits<double>::min(), 1e9, res);
+            validateIntegerField(scene, "repeats", path, 1, INT32_MAX, res);
+            validateEnumField(scene, "phaseMode", path, {"restart", "continue", "alignGlobal"}, res);
+            json_t* id = json_object_get(scene, "id");
+            if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Scene id is required and must be 1-64 characters");
+            else if (!sceneIds.insert(json_string_value(id)).second) addError(res, path + ".id", "Duplicate scene id");
+            json_t* assignments = json_object_get(scene, "tracks");
+            if (assignments && !json_is_object(assignments)) { addError(res, path + ".tracks", "Expected object"); continue; }
+            if (!assignments) continue;
+            const char* trackId; json_t* assignment;
+            json_object_foreach(assignments, trackId, assignment) {
+                std::string assignmentPath = path + ".tracks." + trackId;
+                if (!trackIds.count(trackId)) addError(res, assignmentPath, "Undefined track referenced: " + std::string(trackId));
+                std::string assignedPattern;
+                if (json_is_string(assignment)) assignedPattern = json_string_value(assignment);
+                else if (json_is_object(assignment)) {
+                    warnUnknownFields(assignment, assignmentPath, {"pattern", "phaseMode", "overrides"}, res);
+                    if (json_object_get(assignment, "overrides")) {
+                        const char* attribute; json_t* attributeValue;
+                        json_object_foreach(assignment, attribute, attributeValue)
+                            if (!isOneOf(attribute, {"pattern", "phaseMode", "overrides"}))
+                                addError(res, assignmentPath + "." + attribute, "Unknown assignment field", "invalid_override");
+                    }
+                    parseOverrides(json_object_get(assignment, "overrides"), assignmentPath + ".overrides", res);
+                    validateStringField(assignment, "pattern", assignmentPath, 64, res);
+                    validateEnumField(assignment, "phaseMode", assignmentPath, {"restart", "continue", "alignGlobal"}, res);
+                    json_t* assigned = json_object_get(assignment, "pattern");
+                    if (!assigned) addError(res, assignmentPath + ".pattern", "Required field is missing");
+                    else if (json_is_string(assigned)) assignedPattern = json_string_value(assigned);
+                    if (json_object_get(assignment,"overrides") && assignedPattern.empty())
+                        addError(res, assignmentPath + ".pattern", "Overrides require a nonempty pattern reference", "invalid_override");
+                } else if (!json_is_null(assignment)) addError(res, assignmentPath, "Expected pattern id, assignment object, or null");
+                if (!assignedPattern.empty() && !patternIds.count(assignedPattern)) addError(res, assignmentPath, "Undefined pattern referenced: " + assignedPattern);
+            }
+        }
+    }
+
+    json_t* macros = json_object_get(root, "macros");
+    if (macros && !json_is_object(macros)) addError(res, "macros", "Expected object");
+    else if (macros) {
+        const char* macroId; json_t* macro;
+        json_object_foreach(macros, macroId, macro) {
+            std::string path = "macros." + std::string(macroId);
+            if (!isOneOf(macroId, {"1", "2", "3", "4"})) addError(res, path, "Macro id must be 1, 2, 3, or 4");
+            if (!json_is_object(macro)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(macro, path, {"target", "amount", "polarity", "clamp"}, res);
+            validateStringField(macro, "target", path, 128, res);
+            validateNumberField(macro, "amount", path, -100.0, 100.0, res);
+            validateEnumField(macro, "polarity", path, {"unipolar", "bipolar"}, res);
+            json_t* target = json_object_get(macro, "target");
+            if (!json_is_string(target)) addError(res, path + ".target", "Required field is missing or invalid");
+            else {
+                std::string targetName = json_string_value(target);
+                bool validTarget = isOneOf(targetName, {"global.probability", "global.swing", "global.velocity"});
+                std::smatch match;
+                if (!validTarget && std::regex_match(targetName, match, std::regex("^track\\.([^.]+)\\.(probability|swing|velocity|gate|mod|mod2|mod3)$"))) validTarget = trackIds.count(match[1].str()) != 0;
+                if (!validTarget) addError(res, path + ".target", "Unknown or unresolved macro target: " + targetName);
+            }
+            json_t* clamp = json_object_get(macro, "clamp");
+            if (clamp) {
+                if (!json_is_array(clamp) || json_array_size(clamp) != 2 || !json_is_number(json_array_get(clamp, 0)) || !json_is_number(json_array_get(clamp, 1))) addError(res, path + ".clamp", "Clamp must be a two-number array");
+                else if (json_number_value(json_array_get(clamp, 0)) > json_number_value(json_array_get(clamp, 1))) addError(res, path + ".clamp", "Clamp minimum must not exceed maximum");
+            }
+        }
+    }
+}
+
+// Helpers for reading json
+static std::string getString(json_t* obj, const char* key, const std::string& def = "") {
+    json_t* val = json_object_get(obj, key);
+    if (json_is_string(val)) return json_string_value(val);
+    return def;
+}
+
+static float getNumber(json_t* obj, const char* key, float def = 0.0f) {
+    json_t* val = json_object_get(obj, key);
+    if (json_is_number(val)) return json_number_value(val);
+    return def;
+}
+
+static int getInteger(json_t* obj, const char* key, int def = 0) {
+    json_t* val = json_object_get(obj, key);
+    if (json_is_integer(val)) return json_integer_value(val);
+    return def;
+}
+
+static bool getBoolean(json_t* obj, const char* key, bool def = false) {
+    json_t* val = json_object_get(obj, key);
+    if (json_is_boolean(val)) return json_boolean_value(val);
+    return def;
+}
+
+static ScaleType parseScale(const std::string& s) {
+    if (s == "major") return ScaleType::MAJOR;
+    if (s == "natural_minor") return ScaleType::NATURAL_MINOR;
+    if (s == "harmonic_minor") return ScaleType::HARMONIC_MINOR;
+    if (s == "melodic_minor") return ScaleType::MELODIC_MINOR;
+    if (s == "dorian") return ScaleType::DORIAN;
+    if (s == "phrygian") return ScaleType::PHRYGIAN;
+    if (s == "lydian") return ScaleType::LYDIAN;
+    if (s == "mixolydian") return ScaleType::MIXOLYDIAN;
+    if (s == "locrian") return ScaleType::LOCRIAN;
+    if (s == "major_pentatonic") return ScaleType::MAJOR_PENTATONIC;
+    if (s == "minor_pentatonic") return ScaleType::MINOR_PENTATONIC;
+    return ScaleType::CHROMATIC;
+}
+
+static ApplyAt parseApplyAt(const std::string& s) {
+    if (s == "immediate") return ApplyAt::IMMEDIATE;
+    if (s == "nextStep") return ApplyAt::NEXT_STEP;
+    if (s == "nextScene") return ApplyAt::NEXT_SCENE;
+    return ApplyAt::NEXT_BEAT;
+}
+
+static PhaseMode parsePhaseMode(const std::string& s) {
+    if (s == "continue") return PhaseMode::CONTINUE;
+    if (s == "alignGlobal") return PhaseMode::ALIGN_GLOBAL;
+    return PhaseMode::RESTART;
+}
+
+static OnExternalStop parseOnExternalStop(const std::string& s) {
+    if (s == "freeRun") return OnExternalStop::FREE_RUN;
+    if (s == "internal") return OnExternalStop::INTERNAL;
+    return OnExternalStop::HOLD;
+}
+
+// Convert resolution string to beats (quarter notes). e.g. "1/16" -> 0.25
+static double parseResolution(const std::string& s, ParseResult& res, const std::string& path) {
+    double base = 1.0;
+    if (s.substr(0, 2) == "1/") {
+        std::string denomStr = s.substr(2);
+        bool dotted = false;
+        bool triplet = false;
+        if (!denomStr.empty() && denomStr.back() == 'd') {
+            dotted = true;
+            denomStr.pop_back();
+        } else if (!denomStr.empty() && denomStr.back() == 't') {
+            triplet = true;
+            denomStr.pop_back();
+        }
+        
+        try {
+            int denom = std::stoi(denomStr);
+            if (denom > 0) {
+                // 1/4 is 1 beat. So base = 4.0 / denom.
+                base = 4.0 / denom;
+                if (dotted) base *= 1.5;
+                if (triplet) base *= (2.0 / 3.0);
+                return base;
+            }
+        } catch (...) {}
+    }
+    addError(res, path, "Invalid resolution format: " + s);
+    return 0.25; // default 1/16
+}
+
+static int rootPitchClassFromName(const std::string& root) {
+    if (root.empty()) return 0;
+    char name = root[0];
+    int offset = 0;
+    if (root.length() > 1) {
+        if (root[1] == 'b') offset = -1;
+        else if (root[1] == '#') offset = 1;
+    }
+    int pc = 0;
+    switch (name) {
+        case 'C': pc = 0; break;
+        case 'D': pc = 2; break;
+        case 'E': pc = 4; break;
+        case 'F': pc = 5; break;
+        case 'G': pc = 7; break;
+        case 'A': pc = 9; break;
+        case 'B': pc = 11; break;
+        default: pc = 0; break;
+    }
+    return (pc + offset + 12) % 12;
+}
+
+static const std::vector<int>& getScaleIntervals(ScaleType scale) {
+    static const std::vector<int> major = {0, 2, 4, 5, 7, 9, 11};
+    static const std::vector<int> natMinor = {0, 2, 3, 5, 7, 8, 10};
+    static const std::vector<int> harmMinor = {0, 2, 3, 5, 7, 8, 11};
+    static const std::vector<int> melMinor = {0, 2, 3, 5, 7, 9, 11};
+    static const std::vector<int> dorian = {0, 2, 3, 5, 7, 9, 10};
+    static const std::vector<int> phrygian = {0, 1, 3, 5, 7, 8, 10};
+    static const std::vector<int> lydian = {0, 2, 4, 6, 7, 9, 11};
+    static const std::vector<int> mixolydian = {0, 2, 4, 5, 7, 9, 10};
+    static const std::vector<int> locrian = {0, 1, 3, 5, 6, 8, 10};
+    static const std::vector<int> majPent = {0, 2, 4, 7, 9};
+    static const std::vector<int> minPent = {0, 3, 5, 7, 10};
+    static const std::vector<int> chromatic = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    switch (scale) {
+        case ScaleType::MAJOR: return major;
+        case ScaleType::NATURAL_MINOR: return natMinor;
+        case ScaleType::HARMONIC_MINOR: return harmMinor;
+        case ScaleType::MELODIC_MINOR: return melMinor;
+        case ScaleType::DORIAN: return dorian;
+        case ScaleType::PHRYGIAN: return phrygian;
+        case ScaleType::LYDIAN: return lydian;
+        case ScaleType::MIXOLYDIAN: return mixolydian;
+        case ScaleType::LOCRIAN: return locrian;
+        case ScaleType::MAJOR_PENTATONIC: return majPent;
+        case ScaleType::MINOR_PENTATONIC: return minPent;
+        default: return chromatic;
+    }
+}
+
+float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const std::string& rootName, int rootOctave) {
+    const auto& intervals = getScaleIntervals(scale);
+    int numDegrees = (int)intervals.size();
+    if (numDegrees == 0) return 0.0f;
+
+    int64_t octaveWrap = (degree >= 0) ? (degree / numDegrees) : ((int64_t(degree) - numDegrees + 1) / numDegrees);
+    int degreeInScale = degree - octaveWrap * numDegrees;
+    if (degreeInScale < 0) degreeInScale += numDegrees;
+
+    int semitoneInScale = intervals[degreeInScale];
+    int rootPc = rootPitchClassFromName(rootName);
+    int64_t totalOctave = int64_t(rootOctave) + octaveOffset + octaveWrap;
+    int64_t totalSemitones = rootPc + semitoneInScale + (totalOctave - 4) * 12;
+    return totalSemitones / 12.0f;
+}
+
+float noteToPitchV(const std::string& noteStr, ParseResult& res, const std::string& path) {
+    // Basic scientific pitch parser. C4 = 0V. 1V/Octave.
+    if (noteStr.empty()) return 0.0f;
+    char name = noteStr[0];
+    int offset = 0;
+    size_t numStart = 1;
+    if (noteStr.length() > 1) {
+        if (noteStr[1] == 'b') { offset = -1; numStart = 2; }
+        else if (noteStr[1] == '#') { offset = 1; numStart = 2; }
+    }
+    
+    int octave = 4;
+    if (numStart < noteStr.length()) {
+        try { octave = std::stoi(noteStr.substr(numStart)); }
+        catch (...) { addError(res, path, "Invalid octave in note: " + noteStr); }
+    }
+    
+    int pc = 0;
+    switch(name) {
+        case 'C': pc = 0; break;
+        case 'D': pc = 2; break;
+        case 'E': pc = 4; break;
+        case 'F': pc = 5; break;
+        case 'G': pc = 7; break;
+        case 'A': pc = 9; break;
+        case 'B': pc = 11; break;
+        default: addError(res, path, "Invalid note name: " + noteStr); break;
+    }
+    
+    int totalSemitones = pc + offset + (octave - 4) * 12;
+    return totalSemitones / 12.0f;
+}
+
+ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
+    ParseResult res;
+    res.valid = true;
+    res.composition = std::make_shared<Composition>();
+    Composition& comp = *const_cast<Composition*>(res.composition.get());
+    comp.revision = revision;
+
+    json_error_t error;
+    json_t* root = json_loads(jsonString.c_str(), 0, &error);
+    if (!root) {
+        addError(res, "$", "Failed to parse JSON: " + std::string(error.text));
+        return res;
+    }
+
+    json_t* normalized = normalizeComposition(root, res);
+    json_decref(root);
+    if (!normalized) return res;
+    root = normalized;
+    validateCompositionSchema(root, res);
+    if (!res.valid) {
+        json_decref(root);
+        return res;
+    }
+
+    if (!tuning_json::definitions(json_object_get(root,"pitchSystems"), comp.pitchSystems, res)) { json_decref(root); return res; }
+
+    std::map<std::string,std::shared_ptr<std::vector<float>>> pitchPrograms;
+
+    // Parse Meta
+    json_t* metaJ = json_object_get(root, "meta");
+    if (metaJ) {
+        comp.meta.title = getString(metaJ, "title", "Untitled");
+        comp.meta.prompt = getString(metaJ, "prompt");
+        comp.meta.bpm = getNumber(metaJ, "bpm", 120.0f);
+        comp.meta.root = getString(metaJ, "root", "C");
+        comp.meta.rootOctave = getInteger(metaJ, "rootOctave", 4);
+        comp.meta.scale = parseScale(getString(metaJ, "scale", "chromatic"));
+        comp.meta.swing = getNumber(metaJ, "swing", 0.0f);
+        json_t* seedJ = json_object_get(metaJ, "seed");
+        if (seedJ && json_is_integer(seedJ)) {
+            comp.meta.seed = json_integer_value(seedJ);
+        }
+    }
+
+    // Parse Clock
+    json_t* clockJ = json_object_get(root, "clock");
+    if (clockJ) {
+        comp.clock.externalPpqn = getInteger(clockJ, "externalPpqn", 24);
+        comp.clock.outputPpqn = getInteger(clockJ, "outputPpqn", 24);
+        comp.clock.externalTimeoutMs = getNumber(clockJ, "externalTimeoutMs", 2000.0f);
+        comp.clock.onExternalStop = parseOnExternalStop(getString(clockJ, "onExternalStop", "hold"));
+    }
+
+    // Parse Transport
+    json_t* transportJ = json_object_get(root, "transport");
+    if (transportJ) {
+        comp.transport.running = getBoolean(transportJ, "running", true);
+        comp.transport.loop = getBoolean(transportJ, "loop", true);
+        comp.transport.defaultApplyAt = parseApplyAt(getString(transportJ, "defaultApplyAt", "nextBeat"));
+    }
+
+    // Parse Tracks
+    json_t* tracksJ = json_object_get(root, "tracks");
+    if (tracksJ && json_is_array(tracksJ)) {
+        size_t index; json_t* value;
+        std::set<int> seenChannels;
+        std::set<std::string> seenIds;
+        json_array_foreach(tracksJ, index, value) {
+            TrackDef t;
+            t.id = getString(value, "id");
+            t.channel = getInteger(value, "channel", 0);
+            t.defaultGate = getNumber(value, "defaultGate", 0.5f);
+            t.defaultVelocity = getNumber(value, "defaultVelocity", 0.5f);
+            
+            std::string path = "tracks[" + std::to_string(index) + "]";
+            if (t.id.empty()) addError(res, path, "Track id is missing");
+            if (seenIds.count(t.id)) addError(res, path, "Duplicate track id: " + t.id);
+            if (seenChannels.count(t.channel)) addError(res, path, "Duplicate channel: " + std::to_string(t.channel));
+            if (t.channel < 0 || t.channel >= 16) addError(res, path, "Channel out of bounds (0-15): " + std::to_string(t.channel));
+            
+            seenIds.insert(t.id);
+            seenChannels.insert(t.channel);
+            comp.tracks.push_back(t);
+        }
+    }
+
+    // Parse Patterns
+    json_t* patternsJ = json_object_get(root, "patterns");
+    if (patternsJ && json_is_object(patternsJ)) {
+        const char* key; json_t* val;
+        json_object_foreach(patternsJ, key, val) {
+            Pattern p;
+            p.id = key;
+            if (json_t* context=json_object_get(val,"pitchContext")) {
+                p.pitchContext=harmony_json::string(context);
+                if (!json_is_string(context) || !comp.pitchSystems.contexts.count(p.pitchContext))
+                    addError(res,"patterns."+std::string(key)+".pitchContext","Unknown context","unresolved_pitch_context");
+            }
+            p.nextNoteId = getInteger(val, "nextNoteId", 1);
+            p.length = getInteger(val, "length", 16);
+            p.resolutionStr = getString(val, "resolution", "1/16");
+            p.resolutionBeats = parseResolution(p.resolutionStr, res, "patterns." + std::string(key) + ".resolution");
+            
+            json_t* evolutionJ = json_object_get(val, "evolution");
+            p.evolution.probability = getNumber(evolutionJ, "probability", 0.f);
+            p.evolution.velocity = getNumber(evolutionJ, "velocity", 0.f);
+            p.evolution.gate = getNumber(evolutionJ, "gate", 0.f);
+            p.evolution.glideMs = getNumber(evolutionJ, "glideMs", 0.f);
+            p.evolution.mod[0] = getNumber(evolutionJ, "mod", 0.f);
+            p.evolution.mod[1] = getNumber(evolutionJ, "mod2", 0.f);
+            p.evolution.mod[2] = getNumber(evolutionJ, "mod3", 0.f);
+            json_t* stepsJ = json_object_get(val, "steps");
+			if (stepsJ && json_is_array(stepsJ)) {
+                size_t idx; json_t* stepJ;
+                std::set<int> seenSteps;
+                json_array_foreach(stepsJ, idx, stepJ) {
+                    StepEvent e;
+                    e.id = getString(stepJ, "id");
+                    tuning_json::offsets(stepJ,e.pitchOffsets,res,"patterns."+std::string(key)+".steps["+std::to_string(idx)+"]");
+                    e.transposeSemitones = getInteger(stepJ, "transposeSemitones", 0);
+                    e.step = getInteger(stepJ, "step", 0);
+                    e.evolve = getBoolean(stepJ, "evolve", true);
+                    std::string path = "patterns." + std::string(key) + ".steps[" + std::to_string(idx) + "]";
+                    e.condition = parseCondition(json_object_get(stepJ, "condition"), path + ".condition", res);
+                    
+                    if (e.step < 0 || e.step >= p.length) addError(res, path, "Step index out of bounds: " + std::to_string(e.step));
+                    if (seenSteps.count(e.step)) addError(res, path, "Duplicate step index: " + std::to_string(e.step));
+                    seenSteps.insert(e.step);
+                    
+                    json_t* pitchVJ = json_object_get(stepJ, "pitchV");
+                    json_t* degreeJ = json_object_get(stepJ, "degree");
+                    json_t* noteJ = json_object_get(stepJ, "note");
+                    
+                    json_t* tunedJ = json_object_get(stepJ,"tuned");
+                    json_t* harmonicJ = json_object_get(stepJ, "harmonic");
+                    int pitchDefs = (pitchVJ ? 1 : 0) + (degreeJ ? 1 : 0) + (noteJ ? 1 : 0) + (harmonicJ ? 1 : 0) + (tunedJ ? 1 : 0);
+                    if (pitchDefs != 1) {
+                        addError(res, path, "Exactly one of pitchV, degree, note, harmonic, or tuned is required");
+                    } else {
+                        if (tunedJ) {
+                            e.pitchType=PitchType::TUNED;
+                            double voltage=0.;
+                            if (tuning_json::resolve(tunedJ,p.pitchContext,comp.pitchSystems,voltage,res,path+".tuned",&e.nativePitch)) {
+                                e.compiledPitchV=float(voltage);
+                            }
+                            e.tuned=harmony_json::dump(tunedJ);
+                        } else if (harmonicJ) {
+                            e.pitchType = PitchType::HARMONIC;
+                            e.harmonic = harmony_json::dump(harmonicJ);
+                        } else if (pitchVJ) {
+                            e.pitchType = PitchType::PITCH_V;
+                            e.pitchV = json_number_value(pitchVJ);
+                            e.compiledPitchV = e.pitchV;
+                        } else if (degreeJ) {
+                            e.pitchType = PitchType::DEGREE;
+                            e.degree = json_integer_value(degreeJ);
+                            e.octave = getInteger(stepJ, "octave", 0);
+                            e.compiledPitchV = degreeToPitchV(e.degree, e.octave, comp.meta.scale, comp.meta.root, comp.meta.rootOctave);
+                        } else if (noteJ) {
+                            e.pitchType = PitchType::NOTE;
+                            e.note = json_string_value(noteJ);
+                            e.compiledPitchV = noteToPitchV(e.note, res, path);
+                        }
+                    }
+                    
+                    if(e.pitchType!=PitchType::TUNED) e.nativePitch.baseV=double(e.compiledPitchV);
+                    if(e.pitchType!=PitchType::HARMONIC && (e.pitchType==PitchType::TUNED || e.pitchOffsets.fields)) {
+                        double voltage=0.;
+                        if(res.valid && tuning_json::transformed(e,comp.pitchSystems,nullptr,voltage,res,path)) e.compiledPitchV=float(voltage);
+                    } else if(e.pitchType!=PitchType::HARMONIC && e.transposeSemitones!=0) e.compiledPitchV+=e.transposeSemitones/12.f;
+                    if (e.compiledPitchV < -10.f || e.compiledPitchV > 10.f)
+                        addError(res, path, "Effective pitch is outside -10 to 10 V", "pitch_out_of_range");
+                    json_t* gateJ = json_object_get(stepJ, "gate");
+                    if (gateJ) { e.hasGate = true; e.gate = json_number_value(gateJ); }
+                    json_t* velJ = json_object_get(stepJ, "velocity");
+                    if (velJ) { e.hasVelocity = true; e.velocity = json_number_value(velJ); }
+                    json_t* modJ = json_object_get(stepJ, "mod");
+                    if (modJ) { e.hasMod = true; e.mod = json_number_value(modJ); }
+                    json_t* mod2J = json_object_get(stepJ, "mod2");
+                    if (mod2J) { e.hasMod2 = true; e.mod2 = json_number_value(mod2J); }
+                    json_t* mod3J = json_object_get(stepJ, "mod3");
+                    if (mod3J) { e.hasMod3 = true; e.mod3 = json_number_value(mod3J); }
+                    json_t* probJ = json_object_get(stepJ, "probability");
+                    if (probJ) { e.hasProbability = true; e.probability = json_number_value(probJ); }
+                    
+                    e.tie = getBoolean(stepJ, "tie", false);
+                    e.glideMs = getNumber(stepJ, "glideMs", 0.0f);
+                    e.microshift = getNumber(stepJ, "microshift", 0.0f);
+                    e.ratchets = getInteger(stepJ, "ratchets", 1);
+                    json_t* observationJ = json_object_get(stepJ, "observation");
+                    if (json_is_object(observationJ)) {
+                        e.hasObservation = true;
+                        e.observation.octaviaModuleId = json_integer_value(
+                            json_object_get(observationJ, "octaviaModuleId"));
+                        e.observation.preFrames = static_cast<uint32_t>(getInteger(
+                            observationJ, "preFrames", 0));
+                        e.observation.postFrames = static_cast<uint32_t>(getInteger(
+                            observationJ, "postFrames", 0));
+                        json_t* labelJ = json_object_get(observationJ, "label");
+                        if (json_is_string(labelJ)) e.observation.label = json_string_value(labelJ);
+                        json_t* monitorsJ = json_object_get(observationJ, "monitors");
+                        size_t monitorIndex; json_t* monitorJ;
+                        json_array_foreach(monitorsJ, monitorIndex, monitorJ)
+                            e.observation.monitorMask |= observationMonitorBit(json_string_value(monitorJ));
+                    }
+                    
+                    p.steps.push_back(e);
+				}
+			}
+			p.eventIndexByStep.assign(std::max(0, p.length), -1);
+			for (size_t eventIndex = 0; eventIndex < p.steps.size(); ++eventIndex) {
+				int step = p.steps[eventIndex].step;
+				if (step >= 0 && step < p.length) p.eventIndexByStep[step] = static_cast<int>(eventIndex);
+			}
+			comp.patterns[p.id] = p;
+        }
+    }
+
+    // Parse Arrangement
+    json_t* arrJ = json_object_get(root, "arrangement");
+    if (arrJ && json_is_array(arrJ)) {
+        size_t idx; json_t* val;
+        json_array_foreach(arrJ, idx, val) {
+            Scene s;
+            s.id = getString(val, "id");
+            s.name = getString(val, "name");
+            s.description = getString(val, "description");
+            s.lengthBeats = getNumber(val, "lengthBeats", 16.0f);
+            s.authoredLengthBeats = json_object_get(val,"lengthBeats") ? json_number_value(json_object_get(val,"lengthBeats")) : 16.;
+            s.repeats = getInteger(val, "repeats", 1);
+            s.phaseMode = parsePhaseMode(getString(val, "phaseMode", "restart"));
+            
+            json_t* tracksMapJ = json_object_get(val, "tracks");
+            if (tracksMapJ && json_is_object(tracksMapJ)) {
+                const char* tk; json_t* tv;
+                json_object_foreach(tracksMapJ, tk, tv) {
+                    TrackAssignment ta;
+                    if (json_is_string(tv)) {
+                        ta.patternId = json_string_value(tv);
+                    } else if (json_is_object(tv)) {
+                        ta.patternId = getString(tv, "pattern");
+                        ta.overrides = parseOverrides(json_object_get(tv, "overrides"),
+                            "arrangement[" + std::to_string(idx) + "].tracks." + tk + ".overrides", res);
+                        json_t* pmJ = json_object_get(tv, "phaseMode");
+                        if (pmJ) {
+                            ta.hasPhaseModeOverride = true;
+                            ta.phaseModeOverride = parsePhaseMode(json_string_value(pmJ));
+                        }
+                    } else if (json_is_null(tv)) {
+                        ta.patternId = ""; // rest
+                    } else {
+                        addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk, "Invalid track assignment");
+                    }
+                    if (!ta.patternId.empty() && comp.patterns.find(ta.patternId) == comp.patterns.end()) {
+                        addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk, "Undefined pattern referenced: " + ta.patternId);
+                    }
+                    auto assigned = comp.patterns.find(ta.patternId);
+                    std::string pitchKey=std::to_string(ta.patternId.size())+":"+ta.patternId;
+                    auto keyValue=[&](const void* data,size_t size){pitchKey.append(static_cast<const char*>(data),size);};
+                    keyValue(&ta.overrides.values[TRANSPOSE],sizeof(float));
+                    const auto& pitchOffset=ta.overrides.pitchOffsets;
+                    keyValue(&pitchOffset.fields,sizeof(pitchOffset.fields));keyValue(&pitchOffset.steps,sizeof(pitchOffset.steps));
+                    keyValue(&pitchOffset.periods,sizeof(pitchOffset.periods));keyValue(&pitchOffset.cents,sizeof(pitchOffset.cents));
+                    auto cached=pitchPrograms.find(pitchKey);
+                    const bool cachedPitchProgram=cached!=pitchPrograms.end();
+                    std::shared_ptr<std::vector<float>> pitchProgram;
+                    if(cachedPitchProgram) ta.compiledPitches=cached->second;
+                    if (assigned != comp.patterns.end()) for (const auto& event : assigned->second.steps) {
+                        if (event.pitchType == PitchType::HARMONIC) {
+                            continue;
+                        }
+                        if(cachedPitchProgram) continue;
+                        float pitch = ta.overrides.pitch(event.compiledPitchV);
+                        if(event.pitchType==PitchType::TUNED || event.pitchOffsets.fields || ta.overrides.pitchOffsets.fields) {
+                            double voltage=0.;
+                            if(res.valid && tuning_json::transformed(event,comp.pitchSystems,&ta.overrides,voltage,res,"arrangement["+std::to_string(idx)+"].tracks."+tk)) {
+                                if(!pitchProgram) {
+                                    if(comp.staticPitchEntries+size_t(assigned->second.length)>1048576) {
+                                        addError(res,"pitchSystems","Static pitch table exceeds entry budget","capacity_exceeded");
+                                        continue;
+                                    }
+                                    comp.staticPitchEntries+=size_t(assigned->second.length);
+                                    pitchProgram=std::make_shared<std::vector<float>>(size_t(assigned->second.length),0.f);
+                                    ta.compiledPitches=pitchProgram;
+                                    for(const auto& e:assigned->second.steps) (*pitchProgram)[size_t(e.step)]=ta.overrides.pitch(e.compiledPitchV);
+                                }
+                                (*pitchProgram)[size_t(event.step)]=pitch=float(voltage);
+                            }
+                        }
+                        if (pitch < -10.f || pitch > 10.f)
+                            addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk + ".overrides.transposeSemitones",
+                                "Assigned note pitch is outside -10 to 10 V", "pitch_out_of_range");
+                    }
+                    if(pitchProgram && res.valid) pitchPrograms.emplace(pitchKey,pitchProgram);
+                    s.tracks[tk] = ta;
+                }
+            }
+            comp.arrangement.push_back(s);
+        }
+    }
+
+    // Parse Macros
+    json_t* macrosJ = json_object_get(root, "macros");
+    if (macrosJ && json_is_object(macrosJ)) {
+        const char* key; json_t* val;
+        json_object_foreach(macrosJ, key, val) {
+            Macro macro;
+            macro.id = key;
+            macro.target = getString(val, "target");
+            macro.amount = getNumber(val, "amount", 0.0f);
+            macro.polarity = getString(val, "polarity", "unipolar") == "bipolar"
+                ? MacroPolarity::BIPOLAR : MacroPolarity::UNIPOLAR;
+            json_t* clampJ = json_object_get(val, "clamp");
+            if (clampJ) {
+                macro.clampMin = json_number_value(json_array_get(clampJ, 0));
+                macro.clampMax = json_number_value(json_array_get(clampJ, 1));
+            }
+            comp.macros[macro.id] = macro;
+        }
+    }
+
+    for (const auto& patternEntry : comp.patterns) {
+        for (const auto& event : patternEntry.second.steps) {
+            if (!std::isfinite(event.compiledPitchV) || event.compiledPitchV < -10.0f || event.compiledPitchV > 10.0f) {
+                addError(res, "patterns." + patternEntry.first, "Compiled pitch is outside -10 to 10 V");
+            }
+        }
+    }
+
+    comp.pitchStorageBytes=comp.pitchSystems.storageBytes();
+    for (const auto& entry : comp.patterns) {
+        if (!entry.second.pitchContext.empty()) comp.pitchStorageBytes+=entry.second.pitchContext.capacity()+1;
+        for (const auto& event : entry.second.steps)
+            if (event.pitchType==PitchType::TUNED) comp.pitchStorageBytes+=event.tuned.capacity()+event.nativePitch.context.capacity()+sizeof(NativePitch)+2;
+    }
+    size_t staticPitchEntries=0;
+    std::set<const std::vector<float>*> countedPrograms;
+    for(const auto& scene:comp.arrangement) for(const auto& assignment:scene.tracks) {
+        const auto* program=assignment.second.compiledPitches.get();
+        if(program && countedPrograms.insert(program).second) {
+            comp.pitchStorageBytes+=program->capacity()*sizeof(float)+sizeof(*program)+64;
+            staticPitchEntries+=program->size();
+        }
+    }
+    comp.staticPitchEntries=staticPitchEntries;
+    if(staticPitchEntries>1048576) addError(res,"pitchSystems","Static pitch table exceeds entry budget","capacity_exceeded");
+    if (comp.pitchStorageBytes>32u*1024u*1024u) addError(res,"pitchSystems","Pitch storage exceeds combined 32 MiB budget","capacity_exceeded");
+    if (res.errors.empty()) compileAutomation(root, comp, res);
+    if (res.errors.empty()) compileHarmony(root, comp, res);
+    json_decref(root);
+    
+    // Validate bounds
+    if (comp.tracks.size() > 16) addError(res, "tracks", "Maximum 16 tracks allowed");
+    if (comp.patterns.size() > 256) addError(res, "patterns", "Maximum 256 patterns allowed");
+    if (comp.arrangement.size() > 256) addError(res, "arrangement", "Maximum 256 scenes allowed");
+    if (comp.meta.bpm < 20.0f || comp.meta.bpm > 400.0f) addError(res, "meta.bpm", "BPM out of range 20-400");
+    
+    if (!res.errors.empty()) res.valid = false;
+    return res;
+}
+
+static const char* scaleToString(ScaleType s) {
+    switch (s) {
+        case ScaleType::MAJOR: return "major";
+        case ScaleType::NATURAL_MINOR: return "natural_minor";
+        case ScaleType::HARMONIC_MINOR: return "harmonic_minor";
+        case ScaleType::MELODIC_MINOR: return "melodic_minor";
+        case ScaleType::DORIAN: return "dorian";
+        case ScaleType::PHRYGIAN: return "phrygian";
+        case ScaleType::LYDIAN: return "lydian";
+        case ScaleType::MIXOLYDIAN: return "mixolydian";
+        case ScaleType::LOCRIAN: return "locrian";
+        case ScaleType::MAJOR_PENTATONIC: return "major_pentatonic";
+        case ScaleType::MINOR_PENTATONIC: return "minor_pentatonic";
+        default: return "chromatic";
+    }
+}
+
+static const char* applyAtToString(ApplyAt a) {
+    switch (a) {
+        case ApplyAt::IMMEDIATE: return "immediate";
+        case ApplyAt::NEXT_STEP: return "nextStep";
+        case ApplyAt::NEXT_SCENE: return "nextScene";
+        default: return "nextBeat";
+    }
+}
+
+static const char* phaseModeToString(PhaseMode p) {
+    switch (p) {
+        case PhaseMode::CONTINUE: return "continue";
+        case PhaseMode::ALIGN_GLOBAL: return "alignGlobal";
+        default: return "restart";
+    }
+}
+
+static const char* onExternalStopToString(OnExternalStop o) {
+    switch (o) {
+        case OnExternalStop::FREE_RUN: return "freeRun";
+        case OnExternalStop::INTERNAL: return "internal";
+        default: return "hold";
+    }
+}
+
+static json_t* patternToJson(const Pattern& pat) {
+    json_t* patJ = json_object();
+    if (!pat.pitchContext.empty()) json_object_set_new(patJ,"pitchContext",json_string(pat.pitchContext.c_str()));
+    json_object_set_new(patJ, "nextNoteId", json_integer(pat.nextNoteId));
+    json_object_set_new(patJ, "length", json_integer(pat.length));
+    json_object_set_new(patJ, "resolution", json_string(pat.resolutionStr.c_str()));
+    if (pat.evolution.enabled()) {
+        json_t* evolutionJ = json_object();
+        json_object_set_new(evolutionJ, "probability", json_real(pat.evolution.probability));
+        json_object_set_new(evolutionJ, "velocity", json_real(pat.evolution.velocity));
+        json_object_set_new(evolutionJ, "gate", json_real(pat.evolution.gate));
+        json_object_set_new(evolutionJ, "glideMs", json_real(pat.evolution.glideMs));
+        const char* lanes[] = {"mod", "mod2", "mod3"};
+        for (int i = 0; i < 3; ++i)
+            json_object_set_new(evolutionJ, lanes[i], json_real(pat.evolution.mod[i]));
+        json_object_set_new(patJ, "evolution", evolutionJ);
+    }
+    json_t* stepsJ = json_array();
+    std::vector<const StepEvent*> ordered;
+    for (const auto& ev : pat.steps) ordered.push_back(&ev);
+    std::sort(ordered.begin(), ordered.end(), [](const StepEvent* a, const StepEvent* b) { return a->step < b->step; });
+    for (const auto* event : ordered) {
+        const auto& ev = *event;
+        json_t* evJ = json_object();
+        tuning_json::writeOffsets(evJ,ev.pitchOffsets);
+        if (!ev.id.empty()) json_object_set_new(evJ, "id", json_string(ev.id.c_str()));
+        if (ev.transposeSemitones != 0) json_object_set_new(evJ, "transposeSemitones", json_integer(ev.transposeSemitones));
+        if (ev.condition.present) json_object_set_new(evJ, "condition", conditionToJson(ev.condition));
+        json_object_set_new(evJ, "step", json_integer(ev.step));
+        if (!ev.evolve) json_object_set_new(evJ, "evolve", json_false());
+        if (ev.pitchType == PitchType::TUNED) {
+            json_object_set_new(evJ,"tuned",json_loads(ev.tuned.c_str(),0,nullptr));
+        } else if (ev.pitchType == PitchType::HARMONIC) {
+            json_error_t error;
+            json_object_set_new(evJ,"harmonic",json_loads(ev.harmonic.c_str(),0,&error));
+        } else if (ev.pitchType == PitchType::PITCH_V) {
+            json_object_set_new(evJ, "pitchV", json_real(ev.pitchV));
+        } else if (ev.pitchType == PitchType::DEGREE) {
+            json_object_set_new(evJ, "degree", json_integer(ev.degree));
+            if (ev.octave != 0) json_object_set_new(evJ, "octave", json_integer(ev.octave));
+        } else if (ev.pitchType == PitchType::NOTE) {
+            json_object_set_new(evJ, "note", json_string(ev.note.c_str()));
+        }
+        if (ev.hasGate) json_object_set_new(evJ, "gate", json_real(ev.gate));
+        if (ev.hasVelocity) json_object_set_new(evJ, "velocity", json_real(ev.velocity));
+        if (ev.hasMod) json_object_set_new(evJ, "mod", json_real(ev.mod));
+        if (ev.hasMod2) json_object_set_new(evJ, "mod2", json_real(ev.mod2));
+        if (ev.hasMod3) json_object_set_new(evJ, "mod3", json_real(ev.mod3));
+        if (ev.hasProbability) json_object_set_new(evJ, "probability", json_real(ev.probability));
+        if (ev.tie) json_object_set_new(evJ, "tie", json_true());
+        if (ev.glideMs > 0.0f) json_object_set_new(evJ, "glideMs", json_real(ev.glideMs));
+        if (ev.microshift != 0.0f) json_object_set_new(evJ, "microshift", json_real(ev.microshift));
+        if (ev.ratchets > 1) json_object_set_new(evJ, "ratchets", json_integer(ev.ratchets));
+        if (ev.hasObservation) {
+            json_t* observationJ = json_object();
+            json_object_set_new(observationJ, "octaviaModuleId",
+                json_integer(ev.observation.octaviaModuleId));
+            json_t* monitorsJ = json_array();
+            static const char* monitorNames[] = {"masterL", "masterR", "A", "B", "C", "D"};
+            for (size_t monitor = 0; monitor < 6; ++monitor)
+                if (ev.observation.monitorMask & (1u << monitor))
+                    json_array_append_new(monitorsJ, json_string(monitorNames[monitor]));
+            json_object_set_new(observationJ, "monitors", monitorsJ);
+            if (ev.observation.preFrames)
+                json_object_set_new(observationJ, "preFrames", json_integer(ev.observation.preFrames));
+            if (ev.observation.postFrames)
+                json_object_set_new(observationJ, "postFrames", json_integer(ev.observation.postFrames));
+            if (!ev.observation.label.empty())
+                json_object_set_new(observationJ, "label", json_string(ev.observation.label.c_str()));
+            json_object_set_new(evJ, "observation", observationJ);
+        }
+        json_array_append_new(stepsJ, evJ);
+    }
+    json_object_set_new(patJ, "steps", stepsJ);
+    return patJ;
+}
+
+static json_t* sceneToJson(const Scene& sc) {
+    json_t* scJ = json_object();
+    if(sc.harmony.present)json_object_set_new(scJ,"harmony",harmony_json::bindingJson(sc.harmony));
+    json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
+    if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+    if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
+    json_object_set_new(scJ, "lengthBeats", json_real(sceneTimelineLength(sc)));
+    json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
+    json_object_set_new(scJ, "phaseMode", json_string(phaseModeToString(sc.phaseMode)));
+    json_t* tracksJ = json_object();
+    for (const auto& kv : sc.tracks) {
+        if (kv.second.patternId.empty()) {
+            json_object_set_new(tracksJ, kv.first.c_str(), json_null());
+        } else if (kv.second.hasPhaseModeOverride || kv.second.overrides.present) {
+            json_t* overrideJ = json_object();
+            json_object_set_new(overrideJ, "pattern", json_string(kv.second.patternId.c_str()));
+            if (kv.second.hasPhaseModeOverride)
+                json_object_set_new(overrideJ, "phaseMode", json_string(phaseModeToString(kv.second.phaseModeOverride)));
+            if (kv.second.overrides.present)
+                json_object_set_new(overrideJ, "overrides", overridesToJson(kv.second.overrides));
+            json_object_set_new(tracksJ, kv.first.c_str(), overrideJ);
+        } else {
+            json_object_set_new(tracksJ, kv.first.c_str(), json_string(kv.second.patternId.c_str()));
+        }
+    }
+    json_object_set_new(scJ, "tracks", tracksJ);
+    return scJ;
+}
+
+static json_t* compositionToJson(const Composition& comp) {
+    json_t* root = json_object();
+    if (!comp.pitchSystems.authored.empty()) json_object_set_new(root,"pitchSystems",json_loads(comp.pitchSystems.authored.c_str(),0,nullptr));
+    if(comp.harmonyPresent || !comp.progressions.empty() || comp.defaultHarmony.present){
+        json_t* harmony=json_object();json_t* progressions=json_object();
+        for(const auto& p:comp.progressions)json_object_set_new(progressions,p.id.c_str(),harmony_json::progressionJson(p));
+        json_object_set_new(harmony,"progressions",progressions);
+        if(comp.defaultHarmony.present)json_object_set_new(harmony,"default",harmony_json::bindingJson(comp.defaultHarmony));
+        json_object_set_new(root,"harmony",harmony);
+    }
+    if (!comp.automation.empty()) {
+        json_t* automation=json_object();
+        for(const auto& curve:comp.automation)json_object_set_new(automation,curve.id.c_str(),automationToJson(curve));
+        json_object_set_new(root,"automation",automation);
+    }
+    json_object_set_new(root, "schemaVersion", json_integer(4));
+
+    // Meta
+    json_t* metaJ = json_object();
+    json_object_set_new(metaJ, "title", json_string(comp.meta.title.c_str()));
+    if (!comp.meta.prompt.empty()) json_object_set_new(metaJ, "prompt", json_string(comp.meta.prompt.c_str()));
+    json_object_set_new(metaJ, "bpm", json_real(comp.meta.bpm));
+    json_object_set_new(metaJ, "root", json_string(comp.meta.root.c_str()));
+    json_object_set_new(metaJ, "rootOctave", json_integer(comp.meta.rootOctave));
+    json_object_set_new(metaJ, "scale", json_string(scaleToString(comp.meta.scale)));
+    json_object_set_new(metaJ, "swing", json_real(comp.meta.swing));
+    json_object_set_new(metaJ, "seed", json_integer(comp.meta.seed));
+    json_object_set_new(root, "meta", metaJ);
+
+    // Clock
+    json_t* clockJ = json_object();
+    json_object_set_new(clockJ, "externalPpqn", json_integer(comp.clock.externalPpqn));
+    json_object_set_new(clockJ, "outputPpqn", json_integer(comp.clock.outputPpqn));
+    json_object_set_new(clockJ, "externalTimeoutMs", json_real(comp.clock.externalTimeoutMs));
+    json_object_set_new(clockJ, "onExternalStop", json_string(onExternalStopToString(comp.clock.onExternalStop)));
+    json_object_set_new(root, "clock", clockJ);
+
+    // Transport
+    json_t* transportJ = json_object();
+    json_object_set_new(transportJ, "running", json_boolean(comp.transport.running));
+    json_object_set_new(transportJ, "loop", json_boolean(comp.transport.loop));
+    json_object_set_new(transportJ, "defaultApplyAt", json_string(applyAtToString(comp.transport.defaultApplyAt)));
+    json_object_set_new(root, "transport", transportJ);
+
+    // Tracks
+    json_t* tracksJ = json_array();
+    for (const auto& tr : comp.tracks) {
+        json_t* trJ = json_object();
+        json_object_set_new(trJ, "id", json_string(tr.id.c_str()));
+        json_object_set_new(trJ, "channel", json_integer(tr.channel));
+        json_object_set_new(trJ, "defaultGate", json_real(tr.defaultGate));
+        json_object_set_new(trJ, "defaultVelocity", json_real(tr.defaultVelocity));
+        json_array_append_new(tracksJ, trJ);
+    }
+    json_object_set_new(root, "tracks", tracksJ);
+
+    // Patterns
+    json_t* patternsJ = json_object();
+    for (const auto& kv : comp.patterns) {
+        json_object_set_new(patternsJ, kv.first.c_str(), patternToJson(kv.second));
+    }
+    json_object_set_new(root, "patterns", patternsJ);
+
+    // Arrangement
+    json_t* arrJ = json_array();
+    for (const auto& sc : comp.arrangement) {
+        json_array_append_new(arrJ, sceneToJson(sc));
+    }
+    json_object_set_new(root, "arrangement", arrJ);
+
+    // Macros
+    json_t* macrosJ = json_object();
+    for (const auto& kv : comp.macros) {
+        json_t* mJ = json_object();
+        json_object_set_new(mJ, "target", json_string(kv.second.target.c_str()));
+        json_object_set_new(mJ, "amount", json_real(kv.second.amount));
+        json_object_set_new(mJ, "polarity", json_string(kv.second.polarity == MacroPolarity::BIPOLAR ? "bipolar" : "unipolar"));
+        json_t* clampJ = json_array();
+        json_array_append_new(clampJ, json_real(kv.second.clampMin));
+        json_array_append_new(clampJ, json_real(kv.second.clampMax));
+        json_object_set_new(mJ, "clamp", clampJ);
+        json_object_set_new(macrosJ, kv.first.c_str(), mJ);
+    }
+    json_object_set_new(root, "macros", macrosJ);
+
+    return root;
+}
+
+static std::string dumpAndFree(json_t* root) {
+    if (!root) return "{}";
+    char* str = json_dumps(root, JSON_COMPACT);
+    std::string out = str ? str : "{}";
+    if (str) free(str);
+    json_decref(root);
+    return out;
+}
+
+std::string serializeSummaryJson(const Composition& comp) {
+    json_t* root = json_object();
+    json_object_set_new(root,"progressionCount",json_integer(comp.progressions.size()));
+    json_object_set_new(root,"harmonicPitchEntries",json_integer(comp.harmonicPitchEntries));
+    json_t* automation=json_array();
+    for(const auto& curve:comp.automation)json_array_append_new(automation,json_pack("{s:s,s:s,s:s,s:b,s:i}",
+        "id",curve.id.c_str(),"track",curve.trackId.c_str(),"lane",curve.lane==0?"mod":curve.lane==1?"mod2":"mod3",
+        "enabled",curve.enabled,"pointCount",int(curve.points.size())));
+    json_object_set_new(root,"automationCount",json_integer(comp.automation.size()));
+    json_object_set_new(root,"automation",automation);
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(4));
+    json_object_set_new(root, "view", json_string("summary"));
+
+    // Meta
+    json_t* metaJ = json_object();
+    json_object_set_new(metaJ, "title", json_string(comp.meta.title.c_str()));
+    if (!comp.meta.prompt.empty()) json_object_set_new(metaJ, "prompt", json_string(comp.meta.prompt.c_str()));
+    json_object_set_new(metaJ, "bpm", json_real(comp.meta.bpm));
+    json_object_set_new(metaJ, "root", json_string(comp.meta.root.c_str()));
+    json_object_set_new(metaJ, "rootOctave", json_integer(comp.meta.rootOctave));
+    json_object_set_new(metaJ, "scale", json_string(scaleToString(comp.meta.scale)));
+    json_object_set_new(metaJ, "swing", json_real(comp.meta.swing));
+    json_object_set_new(metaJ, "seed", json_integer(comp.meta.seed));
+    json_object_set_new(root, "meta", metaJ);
+
+    // Clock
+    json_t* clockJ = json_object();
+    json_object_set_new(clockJ, "externalPpqn", json_integer(comp.clock.externalPpqn));
+    json_object_set_new(clockJ, "outputPpqn", json_integer(comp.clock.outputPpqn));
+    json_object_set_new(root, "clock", clockJ);
+
+    // Transport
+    json_t* transportJ = json_object();
+    json_object_set_new(transportJ, "running", json_boolean(comp.transport.running));
+    json_object_set_new(transportJ, "loop", json_boolean(comp.transport.loop));
+    json_object_set_new(root, "transport", transportJ);
+
+    // Tracks
+    json_t* tracksJ = json_array();
+    for (const auto& tr : comp.tracks) {
+        json_t* trJ = json_object();
+        json_object_set_new(trJ, "id", json_string(tr.id.c_str()));
+        json_object_set_new(trJ, "channel", json_integer(tr.channel));
+        json_array_append_new(tracksJ, trJ);
+    }
+    json_object_set_new(root, "tracks", tracksJ);
+
+    // Scenes summary
+    json_t* scenesJ = json_array();
+    for (const auto& sc : comp.arrangement) {
+        json_t* scJ = json_object();
+    if(sc.harmony.present)json_object_set_new(scJ,"harmony",harmony_json::bindingJson(sc.harmony));
+        json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
+        if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+        if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
+        json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
+        json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
+        json_object_set_new(scJ, "trackCount", json_integer(sc.tracks.size()));
+        json_array_append_new(scenesJ, scJ);
+    }
+    json_object_set_new(root, "scenes", scenesJ);
+
+    // Patterns summary
+    json_t* patternsJ = json_array();
+    for (const auto& kv : comp.patterns) {
+        json_t* pJ = json_object();
+        json_object_set_new(pJ, "id", json_string(kv.first.c_str()));
+        json_object_set_new(pJ, "length", json_integer(kv.second.length));
+        json_object_set_new(pJ, "resolution", json_string(kv.second.resolutionStr.c_str()));
+        json_object_set_new(pJ, "durationBeats", json_real(kv.second.length * kv.second.resolutionBeats));
+        json_object_set_new(pJ, "eventCount", json_integer(kv.second.steps.size()));
+        json_array_append_new(patternsJ, pJ);
+    }
+    json_object_set_new(root, "patterns", patternsJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializeFullCompositionJson(const Composition& comp) {
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(4));
+    json_object_set_new(root, "view", json_string("full"));
+    json_object_set_new(root, "composition", compositionToJson(comp));
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializeArrangementViewJson(const Composition& comp, json_t* request) {
+    auto error = [](const char* code, const char* message) {
+        return dumpAndFree(json_pack("{s:b,s:{s:s,s:s}}", "ok", 0, "error", "code", code, "message", message));
+    };
+    json_t* sizeJ = json_object_get(request, "page_size");
+    if (sizeJ && (!json_is_integer(sizeJ) || json_integer_value(sizeJ)<1 || json_integer_value(sizeJ)>32))
+        return error("invalid_request", "Arrangement page_size must be 1-32");
+    const size_t pageSize = sizeJ ? size_t(json_integer_value(sizeJ)) : 8;
+    size_t offset=0;
+    if (json_t* cursor = json_object_get(request,"cursor")) {
+        if (!json_is_string(cursor)) return error("invalid_request","Invalid arrangement cursor");
+        std::string token=json_string_value(cursor);
+        const std::string prefix=std::to_string(comp.revision)+":";
+        if (token.compare(0,prefix.size(),prefix)!=0) return error("revision_conflict","Arrangement cursor is stale");
+        const std::string position=token.substr(prefix.size());
+        if (position.empty() || position.size()>6 || position.find_first_not_of("0123456789")!=std::string::npos)
+            return error("invalid_request","Invalid arrangement cursor");
+        offset=size_t(std::stoul(position));
+        if (offset>comp.arrangement.size()) return error("invalid_request","Arrangement cursor is out of range");
+    }
+    json_t* root=json_pack("{s:b,s:i,s:s,s:i}","ok",1,"revision",comp.revision,"view","arrangement","total",int(comp.arrangement.size()));
+    json_t* scenes=json_array(); json_t* patterns=json_object();
+    const size_t end=std::min(offset+pageSize,comp.arrangement.size());
+    std::map<std::string,size_t> references;
+    for (const auto& scene:comp.arrangement)
+        for (const auto& assignment:scene.tracks) ++references[assignment.second.patternId];
+    for (size_t i=offset;i<end;++i) {
+        const auto& scene=comp.arrangement[i];
+        json_array_append_new(scenes,sceneToJson(scene));
+        for (const auto& assignment:scene.tracks) {
+            const auto found=comp.patterns.find(assignment.second.patternId);
+            if(found==comp.patterns.end() || json_object_get(patterns,found->first.c_str())) continue;
+            const auto& pattern=found->second;
+            json_t* summary=json_pack("{s:i,s:s,s:i,s:i}","length",pattern.length,"resolution",pattern.resolutionStr.c_str(),
+                "eventCount",int(pattern.steps.size()),"referenceCount",int(references[found->first]));
+            // Reuse authored property serialization, never include event arrays.
+            json_t* authored=patternToJson(pattern);
+            for(const char* key:{"pitchContext","evolution"})
+                if(json_t* value=json_object_get(authored,key)) json_object_set(summary,key,value);
+            json_decref(authored);
+            json_object_set_new(patterns,found->first.c_str(),summary);
+        }
+    }
+    json_object_set_new(root,"scenes",scenes);
+    json_object_set_new(root,"patterns",patterns);
+    json_t* automation=json_array();
+    size_t automationTotal=0;
+    for(const auto& curve:comp.automation) {
+        bool relevant=curve.sceneId.empty();
+        for(size_t i=offset;i<end;++i) relevant |= curve.sceneId==comp.arrangement[i].id;
+        if(!relevant) continue;
+        ++automationTotal;
+        if(json_array_size(automation)<32) json_array_append_new(automation,json_string(curve.id.c_str()));
+    }
+    json_object_set_new(root,"automation",json_pack("{s:o,s:i,s:i}","ids",automation,
+        "total",int(automationTotal),"omitted",int(automationTotal-json_array_size(automation))));
+    if(!comp.pitchSystems.defaultContext.empty())
+        json_object_set_new(root,"defaultPitchContext",json_string(comp.pitchSystems.defaultContext.c_str()));
+    if(comp.defaultHarmony.present)
+        json_object_set_new(root,"defaultHarmony",harmony_json::bindingJson(comp.defaultHarmony));
+    json_object_set_new(root,"nextCursor",end<comp.arrangement.size()
+        ? json_string((std::to_string(comp.revision)+":"+std::to_string(end)).c_str()) : json_null());
+    return dumpAndFree(root);
+}
+
+std::string serializePatternViewJson(const Composition& comp, const std::string& patternId) {
+    auto it = comp.patterns.find(patternId);
+    if (it == comp.patterns.end()) {
+        json_t* err = json_object();
+        json_object_set_new(err, "ok", json_false());
+        json_t* errorJ = json_object();
+        json_object_set_new(errorJ, "code", json_string("pattern_not_found"));
+        json_object_set_new(errorJ, "message", json_string(("Pattern not found: " + patternId).c_str()));
+        json_object_set_new(err, "error", errorJ);
+        return dumpAndFree(err);
+    }
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(4));
+    json_object_set_new(root, "view", json_string("pattern"));
+    json_object_set_new(root, "id", json_string(patternId.c_str()));
+    json_object_set_new(root, "pattern", patternToJson(it->second));
+
+    json_t* derivedJ = json_object();
+    json_object_set_new(derivedJ, "durationBeats", json_real(it->second.length * it->second.resolutionBeats));
+    json_object_set_new(derivedJ, "eventCount", json_integer(it->second.steps.size()));
+    json_object_set_new(root, "derived", derivedJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId, bool effectiveExpressions) {
+    const Scene* found = nullptr;
+    for (const auto& sc : comp.arrangement) {
+        if (sc.id == sceneId) { found = &sc; break; }
+    }
+    if (!found) {
+        json_t* err = json_object();
+        json_object_set_new(err, "ok", json_false());
+        json_t* errorJ = json_object();
+        json_object_set_new(errorJ, "code", json_string("scene_not_found"));
+        json_object_set_new(errorJ, "message", json_string(("Scene not found: " + sceneId).c_str()));
+        json_object_set_new(err, "error", errorJ);
+        return dumpAndFree(err);
+    }
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(4));
+    json_object_set_new(root, "view", json_string("scene"));
+    json_object_set_new(root, "id", json_string(sceneId.c_str()));
+    json_object_set_new(root, "scene", sceneToJson(*found));
+
+    json_t* derivedJ = json_object();
+    json_object_set_new(derivedJ, "durationBeats", json_real(found->lengthBeats));
+    json_object_set_new(derivedJ, "totalBeats", json_real(found->lengthBeats * found->repeats));
+    if (effectiveExpressions) {
+    // Static scene-instance projection. Authored pattern/scene data stays separate;
+    // these are pass-zero values before probability decisions and live macros.
+    json_object_set_new(derivedJ, "expressionContext", json_string("authoredBeforeEvolutionAndMacros"));
+    json_t* assignedNotes = json_object();
+    for (const auto& track : comp.tracks) {
+        auto assignment = found->tracks.find(track.id);
+        if (assignment == found->tracks.end()) continue;
+        auto pattern = comp.patterns.find(assignment->second.patternId);
+        if (pattern == comp.patterns.end()) continue;
+        const auto& ov = assignment->second.overrides;
+        json_t* notes = json_array();
+        for (const auto& event : pattern->second.steps) {
+            auto clampValue = [](float v, float lo, float hi) { return std::max(lo, std::min(hi, v)); };
+            float gate = ov.scaled(event.hasGate ? event.gate : track.defaultGate, GATE_SCALE, GATE_OFFSET);
+            gate = ov.gateTransform() && gate <= 0.f ? 0.f : clampValue(gate, .01f, event.ratchets > 1 ? 1.f : 1024.f);
+            json_t* note = json_pack("{s:s,s:i,s:f,s:f,s:f,s:f}", "id", event.id.c_str(), "step", event.step,
+                "pitchV", double(assignedPitch(event,assignment->second,event.compiledPitchV)), "gate", double(gate),
+                "velocity", double(clampValue(ov.scaled(event.hasVelocity ? event.velocity : track.defaultVelocity, VELOCITY_SCALE, VELOCITY_OFFSET),0.f,1.f)),
+                "probability", double(clampValue(ov.scaled(event.hasProbability ? event.probability : 1.f, PROBABILITY_SCALE, PROBABILITY_OFFSET),0.f,1.f)));
+            if(event.pitchType==PitchType::HARMONIC){json_object_set_new(note,"pitchV",json_null());json_object_set_new(note,"requiresContext",json_true());}
+            json_object_set_new(note,"mod",json_real(clampValue((event.hasMod ? event.mod : 0.f)+ov.values[MOD_1_OFFSET],-10.f,10.f)));
+            json_object_set_new(note,"mod2",json_real(clampValue((event.hasMod2 ? event.mod2 : 0.f)+ov.values[MOD2_OFFSET],-10.f,10.f)));
+            json_object_set_new(note,"mod3",json_real(clampValue((event.hasMod3 ? event.mod3 : 0.f)+ov.values[MOD3_OFFSET],-10.f,10.f)));
+            json_array_append_new(notes,note);
+        }
+        json_object_set_new(assignedNotes,track.id.c_str(),notes);
+    }
+    json_object_set_new(derivedJ,"assignmentNotes",assignedNotes);
+    }
+    json_object_set_new(root, "derived", derivedJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+} // namespace sibyl

@@ -1,0 +1,15 @@
+id,priority,area,question,entry_point,next_action
+OPEN-01,P0,Grain allocation/retirement,82 storage slots vs 42-threshold logic and documented 44 sounding/engine,play_next 0x6c34; perform 0x4248,"Trace every launch, kill, active count, MIDI and override branch; build oversubscription fixtures."
+OPEN-02,P0,Internal grain scheduler,"Exact Intensity law, duration coupling, asynchronous jitter and minimum spacing",tickInternTrig 0x7928; GPIO timing functions; main/core patches,Trace clocks and snapshot time; test fixed duration/density grids with fixed random seed.
+OPEN-03,P0,Capture/Dub/boundaries,"Full write equation, two-writer handover, 256-sample fades, end behavior",rec perform 0x4288; checkCaptureButton 0x4a14,Use ramps/impulses and event timeline fixtures; never assume perpetual ring recording.
+OPEN-04,P0,Delay macro,Creation multiplier differs from dynamic multiplier and descriptive ranges,arbhar_feedback.pd and upstream macro/MIDI wiring,Evaluate Pd message order; map actual incoming domain and render impulse traces.
+OPEN-05,P1,Pitch/quantisation,"Detent fix, deviation probabilities, ordered sequence selection and V/oct latch",setDeviation 0x404c; _getChord 0x2f40; MIDI branches,"Trace center departures and pair selection, preserve repeated values."
+OPEN-06,P1,Texture and reverse grains,"Row indexing, window advance, boundary reads and reverse tails",makingWndArray 0x5b34; perform 0x4248,Probe signed-speed/texture endpoints and all buffer edges.
+OPEN-07,P1,Stereo output / gain / panning,"Exact mixing, mono normalization, phase, activity gain and MIDI scaling",main graph; main_out_stereo~; play perform,Impulse both channels; compare cable states and preset phase policies.
+OPEN-08,P1,Onset profiles,Installed bonk~ implementation and six profile event truth tables,arbharRecorder.pd; _processOnsetData 0x4044; GPIO _setOnsetMode,"Identify exact dependency, then test hits, gaps, hold, manual capture, and stereo transitions."
+OPEN-09,P1,Follow and Omega boundaries,"Backward-looking spray, endpoint layer 6 guard, record-head exclusion",_getPositionRange 0x6868; _setPlayParameters 0x7c50,Trace guards including 0x6a20; test all six layer boundaries and offsets.
+OPEN-10,P1,Timebases/file length,48k request vs 49148 raw conversion vs WT factor,"launch, conversion scripts, WT patch",Measure hardware or verified original process; test 624000 vs 638924 frame files.
+OPEN-11,P2,Auxiliary reverb,Nonzero activation not established,main object 336 and gains 337/338,Find normal initialization/control drivers before enabling.
+OPEN-12,P2,Clocked mode,Disabled fallback but beta source/editor present,configurationDataInitFile and clock scripts,Separate optional-feature compatibility from stock baseline.
+OPEN-13,P1,Analog input/output,No authentic gain/limiter/codec transfer measurement,stereo_in~; ALSA state; physical hardware,Measure physical transfer separately; avoid labelling a generic soft clip authentic.
+OPEN-14,P2,Source/build provenance,Source snapshot missing headers; DWARF is hardware-library data,arbhar_gpio~.c_changes?; Makefile; dwarf metadata,Do not use source sketches as authoritative compiled DSP definitions.

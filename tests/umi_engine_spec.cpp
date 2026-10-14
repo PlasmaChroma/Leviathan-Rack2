@@ -1,4 +1,4 @@
-#include "../src/UmiEngine.hpp"
+#include "../src/umi/UmiEngine.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -74,6 +74,130 @@ TestResult testSpawnCapacityPolicies() {
 	return {"Spawn capacity policies", pass,
 		"first=" + std::to_string(first) + " ignored=" + std::to_string(ignored) +
 		" replaced=" + std::to_string(replaced)};
+}
+
+TestResult testBurstSpawnSeparation() {
+	umi::Engine engine;
+	engine.setCapacity(64);
+	int spawned = 0;
+	for (int burst = 0; burst < 8; ++burst) {
+		spawned += engine.spawnBurst(8, (burst & 1) ? 1.f : 0.f);
+	}
+	bool separated = spawned == 64 && engine.getActiveCount() == 64;
+	float minimumGap = 1.0e9f;
+	const auto& balls = engine.getBalls();
+	for (int first = 0; first < engine.getCapacity(); ++first) {
+		if (!balls[static_cast<std::size_t>(first)].active) continue;
+		const umi::Ball& a = balls[static_cast<std::size_t>(first)];
+		separated = separated && a.pos.x >= 70.f && a.pos.x <= 930.f;
+		for (int second = first + 1; second < engine.getCapacity(); ++second) {
+			if (!balls[static_cast<std::size_t>(second)].active) continue;
+			const umi::Ball& b = balls[static_cast<std::size_t>(second)];
+			const float dx = b.pos.x - a.pos.x;
+			const float dy = b.pos.y - a.pos.y;
+			const float distance = std::sqrt(dx * dx + dy * dy);
+			minimumGap = std::min(minimumGap, distance - (a.radius + b.radius));
+			separated = separated && distance >= a.radius + b.radius;
+		}
+	}
+	return {"Burst spawning avoids pre-overlapping pearls", separated,
+		"spawned=" + std::to_string(spawned) + " minimumGap=" + std::to_string(minimumGap)};
+}
+
+TestResult testPearlInteraction() {
+	umi::Engine engine;
+	engine.setCapacity(2);
+	const bool spawned =
+		engine.spawnAt({480.f, 50.f}, {100.f, 0.f})
+		&& engine.spawnAt({515.f, 50.f}, {-100.f, 0.f});
+	umi::PhysicsParams params;
+	params.gravity = 0.f;
+	params.drag = 0.f;
+	params.chaos = 0.f;
+	params.restitution = 1.f;
+	engine.step(params);
+
+	const auto& balls = engine.getBalls();
+	const umi::Ball& first = balls[0];
+	const umi::Ball& second = balls[1];
+	const float dx = second.pos.x - first.pos.x;
+	const float dy = second.pos.y - first.pos.y;
+	const float distance = std::sqrt(dx * dx + dy * dy);
+	const float momentumX = first.vel.x + second.vel.x;
+	const bool pass = spawned
+		&& first.active && second.active
+		&& distance >= first.radius + second.radius - 1e-4f
+		&& first.vel.x < 0.f && second.vel.x > 0.f
+		&& std::fabs(momentumX) < 1e-4f;
+	return {"Pearls separate and exchange equal-mass impulse", pass,
+		"distance=" + std::to_string(distance)
+			+ " velocities=" + std::to_string(first.vel.x)
+			+ "/" + std::to_string(second.vel.x)};
+}
+
+TestResult testStaticColliderCoverage() {
+	umi::Engine engine;
+	engine.setCapacity(1);
+	umi::PhysicsParams params;
+	params.gravity = 0.f;
+	params.restitution = 0.5f;
+	params.drag = 0.f;
+	params.chaos = 0.f;
+	const umi::Layout& layout = engine.getLayout();
+	int tested = 0;
+	std::string failedCollider;
+
+	auto displacedFrom = [&](umi::Vec2 probe) {
+		engine.clear();
+		if (!engine.spawnAt(probe)) {
+			return false;
+		}
+		const umi::StepEvents events = engine.step(params);
+		if (events.captureCount > 0) {
+			return true;
+		}
+		for (const umi::Ball& ball : engine.getBalls()) {
+			if (!ball.active) {
+				continue;
+			}
+			const float dx = ball.pos.x - probe.x;
+			const float dy = ball.pos.y - probe.y;
+			return dx * dx + dy * dy > 1.0e-4f;
+		}
+		return false;
+	};
+
+	bool pass = true;
+	for (int i = 0; i < layout.pegCount; ++i) {
+		if (!displacedFrom(layout.pegs[static_cast<std::size_t>(i)].pos)) {
+			pass = false;
+			if (failedCollider.empty()) failedCollider = "peg " + std::to_string(i);
+		}
+		tested++;
+	}
+	for (int i = 0; i < layout.segmentCount; ++i) {
+		const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+		umi::Vec2 probe {
+			0.5f * (segment.a.x + segment.b.x),
+			0.5f * (segment.a.y + segment.b.y)
+		};
+		for (const umi::Sink& sink : layout.sinks) {
+			const float dx = probe.x - sink.pos.x;
+			const float dy = probe.y - sink.pos.y;
+			if (dx * dx + dy * dy <= sink.radius * sink.radius) {
+				probe = segment.a;
+				break;
+			}
+		}
+		if (!displacedFrom(probe)) {
+			pass = false;
+			if (failedCollider.empty()) failedCollider = "segment " + std::to_string(i);
+		}
+		tested++;
+	}
+	return {"Static collider broad-phase coverage", pass,
+		"colliders=" + std::to_string(tested)
+			+ (failedCollider.empty() ? "" : " firstFailure=" + failedCollider)};
 }
 
 TestResult testEverySinkCapture() {
@@ -173,6 +297,9 @@ int main() {
 		testLayoutValidity(),
 		testStaggeredGridAndBottomClearance(),
 		testSpawnCapacityPolicies(),
+		testBurstSpawnSeparation(),
+		testPearlInteraction(),
+		testStaticColliderCoverage(),
 		testEverySinkCapture(),
 		testDeterminism(),
 		testLongRunStability(),

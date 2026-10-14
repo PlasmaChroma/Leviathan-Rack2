@@ -67,14 +67,16 @@
      inkscape:window-maximized="1"
      inkscape:current-layer="svg8"
      showgrid="false" />
-  <rect
+  <g id="theme_background"><rect
      width="10160"
      height="12850"
-     fill="#07090d"
-     id="panel_black" />
+     fill="#000000"
+     id="panel_black" /></g>
   <g
      id="glass">
-    <rect
+    <g
+       id="glass_input">
+      <rect
        x="272.957"
        y="8243.4932"
        width="9614.0859"
@@ -88,7 +90,10 @@
        stroke-width="47.514"
        id="inputs"
        style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
-    <rect
+    </g>
+    <g
+       id="glass_output">
+      <rect
        x="1918.7422"
        y="10838.555"
        width="6322.5156"
@@ -100,17 +105,18 @@
        stroke="#ffffff"
        stroke-opacity="0.06"
        stroke-width="29.6001"
-       id="outputs"
-       style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+         id="outputs"
+         style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+    </g>
   </g>
   <g
      id="waves_layer"
-     style="display:inline;opacity:0.5"
+     style="display:none;opacity:0.5"
      transform="translate(0.00337775,142.46186)">
     <g
        id="branding_wave_left"
        transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
-       style="display:inline">
+       style="display:none">
       <path
          style="fill:#4995ec"
          d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
@@ -127,7 +133,7 @@
     <g
        id="branding_wave_right"
        transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
-       style="display:inline">
+       style="display:none">
       <path
          style="fill:#4995ec"
          d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
@@ -293,58 +299,10 @@
   </g>
   <g
      id="labels">
-    <text
-       x="946.89569"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="zoom_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
-         sodipodi:role="line"
-         id="tspan6"
-         x="946.89569"
-         y="10639.935">ZOOM-V</tspan></text>
-    <text
-       x="3853.7031"
-       y="12066.577"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="lcode_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
-         sodipodi:role="line"
-         id="tspan3"
-         x="3853.7031"
-         y="12066.577">LOC CODE</tspan></text>
-    <text
-       x="2251.2947"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="x_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
-         sodipodi:role="line"
-         id="tspan7"
-         x="2251.2947"
-         y="10639.935">X-V</tspan></text>
-    <text
-       x="3550.448"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="y_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
-         sodipodi:role="line"
-         id="tspan8"
-         x="3550.448"
-         y="10639.935">Y-V</tspan></text>
+
+
+
+
     <text
        id="module_title"
        x="5077.354"
@@ -369,7 +327,7 @@
          id="tspan2">fractal explorer</tspan></text>
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:inline;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:75.0001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:none;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:75.0001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        x="3963.6721"
        y="12732.525"
        id="Leviathan_Branding"><tspan
@@ -378,5 +336,65 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:url(#linearGradient74);stroke:none;stroke-width:75"
          x="3963.6721"
          y="12732.525">Leviathan</tspan></text>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="946.89569"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="zoom_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         x="946.89569"
+         y="10639.935">ZOOM-V</tspan></text>
+<text
+       x="3853.7031"
+       y="12066.577"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="lcode_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="3853.7031"
+         y="12066.577">LOC CODE</tspan></text>
+<text
+       x="2251.2947"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="x_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="2251.2947"
+         y="10639.935">X-V</tspan></text>
+<text
+       x="3550.448"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="y_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="3550.448"
+         y="10639.935">Y-V</tspan></text>
+    </g>
+</g>
+  <g id="perfect_wave_raster_anchors" style="display:none">
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="2189.610" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6663.674" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="3444.0335" y="11943.102" width="3271.933" height="1224.054" />
   </g>
 </svg>

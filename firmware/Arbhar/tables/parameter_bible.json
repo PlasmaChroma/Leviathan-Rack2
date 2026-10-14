@@ -1,0 +1,1285 @@
+{
+  "schema_version": 1,
+  "status": "reverse-engineering handoff; not a complete original DSP specification",
+  "archive_sha256": "1414f35d8d0e3ca8d4cb0871a8c61f3957001caf3b106d30df0514ca9f404637",
+  "rate_policy": {
+    "requested_audio_hz": 48000,
+    "file_conversion_hz": 49148,
+    "actual_codec_hz": null,
+    "wt_frequency_factor": 0.976642
+  },
+  "storage": {
+    "layers": 6,
+    "channels_per_layer": 2,
+    "frames_per_channel": 624000,
+    "nominal_scan_frames": 480000,
+    "storage_slots_per_player": 82,
+    "proven_max_simultaneously_audible_per_player": null
+  },
+  "hardware_controls": [
+    {
+      "id": "scan",
+      "label": "Scan / Follow traversal",
+      "notes_adc_channel": 0,
+      "shared_slot": 100,
+      "evidence": "S",
+      "recovered": "Scan approximately 480000/4095 samples per calibrated 12-bit unit; Follow uses a separate speed helper.",
+      "open": "Omega endpoint and capture-head boundary branches unresolved."
+    },
+    {
+      "id": "length",
+      "label": "Grain duration / wavetable entry",
+      "notes_adc_channel": 1,
+      "shared_slot": 101,
+      "evidence": "S",
+      "recovered": "u² * 100000 units, then *1.44 samples clamped 128..144000 in nominal-48k domain.",
+      "open": "Mode-dependent entry thresholds and exact physical minimum require validation."
+    },
+    {
+      "id": "pitch_v_oct",
+      "label": "Pitch CV",
+      "notes_adc_channel": 2,
+      "shared_slot": null,
+      "evidence": "F/S/D",
+      "recovered": "1 V/oct is the documented musical contract; raw hardware and WT paths require calibration.",
+      "open": "Do not use raw ADC scaling as a Rack volts formula."
+    },
+    {
+      "id": "pitch",
+      "label": "Pitch knob",
+      "notes_adc_channel": 3,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Named pitch functions and exact PITCH_VALUES table recovered.",
+      "open": "Full normal-mode center detent, quantisation, and MIDI merge not completely reconstructed."
+    },
+    {
+      "id": "layer",
+      "label": "Layer / Omega",
+      "notes_adc_channel": 5,
+      "shared_slot": 30,
+      "evidence": "F/S",
+      "recovered": "Six layers plus Omega; play and record layer may be separate.",
+      "open": "Notes distinguish layer CV channel 4; switching/hysteresis and coupling need complete truth table."
+    },
+    {
+      "id": "dry_wet",
+      "label": "Dry / Wet",
+      "notes_adc_channel": 6,
+      "shared_slot": 6,
+      "evidence": "S",
+      "recovered": "Steady-state equal-power cosine/sine curve; raw control is inverted in the main patch.",
+      "open": "Pd table approximation and smoothing not reproduced by ideal C++ sin/cos."
+    },
+    {
+      "id": "hold",
+      "label": "Hold",
+      "notes_adc_channel": 8,
+      "shared_slot": 38,
+      "evidence": "F/S",
+      "recovered": "Onset hold state; recorder converts shared milliseconds with factor 48.",
+      "open": "Also affects Follow loop-length policy when configured; full panel law unresolved."
+    },
+    {
+      "id": "spray",
+      "label": "Spray",
+      "notes_adc_channel": 9,
+      "shared_slot": 103,
+      "evidence": "S",
+      "recovered": "u² * 100000 units, then *4.8 samples; Scan and Follow use different placement branches.",
+      "open": "Not a proven uniform bipolar offset; MIDI slot 212 participates upstream."
+    },
+    {
+      "id": "direction",
+      "label": "Grain direction probability",
+      "notes_adc_channel": 10,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Per-grain direction and _dirPercent are present; reverse branch distinct.",
+      "open": "Complete probability transfer and draw order unresolved."
+    },
+    {
+      "id": "dub",
+      "label": "Dub / recording blend",
+      "notes_adc_channel": 11,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Recorder has handover state and coefficient slew near 0.0078/sample.",
+      "open": "Complete record equation and all capture fades unresolved."
+    },
+    {
+      "id": "intensity",
+      "label": "Continuous grain production",
+      "notes_adc_channel": 12,
+      "shared_slot": null,
+      "evidence": "F/S/D",
+      "recovered": "Separate continuous and struck engines; timing and amplitude randomization are independent options.",
+      "open": "Exact density law and duration coupling are high-priority open work."
+    },
+    {
+      "id": "mod",
+      "label": "Configurable modulation",
+      "notes_adc_channel": 13,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Enum selects none/pan/hold/reverb/delay; dedicated defaults also exist.",
+      "open": "Do not make effects mutually exclusive in the 2.1-style feature set."
+    },
+    {
+      "id": "texture",
+      "label": "Grain window / texture",
+      "notes_adc_channel": 14,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "101 x 515 reconstructed bank from exact templates.",
+      "open": "Complete control-to-row and reverse phase stepping not proven."
+    },
+    {
+      "id": "deviation",
+      "label": "Pitch deviation",
+      "notes_adc_channel": 15,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Ordered quantisation sequences and setDeviation routine recovered.",
+      "open": "Probability selection, continuous vs quantised behavior, and timing still incomplete."
+    },
+    {
+      "id": "capture",
+      "label": "Capture button/CV",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "CV modes latch/momentary/retrigger; separate button policy.",
+      "open": "Simultaneous events, accumulative behavior, and record destination locking need tests."
+    },
+    {
+      "id": "strike",
+      "label": "Strike button/CV",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "F/S",
+      "recovered": "Independent grain event source with configurable CV delay.",
+      "open": "Pitch/control latch timing and scheduler order remain explicit fidelity work."
+    },
+    {
+      "id": "shift",
+      "label": "Shift / gesture layer",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "F/S/D",
+      "recovered": "Multiple mode/gesture handlers and staged parameter behavior.",
+      "open": "Full hold/double-press timing and precedence not recovered."
+    },
+    {
+      "id": "sense",
+      "label": "Onset sensitivity / alternate input level",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "F/D",
+      "recovered": "Normal onset path is bonk~ after four hip~300 stages.",
+      "open": "Analog control and stereo-mode level behavior not fully reconstructed."
+    },
+    {
+      "id": "input_gain",
+      "label": "Input level",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "D/S",
+      "recovered": "Separate input conditioning and analog preamp/limiter target.",
+      "open": "No authentic analog transfer measurement supplied."
+    },
+    {
+      "id": "output_gain",
+      "label": "Output level",
+      "notes_adc_channel": null,
+      "shared_slot": null,
+      "evidence": "D/S",
+      "recovered": "Main output/phase/mute path separate from rational clipping.",
+      "open": "Absolute hardware dB/V calibration not established."
+    }
+  ],
+  "ports": [
+    {
+      "id": "audio_in",
+      "direction": "input",
+      "kind": "audio",
+      "role": "Capture input; left channel in stereo input mode",
+      "source": "D3 pp8/10/37"
+    },
+    {
+      "id": "onset_right_in",
+      "direction": "input",
+      "kind": "audio",
+      "role": "Analysis input in mono mode; right channel in stereo input mode",
+      "source": "D3 pp8/10/37"
+    },
+    {
+      "id": "out_1",
+      "direction": "output",
+      "kind": "audio",
+      "role": "First audio output; preserve cable-dependent mono policy as a separate compatibility setting",
+      "source": "D3 pp8/11"
+    },
+    {
+      "id": "out_2",
+      "direction": "output",
+      "kind": "audio",
+      "role": "Second audio output; phase policy is configurable",
+      "source": "D3 pp8/11"
+    },
+    {
+      "id": "pulse_out",
+      "direction": "output",
+      "kind": "trigger",
+      "role": "Event-derived pulse; source policy depends on mode/configuration",
+      "source": "D3 p8; GPIO symbols"
+    },
+    {
+      "id": "capture_in",
+      "direction": "input",
+      "kind": "gate/trigger",
+      "role": "capture event input",
+      "source": "D3 p8; GPIO handlers"
+    },
+    {
+      "id": "strike_in",
+      "direction": "input",
+      "kind": "gate/trigger",
+      "role": "strike event input",
+      "source": "D3 p8; GPIO handlers"
+    },
+    {
+      "id": "intensity_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "intensity",
+      "source": "D3 p8; control notes/binary"
+    },
+    {
+      "id": "length_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "length",
+      "source": "D3 p8; control notes/binary"
+    },
+    {
+      "id": "scan_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "scan",
+      "source": "D3 p8; control notes/binary"
+    },
+    {
+      "id": "pitch_v_oct_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "pitch_v_oct",
+      "source": "D3 p8; control notes/binary"
+    },
+    {
+      "id": "spray_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "spray",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "layer_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "layer",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "direction_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "direction",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "texture_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "texture",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "deviation_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "deviation",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "dub_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "dub",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "mod_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "mod",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    },
+    {
+      "id": "dry_wet_cv",
+      "direction": "input",
+      "kind": "CV",
+      "role": "dry_wet",
+      "location": "hardware CV expansion; native port may integrate",
+      "source": "D3 p9; included control notes"
+    }
+  ],
+  "configuration": [
+    {
+      "key": "AccumulateRecordingsInLayer",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "AccumulativeCaptureMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 1
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ActivateCaptureOnButtonUp",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "AnalogEmulation",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "0 - Disable",
+        "1": "1 - Enable"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "AnalogEmulationOfOnsetInput",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "CaptureButtonAsGate",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "CaptureButtonMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "0 - Latching",
+        "1": "1 - Momentary"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "CaptureCVMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 2,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "0 - Latching",
+        "1": "1 - Momentary",
+        "2": "2 - Retrigger"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "CaptureCvMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ClockBPM",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 120.0,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ClockDivisions",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": [
+        1,
+        1.5,
+        2,
+        3,
+        4
+      ],
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ClockMultiplications",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": [
+        1,
+        1.5,
+        2,
+        3,
+        4,
+        6,
+        8,
+        12,
+        16,
+        24,
+        32
+      ],
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ClockedMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Zero in initialization fallback; disabled baseline."
+    },
+    {
+      "key": "DelayDefaultValue",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "DelayDefaultValueInPerCent",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "EffectOrder",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "0 - Delay and Reverb in parallel",
+        "1": "1 - Delay and Reverb in series"
+      },
+      "note": "Parallel/series are exact config labels. Full gain-normalized transition behavior remains unresolved."
+    },
+    {
+      "key": "EnableClockedModeSwitch",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Zero in initialization fallback. Present experimental/optional feature, not an assumed stock default."
+    },
+    {
+      "key": "FollowLoop",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "0 - Disable",
+        "1": "1 - Enable"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 1,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "0 - Scan Mode",
+        "1": "1 - Follow Mode"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowPositionOffset",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": {
+        "0": "0 - Both Control",
+        "1": "1 - Scan Knob Only"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowPositionOffsetWithScanCV",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "knob and CV control speed/offset policy",
+        "1": "Scan knob only offset policy; see original configuration comments"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowScanOffset",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowSetLoopLengthWithHold",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowSpeedBiDirectional",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "FollowSpeedDirection",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "unidirectional",
+        "1": "bidirectional",
+        "2": "inverted-control unidirectional"
+      },
+      "note": "The compiled helper is numerically probed. Mode 2 reverses control orientation, not all playback signs."
+    },
+    {
+      "key": "HoldDefaultValue",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "InputClockDivision",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "InputMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 1,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "0 - Mono",
+        "1": "1 - Stereo"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "LinkAccumulativeRecordingCaptureAsGate",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "LoadConfiguration",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 3,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": {
+        "0": "0 - Load Nothing",
+        "1": "1 - Load Preset",
+        "2": "2 - Load Layers",
+        "3": "3 - Load Scene"
+      },
+      "note": "Startup fallback is 3; named factories are 1; HTML selected option is not actual startup precedence."
+    },
+    {
+      "key": "ModCV",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 3,
+      "factory_values": {
+        "alpha": 3,
+        "beta": 4,
+        "gamma": 3,
+        "delta": 2,
+        "epsilon": 1,
+        "zeta": 3
+      },
+      "enum": {
+        "0": "0 - None",
+        "1": "1 - Panning",
+        "2": "2 - Hold",
+        "3": "3 - Reverb",
+        "4": "4 - Delay"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "OnsetMode",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 4,
+        "delta": 6,
+        "epsilon": 3,
+        "zeta": 4
+      },
+      "enum": {
+        "1": "1 - Alpha",
+        "2": "2 - Beta",
+        "3": "3 - Gamma",
+        "4": "4 - Delta",
+        "5": "5 - Epsilon",
+        "6": "6 - Zeta"
+      },
+      "note": "Six named profiles. Full per-profile transition/trigger behavior still needs a truth table."
+    },
+    {
+      "key": "OutputPhaseSwitch",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "PanningDefaultValue",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "PanningDefaultValueInPerCent",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "PhaseSwitch",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 1,
+        "delta": 0,
+        "epsilon": 1,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "0 - Phase-Inverted",
+        "1": "1 - Phase-Corrected"
+      },
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "QuantiseTable",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": [
+        1,
+        -2,
+        2,
+        -1,
+        3,
+        -4,
+        4,
+        -3,
+        5,
+        -7,
+        6,
+        -6,
+        7,
+        -5,
+        8,
+        -9,
+        9,
+        -8,
+        10,
+        -11,
+        11,
+        -10,
+        12,
+        -12
+      ],
+      "factory_values": {
+        "alpha": [
+          1,
+          -2,
+          2,
+          -1,
+          3,
+          -4,
+          4,
+          -3,
+          5,
+          -7,
+          6,
+          -6,
+          7,
+          -5,
+          8,
+          -9,
+          9,
+          -8,
+          10,
+          -11,
+          11,
+          -10,
+          12,
+          -12
+        ],
+        "beta": [
+          12,
+          0,
+          0,
+          12,
+          -12,
+          0,
+          0,
+          -12,
+          12,
+          -12
+        ],
+        "gamma": [
+          1,
+          -2,
+          2,
+          -1,
+          3,
+          -4,
+          4,
+          -3,
+          5,
+          -7,
+          6,
+          -6,
+          7,
+          -5,
+          8,
+          -9,
+          9,
+          -8,
+          10,
+          -11,
+          11,
+          -10,
+          12,
+          -12
+        ],
+        "delta": [
+          12,
+          0,
+          0,
+          12,
+          -12,
+          0,
+          0,
+          -12,
+          12,
+          -12
+        ],
+        "epsilon": [
+          12,
+          0,
+          0,
+          12,
+          -12,
+          0,
+          0,
+          -12,
+          12,
+          -12
+        ],
+        "zeta": [
+          1,
+          -2,
+          2,
+          -1,
+          3,
+          -4,
+          4,
+          -3,
+          5,
+          -7,
+          6,
+          -6,
+          7,
+          -5,
+          8,
+          -9,
+          9,
+          -8,
+          10,
+          -11,
+          11,
+          -10,
+          12,
+          -12
+        ]
+      },
+      "enum": null,
+      "note": "Ordered signed sequence; preserve order, duplicates, and pairing rather than sorting to pitch classes."
+    },
+    {
+      "key": "RandomAmpWithRandomIntensity",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "RandomTimingWithRandomIntensity",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 1,
+      "factory_values": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1,
+        "delta": 1,
+        "epsilon": 1,
+        "zeta": 1
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ReverbDefaultValue",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ReverbDefaultValueInPerCent",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "ReverbReset",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": {
+        "0": "disabled",
+        "1": "Strike",
+        "2": "onset",
+        "3": "Strike and onset"
+      },
+      "note": "The patch supports duck/restore. Tank-memory clearing is not established."
+    },
+    {
+      "key": "SetQuantiseTable",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "StrikeButtonToTrigger",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 0,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 0,
+        "gamma": 0,
+        "delta": 0,
+        "epsilon": 0,
+        "zeta": 0
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "StrikeCVDelay",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 10,
+      "factory_values": {
+        "alpha": 0,
+        "beta": 10,
+        "gamma": 10,
+        "delta": 10,
+        "epsilon": 10,
+        "zeta": 10
+      },
+      "enum": null,
+      "note": "Milliseconds; Classic=0, other named factories=10, initialization fallback=10. Not a universal default."
+    },
+    {
+      "key": "StrikeCvDelay",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    },
+    {
+      "key": "WavetableCentreFrequency",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": 130.813,
+      "factory_values": {
+        "alpha": 130.813,
+        "beta": 130.813,
+        "gamma": 130.813,
+        "delta": 130.813,
+        "epsilon": 130.813,
+        "zeta": 130.813
+      },
+      "enum": null,
+      "note": "Hz; separate 0.976642 factor is applied downstream in the WT patch."
+    },
+    {
+      "key": "feature",
+      "evidence": "F: preset/configuration text; enum labels from included editor when present",
+      "initialization_fallback": null,
+      "factory_values": {
+        "alpha": null,
+        "beta": null,
+        "gamma": null,
+        "delta": null,
+        "epsilon": null,
+        "zeta": null
+      },
+      "enum": null,
+      "note": "Consult original file comments; absent values are null, not inferred zero."
+    }
+  ],
+  "rack_recommendations": {
+    "nominal_audio_volts_per_unit": 5,
+    "trigger_low_V": 0.1,
+    "trigger_high_V": 1.0,
+    "pulse_output_V": 10,
+    "pulse_duration_s": 0.001,
+    "input_polyphony": "single instrument; summed audio / first-channel CV policy must be explicit",
+    "microphone": "No automatic host microphone; optional user-patched source or explicit file import",
+    "clocked_mode_default": false
+  }
+}

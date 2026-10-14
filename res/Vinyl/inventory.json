@@ -6,8 +6,8 @@
     {
       "id": "temporal_deck",
       "label": "Temporal Deck",
-      "file": "TemporalDeck.png",
-      "format": "png",
+      "file": "TemporalDeck.jpg",
+      "format": "jpg",
       "menuVisible": true,
       "menuId": 1,
       "submenu": "Core",
@@ -16,8 +16,8 @@
     {
       "id": "blank",
       "label": "Blank",
-      "file": "Blank.png",
-      "format": "png",
+      "file": "Blank.jpg",
+      "format": "jpg",
       "menuVisible": true,
       "menuId": 2,
       "submenu": "Core"
@@ -34,23 +34,23 @@
   ],
   "signed": {
     "algorithm": "fnv1a64-keyed-v1",
-    "generatedUnix": 1782412083,
+    "generatedUnix": 1786930118,
     "keyId": "f2f64a74e0dd68c5",
-    "signature": "d0425167992b8a2f",
+    "signature": "a2b756a294dbe193",
     "files": [
       {
         "id": "temporal_deck",
-        "file": "TemporalDeck.png",
+        "file": "TemporalDeck.jpg",
         "menuId": 1,
-        "size": 336576,
-        "hash": "9df81078a0080c49"
+        "size": 227128,
+        "hash": "0c40e0bbfc28a8f8"
       },
       {
         "id": "blank",
-        "file": "Blank.png",
+        "file": "Blank.jpg",
         "menuId": 2,
-        "size": 204724,
-        "hash": "b3f9f216994fcd72"
+        "size": 87958,
+        "hash": "a999018010ee785c"
       },
       {
         "id": "static_svg",

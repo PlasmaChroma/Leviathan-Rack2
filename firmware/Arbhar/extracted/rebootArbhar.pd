@@ -1,0 +1,4 @@
+#N canvas 513 551 450 300 12;
+#X msg 97 67 sudo reboot;
+#X obj 97 92 terminal;
+#X connect 0 0 1 0;

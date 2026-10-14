@@ -8,10 +8,25 @@ The binary index is intentionally small and fast to validate; it records each
 cache key, artifact fingerprint, pack offset and length, image dimensions, and
 payload checksum.
 
-Startup performs one sequential read of the complete pack. QOI decoding runs on
-the archive worker, while NanoVG image creation remains on Rack's draw thread.
-Decoded RGBA and compressed pack data remain resident so browser scrolling does
-not cause disk reads and graphics-context recreation does not require disk I/O.
+Startup validates the bounded index before accessing the pack. Index files are
+limited to 64 MB; each referenced offset, encoded length, decoded size, and image
+dimension is validated against the physical pack before use. The archive worker
+reads and decodes one indexed QOI span at a time, so multi-gigabyte databases do
+not require equivalent startup RAM. NanoVG image creation remains on Rack's draw
+thread. Graphics-context recreation requests bounded per-entry re-decodes from
+disk rather than retaining the complete compressed pack in memory.
+
+Cold reload publishes every structurally valid matching index entry before QOI
+hydration. Entries for hidden, disabled, or non-whitelisted models remain
+persistent cache hits but defer their pack read, checksum, and QOI decode until
+they become display-eligible. Eligible entries hydrate in physical pack order,
+with viewport promotions selected from a linked work queue so an ordinary reload
+does not repeatedly scan and shift the remaining population.
+
+When Dragon King debugging is enabled, the completed reload reports separate
+index, pack-read, checksum, QOI-decode, decoded-handoff wait, hydrated/deferred,
+and priority-selection measurements. These are component metrics and do not
+replace the stable module-level Process, Step, and Draw telemetry contract.
 
 Normal updates append instead of rewriting the pack. Compaction is requested
 automatically only after at least 64 MB is reclaimable and dead space reaches
@@ -22,6 +37,23 @@ Plugin render fingerprints include the plugin identity, version, path, Rack's
 high-resolution plugin modification timestamp, relevant artifact sizes, panel
 theme, and the Deepcache raster schema. Development builds therefore invalidate
 without requiring a semantic version change.
+
+Rack panel-theme changes use stale-while-revalidate behavior. Deepcache keeps
+the resident raster visible while a replacement preview widget is constructed
+and captured under the new theme. A successful capture replaces the stale
+raster atomically; a construction or capture failure leaves the stale raster in
+place. Pixel-identical light/dark captures are retained as one raster and record
+the model as theme-invariant for that exact plugin build and preview resolution.
+
+Theme classifications are stored in the optional
+`theme-classifier-v1.bin` sidecar. The sidecar is keyed by the existing model
+cache key and a theme-independent plugin artifact fingerprint. It does not
+change `previews-v1.pack` or `index-v1.bin`. Missing, corrupt, or build-stale
+classifier records degrade to an unknown classification and another comparison;
+they never invalidate preview pixels. During archive loading, a version-1 entry
+whose fingerprint matches the opposite Rack panel theme is admitted as a
+provisional raster. Known invariant models may use it directly, while unknown
+or sensitive models keep it visible until revalidation completes.
 
 The archive worker checks cancellation between entries and before commits. The
 module destructor signals cancellation and joins it before browser teardown;
@@ -157,3 +189,37 @@ Windows/MSYS2 environment:
 - third-party null, exception, and slow preview behavior;
 - audio continuity at each UI budget;
 - resident-preview reuse and measured cold/warm browser latency.
+
+
+## Leviathan theme invalidation
+
+Deepcache observes the rendered Leviathan theme (input/output colors, input/output
+text colors, background enable/color, and texture amount). After 350 ms without a
+visual change, it invalidates only entries whose plugin slug is exactly
+`Leviathan` and replans them through the existing bounded warming queues.
+`Leviathan-Pro` and all other plugins retain their previews. Rack's separate
+light/dark refresh behavior remains unchanged. Preset name changes and edits to
+a disabled background color do not cause unnecessary refreshes.
+
+The archive fingerprint includes a stable hash of those rendered values, not a
+process-local generation. A restart therefore rejects obsolete Leviathan pixels.
+All three Rack-theme archive slots are available for Leviathan even when its
+previous light/dark classification was invariant. A palette edit invalidates
+those slots independently of that classification; new previews replace the same
+archive keys rather than accumulating a separate entry for every palette.
+
+Construction records the current theme identity. Both sides of framebuffer
+rendering check it against the applied theme and reject captures during unsettled
+edits. Archive index, decode, and commit handoffs are checked against the current
+fingerprint before admission. Commit acknowledgements include their original
+fingerprint for both disk-backed and read-only/volatile workers, so a late old
+write cannot mark a replacement preview as current. Other plugins' queued
+uploads, stored rasters, and archive entries are retained during this refresh.
+
+Validation: `deepcache_theme_identity_spec`, `deepcache_archive_spec`,
+`deepcache_theme_classifier_spec`, and `deepcache_planner_spec` passed natively,
+and the Windows `plugin.dll` linked. The identity test covers exact plugin scope,
+all visible settings, stable identities and edit coalescing. Archive tests cover
+same-key old/new theme acknowledgements, latest-theme reload, and volatile commit
+identities. Live Rack rendering while dragging Theme controls remains a manual
+integration check.

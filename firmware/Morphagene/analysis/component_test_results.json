@@ -1,0 +1,29 @@
+{
+  "status": "pass with native FMA configuration described below",
+  "date": "2026-09-27",
+  "source": "tests/test_components.cpp",
+  "fixture_origin": "tools/reference_models.py: binary32 calculations and exact rational FMA rounding for finite kernel cases",
+  "checks_per_run": 28646,
+  "runs": [
+    {
+      "platform": "Linux, WSL",
+      "compiler": "GCC 11.4.0",
+      "flags": "-std=c++17 -O2 -Wall -Wextra -pedantic -ffp-contract=off",
+      "result": "PASS: 28646 checks; 4096 ADC cases; 42 sparse-kernel cases; 28 launch cases."
+    },
+    {
+      "platform": "native Windows MINGW64",
+      "compiler": "GCC 16.1.0",
+      "flags": "-std=c++17 -O2 -Wall -Wextra -pedantic -ffp-contract=off -mfma",
+      "result": "PASS: 28646 checks; 4096 ADC cases; 42 sparse-kernel cases; 28 launch cases."
+    }
+  ],
+  "observed_portability_failure": {
+    "platform": "native Windows MINGW64 GCC 16.1.0 without -mfma",
+    "case": "sparseRead(-32768,32767,-123,30000,float32(0.999))",
+    "expected_bits": "0x46f43e80",
+    "actual_bits": "0x46f43e7f",
+    "resolution": "Same test passed when compiled with hardware FMA enabled. Expectations were not relaxed."
+  },
+  "not_validated": ["full firmware execution", "whole-module DSP equivalence", "hardware audio", "peripheral timing", "Rack behavior"]
+}

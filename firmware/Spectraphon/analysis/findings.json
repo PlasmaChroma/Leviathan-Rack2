@@ -1,0 +1,142 @@
+[
+  {
+    "id": "image_mapping",
+    "level": "B",
+    "finding": "Raw Thumb application image at 0x08020000",
+    "evidence": "0x08020000; 0x08036430",
+    "boundary": "Exact uploaded image, not bootloader"
+  },
+  {
+    "id": "mcu_family",
+    "level": "T",
+    "finding": "STM32H743/H753-class Cortex-M7 match",
+    "evidence": "vector table and peripheral footprint",
+    "boundary": "Exact package/revision unresolved"
+  },
+  {
+    "id": "cadence",
+    "level": "T",
+    "finding": "64 stereo frames/callback; DSP calculations assume 48000 Hz",
+    "evidence": "0x08032678; 0x08032680; 0x0803038c",
+    "boundary": "Not a physical converter-clock measurement"
+  },
+  {
+    "id": "storage_frame",
+    "level": "B/T",
+    "finding": "64 float32 coefficients per RAM spectrum",
+    "evidence": "0x0802cd0c; 0x08033af8",
+    "boundary": "Not all storage positions are active synthesis terms"
+  },
+  {
+    "id": "active_terms",
+    "level": "T",
+    "finding": "60-term normal bank ceiling in groups of four",
+    "evidence": "0x0802f7c0; 0x08030e42",
+    "boundary": "Extreme signed FM paths not fully analyzed"
+  },
+  {
+    "id": "SAM_algorithm",
+    "level": "T",
+    "finding": "Quadrature harmonic detectors with two cascaded one-poles per component",
+    "evidence": "0x0802f4ac; 0x0802f716",
+    "boundary": "No FFT needed in this traced path; not a whole-program absence proof"
+  },
+  {
+    "id": "magnitude",
+    "level": "B/T",
+    "finding": "Unsigned float-bit square-root approximation",
+    "evidence": "0x0802f946..0x0802f9ae",
+    "boundary": "Zero maps to tiny negative bits 0x9fc00000"
+  },
+  {
+    "id": "analysis_mapping",
+    "level": "T",
+    "finding": "Slide maps reference around20..320Hz; Focus controls detector pole",
+    "evidence": "0x0802e998",
+    "boundary": "Normalized internal control; analog calibration unresolved"
+  },
+  {
+    "id": "partials_recurrence",
+    "level": "T",
+    "finding": "Partials changes polynomial carrier basis with C0=r^2",
+    "evidence": "0x08030d60; 0x08030dd8; 0x08030e42",
+    "boundary": "Independent odd/even phase inputs in reference probe"
+  },
+  {
+    "id": "compensation",
+    "level": "T",
+    "finding": "Cubic compensation plus low-radius taper",
+    "evidence": "0x08030f94..0x08030fd2",
+    "boundary": "Float ordering affects exact rounding"
+  },
+  {
+    "id": "linear_reader",
+    "level": "T",
+    "finding": "Adjacent-frame interpolation plus bit-domain Focus transform",
+    "evidence": "0x0802cd0c; 0x0802ce5c",
+    "boundary": "One-subtraction wrap, exact bypass"
+  },
+  {
+    "id": "planar_reader",
+    "level": "T",
+    "finding": "Bilinear reader with sqrt-derived grid and unusual row edges",
+    "evidence": "0x0802cfac; 0x0802d0f8",
+    "boundary": "Logical bounds need upstream-state validation"
+  },
+  {
+    "id": "wave_payload",
+    "level": "T",
+    "finding": "Observed saver emits mono PCM16, 64 values per spectrum",
+    "evidence": "0x08033af8",
+    "boundary": "Serialized coefficients, not source recording"
+  },
+  {
+    "id": "wave_header_quirk",
+    "level": "T",
+    "finding": "PCM16 path appears to retain byteRate192000 and blockAlign4",
+    "evidence": "0x080338f4..0x080339fa",
+    "boundary": "Awaiting untouched hardware-saved WAV"
+  },
+  {
+    "id": "save_mutation",
+    "level": "T",
+    "finding": "Conditional upward normalization writes back into RAM before16-bit conversion",
+    "evidence": "0x08033af8",
+    "boundary": "Tracked scalar lifecycle not fully reconstructed"
+  },
+  {
+    "id": "external_RAM",
+    "level": "B",
+    "finding": "Two12MiB clear regions at separate A/B bases",
+    "evidence": "0x080346ee..0x08034718",
+    "boundary": "Not proof of installed SDRAM capacity"
+  },
+  {
+    "id": "factory_bank",
+    "level": "B/T",
+    "finding": "4096float factory bank, 64x64 layout",
+    "evidence": "0x08045a98",
+    "boundary": "Extracted vendor asset; redistribution rights not determined"
+  },
+  {
+    "id": "noise",
+    "level": "partial",
+    "finding": "LCG and filter/modulator ingredients identified",
+    "evidence": "0x08031038; 0x08031128",
+    "boundary": "Complete equations/state ordering unfinished"
+  },
+  {
+    "id": "chaos",
+    "level": "partial",
+    "finding": "Coupled phase/modulation/feedback branch identified",
+    "evidence": "0x0802fa04",
+    "boundary": "Not a validated Chaos emulator"
+  },
+  {
+    "id": "io",
+    "level": "partial",
+    "finding": "Input pair and eight output lanes located",
+    "evidence": "0x0802ec94; 0x080302b8",
+    "boundary": "Physical jack mapping/analog gains unfinished"
+  }
+]

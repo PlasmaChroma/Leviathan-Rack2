@@ -1,0 +1,52 @@
+[
+  {
+    "op": "upsert_track",
+    "id": "chord_low",
+    "track": {
+      "id": "chord_low",
+      "channel": 4
+    }
+  },
+  {
+    "op": "upsert_track",
+    "id": "chord_mid",
+    "track": {
+      "id": "chord_mid",
+      "channel": 5
+    }
+  },
+  {
+    "op": "upsert_track",
+    "id": "chord_high",
+    "track": {
+      "id": "chord_high",
+      "channel": 6
+    }
+  },
+  {
+    "op": "voice_progression",
+    "progression_id": "main_changes",
+    "scene_id": "chorus",
+    "resolution": "1/16",
+    "voices": [
+      {
+        "track_id": "chord_low",
+        "pattern_id": "chorus_low",
+        "min": "C2",
+        "max": "C3"
+      },
+      {
+        "track_id": "chord_mid",
+        "pattern_id": "chorus_mid",
+        "min": "C3",
+        "max": "C4"
+      },
+      {
+        "track_id": "chord_high",
+        "pattern_id": "chorus_high",
+        "min": "C4",
+        "max": "C5"
+      }
+    ]
+  }
+]

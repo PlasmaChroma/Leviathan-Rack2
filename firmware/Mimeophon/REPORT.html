@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mimeophon MP86 — Firmware Extraction &amp; Engineering Analysis</title><style>
+:root{color-scheme:light;--ink:#182534;--muted:#556675;--line:#dbe3e8;--accent:#13697c;--paper:#fff;--bg:#f3f6f8;--code:#eff3f6}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}a:hover{text-decoration:none}.masthead{background:#102a3b;color:#f6fbff;padding:36px max(24px,calc((100vw - 1420px)/2));border-bottom:4px solid #29879b}.eyebrow{text-transform:uppercase;letter-spacing:.15em;font-size:12px;font-weight:700}.masthead p{margin:10px 0 0;color:#dce8ef}.status{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}.status span{background:#1e4053;border:1px solid #385b6f;padding:5px 11px;border-radius:5px;font-size:13px}.layout{display:grid;grid-template-columns:260px minmax(0,980px);gap:42px;max-width:1370px;margin:0 auto;padding:42px 28px}nav{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:13px}nav strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase}nav a{display:block;padding:7px 0;border-bottom:1px solid var(--line);line-height:1.5;text-decoration:none}main{background:var(--paper);padding:36px 46px;border:1px solid var(--line);border-radius:9px;min-width:0}h1{font-size:32px;line-height:1.2;margin:0 0 24px;letter-spacing:-.035em}h2{font-size:24px;line-height:1.35;margin:48px 0 18px;padding-top:18px;border-top:1px solid var(--line);scroll-margin-top:24px}h3{font-size:19px;margin-top:32px;scroll-margin-top:24px}p{margin:14px 0}li{margin:7px 0}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em;background:var(--code);border-radius:4px;padding:.1em .28em;overflow-wrap:anywhere}pre{background:#122635;color:#e4edf3;padding:20px;border-radius:6px;overflow:auto;line-height:1.6;font-size:14px}pre code{background:none;padding:0;font-size:inherit;overflow-wrap:normal}strong{font-weight:650}.table-scroll{overflow-x:auto;margin:22px 0}table{border-collapse:collapse;font-size:14px;min-width:100%;line-height:1.55}th{text-align:left;background:#eaf1f5;font-weight:650}td,th{border-bottom:1px solid var(--line);padding:10px 12px;vertical-align:top}tr:nth-child(even) td{background:#fafcfd}table code{white-space:normal;font-size:.91em}blockquote{margin:20px 0;padding:6px 20px;border-left:3px solid var(--accent);background:#f0f6f8}footer{max-width:980px;margin:0 auto;padding:0 30px 45px;color:var(--muted);font-size:13px}
+@media(max-width:1000px){.layout{grid-template-columns:1fr;padding:24px 15px;gap:18px}nav{position:static;max-height:none;display:none}main{padding:28px 24px}.masthead{padding:28px 24px}h1{font-size:28px}}
+@media print{body{background:white;font-size:10pt}.masthead{background:none;color:var(--ink);padding:0;border:none}.masthead p,.status{display:none}.layout{display:block;padding:0;margin:0;max-width:none}nav{display:none}main{border:none;padding:0}pre{background:#f1f3f4;color:black;white-space:pre-wrap;font-size:9pt}h2,h3{break-after:avoid}tr,pre{break-inside:avoid}footer{display:none}a{color:inherit}h1{font-size:25pt}}
+</style></head><body><header class="masthead"><div class="eyebrow">Firmware engineering / evidence dossier</div><p>Mimeophon MP86 · user-supplied update WAV · 27 September 2026</p><div class="status"><span>48 KiB recovered</span><span>192 / 192 CRCs valid</span><span>QPSK decoded</span><span>Offline static analysis</span></div></header><div class="layout"><nav aria-label="Report contents"><strong>Contents</strong><a href="#section-1">1. Executive findings</a><a href="#section-2">2. Evidence levels and provenance</a><a href="#section-4">3. Audio transport: exact recovered format</a><a href="#section-9">4. What the recovered binary contains</a><a href="#section-10">5. Processor, startup, and memory organization</a><a href="#section-15">6. Audio boundary and processing quantum</a><a href="#section-16">7. Zone timing and exponential rate conversion</a><a href="#section-21">8. Halo: an eight-way feedback/diffusion network</a><a href="#section-27">9. Color: filter stages, tap morphing, and nonlinear compensation</a><a href="#section-31">10. Repeats and control conditioning</a><a href="#section-32">11. Codec initialization and input-gain clues</a><a href="#section-33">12. Diagnostics and code organization</a><a href="#section-34">13. Deliverables and reproducibility</a><a href="#section-35">14. What is not recovered, and the next useful engineering step</a><a href="#section-36">15. Primary references</a></nav><main><h1>Mimeophon MP86 — firmware extraction and static engineering analysis</h1>
+<p><strong>Input:</strong> the user-supplied <code>mp86.wav</code> · <strong>Analysis date:</strong> 27 September 2026<br/>
+<strong>Result:</strong> complete recovery of the 49,152-byte transported application image; 192/192 packet CRCs pass.<br/>
+<strong>Scope:</strong> offline decoding and static analysis. No module was connected, modified, flashed, or audio-tested.</p>
+<h2 id="section-1">1. Executive findings</h2>
+<p>The WAV is not a conventional two-frequency FSK update. It carries <strong>absolute-phase QPSK</strong> at a 6 kHz carrier, with 6,000 symbols per second and two bits per symbol. Its framing matches the public <code>stm-audio-bootloader</code> QPSK encoder family by Émilie Gillet [S1]. The payload is directly readable ARM Thumb firmware: no descrambling, decompression, or decryption is needed to obtain executable instructions.</p>
+<p>Two independent demodulation methods agree on all <strong>226,848 symbols</strong>. All <strong>192 payloads</strong> pass their stored CRC-32. Their ordered concatenation is <strong>48 KiB</strong>. The recovered vector table, startup code, floating-point constants, diagnostic strings, and internal revision integer are mutually consistent. This is strong evidence that the transported bytes have been recovered correctly, rather than merely producing an attractive-looking disassembly.</p>
+<p>The principal engineering findings are:</p>
+<ul>
+<li>An STM32F7/Cortex-M7-class, hardware-floating-point application at <code>0x08020000</code>, with a reset vector of <code>0x08020299</code> and initial stack pointer <code>0x2004c000</code>.</li>
+<li>A four-stereo-frame processing entry point at <code>0x080239b4</code>, called by two alternating DMA-buffer callbacks. Hardware initialization requests a nominal 48,000 Hz audio rate independently of the update WAV's sample rate.</li>
+<li>Two <strong>2,097,152-float main delay buffers</strong>, occupying <strong>8 MiB each</strong>, at <code>0xd0800000</code> and <code>0xd1000000</code>. At nominal 48 kHz, each holds approximately 43.69 seconds. These allocations are not a claim that the entire physical RAM device is only 16 MiB.</li>
+<li>A separate 32,768-float ring at <code>0xd0000000</code>, used by an <strong>eight-tap feedback network with an explicitly recoverable 8×8 Hadamard matrix</strong>. Four additional short allpass delay lines have lengths 969, 803, 1,236, and 1,511 samples.</li>
+<li>Exact control tables for exponential conversion, Halo matrix gain, Repeats gain, Color coefficients, and zone-dependent timing. There are 3,072 floats in the six large contiguous lookup tables alone.</li>
+<li>A four-stage allpass-average filter cascade in each audited Color channel, plus tap interpolation and amplitude-dependent polynomial gain. This is more specific than identifying “a filter” or “a reverb.”</li>
+<li>A codec-control fingerprint compatible with the WM8731/TLV320AIC23 register family, including 32-bit I²S interface settings. The register fingerprint does <strong>not</strong> establish the exact installed part number.</li>
+</ul>
+<p>The remaining gap is not the firmware extraction. It is the full semantic reconstruction of the optimized DSP and its mode-dependent state transitions. The bundle preserves the evidence needed to continue that work.</p>
+<h2 id="section-2">2. Evidence levels and provenance</h2>
+<p><strong>Verified bytes:</strong> values directly decoded from the WAV, CRCs, table entries, strings, instruction encodings, and literal addresses. These are reproducible with the bundled scripts.</p>
+<p><strong>High-confidence interpretation:</strong> Cortex-M7/F7-class platform, audio callbacks, large float rings, the Hadamard network, individual allpass equations, and the main lookup-table roles. These conclusions are supported by multiple code paths or by matching the register layout to primary documentation.</p>
+<p><strong>Provisional interpretation:</strong> exact correspondence of some ADC slots to panel controls, transition-window field names, several rate-related coefficients, and complete routing through Hold, Flip, Skew, and Ping Pong. The data is exact even where the label remains provisional.</p>
+<p><strong>Not established:</strong> original source code, original symbol names, a particular compiler version, exact MCU/codec package, the board's complete analog transfer function, hardware-measured audio timing, full state-machine equivalence, or the specific difference between MP86 and an earlier firmware image.</p>
+<p>Make Noise identifies MP86 as the noise-floor-reduction revision [S2]. The code also writes the integer <strong>86</strong> into <code>0x200050fc</code> at approximately <code>0x080278a6</code>. This independently corroborates the revision label. The uploaded WAV was <strong>not</strong> byte-compared with the official ZIP: its link was located, but downloading that archive was unsuccessful. No assertion of signed authenticity follows from the CRCs.</p>
+<h3 id="section-3">Cryptographic identities</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th style="text-align:right">Bytes</th>
+<th>SHA-256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Uploaded <code>mp86.wav</code></td>
+<td style="text-align:right">3,725,612</td>
+<td><code>d116d3b0d5d54443437934216377d178321e401e706321e1ad72d5ccc05a9652</code></td>
+</tr>
+<tr>
+<td>Recovered application BIN</td>
+<td style="text-align:right">49,152</td>
+<td><code>31323684dacda3d6313565a1a47596005870d1defed55e0336fd419ca82040b9</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The original upload is preserved in <code>input/</code>. <code>MANIFEST.sha256</code> covers the deliverable files. The original firmware remains third-party material; analyst-written tools and labels do not change its ownership or licensing.</p>
+<h2 id="section-4">3. Audio transport: exact recovered format</h2>
+<h3 id="section-5">3.1 WAV container and modulation</h3>
+<p>The input is uncompressed, mono, signed 16-bit little-endian PCM at 48,000 samples/s. It contains 1,862,784 frames and lasts <strong>38.808 seconds</strong>. The first 48,000 samples are zero. The signal after that begins on a usable carrier/symbol boundary.</p>
+<p>Each symbol occupies eight samples: one complete cycle of the 6 kHz carrier. If a symbol has numeric value <code>s</code> in 0…3, its two quadrature signs are:</p>
+<pre><code class="language-text">I_sign = 2 * floor(s / 2) - 1
+Q_sign = 2 * (s mod 2) - 1
+x[n] ∝ I_sign*cos(2πn/8) + Q_sign*sin(2πn/8)
+</code></pre>
+<p>Four successive two-bit symbols are packed into each byte, most significant first. There is no differential decoding stage in the successful extraction. Carrier phase is referenced to the clean file's detected onset.</p>
+<p>The bundled decoder uses a one-cycle complex DFT. For the same alignment, the signs of sample 0 and sample 2 independently classify the I and Q bits. The second method agrees with the DFT on every symbol. It is a useful independent check because it does not reuse the frequency-domain calculation.</p>
+<p>This decoder intentionally targets the supplied clean digital file. It is not advertised as a general modem for recordings made through speakers, unknown phase shifts, resampling, clipping, or sample-clock drift. Such recordings need synchronization and error-handling machinery beyond this extraction.</p>
+<h3 id="section-6">3.2 Packet format</h3>
+<pre><code class="language-text">Offset  Length  Meaning
+0       8       00 00 00 00 00 00 00 00
+8       4       99 99 99 99
+12      4       CC CC CC CC
+16      256     Payload bytes
+272     4       CRC-32 of payload, big-endian stored word
+Total   276
+</code></pre>
+<p>The CRC is the unsigned IEEE CRC-32 returned by <code>zlib.crc32(payload)</code>. There is no CRC over the preamble. For example, packet zero's stored/computed checksum is <code>9d57885f</code>.</p>
+<p>The decoded post-silence byte stream is 56,712 bytes. It begins with 1,500 zero-symbol bytes, equivalent to one second of carrier training. The first packet starts at demodulated byte 1,500. Packet starts are normally separated by 276 bytes; after every fourth packet, an additional 15 zero-symbol bytes appear. These 15-byte pauses last 10 ms at the 1,500-byte/s raw transport rate.</p>
+<p>The four-packet grouping is consistent with 1,024-byte update chunks. It does not by itself prove the target flash's erase-sector size or recover the resident bootloader's implementation.</p>
+<h3 id="section-7">3.3 Complete duration accounting</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th style="text-align:right">Duration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initial PCM silence</td>
+<td style="text-align:right">1.000 s</td>
+</tr>
+<tr>
+<td>Intro/training carrier</td>
+<td style="text-align:right">1.000 s</td>
+</tr>
+<tr>
+<td>192 packets × 276 bytes / 1,500 bytes/s</td>
+<td style="text-align:right">35.328 s</td>
+</tr>
+<tr>
+<td>48 group pauses × 0.010 s</td>
+<td style="text-align:right">0.480 s</td>
+</tr>
+<tr>
+<td>Outro carrier</td>
+<td style="text-align:right">1.000 s</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td style="text-align:right"><strong>38.808 s</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>All non-packet demodulated bytes are zero-symbol framing/pause bytes. The decoder checks this rather than silently discarding unexplained data.</p>
+<h3 id="section-8">3.4 Relation to the public encoder</h3>
+<p>The quadrature mapping, preamble, byte packing, and CRC placement match [S1]. The pause schedule is specific to this file and differs from several current upstream target presets. Therefore the warranted statement is <strong>protocol compatibility or derivation</strong>, not proof that Make Noise shipped an unchanged current upstream bootloader.</p>
+<p>The upstream encoder supports an optional XOR scrambler. It was not needed here: the CRC-valid packet contents themselves form the coherent firmware image. Applying that unrelated optional transform is not part of the successful decode. This analysis also does not prove that Morphagene uses the identical settings; its firmware WAV was not part of this task.</p>
+<h2 id="section-9">4. What the recovered binary contains</h2>
+<p>The raw image maps to <code>0x08020000…0x0802bfff</code> inclusive. The update does not contain the resident bootloader below that base. It also does not contain the module's live audio buffers or the settings region referenced at <code>0x080c0000…0x080fffff</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>File offset</th>
+<th>Flash address</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0000…0x01c7</code></td>
+<td><code>0x08020000…0x080201c7</code></td>
+<td>114-word vector table</td>
+</tr>
+<tr>
+<td><code>0x01c8…0x8c7b</code></td>
+<td><code>0x080201c8…0x08028c7b</code></td>
+<td>Startup, support code, DSP, handlers, inline literal pools; not exclusively instructions</td>
+</tr>
+<tr>
+<td><code>0x8c7c…0x8dc3</code></td>
+<td><code>0x08028c7c…0x08028dc3</code></td>
+<td>Diagnostic text region</td>
+</tr>
+<tr>
+<td><code>0x8dc4…0xbdc3</code></td>
+<td><code>0x08028dc4…0x0802bdc3</code></td>
+<td>Six contiguous large float tables, 12,288 bytes</td>
+</tr>
+<tr>
+<td><code>0xbdc4…0xbe07</code></td>
+<td><code>0x0802bdc4…0x0802be07</code></td>
+<td>Small constants/string material</td>
+</tr>
+<tr>
+<td><code>0xbe08…0xbf7b</code></td>
+<td><code>0x0802be08…0x0802bf7b</code></td>
+<td>372-byte RAM initializer</td>
+</tr>
+<tr>
+<td><code>0xbf7c…0xbfff</code></td>
+<td><code>0x0802bf7c…0x0802bfff</code></td>
+<td>132 preserved zero bytes</td>
+</tr>
+</tbody>
+</table></div>
+<p>These are analysis boundaries, not recovered original linker-section names. The entire transported image is retained. No trailing zeros were stripped and no imaginary bootloader bytes were prepended.</p>
+<p>The bundle provides the image as raw BIN and address-bearing Intel HEX. The <strong>ELF is a synthetic analysis wrapper</strong> constructed from the recovered bytes, initialized RAM layout, and analyst labels. It is not the vendor's original ELF, and it should not be treated as a hardware update file.</p>
+<h2 id="section-10">5. Processor, startup, and memory organization</h2>
+<h3 id="section-11">5.1 Architecture evidence</h3>
+<p>The first two vector words are:</p>
+<pre><code class="language-text">Initial SP     0x2004c000
+Reset vector   0x08020299   (Thumb bit set; code at 0x08020298)
+</code></pre>
+<p>The reset trampoline transfers to runtime startup at <code>0x080201c8</code>. Startup copies 372 bytes from <code>0x0802be08</code> to <code>0x20000000</code> and clears <code>0x20000174…0x20005a7f</code>. The zeroed BSS span is 22,796 bytes. Main is at <code>0x08027648</code>.</p>
+<p>Main explicitly programs the vector-table base to <code>0x08020000</code> and performs Cortex-M7-style instruction/data cache initialization. The instruction stream contains hardware single-precision operations, fused multiply-add, and min/max-number instructions. The peripheral and interrupt layout is consistent with the official STM32F746-class CMSIS definitions [S3].</p>
+<p>The conservative identification is <strong>Cortex-M7, STM32F7/F74x–F75x-compatible application</strong>. A precise MCU SKU should not be asserted without an identifying constant, a board photograph, or hardware identification. The firmware is interrupt-driven in a bare-metal style; a named RTOS has not been identified.</p>
+<h3 id="section-12">5.2 Interrupts with nondefault handlers</h3>
+<p>The vector table contains 16 core entries and 98 peripheral positions. Most unused peripheral entries point to <code>0x08027c95</code>, a shared default handler. Identified active peripheral vectors include DMA1 streams 2 and 7, DMA2 streams 0, 1 and 5, and TIM2. Core fault handlers and SysTick have their own targets. The complete exact vector table is exported in <code>analysis/vectors.csv</code>.</p>
+<h3 id="section-13">5.3 Main delay storage</h3>
+<p>Initialization at <code>0x0802343e…0x080235de</code> establishes two float buffers:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Buffer</th>
+<th>Base</th>
+<th style="text-align:right">Bytes</th>
+<th style="text-align:right">Float samples</th>
+<th style="text-align:right">Nominal capacity at 48 kHz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Main A</td>
+<td><code>0xd0800000</code></td>
+<td style="text-align:right">8,388,608</td>
+<td style="text-align:right">2,097,152</td>
+<td style="text-align:right">43.690667 s</td>
+</tr>
+<tr>
+<td>Main B</td>
+<td><code>0xd1000000</code></td>
+<td style="text-align:right">8,388,608</td>
+<td style="text-align:right">2,097,152</td>
+<td style="text-align:right">43.690667 s</td>
+</tr>
+<tr>
+<td>Auxiliary Halo ring</td>
+<td><code>0xd0000000</code></td>
+<td style="text-align:right">131,072</td>
+<td style="text-align:right">32,768</td>
+<td style="text-align:right">Allocation capacity, not one audible 0.683 s echo</td>
+</tr>
+</tbody>
+</table></div>
+<p>The main-ring length is stored at <code>0x200037f8</code>; its mask, <code>0x001fffff</code>, at <code>0x20001b20</code>. The auxiliary mask is 32,767 at <code>0x20001b4c</code>.</p>
+<p>Four 44-byte structures begin at <code>0x20001a14</code>. Their buffer pointers alternate between the two main arrays. This supports a dual-head-per-channel organization, consistent with changing read positions and transitions without allocating a separate recording for every zone. Exactly how each field participates in all Hold/Flip/clocked paths still needs a complete state-machine trace.</p>
+<p>The clear routine at <code>0x08023988</code> provides a second, independent confirmation of the two main buffers and their sample count. Neither their contents nor any prerecorded material can be recovered from an update image: these arrays exist in volatile RAM after boot.</p>
+<h3 id="section-14">5.4 Persistent settings are outside this image</h3>
+<p>Main references a flash scan region beginning at <code>0x080c0000</code>, ending near <code>0x080fffff</code>. Those addresses are outside the transported application. The code for reading or updating settings can be analyzed, but this WAV does not disclose a particular module's saved settings, calibration, or input-gain selection.</p>
+<h2 id="section-15">6. Audio boundary and processing quantum</h2>
+<p>The main DSP entry is <code>0x080239b4</code>. Two wrappers at <code>0x0802697c</code> and <code>0x08026ab4</code> convert incoming signed 32-bit transfer words to float, invoke that entry with a count of <strong>four stereo frames</strong>, convert results back to signed integer words, and write the opposite half of the output DMA buffer.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>State</th>
+<th>Address</th>
+<th>Observed format</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RX transfer buffer</td>
+<td><code>0x20001adc</code></td>
+<td>16 × signed 32-bit words</td>
+</tr>
+<tr>
+<td>TX transfer buffer</td>
+<td><code>0x20002ae8</code></td>
+<td>16 × signed 32-bit words</td>
+</tr>
+<tr>
+<td>Float input scratch</td>
+<td><code>0x20004d7c</code></td>
+<td>8 floats / 4 stereo frames</td>
+</tr>
+<tr>
+<td>Float output scratch</td>
+<td><code>0x200038a4</code></td>
+<td>8 floats / 4 stereo frames</td>
+</tr>
+</tbody>
+</table></div>
+<p>The input conversion multiplier has bits <code>0x300a3d6d</code>, exactly approximately <code>5.0291398823e-10</code>. The output multiplier has bits <code>0x4e7ffc00</code>, exactly <code>1,073,676,288</code>. These are actual constants, not a generic assumption that every transfer uses precisely <code>1/2^31</code> and <code>2^31</code>. They are not enough to infer end-to-end module gain without the intervening DSP and analog circuitry.</p>
+<p>Main stores <strong>48,000</strong> into the SAI audio-frequency configuration at <code>0x08027aac…0x08027ad0</code>; the SAI block addresses are also visible. This is independent evidence for the nominal processing rate. Actual LRCLK, oscillator tolerance, and PLL-derived rate have not been measured, so all seconds/milliseconds in this report are explicitly <strong>nominal at 48 kHz</strong>.</p>
+<p>At that nominal rate, one block covers 83.333 µs and the two callbacks collectively process 12,000 blocks per second. This is the computation quantum, <strong>not a measurement of complete analog-input-to-output latency</strong>. DMA scheduling, converter filters, and hardware buffering add other terms.</p>
+<h2 id="section-16">7. Zone timing and exponential rate conversion</h2>
+<h3 id="section-17">7.1 Exact base-delay table</h3>
+<p>Eight float values are copied from flash offset <code>0xbe10</code> into RAM at <code>0x20000008</code>. The following values come from the recovered bytes. Maximum ranges use the observed/documented per-zone factors; the firmware also contains an approximately 2,006,227.5-sample long-delay bound.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th style="text-align:right">Zone</th>
+<th style="text-align:right">Minimum samples</th>
+<th style="text-align:right">Minimum ms</th>
+<th style="text-align:right">Nominal maximum ms</th>
+<th style="text-align:right">Range factor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">0</td>
+<td style="text-align:right">61.22520447</td>
+<td style="text-align:right">1.275525</td>
+<td style="text-align:right">20.408401</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td style="text-align:right">1</td>
+<td style="text-align:right">979.60327148</td>
+<td style="text-align:right">20.408401</td>
+<td style="text-align:right">81.633606</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">2</td>
+<td style="text-align:right">3918.41308594</td>
+<td style="text-align:right">81.633606</td>
+<td style="text-align:right">326.534424</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">3</td>
+<td style="text-align:right">7836.82617188</td>
+<td style="text-align:right">163.267212</td>
+<td style="text-align:right">653.068848</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">4</td>
+<td style="text-align:right">15673.65234375</td>
+<td style="text-align:right">326.534424</td>
+<td style="text-align:right">1306.137695</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">5</td>
+<td style="text-align:right">31347.30468750</td>
+<td style="text-align:right">653.068848</td>
+<td style="text-align:right">2612.275391</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">6</td>
+<td style="text-align:right">62694.60937500</td>
+<td style="text-align:right">1306.137695</td>
+<td style="text-align:right">5224.550781</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td style="text-align:right">7</td>
+<td style="text-align:right">125389.21875000</td>
+<td style="text-align:right">2612.275391</td>
+<td style="text-align:right">41796.406250</td>
+<td style="text-align:right">16</td>
+</tr>
+</tbody>
+</table></div>
+<p>The values agree with the official manual's rounded ranges [S4]. They show why the longest playable nominal interval is about 41.796 s although the allocated ring can hold about 43.691 s. Allocation size and control range should not be conflated.</p>
+<p>A mathematical observation, not a measured pitch claim: the smallest base delay closely matches <code>48000 / (440 * 2^(10/12))</code>, with the other bases related by powers of two. A feedback oscillator's audible fundamental also depends on filter phase and interpolation, so this is not proof that a particular patch will be exactly in tune at that nominal pitch.</p>
+<h3 id="section-18">7.2 Exponential lookup</h3>
+<p>Flash <code>0x08028dc4</code> contains 2,048 floats closely following:</p>
+<pre><code class="language-text">exp2_fraction[i] ≈ 2^(i / 2048),  0 ≤ i &lt; 2048
+</code></pre>
+<p>The largest absolute deviation from a high-precision formula is about <code>6.42e-8</code>. A correctly rounded float32 re-evaluation matches <strong>2,010/2,048</strong> entries exactly; 38 entries differ. Consequently, a bit-conscious reconstruction should use the extracted values, not assume regenerating the apparent formula produces identical bytes.</p>
+<p>One audited usage masks an index with 2,047 and doubles the result when the index is in the next octave. Other references occur in the rate/control paths around <code>0x080254b2</code>, <code>0x0802633e</code>, <code>0x08026694</code>, <code>0x0802675a</code>, and <code>0x08026834</code>. Recovering this table eliminates much of the guesswork in an exponential rate implementation, but does not on its own reconstruct every CV scaling and state branch.</p>
+<h3 id="section-19">7.3 Clocked delay ratios</h3>
+<p>Initialization builds a 13-entry float table at <code>0x20003804</code>:</p>
+<pre><code class="language-text">1/2, 4/7, 3/5, 2/3, 3/4, 4/5, 1,
+5/4, 4/3, 3/2, 5/3, 7/4, 2
+</code></pre>
+<p>These are <strong>delay-time ratios</strong>. The corresponding repeat-frequency ratios are their reciprocals. This distinction matters: copying the manual's frequency multipliers into a delay-length calculation without inversion would reverse the mapping. These runtime values were reconstructed from immediate stores at <code>0x08023428…0x0802348e</code>; they are not falsely presented as one contiguous flash array.</p>
+<h3 id="section-20">7.4 Other zone-dependent values</h3>
+<p>The image also provides per-zone transition scales <code>[68, 132, 260, 1004, 1004, 1004, 1004, 1004]</code>, coefficients <code>[1/64, 1/128, 1/256, .001, .001, .001, .001, .001]</code>, and eight near-unity filter coefficients. The exact bytes and addresses are exported. The transition field's name is still provisional; it should not automatically become a fixed crossfade duration until all uses are traced.</p>
+<h2 id="section-21">8. Halo: an eight-way feedback/diffusion network</h2>
+<h3 id="section-22">8.1 The recovered matrix</h3>
+<p>The code around <code>0x08024b8e…0x08025154</code> reads eight locations from the auxiliary float ring and computes an explicit sum/difference butterfly. The resulting eight outputs are the following unnormalized Sylvester Hadamard transform:</p>
+<pre><code class="language-text">+ + + + + + + +
++ - + - + - + -
++ + - - + + - -
++ - - + + - - +
++ + + + - - - -
++ - + - - + - +
++ + - - - - + +
++ - - + - + + -
+</code></pre>
+<p>Here each sign is ±1. The matrix satisfies <code>HᵀH = 8I</code>. The exact sign matrix is exported as CSV and as a tested C++ butterfly component. This algebraic structure is directly recoverable from the instructions; the interpretation as the Halo feedback network is additionally supported by its live coefficient coming from the Halo-associated lookup/smoothing path.</p>
+<h3 id="section-23">8.2 Ring taps and feedback destinations</h3>
+<p>The ring cursor decreases by one per processed sample and wraps with mask 32,767. Relative read offsets are:</p>
+<pre><code class="language-text">1838, 2241, 2662, 3128, 3688, 4251, 4861, 5539
+</code></pre>
+<p>Corresponding write offsets are:</p>
+<pre><code class="language-text">0, 1839, 2242, 2663, 3129, 3689, 4252, 4862
+</code></pre>
+<p>The CSV records both rather than calling all eight read offsets independent delay lengths. Their differences are 1,838, 402, 420, 465, 559, 562, 609, and 677 samples, before the extra processing on selected feedback branches. That distinction is important when reconstructing a partitioned single-ring implementation.</p>
+<p>The matrix operates on the eight tapped signals. The feedback writes include gain, injection of the stereo signal, damping/nonlinear stages, and selected additional allpasses. The network is not accurately characterized as eight plain comb filters added in parallel.</p>
+<h3 id="section-24">8.3 Exact Halo feedback-gain law</h3>
+<p>The 128-entry table at <code>0x0802adc4</code> runs from approximately 0.176776707 to 0.348771602. Its live smoothed value at <code>0x20004d24</code> multiplies the unnormalized Hadamard outputs.</p>
+<p>Because <code>H</code> has norm <code>sqrt(8)</code>, those endpoints correspond to approximately <strong>0.50000003…0.98647506</strong> when expressed as gain multiplying a normalized orthogonal matrix. This explains why the raw numbers look small: the implementation has not normalized the butterfly by <code>1/sqrt(8)</code>.</p>
+<p>This is a practical reconstruction trap. Normalizing the matrix and then retaining the original raw table would attenuate the loop by an additional <code>sqrt(8)</code>. Conversely, using a normalized-gain table with an unnormalized matrix would increase loop gain. The table endpoint alone is not a complete decay-time or stability analysis: additional filters, nonlinearities, delay lengths, and injection paths affect the full system.</p>
+<h3 id="section-25">8.4 Four short allpass lines</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Base</th>
+<th style="text-align:right">Length</th>
+<th style="text-align:right">Nominal allocation time</th>
+<th style="text-align:right">Coefficient in audited path</th>
+<th>Read behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x20001b6c</code></td>
+<td style="text-align:right">969 samples</td>
+<td style="text-align:right">20.1875 ms</td>
+<td style="text-align:right">0.7</td>
+<td>Fractional, linearly interpolated</td>
+</tr>
+<tr>
+<td><code>0x20002b64</code></td>
+<td style="text-align:right">803 samples</td>
+<td style="text-align:right">16.7292 ms</td>
+<td style="text-align:right">0.7</td>
+<td>Fractional, linearly interpolated</td>
+</tr>
+<tr>
+<td><code>0x200038e8</code></td>
+<td style="text-align:right">1,236 samples</td>
+<td style="text-align:right">25.7500 ms</td>
+<td style="text-align:right">0.4</td>
+<td>Integer ring access</td>
+</tr>
+<tr>
+<td><code>0x20000278</code></td>
+<td style="text-align:right">1,511 samples</td>
+<td style="text-align:right">31.4792 ms</td>
+<td style="text-align:right">0.4</td>
+<td>Integer ring access</td>
+</tr>
+</tbody>
+</table></div>
+<p>The locally audited allpass update is:</p>
+<pre><code class="language-text">write_value = input + coefficient * delayed_value
+output      = delayed_value - coefficient * write_value
+</code></pre>
+<p>The coefficients are represented by float32 constants, so 0.7 and 0.4 here are rounded human-readable forms. The exact constants are visible in the disassembly. The 969- and 803-sample arrays include interpolated read positions and slow modulation-related state; their allocation lengths are not a promise that the instantaneous delay is always the full array length.</p>
+<h3 id="section-26">8.5 Nonlinear feedback and modulation</h3>
+<p>One clear nonlinear stage clamps its input to ±2/3, then applies:</p>
+<pre><code class="language-text">y = x - x³/3
+</code></pre>
+<p>Additional filtering and scaling follow; this is not the whole Halo transfer function.</p>
+<p>A 32-bit LCG uses multiplier <code>196314165</code> and increment <code>907633515</code>, with unsigned wrapping. Its centered random value is formed using <code>2^-32</code>, then scaled by approximately <code>2e-6</code>. Nearby state-dependent branches constrain tiny modulation increments around ±<code>3e-6</code>. References connect this state to the diffusion/read-position processing.</p>
+<p>The warranted conclusion is that very small pseudorandom modulation is present. It is <strong>not</strong> justified to call it DAC dither, to attribute the module's audible noise floor to it, or to claim that MP86 introduced or removed it. Those claims require further tracing or a comparison image.</p>
+<h2 id="section-27">9. Color: filter stages, tap morphing, and nonlinear compensation</h2>
+<h3 id="section-28">9.1 Four cascaded allpass-average stages</h3>
+<p>The two channel paths around <code>0x08024742</code> and <code>0x08024996</code> use a coefficient selected from the 256-entry table at <code>0x0802b5c4</code>. The coefficient is smoothed:</p>
+<pre><code class="language-text">a ← a + 0.01 * (target_a - a)
+</code></pre>
+<p>For one stage, the core recurrence is:</p>
+<pre><code class="language-text">ap = previous_input + a * (input - previous_ap)
+output = 0.5 * (input + ap)
+previous_input = input
+previous_ap = ap
+</code></pre>
+<p>There are four cascaded stages, with intermediate taps retained. At fixed <code>a</code>, the allpass part has transfer function <code>(a + z^-1)/(1 + a*z^-1)</code>; averaging it with the input gives a first-order lowpass form. Four such stages and tap morphing are more specific than a generic “four-pole filter” description. They should not silently be replaced with an unrelated biquad or ladder filter in a fidelity-oriented port.</p>
+<p>The stored coefficient table spans approximately <code>0.5697072…-0.9364711</code>. Because control indices are transformed and may be inverted, this statement does not by itself assign dark/bright endpoints to the physical knob.</p>
+<h3 id="section-29">9.2 Tap interpolation and level shaping</h3>
+<p>The code keeps multiple outputs from the cascade, applies several unequal scale factors, and interpolates between neighboring taps using a fractional control position. It also feeds other state back into the calculation. The standalone C++ component returns the five raw taps only; it does not pretend to reproduce the entire Color path.</p>
+<p>Two additional 256-entry tables at <code>0x0802b1c4</code> and <code>0x0802b9c4</code> participate in Color-related control/filter/gain paths. Their ranges are approximately <code>0.0737930…0.9365152</code> and <code>0…48.14673</code>, respectively. Exact exports are preferable to speculative analytic replacements.</p>
+<p>An unusual access around <code>0x08026054</code> uses an aligned <strong>byte-offset</strong> expression into the first of these tables, rather than a simple floating-point index multiplied by four. It is preserved in the disassembly. A port should trace the actual addressing before “fixing” it into a conventional table lookup.</p>
+<h3 id="section-30">9.3 Zone-dependent amplitude polynomial</h3>
+<p>Four coefficient groups copied into live state at <code>0x20002ad4</code> are used by a polynomial gain stage around <code>0x08024888…0x080248dc</code>:</p>
+<pre><code class="language-text">g(m) = c0 - c1*m + c2*m² - c3*m³
+shaped_signal = g(m) * signal
+</code></pre>
+<p>The magnitude/control term <code>m</code> is derived from smoothed envelope-related state and clamped in the audited path. Two distinct coefficient sets are apparent: the first zone group uses approximately <code>[1.326183, .7918028, .2978016, .03785328]</code>; the remaining groups use approximately <code>[1.184146, .4349760, .1311650, .01429918]</code>.</p>
+<p>This is an amplitude-dependent gain law, not four unexplained biquad coefficients. Its complete interaction with transient suppression, repeats, and Color needs further routing analysis. The exact coefficients and a narrowly scoped evaluator are supplied.</p>
+<h2 id="section-31">10. Repeats and control conditioning</h2>
+<p>The Repeats-associated lookup at <code>0x0802afc4</code> contains 128 floats. It starts with two zero entries, rises toward unity, and ends:</p>
+<pre><code class="language-text">… 0.9972241, 0.9993614, 1.06, 1.09, 1.12, 1.15,
+  1.18, 1.21, 1.24, 1.27
+</code></pre>
+<p>That is an explicit above-unity control region, not merely “a feedback knob that probably goes past one.” It is nevertheless a <strong>gain target inside a nonlinear, filtered system</strong>; it does not imply every complete feedback loop has gain exactly 1.27 at the endpoint.</p>
+<p>A seven-word control area begins at <code>0x20004f98</code>. Behavior-based assignments are:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th style="text-align:right">Byte offset</th>
+<th>Likely control</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">+0</td>
+<td>Mix</td>
+<td>Clamp to 0…1 and wet/dry-related smoothing</td>
+</tr>
+<tr>
+<td style="text-align:right">+4</td>
+<td>Zone</td>
+<td>Eight-way selection and zone-table accesses</td>
+</tr>
+<tr>
+<td style="text-align:right">+8</td>
+<td>Repeats</td>
+<td>128-entry gain table with above-unity tail</td>
+</tr>
+<tr>
+<td style="text-align:right">+12</td>
+<td>Color</td>
+<td>Filter/tap/gain table paths</td>
+</tr>
+<tr>
+<td style="text-align:right">+16</td>
+<td>Halo</td>
+<td>Hadamard gain and auxiliary amount paths</td>
+</tr>
+<tr>
+<td style="text-align:right">+20</td>
+<td>Rate</td>
+<td>Delay/exponential/time calculations</td>
+</tr>
+<tr>
+<td style="text-align:right">+24</td>
+<td>microRate</td>
+<td>Fine rate modulation path</td>
+</tr>
+</tbody>
+</table></div>
+<p>These labels should be confirmed against board wiring for a hardware emulation. They are not a proven ADC pin map and they do not identify the analog CV summing/scaling circuit.</p>
+<p>Several control paths perform an offset/scale correction resembling <code>int((raw - 200) * 1.08)</code> followed by a 0…4095 clamp. Mix contains a path resembling <code>clamp((raw - 200) * 0.000264, 0, 1)</code>. Rate uses a different correction. These are individual audited paths, not a claim that every operating mode applies one shared formula.</p>
+<p>Several smoothed controls update once before the four-frame sample loop using <code>state += .001*(target-state)</code>. At nominal 48 kHz, an isolated first-order smoother at that block rate has a time constant of about 83.3 ms. Per-sample filter smoothing must not be confused with per-block control smoothing.</p>
+<p>Zone selection includes a raw-difference threshold of 256 and eight-bin quantization behavior. That helps explain why continuously modulating the selection need not behave like an unfiltered <code>floor(knob*8)</code> at every sample. Complete hysteresis/state behavior remains a follow-up tracing task.</p>
+<h2 id="section-32">11. Codec initialization and input-gain clues</h2>
+<p>Function <code>0x08026bf0</code> sends eleven observed two-byte writes to an I²C API using address argument <code>0x34</code>. Under the usual shifted-address convention this corresponds to seven-bit address <code>0x1a</code>.</p>
+<pre><code class="language-text">0c 72   0e 0e   00 17   02 17   04 00   06 00
+0a 00   08 12   10 00   12 01   0c 62
+</code></pre>
+<p>Splitting each control word into a seven-bit register address and nine-bit value produces a coherent WM8731/TLV320AIC23-compatible register sequence. TI's primary register documentation [S5] and the Linux WM8731 driver [S6] support this family-level interpretation.</p>
+<p>In that compatible map, the sequence configures the digital interface as <strong>32-bit I²S in slave mode</strong>, selects line input and DAC playback, leaves analog bypass disabled, sets both input-volume fields initially to <code>0x17</code>, enables the active path, and changes the output power state near the end of initialization. Those are interpretations conditional on the register-family identification, not direct observations of the physical chip.</p>
+<p>A nearby routine at <code>0x08026d3c</code> builds stereo input-volume writes from a value that includes an offset of 21. This is evidence that at least part of input-gain handling occurs in codec control, not only in float DSP. The full user-setting-to-decibel mapping and persistent-state selection were not exhaustively reconstructed.</p>
+<p>A 32-bit serial transfer format does <strong>not</strong> mean a 32-bit analog converter or 32 bits of measured dynamic range. The precise converter part and effective resolution remain unverified.</p>
+<h2 id="section-33">12. Diagnostics and code organization</h2>
+<p>Readable diagnostic strings identify stack-frame and fault reporting: registers R0…PSR, fault-status/address registers, LR/EXC_RETURN, and HardFault/BusFault/UsageFault messages. They are exported separately from the indiscriminate printable-byte scan.</p>
+<p><code>strings_all.csv</code> deliberately flags strings outside the diagnostic region as unclassified. Printable instruction bytes can look like meaningful strings; they should not become invented feature names.</p>
+<p>The recursive disassembly currently visits <strong>11,185 candidate instructions</strong>, covering 30,580 instruction bytes, with 144 candidate entry points and 307 direct call sites recorded. These counts describe the analysis traversal, not a proven original function inventory. Candidate roots include vectors, call targets and plausible code pointers. Four table-byte branches have explicit target enumeration; additional table-halfword and indirect paths remain unresolved.</p>
+<p>There are two forms of disassembly:</p>
+<p><strong><code>reachable_thumb.asm</code>:</strong> preferred starting point. It follows control flow and excludes many literal pools, but is still subject to candidate-root errors, indirect branches, and incompleteness.</p>
+<p><strong><code>linear_sweep_thumb.asm</code>:</strong> broad byte coverage for manual checking. It intentionally includes constants decoded as apparent instructions. A line in this file alone is not proof that those bytes are executable.</p>
+<p>Focused listings isolate startup, initialization, main, audio callbacks, interrupts, and the DSP core. Addresses are real; function names in companion symbols are analyst annotations. Original C++ classes, source filenames, and debug symbols were not recovered.</p>
+<h2 id="section-34">13. Deliverables and reproducibility</h2>
+<p>The bundle includes the original WAV, complete recovered BIN, Intel HEX, synthetic analysis ELF, vector/data/code-region extracts, the full demodulated stream, a 192-row packet manifest, exact float tables in CSV and little-endian binary, C++ exact-table constants, memory maps, symbol candidates, literal references, call edges, strings, disassembly, and selected mathematical components.</p>
+<p>To reproduce the extraction from the bundle root:</p>
+<pre><code class="language-bash">python -m pip install -r tools/requirements.txt
+python tools/decode_mp86.py input/mp86.wav --out reproduced
+python tools/extract_artifacts.py --root reproduced
+python tools/validate_bundle.py --root .
+</code></pre>
+<p>The decoder writes only local files. It neither connects to hardware nor installs firmware. It rejects a failed CRC, disagreement between demodulators, unsupported WAV format, unexpected nonzero framing, or the wrong packet count.</p>
+<p>The table extractor checks the exact audited firmware hash before applying version-specific offsets. That prevents accidentally giving an earlier or later image convincing but incorrect MP86 labels.</p>
+<p>For disassembly, <code>tools/build_analysis.py</code> uses a system LLVM shared library with ARM support. It was run with LLVM 19. The optional Ghidra annotation script was not executed in Ghidra in this environment and is marked accordingly. Importing the raw BIN with the correct address and Thumb context remains the clearest analysis path.</p>
+<p>The selected C++ components compile under C++17 and pass sanity checks. Those checks validate their limited algebra and table syntax, <strong>not full Mimeophon audio equivalence</strong>. See <code>analysis/validation_results.json</code> for executed tests.</p>
+<h2 id="section-35">14. What is not recovered, and the next useful engineering step</h2>
+<p>A firmware update does not normally contain its own bootloader, the module's RAM history, or a live dump of persistent settings; this particular extraction does not supply those. It also does not magically turn optimized machine code back into the original source tree.</p>
+<p>The highest-value continuation is to decompile and trace <code>0x080239b4</code>, using the recovered memory map and exact tables, and to isolate a deterministic sample-processing test harness. The first validation should cover the native four-frame quantum at nominal 48 kHz. Hold, Flip, clocked transitions, Skew and Ping Pong should then be added as explicit tested states rather than inferred from the front-panel description.</p>
+<p>For a Rack implementation, exact timing tables, the Hadamard scaling convention, allpass lengths, and Color recurrences are immediately useful. The full control/event logic and interaction of the feedback paths still need careful reconstruction. A generic delay followed by a stock reverb is not what the recovered code describes.</p>
+<p>To attribute the advertised MP86 noise reduction to a specific change, decode an older official image with the same workflow and compare constants, callback scaling, codec writes, filters, and DSP branches. With only MP86, any claim that a particular visible operation is “the noise fix” would be speculation.</p>
+<h2 id="section-36">15. Primary references</h2>
+<p>The conclusions above are primarily original analysis of the supplied bytes. External references are used for protocol matching, device-register interpretation, and limited corroboration—not as substitutes for extraction.</p>
+<p><strong>[S1] Émilie Gillet, stm-audio-bootloader QPSK encoder.</strong> Mapping, packet framing, CRC and optional scrambler. Accessed 2026-09-27.<br/>
+<a href="https://raw.githubusercontent.com/pichenettes/stm-audio-bootloader/master/qpsk/encoder.py">https://raw.githubusercontent.com/pichenettes/stm-audio-bootloader/master/qpsk/encoder.py</a></p>
+<p><strong>[S2] Make Noise, Mimeophon product page.</strong> Official MP86 release description and download link. Accessed 2026-09-27.<br/>
+<a href="https://www.makenoisemusic.com/modules/mimeophon/">https://www.makenoisemusic.com/modules/mimeophon/</a></p>
+<p><strong>[S3] STMicroelectronics, STM32F746 CMSIS device header and startup template.</strong> Interrupt layout and processor/peripheral definitions used for family-level identification. Accessed 2026-09-27.<br/>
+<a href="https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-f7/master/Include/stm32f746xx.h">https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-f7/master/Include/stm32f746xx.h</a><br/>
+<a href="https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-f7/master/Source/Templates/gcc/startup_stm32f746xx.s">https://raw.githubusercontent.com/STMicroelectronics/cmsis-device-f7/master/Source/Templates/gcc/startup_stm32f746xx.s</a></p>
+<p><strong>[S4] Make Noise, Mimeophon manual.</strong> Printed pages 10–13: rounded zone ranges, rate/tempo and feedback behavior. Relevant PDF pages were inspected visually as well as through extracted text. Accessed 2026-09-27.<br/>
+<a href="https://www.makenoise-manuals.com/mimeophon/mimeophon-manual.pdf">https://www.makenoise-manuals.com/mimeophon/mimeophon-manual.pdf</a></p>
+<p><strong>[S5] Texas Instruments, TLV320AIC23B data manual, SLWS106H.</strong> Sections 3.1.2–3.1.3, including register-map pages 3-3 and 3-4. Used as a compatible-map reference, not proof of the exact installed codec. Accessed 2026-09-27.<br/>
+<a href="https://www.ti.com/lit/ds/symlink/tlv320aic23b.pdf">https://www.ti.com/lit/ds/symlink/tlv320aic23b.pdf</a></p>
+<p><strong>[S6] Linux upstream WM8731 driver.</strong> Codec register use and serial sample-width settings. Accessed 2026-09-27.<br/>
+<a href="https://raw.githubusercontent.com/torvalds/linux/master/sound/soc/codecs/wm8731.c">https://raw.githubusercontent.com/torvalds/linux/master/sound/soc/codecs/wm8731.c</a></p>
+<p><strong>[S7] STMicroelectronics SAI HAL header.</strong> Audio-frequency initialization structure. Accessed 2026-09-27.<br/>
+<a href="https://raw.githubusercontent.com/STMicroelectronics/stm32f7xx-hal-driver/master/Inc/stm32f7xx_hal_sai.h">https://raw.githubusercontent.com/STMicroelectronics/stm32f7xx-hal-driver/master/Inc/stm32f7xx_hal_sai.h</a></p>
+</main></div><footer>Recovered bytes and analyst interpretations are distinguished throughout. No hardware execution, flashing, or complete audio-equivalence testing was performed.</footer></body></html>

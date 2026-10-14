@@ -5,8 +5,32 @@
    viewBox="0 0 120 120"
    version="1.1"
    xmlns="http://www.w3.org/2000/svg">
-  <g fill="#000000" stroke="none">
-    <!-- Main circular shadow of the knob body -->
-    <circle cx="60" cy="60" r="54" />
+  <defs>
+    <!-- Pass 1: Wide, very soft ambient shadow (ambient occlusion) -->
+    <radialGradient
+       id="shadowPass1"
+       cx="61.4118"
+       cy="62.8235"
+       r="56.7"
+       gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000000" stop-opacity="0.3137" />
+      <stop offset="0.3333" stop-color="#000000" stop-opacity="0.3137" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <!-- Pass 2: Tighter, slightly darker contact shadow -->
+    <radialGradient
+       id="shadowPass2"
+       cx="60.8824"
+       cy="61.7647"
+       r="43.47"
+       gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000000" stop-opacity="0.5333" />
+      <stop offset="0.6957" stop-color="#000000" stop-opacity="0.5333" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <g stroke="none">
+    <circle cx="61.4118" cy="62.8235" r="56.7" fill="url(#shadowPass1)" />
+    <circle cx="60.8824" cy="61.7647" r="43.47" fill="url(#shadowPass2)" />
   </g>
 </svg>

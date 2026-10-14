@@ -8,11 +8,17 @@
 *.dylib
 *.dll
 /build
+/work
 /dep
 /dist
 
-# Local runtime debug flag
-res/dragonking.txt
+# Local test media and downloaded fixture sets
+/tests/fixtures/*
+
+# Durable local listening fixtures generated from the Doorstop corpus.
+# Unlike build/, these are intended to survive normal build and git cleans.
+/Samples/Doorstop/Auditions/
+/doc/benchmarks
 
 # Python cache artifacts
 __pycache__/

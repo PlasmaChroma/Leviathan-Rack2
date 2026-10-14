@@ -1,0 +1,23 @@
+/*
+	Calibration Data
+	Mid positions for MCP3208 channels
+*/
+{
+  SCP: 1628
+  LEN: 1748
+  VPO: 2048
+  PI: 1738
+  LYC: 2048
+  LYP: 1658
+  DW: 1638
+  SCC: 2078
+  HOL: 1638
+  SPR: 1678
+  DIR: 1708
+  DUB: 1688
+  INT: 1658
+  MOD: 2058
+  TEX: 1748
+  DEV: 1648
+  V3OCT: 828
+}

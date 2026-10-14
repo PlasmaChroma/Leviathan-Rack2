@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckArcLights.hpp"
+#include "../src/temporaldeck/TemporalDeckArcLights.hpp"
 
 #include <cmath>
 #include <iostream>

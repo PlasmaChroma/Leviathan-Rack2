@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckFrameInput.hpp"
+#include "../src/temporaldeck/TemporalDeckFrameInput.hpp"
 
 #include <cmath>
 #include <iostream>

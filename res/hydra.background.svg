@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" id="hydra-background">
+  <defs>
+    <linearGradient id="hydraGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c1620" />
+      <stop offset="1" stop-color="#150f26" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art">
+    <g id="Background_Rect">
+      <g id="theme_background">
+        <rect id="black_background" x="0" y="0" width="10160" height="12850" fill="#000000" />
+      </g>
+    </g>
+  </g>
+</svg>

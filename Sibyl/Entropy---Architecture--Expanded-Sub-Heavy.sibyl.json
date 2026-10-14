@@ -1,0 +1,2026 @@
+{
+  "format": "Leviathan.SibylComposition",
+  "schemaVersion": 2,
+  "composition": {
+    "meta": {
+      "title": "Entropy & Architecture (Expanded Sub-Heavy)",
+      "prompt": "Deep bassline-driven extended electronic track progressing from dark abyssal noise to a colossal structured climax",
+      "bpm": 128.0,
+      "root": "D",
+      "rootOctave": 2,
+      "scale": "phrygian",
+      "swing": 0.02500000037252903,
+      "seed": 108
+    },
+    "clock": {
+      "externalPpqn": 24,
+      "outputPpqn": 24,
+      "externalTimeoutMs": 2000.0,
+      "onExternalStop": "hold"
+    },
+    "transport": {
+      "running": true,
+      "loop": true,
+      "defaultApplyAt": "nextBeat"
+    },
+    "tracks": [
+      {
+        "id": "kick",
+        "channel": 0,
+        "defaultGate": 0.5,
+        "defaultVelocity": 0.949999988079071
+      },
+      {
+        "id": "snare_metal",
+        "channel": 1,
+        "defaultGate": 0.4000000059604645,
+        "defaultVelocity": 0.8500000238418579
+      },
+      {
+        "id": "harsh_chaos",
+        "channel": 2,
+        "defaultGate": 0.5,
+        "defaultVelocity": 0.75
+      },
+      {
+        "id": "bass",
+        "channel": 3,
+        "defaultGate": 0.6499999761581421,
+        "defaultVelocity": 0.949999988079071
+      },
+      {
+        "id": "lead",
+        "channel": 4,
+        "defaultGate": 0.6000000238418579,
+        "defaultVelocity": 0.800000011920929
+      },
+      {
+        "id": "hats_perc",
+        "channel": 5,
+        "defaultGate": 0.3499999940395355,
+        "defaultVelocity": 0.6499999761581421
+      }
+    ],
+    "patterns": {
+      "pat_lead_warm_motif": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": 1,
+            "gate": 0.8500000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 5.0,
+            "tie": true
+          },
+          {
+            "step": 4,
+            "degree": 2,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.800000011920929,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 6,
+            "degree": 3,
+            "octave": 1,
+            "gate": 0.75,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 8,
+            "degree": 4,
+            "octave": 1,
+            "gate": 0.8500000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 7.5,
+            "glideMs": 50.0
+          },
+          {
+            "step": 12,
+            "degree": 2,
+            "octave": 1,
+            "gate": 0.75,
+            "velocity": 0.8500000238418579,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 14,
+            "degree": 1,
+            "octave": 1,
+            "gate": 0.75,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          }
+        ]
+      },
+      "pat_lead_breakdown_arp": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.75,
+            "mod": 5.0
+          },
+          {
+            "step": 2,
+            "degree": 2,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.800000011920929,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 4,
+            "degree": 4,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 6,
+            "degree": 0,
+            "octave": 2,
+            "gate": 0.75,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 8,
+            "degree": 1,
+            "octave": 2,
+            "gate": 0.800000011920929,
+            "velocity": 0.9200000166893005,
+            "mod": 7.5
+          },
+          {
+            "step": 10,
+            "degree": 3,
+            "octave": 2,
+            "gate": 0.800000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 12,
+            "degree": 4,
+            "octave": 2,
+            "gate": 0.8500000238418579,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579,
+            "glideMs": 50.0
+          },
+          {
+            "step": 14,
+            "degree": 5,
+            "octave": 2,
+            "gate": 0.8999999761581421,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_harsh_dialogue_flux": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 5,
+            "pitchV": 0.4000000059604645,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 9,
+            "pitchV": -0.800000011920929,
+            "gate": 0.699999988079071,
+            "velocity": 0.8999999761581421,
+            "mod": -3.0000001192092896,
+            "ratchets": 2
+          },
+          {
+            "step": 13,
+            "pitchV": 0.800000011920929,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 4.000000059604645,
+            "ratchets": 3
+          }
+        ]
+      },
+      "pat_harsh_breakdown_riser": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "pitchV": -0.5,
+            "gate": 0.5,
+            "velocity": 0.6000000238418579,
+            "mod": 1.5000000596046448
+          },
+          {
+            "step": 4,
+            "pitchV": 0.0,
+            "gate": 0.6000000238418579,
+            "velocity": 0.699999988079071,
+            "mod": 2.5
+          },
+          {
+            "step": 8,
+            "pitchV": 0.800000011920929,
+            "gate": 0.699999988079071,
+            "velocity": 0.8500000238418579,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 12,
+            "pitchV": 1.5,
+            "gate": 0.800000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 4.4999998807907104,
+            "ratchets": 2
+          },
+          {
+            "step": 14,
+            "pitchV": 2.0,
+            "gate": 0.8999999761581421,
+            "velocity": 1.0,
+            "mod": 5.0,
+            "ratchets": 4
+          }
+        ]
+      },
+      "pat_snare_soft_backbeat": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 4,
+            "note": "D3",
+            "gate": 0.4000000059604645,
+            "velocity": 0.800000011920929,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 12,
+            "note": "D3",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          }
+        ]
+      },
+      "pat_harsh_sub_saturated_bed": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "pitchV": -0.800000011920929,
+            "gate": 0.800000011920929,
+            "velocity": 0.8500000238418579,
+            "mod": 3.2499998807907104
+          },
+          {
+            "step": 4,
+            "pitchV": -0.20000000298023224,
+            "gate": 0.699999988079071,
+            "velocity": 0.800000011920929,
+            "mod": 3.0000001192092896
+          },
+          {
+            "step": 8,
+            "pitchV": -0.800000011920929,
+            "gate": 0.800000011920929,
+            "velocity": 0.8500000238418579,
+            "mod": 3.2499998807907104
+          },
+          {
+            "step": 12,
+            "pitchV": 0.0,
+            "gate": 0.699999988079071,
+            "velocity": 0.800000011920929,
+            "mod": 3.4999999403953552
+          }
+        ]
+      },
+      "pat_hats_climax_overdrive": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 7.5
+          },
+          {
+            "step": 1,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 2,
+            "note": "D4",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 3,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 4,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 7.5
+          },
+          {
+            "step": 5,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 6,
+            "note": "D4",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 7,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 8,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 7.5
+          },
+          {
+            "step": 9,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 10,
+            "note": "D4",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 11,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 12,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8999999761581421,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 13,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.800000011920929,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 14,
+            "note": "D4",
+            "gate": 0.5,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "ratchets": 2
+          },
+          {
+            "step": 15,
+            "note": "D4",
+            "gate": 0.6000000238418579,
+            "velocity": 1.0,
+            "mod": 10.0,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_kick_syncopated": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 7.5
+          },
+          {
+            "step": 3,
+            "note": "D1",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 5.0
+          },
+          {
+            "step": 4,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 8,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 7.5
+          },
+          {
+            "step": 10,
+            "note": "D1",
+            "gate": 0.4000000059604645,
+            "velocity": 0.800000011920929,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 12,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          }
+        ]
+      },
+      "pat_bass_germination": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 2,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 3,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 5.0,
+            "glideMs": 30.0
+          },
+          {
+            "step": 5,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 6,
+            "degree": 0,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 10,
+            "degree": 4,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 5.0
+          },
+          {
+            "step": 11,
+            "degree": 3,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 12,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.8999999761581421,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 14,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 5.5000001192092896,
+            "glideMs": 40.0
+          }
+        ]
+      },
+      "pat_kick_sub_pulse": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 4,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 8,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.9200000166893005,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 12,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.000000238418579
+          }
+        ]
+      },
+      "pat_hats_minimal_pulse": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 2,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 6,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.5,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 10,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.6000000238418579,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 14,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          }
+        ]
+      },
+      "pat_lead_drone_low": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "gate": 0.949999988079071,
+            "velocity": 0.6499999761581421,
+            "mod": 3.0000001192092896,
+            "tie": true
+          },
+          {
+            "step": 8,
+            "degree": 1,
+            "gate": 0.800000011920929,
+            "velocity": 0.699999988079071,
+            "mod": 4.000000059604645,
+            "glideMs": 80.0
+          }
+        ]
+      },
+      "pat_snare_breakdown_roll": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 8,
+            "note": "D3",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 5.0
+          },
+          {
+            "step": 10,
+            "note": "D3",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 6.000000238418579,
+            "ratchets": 2
+          },
+          {
+            "step": 12,
+            "note": "D3",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 7.5,
+            "ratchets": 2
+          },
+          {
+            "step": 14,
+            "note": "D3",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421,
+            "ratchets": 3
+          },
+          {
+            "step": 15,
+            "note": "D3",
+            "gate": 0.5,
+            "velocity": 1.0,
+            "mod": 10.0,
+            "ratchets": 4
+          }
+        ]
+      },
+      "pat_kick_climax_heavy": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D1",
+            "gate": 0.6000000238418579,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 3,
+            "note": "D1",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 4,
+            "note": "D1",
+            "gate": 0.550000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 6,
+            "note": "D1",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 8,
+            "note": "D1",
+            "gate": 0.6000000238418579,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 11,
+            "note": "D1",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 12,
+            "note": "D1",
+            "gate": 0.550000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 14,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 7.5
+          }
+        ]
+      },
+      "pat_lead_climax_anthem": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": 1,
+            "gate": 0.8500000238418579,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929,
+            "tie": true
+          },
+          {
+            "step": 3,
+            "degree": 4,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.8999999761581421,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 4,
+            "degree": 5,
+            "octave": 1,
+            "gate": 0.800000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 6,
+            "degree": 4,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.8999999761581421,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 8,
+            "degree": 2,
+            "octave": 1,
+            "gate": 0.800000011920929,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579,
+            "glideMs": 50.0
+          },
+          {
+            "step": 10,
+            "degree": 3,
+            "octave": 1,
+            "gate": 0.699999988079071,
+            "velocity": 0.8999999761581421,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 12,
+            "degree": 4,
+            "octave": 1,
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 8.999999761581421,
+            "tie": true
+          },
+          {
+            "step": 14,
+            "degree": 0,
+            "octave": 2,
+            "gate": 0.8999999761581421,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_bass_sub_pedal": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.8999999761581421,
+            "velocity": 0.8500000238418579,
+            "mod": 3.0000001192092896,
+            "tie": true
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.8999999761581421,
+            "velocity": 0.8500000238418579,
+            "mod": 3.4999999403953552,
+            "tie": true
+          }
+        ]
+      },
+      "pat_snare_climax_heavy": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 4,
+            "note": "D3",
+            "gate": 0.550000011920929,
+            "velocity": 1.0,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 12,
+            "note": "D3",
+            "gate": 0.550000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "ratchets": 2
+          },
+          {
+            "step": 15,
+            "note": "D3",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 7.5
+          }
+        ]
+      },
+      "pat_kick_final_hit": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D1",
+            "gate": 0.949999988079071,
+            "velocity": 1.0,
+            "mod": 10.0
+          }
+        ]
+      },
+      "pat_bass_climax_overdrive": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 1,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 2,
+            "degree": 0,
+            "gate": 0.699999988079071,
+            "velocity": 1.0,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 3,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579,
+            "glideMs": 30.0
+          },
+          {
+            "step": 4,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 5,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 6,
+            "degree": 2,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 7,
+            "degree": 0,
+            "gate": 0.75,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 9,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 10,
+            "degree": 4,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 11,
+            "degree": 5,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421,
+            "glideMs": 35.0
+          },
+          {
+            "step": 12,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          },
+          {
+            "step": 13,
+            "degree": 0,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 14,
+            "degree": 6,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "glideMs": 40.0
+          },
+          {
+            "step": 15,
+            "degree": 0,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 10.0,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_harsh_sub_growl": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 3,
+            "pitchV": -0.6000000238418579,
+            "gate": 0.4000000059604645,
+            "velocity": 0.699999988079071,
+            "mod": 2.5
+          },
+          {
+            "step": 7,
+            "pitchV": 0.10000000149011612,
+            "gate": 0.5,
+            "velocity": 0.75,
+            "mod": -2.0000000298023224
+          },
+          {
+            "step": 11,
+            "pitchV": -0.4000000059604645,
+            "gate": 0.4000000059604645,
+            "velocity": 0.699999988079071,
+            "mod": 3.0000001192092896
+          },
+          {
+            "step": 14,
+            "pitchV": 0.30000001192092896,
+            "gate": 0.6000000238418579,
+            "velocity": 0.800000011920929,
+            "mod": 3.4999999403953552,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_bass_climax_wall": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 2,
+            "degree": 0,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 3,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579,
+            "glideMs": 30.0
+          },
+          {
+            "step": 4,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 6,
+            "degree": 2,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 10,
+            "degree": 4,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 11,
+            "degree": 5,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.8999999761581421,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 12,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.800000011920929,
+            "velocity": 1.0,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 14,
+            "degree": 6,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.999999761581421,
+            "glideMs": 40.0
+          },
+          {
+            "step": 15,
+            "degree": 0,
+            "gate": 0.75,
+            "velocity": 1.0,
+            "mod": 9.49999988079071
+          }
+        ]
+      },
+      "pat_lead_climax_overdrive": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": 2,
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 8.999999761581421,
+            "tie": true
+          },
+          {
+            "step": 3,
+            "degree": 4,
+            "octave": 2,
+            "gate": 0.75,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 4,
+            "degree": 5,
+            "octave": 2,
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 8.999999761581421
+          },
+          {
+            "step": 6,
+            "degree": 4,
+            "octave": 2,
+            "gate": 0.75,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 8,
+            "degree": 2,
+            "octave": 2,
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 8.999999761581421,
+            "glideMs": 50.0
+          },
+          {
+            "step": 10,
+            "degree": 3,
+            "octave": 2,
+            "gate": 0.75,
+            "velocity": 0.949999988079071,
+            "mod": 8.500000238418579
+          },
+          {
+            "step": 12,
+            "degree": 4,
+            "octave": 2,
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "tie": true
+          },
+          {
+            "step": 14,
+            "degree": 0,
+            "octave": 3,
+            "gate": 0.8999999761581421,
+            "velocity": 1.0,
+            "mod": 10.0,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_snare_driving": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 4,
+            "note": "D3",
+            "gate": 0.44999998807907104,
+            "velocity": 0.8799999952316284,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 12,
+            "note": "D3",
+            "gate": 0.44999998807907104,
+            "velocity": 0.9200000166893005,
+            "mod": 7.5,
+            "ratchets": 2
+          },
+          {
+            "step": 15,
+            "note": "D3",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 5.0
+          }
+        ]
+      },
+      "pat_metal_subtle_clicks": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 2,
+            "note": "D3",
+            "gate": 0.20000000298023224,
+            "velocity": 0.5,
+            "mod": 3.0000001192092896
+          },
+          {
+            "step": 6,
+            "note": "D3",
+            "gate": 0.20000000298023224,
+            "velocity": 0.550000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 11,
+            "note": "D3",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6000000238418579,
+            "mod": 4.000000059604645,
+            "ratchets": 2
+          },
+          {
+            "step": 15,
+            "note": "D3",
+            "gate": 0.20000000298023224,
+            "velocity": 0.5,
+            "mod": 3.0000001192092896
+          }
+        ]
+      },
+      "pat_bass_void_swell": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.949999988079071,
+            "velocity": 0.8500000238418579,
+            "mod": 5.0,
+            "tie": true
+          },
+          {
+            "step": 8,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.8999999761581421,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104,
+            "tie": true,
+            "glideMs": 90.0
+          }
+        ]
+      },
+      "pat_hats_16th_soft": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 2,
+            "note": "D4",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 4,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 6,
+            "note": "D4",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 8,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 10,
+            "note": "D4",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 12,
+            "note": "D4",
+            "gate": 0.25,
+            "velocity": 0.550000011920929,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 14,
+            "note": "D4",
+            "gate": 0.3499999940395355,
+            "velocity": 0.800000011920929,
+            "mod": 6.000000238418579
+          }
+        ]
+      },
+      "pat_kick_steady": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.949999988079071,
+            "mod": 7.5
+          },
+          {
+            "step": 4,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 8,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.9200000166893005,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 12,
+            "note": "D1",
+            "gate": 0.5,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 14,
+            "note": "D1",
+            "gate": 0.3499999940395355,
+            "velocity": 0.75,
+            "mod": 4.4999998807907104
+          }
+        ]
+      },
+      "pat_snare_final_hit": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D3",
+            "gate": 0.8500000238418579,
+            "velocity": 1.0,
+            "mod": 10.0
+          }
+        ]
+      },
+      "pat_harsh_abyss": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "pitchV": -0.800000011920929,
+            "gate": 0.699999988079071,
+            "velocity": 0.75,
+            "mod": 2.0000000298023224
+          },
+          {
+            "step": 4,
+            "pitchV": 0.20000000298023224,
+            "gate": 0.5,
+            "velocity": 0.6499999761581421,
+            "mod": -1.5000000596046448
+          },
+          {
+            "step": 7,
+            "pitchV": -1.2000000476837158,
+            "gate": 0.800000011920929,
+            "velocity": 0.8500000238418579,
+            "mod": 3.0000001192092896,
+            "ratchets": 2
+          },
+          {
+            "step": 10,
+            "pitchV": 0.5,
+            "gate": 0.4000000059604645,
+            "velocity": 0.6000000238418579,
+            "mod": -2.0000000298023224
+          },
+          {
+            "step": 13,
+            "pitchV": -0.5,
+            "gate": 0.699999988079071,
+            "velocity": 0.800000011920929,
+            "mod": 2.5,
+            "ratchets": 3
+          }
+        ]
+      },
+      "pat_bass_hypnotic_drive": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 1,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 2,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.550000011920929,
+            "velocity": 0.8500000238418579,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 3,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 4,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 5,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 6,
+            "degree": 2,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 7,
+            "degree": 0,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 7.5
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 9,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.800000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 10,
+            "degree": 4,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 11,
+            "degree": 3,
+            "octave": -1,
+            "gate": 0.550000011920929,
+            "velocity": 0.8500000238418579,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 12,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 13,
+            "degree": 5,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 14,
+            "degree": 6,
+            "octave": -1,
+            "gate": 0.6499999761581421,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929,
+            "glideMs": 35.0
+          },
+          {
+            "step": 15,
+            "degree": 0,
+            "gate": 0.699999988079071,
+            "velocity": 1.0,
+            "mod": 8.500000238418579
+          }
+        ]
+      },
+      "pat_bass_flux_groove": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 1.0,
+            "mod": 5.0
+          },
+          {
+            "step": 1,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.5,
+            "velocity": 0.75,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 2,
+            "degree": 0,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.499999761581421
+          },
+          {
+            "step": 3,
+            "degree": 1,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 6.000000238418579,
+            "glideMs": 35.0
+          },
+          {
+            "step": 4,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 6,
+            "degree": 2,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 5.5000001192092896
+          },
+          {
+            "step": 7,
+            "degree": 0,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 8,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 1.0,
+            "mod": 5.0
+          },
+          {
+            "step": 10,
+            "degree": 4,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8500000238418579,
+            "mod": 6.000000238418579
+          },
+          {
+            "step": 11,
+            "degree": 5,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 6.9999998807907104,
+            "glideMs": 40.0
+          },
+          {
+            "step": 12,
+            "degree": 0,
+            "octave": -1,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 5.0
+          },
+          {
+            "step": 14,
+            "degree": 6,
+            "octave": -1,
+            "gate": 0.6000000238418579,
+            "velocity": 0.8999999761581421,
+            "mod": 7.5,
+            "glideMs": 45.0
+          },
+          {
+            "step": 15,
+            "degree": 0,
+            "gate": 0.699999988079071,
+            "velocity": 0.949999988079071,
+            "mod": 8.00000011920929
+          }
+        ]
+      },
+      "pat_hats_groove_full": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 1,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.5,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 2,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 3,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.5,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 4,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 5,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 6,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 7,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 8,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 4.4999998807907104
+          },
+          {
+            "step": 9,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.5,
+            "mod": 3.4999999403953552
+          },
+          {
+            "step": 10,
+            "note": "D4",
+            "gate": 0.4000000059604645,
+            "velocity": 0.8500000238418579,
+            "mod": 6.9999998807907104
+          },
+          {
+            "step": 11,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 12,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.699999988079071,
+            "mod": 5.0
+          },
+          {
+            "step": 13,
+            "note": "D4",
+            "gate": 0.20000000298023224,
+            "velocity": 0.550000011920929,
+            "mod": 4.000000059604645
+          },
+          {
+            "step": 14,
+            "note": "D4",
+            "gate": 0.44999998807907104,
+            "velocity": 0.8999999761581421,
+            "mod": 8.00000011920929
+          },
+          {
+            "step": 15,
+            "note": "D4",
+            "gate": 0.30000001192092896,
+            "velocity": 0.6499999761581421,
+            "mod": 5.0,
+            "ratchets": 2
+          }
+        ]
+      },
+      "pat_lead_final_chord": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": 2,
+            "gate": 1.0,
+            "velocity": 1.0,
+            "mod": 10.0,
+            "tie": true
+          }
+        ]
+      },
+      "pat_bass_final_hit": {
+        "length": 16,
+        "resolution": "1/16",
+        "steps": [
+          {
+            "step": 0,
+            "degree": 0,
+            "octave": -1,
+            "gate": 1.0,
+            "velocity": 1.0,
+            "mod": 9.49999988079071,
+            "tie": true
+          }
+        ]
+      }
+    },
+    "arrangement": [
+      {
+        "id": "scene_1_abyss",
+        "name": "Abyssal Genesis",
+        "lengthBeats": 32.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": null,
+          "snare_metal": "pat_metal_subtle_clicks",
+          "harsh_chaos": "pat_harsh_abyss",
+          "bass": null,
+          "lead": "pat_lead_drone_low",
+          "hats_perc": null
+        }
+      },
+      {
+        "id": "scene_2_sub_pulse",
+        "name": "Sub Pulse Awakening",
+        "lengthBeats": 32.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_sub_pulse",
+          "snare_metal": null,
+          "harsh_chaos": "pat_harsh_sub_growl",
+          "bass": "pat_bass_sub_pedal",
+          "lead": null,
+          "hats_perc": "pat_hats_minimal_pulse"
+        }
+      },
+      {
+        "id": "scene_3_germination",
+        "name": "Bassline Germination",
+        "lengthBeats": 48.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_steady",
+          "snare_metal": "pat_snare_soft_backbeat",
+          "harsh_chaos": null,
+          "bass": "pat_bass_germination",
+          "lead": null,
+          "hats_perc": "pat_hats_16th_soft"
+        }
+      },
+      {
+        "id": "scene_4_flux",
+        "name": "Entropic Flux",
+        "lengthBeats": 48.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_syncopated",
+          "snare_metal": "pat_snare_driving",
+          "harsh_chaos": "pat_harsh_dialogue_flux",
+          "bass": "pat_bass_flux_groove",
+          "lead": null,
+          "hats_perc": "pat_hats_groove_full"
+        }
+      },
+      {
+        "id": "scene_5_hypnotic",
+        "name": "Hypnotic Drive",
+        "lengthBeats": 64.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_syncopated",
+          "snare_metal": "pat_snare_driving",
+          "harsh_chaos": null,
+          "bass": "pat_bass_hypnotic_drive",
+          "lead": "pat_lead_warm_motif",
+          "hats_perc": "pat_hats_groove_full"
+        }
+      },
+      {
+        "id": "scene_6_void",
+        "name": "The Void Breakdown",
+        "lengthBeats": 32.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": null,
+          "snare_metal": "pat_snare_breakdown_roll",
+          "harsh_chaos": "pat_harsh_breakdown_riser",
+          "bass": "pat_bass_void_swell",
+          "lead": "pat_lead_breakdown_arp",
+          "hats_perc": null
+        }
+      },
+      {
+        "id": "scene_7_climax_a",
+        "name": "Titan Climax A",
+        "lengthBeats": 64.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_climax_heavy",
+          "snare_metal": "pat_snare_climax_heavy",
+          "harsh_chaos": "pat_harsh_sub_saturated_bed",
+          "bass": "pat_bass_climax_wall",
+          "lead": "pat_lead_climax_anthem",
+          "hats_perc": "pat_hats_groove_full"
+        }
+      },
+      {
+        "id": "scene_8_climax_b",
+        "name": "Titan Climax B Overdrive",
+        "lengthBeats": 64.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_climax_heavy",
+          "snare_metal": "pat_snare_climax_heavy",
+          "harsh_chaos": "pat_harsh_sub_saturated_bed",
+          "bass": "pat_bass_climax_overdrive",
+          "lead": "pat_lead_climax_overdrive",
+          "hats_perc": "pat_hats_climax_overdrive"
+        }
+      },
+      {
+        "id": "scene_9_impact",
+        "name": "Resolute Impact",
+        "lengthBeats": 32.0,
+        "repeats": 1,
+        "phaseMode": "restart",
+        "tracks": {
+          "kick": "pat_kick_final_hit",
+          "snare_metal": "pat_snare_final_hit",
+          "harsh_chaos": null,
+          "bass": "pat_bass_final_hit",
+          "lead": "pat_lead_final_chord",
+          "hats_perc": null
+        }
+      }
+    ],
+    "macros": {}
+  }
+}

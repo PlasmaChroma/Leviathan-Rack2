@@ -1,0 +1,173 @@
+#N canvas 171 228 1541 736 12;
+#X obj 797 115 array define loadL 624000;
+#X obj 797 138 array define loadR 624000;
+#X msg 77 690 sudo rsync -av --bwlimit=1500 --progress /mnt/ramdisk/1l_auto
+/mnt/ramdisk/1l_undo \, sudo rsync -av --bwlimit=1500 --progress /mnt/ramdisk/1r_auto
+/mnt/ramdisk/1r_undo;
+#X msg 800 62 read /mnt/ramdisk/1l_undo;
+#X obj 145 601 terminal;
+#X obj 145 643 print;
+#X msg 182 301 bang;
+#X msg 214 547 ls -l /mnt/ramdisk/;
+#X msg 399 531 sudo rm /mnt/ramdisk/1l_undo.wav \, sudo rm /mnt/ramdisk/1r_undo.wav
+;
+#X floatatom 273 661 5 0 0 0 - - - 0;
+#X obj 179 347 t b b b;
+#X obj 204 664 del 10;
+#X obj 205 630 t b;
+#X obj 273 636 realtime;
+#X msg 402 615 sudo rm /mnt/ramdisk/1l_undo \, sudo rm /mnt/ramdisk/1r_undo
+;
+#X msg 52 695 sudo ionice -c 3 sox -t raw -r 48000 -b 32 -c 1 -L -e
+float /mnt/ramdisk/1l_auto /mnt/ramdisk/1l_undo.wav \, sudo ionice
+-c 3 sox -t raw -r 48000 -b 32 -c 1 -L -e float /mnt/ramdisk/1r_auto
+/mnt/ramdisk/1r_undo.wav \, ls -l /mnt/ramdisk/ \,;
+#X obj 1128 260 soundfiler;
+#X obj 1128 80 openpanel;
+#X msg 1126 53 bang;
+#X obj 1128 192 list prepend read;
+#X obj 1128 237 list trim;
+#X obj 1128 213 list append loadL loadR;
+#X msg 951 541 sudo sox -t raw -r 48000 -b 32 -c 1 -L -e float /mnt/ramdisk/\$1l_auto
+-t raw -r 48000 -b 32 -c 1 -L -e float /mnt/ramdisk/\$1r_auto --channels
+2 --combine merge /mnt/ramdisk/\$1st_undo.wav;
+#X obj 951 611 print;
+#X floatatom 949 510 5 0 0 0 - - - 0;
+#X obj 1128 285 t b b;
+#X msg 338 353 sudo ionice -c 3 cp /mnt/ramdisk/1st_undo.wav /home/pi/_autosave/1st_auto.wav
+;
+#X msg 96 212 sudo sox -t raw -r 48000 -b 32 -c 1 -L -e float /mnt/ramdisk/1l_auto
+-t raw -r 48000 -b 32 -c 1 -L -e float /mnt/ramdisk/1r_auto --channels
+2 --combine merge /mnt/ramdisk/1st_undo.wav \, ls -l /mnt/ramdisk/
+;
+#X msg 1211 91 /mnt/ramdisk/1st_undo.wav;
+#X msg 1209 135 /home/pi/_autosave/1st_auto.wav;
+#N canvas 153 192 901 621 loadIntoShMem 0;
+#X obj 144 313 shmem 90523 624000;
+#X obj 278 313 shmem 90524 624000;
+#X obj 51 256 shmem 90521 624000;
+#X obj 185 256 shmem 90522 624000;
+#X obj 212 363 shmem 90525 624000;
+#X obj 346 363 shmem 90526 624000;
+#X obj 297 416 shmem 90527 624000;
+#X obj 431 416 shmem 90528 624000;
+#X obj 390 473 shmem 90529 624000;
+#X obj 524 473 shmem 90530 624000;
+#X obj 453 532 shmem 90531 624000;
+#X obj 587 532 shmem 90532 624000;
+#X obj 101 187 route 1 2 3 4 5 6;
+#X obj 378 189 route 1 2 3 4 5 6;
+#X obj 114 60 inlet;
+#X obj 114 116 list prepend 1;
+#X obj 376 120 list prepend 1;
+#X obj 377 61 inlet;
+#X obj 615 57 inlet;
+#X connect 12 0 2 0;
+#X connect 12 1 0 0;
+#X connect 12 2 4 0;
+#X connect 12 3 6 0;
+#X connect 12 4 8 0;
+#X connect 12 5 10 0;
+#X connect 13 0 3 0;
+#X connect 13 1 1 0;
+#X connect 13 2 5 0;
+#X connect 13 3 7 0;
+#X connect 13 4 9 0;
+#X connect 13 5 11 0;
+#X connect 14 0 15 0;
+#X connect 15 0 12 0;
+#X connect 16 0 13 0;
+#X connect 17 0 16 0;
+#X connect 18 0 15 1;
+#X connect 18 0 16 1;
+#X restore 1107 441 pd loadIntoShMem;
+#X msg 1154 371 memclear;
+#X floatatom 562 61 5 0 0 0 Load\ into\ layer: - loadIntoLayerNo 0
+;
+#X msg 1087 325 memclear \, memset loadL;
+#X msg 1276 324 memclear \, memset loadR;
+#X obj 714 274 terminal;
+#X msg 719 193 ls /home/pi/_samples;
+#X obj 870 349 text delete filenames;
+#X msg 869 311 -1;
+#X obj 697 391 text insert filenames;
+#X msg 777 340 1000;
+#X obj 872 391 text define filenames;
+#X obj 714 299 list prepend;
+#X obj 964 229 text get filenames;
+#X floatatom 563 86 5 0 0 0 Select\ file\ no: - getFileNo 0;
+#X obj 965 289 print;
+#X msg 964 254 /home/pi/_samples/\$1;
+#X obj 719 221 t b a b b;
+#X obj 673 431 text size filenames;
+#X floatatom 563 35 5 0 0 0 Number\ of\ files\ in\ _samples noOfFiles
+- 0;
+#X obj 673 456 s noOfFiles;
+#X obj 964 193 r getFileNo;
+#X obj 1216 407 r loadIntoLayerNo;
+#X obj 562 15 bng 15 250 50 0 loadFolder empty Load\\\ samples\\\ from\\\ folder
+-175 7 0 12 #fcfcfc #000000 #000000;
+#X obj 719 166 r loadFolder;
+#X obj 668 3 r getFileNo;
+#X obj 629 37 i;
+#X obj 639 8 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000
+#000000;
+#X obj 685 70 i;
+#X obj 672 42 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000
+#000000;
+#X obj 623 63 - 1, f 4;
+#X obj 685 97 + 1;
+#X connect 3 0 0 0;
+#X connect 4 0 5 0;
+#X connect 4 0 12 0;
+#X connect 6 0 10 0;
+#X connect 7 0 4 0;
+#X connect 8 0 4 0;
+#X connect 10 1 27 0;
+#X connect 10 2 13 0;
+#X connect 11 0 13 1;
+#X connect 12 0 11 0;
+#X connect 13 0 9 0;
+#X connect 14 0 4 0;
+#X connect 16 0 25 0;
+#X connect 17 0 19 0;
+#X connect 18 0 17 0;
+#X connect 19 0 21 0;
+#X connect 20 0 16 0;
+#X connect 21 0 20 0;
+#X connect 22 0 23 0;
+#X connect 24 0 22 0;
+#X connect 25 0 33 0;
+#X connect 25 1 34 0;
+#X connect 26 0 4 0;
+#X connect 27 0 4 0;
+#X connect 28 0 19 0;
+#X connect 29 0 19 0;
+#X connect 31 0 30 0;
+#X connect 31 0 30 1;
+#X connect 33 0 30 0;
+#X connect 34 0 30 1;
+#X connect 35 0 42 0;
+#X connect 36 0 47 0;
+#X connect 38 0 37 0;
+#X connect 40 0 39 1;
+#X connect 42 0 39 0;
+#X connect 43 0 46 0;
+#X connect 46 0 45 0;
+#X connect 46 0 19 0;
+#X connect 47 0 48 0;
+#X connect 47 1 35 0;
+#X connect 47 2 40 0;
+#X connect 47 3 38 0;
+#X connect 48 0 50 0;
+#X connect 51 0 43 0;
+#X connect 52 0 30 2;
+#X connect 54 0 36 0;
+#X connect 55 0 56 1;
+#X connect 55 0 58 1;
+#X connect 56 0 60 0;
+#X connect 57 0 56 0;
+#X connect 58 0 61 0;
+#X connect 59 0 58 0;
+#X connect 60 0 44 0;
+#X connect 61 0 44 0;

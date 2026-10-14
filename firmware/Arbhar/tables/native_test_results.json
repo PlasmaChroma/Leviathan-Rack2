@@ -1,0 +1,1 @@
+{"checks":107421,"failures":0,"follow_probe_rows":12288,"max_follow_probe_error":1.90734863281e-06,"window_bank_bytes":208060,"scope":"native invariants plus one restricted instruction-text probe fixture; no full firmware or hardware run"}

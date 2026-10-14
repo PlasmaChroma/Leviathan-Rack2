@@ -1,4 +1,4 @@
-#include "../src/DeepcacheArchive.hpp"
+#include "../src/deepcache/DeepcacheArchive.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -113,6 +113,38 @@ bool writeOversizedKeyIndex(const std::string& path) {
 	return static_cast<bool>(stream);
 }
 
+bool writeSingleEntryIndex(const std::string& path,
+	                       const std::string& key,
+	                       const std::string& fingerprint) {
+	std::ofstream stream(path.c_str(), std::ios::binary | std::ios::trunc);
+	const char magic[8] = {'L', 'V', 'D', 'C', 'I', 'D', 'X', '1'};
+	const std::uint32_t version = 1;
+	const std::uint32_t count = 1;
+	const std::uint32_t keyLength = static_cast<std::uint32_t>(key.size());
+	const std::uint32_t fingerprintLength =
+		static_cast<std::uint32_t>(fingerprint.size());
+	const std::uint64_t offset = 0;
+	const std::uint64_t length = 22;
+	const std::uint64_t checksum = 0;
+	const std::uint32_t width = 1;
+	const std::uint32_t height = 1;
+	stream.write(magic, sizeof(magic));
+	stream.write(reinterpret_cast<const char*>(&version), sizeof(version));
+	stream.write(reinterpret_cast<const char*>(&count), sizeof(count));
+	stream.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
+	stream.write(key.data(), key.size());
+	stream.write(reinterpret_cast<const char*>(&fingerprintLength),
+	             sizeof(fingerprintLength));
+	stream.write(fingerprint.data(), fingerprint.size());
+	stream.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
+	stream.write(reinterpret_cast<const char*>(&length), sizeof(length));
+	stream.write(reinterpret_cast<const char*>(&checksum), sizeof(checksum));
+	stream.write(reinterpret_cast<const char*>(&width), sizeof(width));
+	stream.write(reinterpret_cast<const char*>(&height), sizeof(height));
+	stream.flush();
+	return static_cast<bool>(stream);
+}
+
 bool createSizedFile(const std::string& path, std::uint64_t size) {
 	if (size == 0)
 		return false;
@@ -134,6 +166,41 @@ std::uint64_t fileSize(const std::string& path) {
 }  // namespace
 
 int main() {
+    // A late acknowledgement must name the captured theme, not just its key.
+    {
+        const std::string dir = "/tmp/leviathan-deepcache-theme-" + std::to_string(processId());
+        removeDirectory(dir); makeDirectory(dir);
+        deepcache::DeepcacheArchiveWorker worker;
+        worker.start(dir, {{"preview", "old-theme", "Leviathan"}});
+        for (const char* identity : {"old-theme", "new-theme"}) {
+            deepcache::PreviewWrite write;
+            write.cacheKey = "preview"; write.fingerprint = identity;
+            write.width = 2; write.height = 2;
+            write.rgba = std::make_shared<const std::vector<std::uint8_t>>(pixels(2, 2, 1));
+            if (!worker.enqueue(std::move(write))) return 1;
+        }
+        std::vector<std::string> identities;
+        if (!waitUntil([&]() {
+            std::string key, identity;
+            while (worker.tryPopCommitted(key, &identity)) {
+                if (key != "preview") return false;
+                identities.push_back(identity);
+            }
+            return identities.size() == 2;
+        }) || identities != std::vector<std::string>{"old-theme", "new-theme"}) {
+            std::cerr << "[FAIL] theme commit acknowledgements lost their capture identity\n";
+            return 1;
+        }
+        worker.shutdown();
+        deepcache::DeepcacheArchiveWorker reopened;
+        reopened.start(dir, {{"preview", "new-theme", "Leviathan"}});
+        deepcache::DecodedPreview restored;
+        if (!waitUntil([&]() { return reopened.tryPopDecoded(restored); }) ||
+            restored.fingerprint != "new-theme" || restored.rgba.empty()) return 1;
+        reopened.shutdown(); removeDirectory(dir);
+        std::cout << "[PASS] same-key theme writes retain their identities and reload the latest theme\n";
+    }
+
 	const std::string directory = "/tmp/leviathan-deepcache-archive-" + std::to_string(processId());
 	removeDirectory(directory);
 	makeDirectory(directory);
@@ -162,7 +229,13 @@ int main() {
 		worker.enqueue(std::move(second));
 		if (!waitUntil([&]() { return worker.readyCount() == 2; }) ||
 		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1) {
-			std::cerr << "[FAIL] initial append did not commit\n";
+			std::cerr << "[FAIL] initial append did not commit"
+			          << " state=" << static_cast<int>(worker.state())
+			          << " ready=" << worker.readyCount()
+			          << " target=" << worker.targetCount()
+			          << " readyPlugins=" << worker.readyPluginCount()
+			          << " targetPlugins=" << worker.targetPluginCount()
+			          << " error=" << worker.errorCode() << "\n";
 			return 1;
 		}
 		bool committedOne = false;
@@ -225,10 +298,10 @@ int main() {
 			std::cerr << "[FAIL] read-only archive worker rejected a volatile QOI write\n";
 			return 1;
 		}
-		std::string volatileCommit;
-		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit); }) ||
-		    volatileCommit != "one" || contender.packBytes() != contenderPackBytes ||
-		    contender.hotCompressedBytes() <= contender.packBytes()) {
+		std::string volatileCommit, volatileFingerprint;
+		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit, &volatileFingerprint); }) ||
+		    (volatileCommit != "one" || volatileFingerprint != "fp-one") || contender.packBytes() != contenderPackBytes ||
+		    contender.hotCompressedBytes() == 0) {
 			std::cerr << "[FAIL] read-only QOI write was not kept strictly in memory\n";
 			return 1;
 		}
@@ -269,6 +342,16 @@ int main() {
 	{
 		deepcache::DeepcacheArchiveWorker worker;
 		worker.start(directory, {{"one", "fp-one", "plugin-a"}, {"two", "stale-fingerprint", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.indexDiscoveryComplete(); })) {
+			std::cerr << "[FAIL] index discovery barrier was not published\n";
+			return 1;
+		}
+		deepcache::IndexedCandidate candidate;
+		if (!worker.tryPopIndexedCandidate(candidate) || candidate.cacheKey != "one" ||
+		    candidate.fingerprint != "fp-one" || worker.tryPopIndexedCandidate(candidate)) {
+			std::cerr << "[FAIL] metadata discovery did not publish only matching candidates\n";
+			return 1;
+		}
 		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
 			std::cerr << "[FAIL] reload did not finish\n";
 			return 1;
@@ -327,8 +410,15 @@ int main() {
 			std::cerr << "[FAIL] corrupt pack reload did not finish\n";
 			return 1;
 		}
+		deepcache::IndexedCandidate corruptCandidate;
+		if (!worker.tryPopIndexedCandidate(corruptCandidate) ||
+		    corruptCandidate.cacheKey != "one") {
+			std::cerr << "[FAIL] corrupt payload was not published as an indexed candidate\n";
+			return 1;
+		}
 		deepcache::DecodedPreview preview;
-		if (worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
+		if (!worker.indexDiscoveryComplete() || worker.hasPendingIndexedCandidates() ||
+		    worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
 		    worker.state() == deepcache::DatabaseState::ERROR) {
 			std::cerr << "[FAIL] corrupt pack payload was not isolated as a cache miss\n";
 			return 1;
@@ -457,6 +547,206 @@ int main() {
 		}
 	}
 
+	// A cache backend that failed before startup must apply backpressure. Saying
+	// it can accept writes would let the UI retain an entire library of RGBA
+	// previews even though none can ever be committed.
+	{
+		deepcache::DeepcacheArchiveWorker unavailable;
+		unavailable.markUnavailable(7);
+		if (unavailable.canAcceptWrite()) {
+			std::cerr << "[FAIL] unavailable archive accepted raster work\n";
+			return 1;
+		}
+	}
+
+	// Candidate-size admission allows one bounded preview above the aggregate
+	// queue threshold when empty, but rejects anything above the single-preview
+	// ceiling. The UI retains a bounded retry if admission later changes.
+	const std::string admissionDirectory = directory + "-admission";
+	removeDirectory(admissionDirectory);
+	makeDirectory(admissionDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(admissionDirectory, {{"admission-model", "fp-admission", "plugin-admission"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; }) ||
+		    !worker.canAcceptWrite(1) ||
+		    !worker.canAcceptWrite(64u * 1024u * 1024u + 1u) ||
+		    worker.canAcceptWrite(128u * 1024u * 1024u + 1u)) {
+			std::cerr << "[FAIL] archive candidate-size admission was inconsistent\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(admissionDirectory);
+
+	// A sparse pack larger than the former 512 MB ceiling must be handled through
+	// its indexed span without allocating or reading the whole file. Its invalid
+	// payload is discarded and the owning worker can accept a normal replacement.
+	const std::string oversizedPackDirectory = directory + "-oversized-pack";
+	removeDirectory(oversizedPackDirectory);
+	makeDirectory(oversizedPackDirectory);
+	if (!writeSingleEntryIndex(oversizedPackDirectory + "/index-v1.bin",
+	                           "oversized-model", "fp-oversized") ||
+	    !createSizedFile(oversizedPackDirectory + "/previews-v1.pack",
+	                     513ull * 1024ull * 1024ull)) {
+		std::cerr << "[FAIL] could not prepare oversized pack test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(oversizedPackDirectory,
+		             {{"oversized-model", "fp-oversized", "plugin-oversized"}});
+		if (!waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY &&
+			       worker.packBytes() == 0;
+		})) {
+			std::cerr << "[FAIL] oversized pack was not reset safely\n";
+			return 1;
+		}
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "oversized-model";
+		replacement.fingerprint = "fp-oversized";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
+		if (!worker.enqueue(std::move(replacement)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] archive did not recover after oversized pack reset\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(oversizedPackDirectory);
+
+	// Extremely wide modules may exceed the former 8192-pixel dimension at
+	// 200% cache resolution even though their total bitmap is modest.
+	const std::string wideDirectory = directory + "-wide";
+	removeDirectory(wideDirectory);
+	makeDirectory(wideDirectory);
+	const std::vector<std::uint8_t> widePixels = pixels(9000, 1, 41);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(wideDirectory, {{"wide-model", "fp-wide", "plugin-wide"}});
+		deepcache::PreviewWrite wide;
+		wide.cacheKey = "wide-model";
+		wide.fingerprint = "fp-wide";
+		wide.width = 9000;
+		wide.height = 1;
+		wide.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(widePixels);
+		if (!worker.enqueue(std::move(wide)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] wide preview did not persist\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(wideDirectory, {{"wide-model", "fp-wide", "plugin-wide"}});
+		if (!waitUntil([&]() {
+			return worker.state() != deepcache::DatabaseState::LOADING;
+		})) {
+			std::cerr << "[FAIL] wide preview reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool restored = worker.tryPopDecoded(preview) &&
+			preview.width == 9000 && preview.height == 1 &&
+			preview.rgba == widePixels;
+		worker.shutdown();
+		if (!restored) {
+			std::cerr << "[FAIL] wide preview did not round-trip\n";
+			return 1;
+		}
+	}
+	removeDirectory(wideDirectory);
+
+	// Startup reads small append-only holes sequentially. A superseded middle
+	// record must be skipped without disturbing either neighboring live QOI.
+	const std::string fragmentedDirectory = directory + "-fragmented";
+	removeDirectory(fragmentedDirectory);
+	makeDirectory(fragmentedDirectory);
+	const std::vector<std::uint8_t> gapPixelsA = pixels(13, 9, 51);
+	const std::vector<std::uint8_t> gapPixelsB = pixels(13, 9, 52);
+	const std::vector<std::uint8_t> gapPixelsB2 = pixels(13, 9, 53);
+	const std::vector<std::uint8_t> gapPixelsC = pixels(13, 9, 54);
+	const std::vector<deepcache::ArchiveWantedEntry> fragmentedWanted = {
+		{"gap-a", "fp-a", "plugin-gap"},
+		{"gap-b", "fp-b", "plugin-gap"},
+		{"gap-c", "fp-c", "plugin-gap"}
+	};
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		const std::vector<std::pair<std::string, const std::vector<std::uint8_t>*>> initial = {
+			{"gap-a", &gapPixelsA}, {"gap-b", &gapPixelsB}, {"gap-c", &gapPixelsC}
+		};
+		for (const auto& item : initial) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = item.first;
+			write.fingerprint = item.first == "gap-a" ? "fp-a" :
+			                    item.first == "gap-b" ? "fp-b" : "fp-c";
+			write.width = 13;
+			write.height = 9;
+			write.rgba =
+				std::make_shared<const std::vector<std::uint8_t>>(*item.second);
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] fragmented archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 3; })) {
+			std::cerr << "[FAIL] fragmented archive was not populated\n";
+			return 1;
+		}
+		std::string committedKey;
+		while (worker.tryPopCommitted(committedKey)) {}
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "gap-b";
+		replacement.fingerprint = "fp-b";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(gapPixelsB2);
+		if (!worker.enqueue(std::move(replacement)) ||
+		    !waitUntil([&]() {
+			    while (worker.tryPopCommitted(committedKey)) {
+				    if (committedKey == "gap-b")
+					    return true;
+			    }
+			    return false;
+		    })) {
+			std::cerr << "[FAIL] fragmented archive replacement was not appended\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] fragmented archive reload did not finish\n";
+			return 1;
+		}
+		bool restoredA = false;
+		bool restoredB = false;
+		bool restoredC = false;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			restoredA = restoredA || (preview.cacheKey == "gap-a" && preview.rgba == gapPixelsA);
+			restoredB = restoredB || (preview.cacheKey == "gap-b" && preview.rgba == gapPixelsB2);
+			restoredC = restoredC || (preview.cacheKey == "gap-c" && preview.rgba == gapPixelsC);
+		}
+		worker.shutdown();
+		if (!restoredA || !restoredB || !restoredC) {
+			std::cerr << "[FAIL] sequential gap read disturbed a live preview\n";
+			return 1;
+		}
+	}
+	removeDirectory(fragmentedDirectory);
+
 	// A live panel-theme rebuild changes the fingerprint without changing the
 	// model cache key. The replacement must persist under the new fingerprint.
 	const std::string themeDirectory = directory + "-theme";
@@ -494,6 +784,105 @@ int main() {
 		}
 	}
 	removeDirectory(themeDirectory);
+
+	// Theme-sensitive modules keep both rasters in the archive, but only the
+	// active theme participates in startup readiness and eager RGBA hydration.
+	// The inactive theme remains directly decodable after a live theme switch.
+	const std::string themeVariantsDirectory = directory + "-theme-variants";
+	removeDirectory(themeVariantsDirectory);
+	makeDirectory(themeVariantsDirectory);
+	const std::vector<std::uint8_t> lightThemePixels = pixels(13, 9, 101);
+	const std::vector<std::uint8_t> darkThemePixels = pixels(13, 9, 102);
+	const std::vector<deepcache::ArchiveWantedEntry> lightThemeWanted = {
+		{"theme-model/panel-light", "light-fp", "plugin-theme", true, std::string(), true},
+		{"theme-model/panel-dark", "dark-fp", "plugin-theme", false, std::string(), false}
+	};
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeVariantsDirectory, lightThemeWanted);
+		deepcache::PreviewWrite light;
+		light.cacheKey = "theme-model/panel-light";
+		light.fingerprint = "light-fp";
+		light.width = 13;
+		light.height = 9;
+		light.rgba = std::make_shared<const std::vector<std::uint8_t>>(lightThemePixels);
+		deepcache::PreviewWrite dark;
+		dark.cacheKey = "theme-model/panel-dark";
+		dark.fingerprint = "dark-fp";
+		dark.width = 13;
+		dark.height = 9;
+		dark.rgba = std::make_shared<const std::vector<std::uint8_t>>(darkThemePixels);
+		if (!worker.enqueue(std::move(light)) || !worker.enqueue(std::move(dark)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] dual-theme rasters did not persist independently\n";
+			return 1;
+		}
+		bool committedLight = false;
+		bool committedDark = false;
+		std::string committedKey;
+		if (!waitUntil([&]() {
+			while (worker.tryPopCommitted(committedKey)) {
+				committedLight = committedLight || committedKey == "theme-model/panel-light";
+				committedDark = committedDark || committedKey == "theme-model/panel-dark";
+			}
+			return committedLight && committedDark;
+		})) {
+			std::cerr << "[FAIL] inactive theme raster was not committed to disk\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeVariantsDirectory, lightThemeWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] dual-theme archive reload did not finish\n";
+			return 1;
+		}
+		bool indexedLight = false;
+		bool indexedDark = false;
+		deepcache::IndexedCandidate candidate;
+		while (worker.tryPopIndexedCandidate(candidate)) {
+			indexedLight = indexedLight || candidate.cacheKey == "theme-model/panel-light";
+			indexedDark = indexedDark || candidate.cacheKey == "theme-model/panel-dark";
+		}
+		int startupDecoded = 0;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			if (!preview.rgba.empty()) {
+				startupDecoded++;
+				if (preview.cacheKey != "theme-model/panel-light" ||
+				    preview.rgba != lightThemePixels) {
+					std::cerr << "[FAIL] inactive theme raster was eagerly hydrated\n";
+					return 1;
+				}
+			}
+		}
+		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();
+		if (!indexedLight || !indexedDark || startupDecoded != 1 ||
+		    worker.targetCount() != 1 || worker.readyCount() != 1 ||
+		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1 ||
+		    metrics.indexedEntries != 2 || metrics.hydratedEntries != 1 ||
+		    metrics.deferredEntries != 1) {
+			std::cerr << "[FAIL] inactive theme affected startup readiness or hydration"
+			          << " decoded=" << startupDecoded
+			          << " ready=" << worker.readyCount()
+			          << " target=" << worker.targetCount()
+			          << " indexed=" << metrics.indexedEntries
+			          << " hydrated=" << metrics.hydratedEntries
+			          << " deferred=" << metrics.deferredEntries << "\n";
+			return 1;
+		}
+		if (!worker.requestDecode("theme-model/panel-dark", 103) ||
+		    !waitUntil([&]() { return worker.tryPopDecoded(preview); }) ||
+		    preview.cacheKey != "theme-model/panel-dark" ||
+		    preview.decodeGeneration != 103 || preview.rgba != darkThemePixels) {
+			std::cerr << "[FAIL] inactive theme raster did not decode on demand\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(themeVariantsDirectory);
 
 	// Startup evaluates the normal compaction threshold even when no new writes
 	// arrive. With no live index entries, a fully dead pack is truncated safely.
@@ -656,6 +1045,31 @@ int main() {
 	{
 		deepcache::DeepcacheArchiveWorker worker;
 		worker.start(loadingResetDirectory, loadingWanted);
+		if (!waitUntil([&]() { return worker.indexDiscoveryComplete(); })) {
+			std::cerr << "[FAIL] priority reload did not discover its index\n";
+			return 1;
+		}
+		worker.promoteHydration({"loading-19"});
+		deepcache::DecodedPreview promoted;
+		bool foundPromoted = false;
+		// The handoff can already contain its 16-entry maximum while one more
+		// background preview is decoded and blocked in pushDecoded(). Promotion
+		// reorders the queued entries immediately and is selected after that one
+		// in-flight preview, so the promoted result is bounded by position 18.
+		for (int attempt = 0; attempt < 18 && !foundPromoted; ++attempt) {
+			if (!waitUntil([&]() { return worker.tryPopDecoded(promoted); }))
+				break;
+			foundPromoted = promoted.cacheKey == "loading-19";
+		}
+		if (!foundPromoted) {
+			std::cerr << "[FAIL] viewport hydration was not promoted ahead of background results\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(loadingResetDirectory, loadingWanted);
 		if (!waitUntil([&]() { return worker.hasPendingDecoded(); }) || !worker.requestReset()) {
 			std::cerr << "[FAIL] reset was not accepted during startup decode\n";
 			return 1;
@@ -676,8 +1090,132 @@ int main() {
 	}
 	removeDirectory(loadingResetDirectory);
 
+	// Cold reload must remain linear in ordinary physical pack order, and
+	// display-ineligible entries must stay indexed without paying QOI decode and
+	// RGBA handoff costs until explicitly requested.
+	const std::string lazyHydrationDirectory = directory + "-lazy-hydration";
+	removeDirectory(lazyHydrationDirectory);
+	makeDirectory(lazyHydrationDirectory);
+	std::vector<deepcache::ArchiveWantedEntry> lazyWanted;
+	for (int i = 0; i < 24; ++i) {
+		const std::string suffix = std::to_string(i);
+		lazyWanted.push_back({"lazy-" + suffix, "fp-lazy-" + suffix,
+		                      "plugin-lazy", true});
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(lazyHydrationDirectory, lazyWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] lazy hydration archive did not initialize\n";
+			return 1;
+		}
+		for (int i = 0; i < 24; ++i) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = lazyWanted[i].cacheKey;
+			write.fingerprint = lazyWanted[i].fingerprint;
+			write.width = 13;
+			write.height = 9;
+			write.rgba = std::make_shared<const std::vector<std::uint8_t>>(
+				pixels(13, 9, 70 + i));
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] lazy hydration archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 24; })) {
+			std::cerr << "[FAIL] lazy hydration archive was not populated\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	for (int i = 0; i < 24; ++i)
+		lazyWanted[i].hydrateAtStartup = (i % 2) == 0;
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(lazyHydrationDirectory, lazyWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] eligibility-aware cold reload did not finish\n";
+			return 1;
+		}
+		int eagerDecoded = 0;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			if (!preview.rgba.empty()) eagerDecoded++;
+			preview = deepcache::DecodedPreview();
+		}
+		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();
+		if (worker.readyCount() != 24 || eagerDecoded != 12 ||
+		    metrics.indexedEntries != 24 || metrics.hydratedEntries != 12 ||
+		    metrics.deferredEntries != 12 || metrics.selectionChecks != 0) {
+			std::cerr << "[FAIL] cold reload did unnecessary scheduling or hydration work"
+			          << " ready=" << worker.readyCount()
+			          << " decoded=" << eagerDecoded
+			          << " indexed=" << metrics.indexedEntries
+			          << " hydrated=" << metrics.hydratedEntries
+			          << " deferred=" << metrics.deferredEntries
+			          << " checks=" << metrics.selectionChecks << "\n";
+			return 1;
+		}
+		if (!worker.requestDecode("lazy-1", 91) ||
+		    !waitUntil([&]() { return worker.tryPopDecoded(preview); }) ||
+		    preview.cacheKey != "lazy-1" || preview.decodeGeneration != 91 ||
+		    preview.rgba != pixels(13, 9, 71)) {
+			std::cerr << "[FAIL] deferred archive entry did not hydrate on demand\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(lazyHydrationDirectory);
+
+	// A version-1 entry from the opposite Rack panel theme remains readable as
+	// a provisional candidate. The archive format itself is unchanged.
+	const std::string alternateThemeDirectory = directory + "-alternate-theme";
+	removeDirectory(alternateThemeDirectory);
+	makeDirectory(alternateThemeDirectory);
+	const std::vector<std::uint8_t> alternateThemePixels = pixels(13, 9, 88);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(alternateThemeDirectory, {{"theme-model", "light-fp", "plugin-theme"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] alternate-theme archive did not initialize\n";
+			return 1;
+		}
+		deepcache::PreviewWrite write;
+		write.cacheKey = "theme-model";
+		write.fingerprint = "light-fp";
+		write.width = 13;
+		write.height = 9;
+		write.rgba = std::make_shared<const std::vector<std::uint8_t>>(alternateThemePixels);
+		worker.enqueue(std::move(write));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] alternate-theme source preview did not commit\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	bool alternateCandidate = false;
+	bool alternateDecoded = false;
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(alternateThemeDirectory,
+		             {{"theme-model", "dark-fp", "plugin-theme", true, "light-fp"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] alternate-theme reload did not finish\n";
+			return 1;
+		}
+		deepcache::IndexedCandidate candidate;
+		alternateCandidate = worker.tryPopIndexedCandidate(candidate) && candidate.alternateTheme &&
+		                     candidate.fingerprint == "light-fp";
+		deepcache::DecodedPreview preview;
+		alternateDecoded = worker.tryPopDecoded(preview) && preview.alternateTheme &&
+		                   preview.fingerprint == "light-fp" && preview.rgba == alternateThemePixels;
+		worker.shutdown();
+	}
+	removeDirectory(alternateThemeDirectory);
+
 	removeDirectory(directory);
-	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
+	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate &&
+	                  alternateCandidate && alternateDecoded;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")
 	          << " append-only QOI archive reloads, invalidates, compacts, cancels, and repairs corruption"
 	          << " :: append=" << sizeAfterUpdate << " compact=" << compactedSize << "\n";

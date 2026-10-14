@@ -1,4 +1,9 @@
+// Independent ideal-math reference: no boundary resampling or production tangent approximation.
+// Full production contracts live in bifurx_runtime_spec.cpp.
 #pragma once
+
+#include "../src/bifurx/BifurxInputStage.hpp"
+#include "../src/bifurx/BifurxOutputStage.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,16 +40,6 @@ inline float signedWeight(float balance, bool upperPeak) {
   const float shaped = clampf(b + 0.35f * b * b * b, -1.f, 1.f);
   const float sign = upperPeak ? 1.f : -1.f;
   return fastExp(0.82f * sign * shaped);
-}
-
-inline float cascadeWideMorph(float spanNorm) {
-  const float x = clamp01((clamp01(spanNorm) - 0.03f) / 0.97f);
-  return std::pow(x, 0.58f);
-}
-
-inline float highHighSpanCompGain(float wideMorph) {
-  const float x = clamp01((wideMorph - 0.75f) / 0.25f);
-  return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
 struct SvfOutputs {
@@ -135,10 +130,8 @@ inline T combineModeResponse(
   const T& cascadeHighToNotch,
   const T& cascadeHpToHp,
   float wA,
-  float wB,
-  float wideMorph
+  float wB
 ) {
-  (void)wideMorph;
   switch (mode) {
     case 0:
       return cascadeLp;
@@ -157,9 +150,9 @@ inline T combineModeResponse(
     case 7:
       return T(1.04f) * cascadeHighToNotch;
     case 8:
-      return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
+      return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
     case 9:
-      return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
+      return cascadeHpToHp;
     default:
       return T(1.f);
   }
@@ -192,7 +185,6 @@ struct PreviewModel {
   float resoNorm = 0.f;
   float wA = 1.f;
   float wB = 1.f;
-  float wideMorph = 0.f;
   int mode = 0;
 };
 
@@ -222,7 +214,6 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   const float norm = 2.f / (lowW + highW);
   model.wA = lowW * norm;
   model.wB = highW * norm;
-  model.wideMorph = cascadeWideMorph(state.spanNorm);
   return model;
 }
 
@@ -248,7 +239,7 @@ inline std::complex<float> response(const PreviewModel& model, float hz) {
     lpA, bpA, hpA, ntA,
     lpB, bpB, hpB, ntB,
     cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp,
-    model.wA, model.wB, model.wideMorph
+    model.wA, model.wB
   );
 }
 
@@ -257,64 +248,13 @@ inline float responseDb(const PreviewModel& model, float hz) {
   return 20.f * std::log10(std::max(mag, 1e-5f));
 }
 
-inline float levelDriveGain(float knob) {
-  const float x = clamp01(knob);
-  return 0.075f + 0.95f * x + 3.6f * x * x * x;
-}
+using bifurx::applyLevelInputStage;
+using bifurx::applyLevelOutputStage;
+using bifurx::levelDriveGain;
 
 inline float smoothstep01(float x) {
   const float t = clamp01(x);
   return t * t * (3.f - 2.f * t);
-}
-
-inline float levelInputGain(float knob) {
-  const float x = clamp01(knob);
-  if (x <= 0.5f) {
-    return 2.f * x;
-  }
-  const float hot = 2.f * (x - 0.5f);
-  return 1.f + 2.5f * hot * hot;
-}
-
-inline float levelDriveAmount(float knob) {
-  const float x = clamp01(knob);
-  constexpr float kLevelDriveStart = 0.62f;
-  if (x <= kLevelDriveStart) {
-    return 0.f;
-  }
-  const float hot = clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
-  return hot * hot;
-}
-
-inline float levelOutputClipWet(float knob) {
-  (void) knob;
-  return 0.f;
-}
-
-inline float levelOutputMakeupGain(float knob) {
-  (void) knob;
-  return 1.f;
-}
-
-inline float softClip(float x) {
-  return std::tanh(x);
-}
-
-inline float applyLevelInputStage(float in, float levelKnob) {
-  constexpr float kLevelMaxDriveGain = 2.5f;
-  const float clean = in * levelInputGain(levelKnob);
-  const float driveAmount = levelDriveAmount(levelKnob);
-  if (driveAmount <= 1e-5f) {
-    return clean;
-  }
-  const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
-  const float driven = 5.f * softClip((clean * driveGain) / 5.f);
-  return clean + (driven - clean) * driveAmount;
-}
-
-inline float applyLevelOutputStage(float modeOut, float levelKnob) {
-  (void) levelKnob;
-  return modeOut;
 }
 
 inline float amplitudeRatioDb(float numerator, float denominator) {
@@ -480,8 +420,7 @@ inline float simulateHhRuntimeGainDb(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  float wideMorph
+  float dampingB
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -492,7 +431,6 @@ inline float simulateHhRuntimeGainDb(
   SvfState a;
   SvfState b;
 
-  const float hhGain = 1.06f * highHighSpanCompGain(wideMorph);
   float inSq = 0.f;
   float outSq = 0.f;
   int nAccum = 0;
@@ -503,7 +441,7 @@ inline float simulateHhRuntimeGainDb(
     const float drivenIn = applyLevelInputStage(in, levelKnob);
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.hp, cB);
-    const float modeOut = hhGain * oB.hp;
+    const float modeOut = oB.hp;
     const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {

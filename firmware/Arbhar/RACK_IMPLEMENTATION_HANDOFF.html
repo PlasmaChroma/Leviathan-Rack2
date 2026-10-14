@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Native Rack implementation handoff</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  :root{color-scheme:light dark;--bg:#f5f5f2;--paper:#fff;--ink:#152331;--muted:#536674;--line:#d5dde2;--accent:#237b86;--code:#edf3f5;}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0 auto;padding:3.5rem 2rem 5rem;max-width:1140px;font:17px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+  header{border-top:7px solid var(--accent);padding-top:1.3rem;margin-bottom:2rem}header h1{font-size:2.65rem;line-height:1.16;letter-spacing:-.035em}h1{font-size:2.2rem;line-height:1.24;letter-spacing:-.025em}h2{font-size:1.55rem;margin-top:2.7rem;border-bottom:1px solid var(--line);padding-bottom:.5rem}h3{font-size:1.15rem;margin-top:1.8rem}p{margin:.85rem 0}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}strong{font-weight:690}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em}code{padding:.14em .3em;background:var(--code);border-radius:4px;overflow-wrap:anywhere}pre{background:var(--code);padding:1.1rem 1.25rem;border:1px solid var(--line);border-radius:8px;overflow-x:auto;line-height:1.5}pre code{padding:0;background:none;overflow-wrap:normal}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;line-height:1.5;margin:1.4rem 0;display:block;overflow-x:auto}th,td{padding:.7rem .75rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;min-width:80px}th{background:var(--code);font-weight:700}tr:nth-child(even) td{background:color-mix(in srgb,var(--code) 45%,transparent)}
+  #TOC{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.7rem;font-size:.95rem;margin:1.8rem 0 2.8rem}#TOC>ul{columns:2;column-gap:3rem}#TOC li{break-inside:avoid;margin:.3rem 0}#TOC ul ul{font-size:.9em}blockquote{margin:1.2rem 0;border-left:4px solid var(--accent);padding:.3rem 1.2rem;background:var(--paper)}li{margin:.3rem 0}.title{margin-top:.2rem}.bundle-nav{font-size:.88rem;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}.bundle-nav a{margin-right:1.1rem}.footnote{font-size:.85rem;color:var(--muted)}
+  @media(max-width:700px){body{padding:1.5rem 1rem;font-size:16px}header h1{font-size:2.05rem}#TOC>ul{columns:1}table{font-size:.78rem}th,td{padding:.5rem}h2{font-size:1.35rem}}
+  @media(prefers-color-scheme:dark){:root{--bg:#10171f;--paper:#17212c;--ink:#e2eaf0;--muted:#9eafbd;--line:#334451;--accent:#80c9cc;--code:#1d2b36}}
+  @media print{body{background:white;color:black;max-width:none;padding:0;font-size:10pt}#TOC>ul{columns:2}pre{white-space:pre-wrap}a{color:inherit}h2,h3{break-after:avoid}table{display:table;font-size:8pt}tr{break-inside:avoid}.bundle-nav{display:none}}
+  </style>
+</head>
+<body>
+<div class="bundle-nav"><strong>ARBHAR / RESEARCH DOSSIER</strong><br><a href="index.html">Bundle index</a><a href="ARBHAR_REVERSE_ENGINEERING.html">Findings</a><a href="RACK_IMPLEMENTATION_HANDOFF.html">Rack handoff</a><a href="PARAMETER_BIBLE.html">Parameters</a><a href="STATE_MACHINES.html">State machines</a><a href="VALIDATION_PLAN.html">Validation</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#native-rack-implementation-handoff"
+id="toc-native-rack-implementation-handoff">Native Rack implementation
+handoff</a>
+<ul>
+<li><a href="#engineering-decision" id="toc-engineering-decision">1.
+Engineering decision</a></li>
+<li><a href="#proposed-code-organization"
+id="toc-proposed-code-organization">2. Proposed code
+organization</a></li>
+<li><a href="#time-and-sample-rate-policy"
+id="toc-time-and-sample-rate-policy">3. Time and sample-rate
+policy</a></li>
+<li><a href="#control-event-and-snapshot-semantics"
+id="toc-control-event-and-snapshot-semantics">4. Control, event, and
+snapshot semantics</a></li>
+<li><a href="#grain-renderer-baseline"
+id="toc-grain-renderer-baseline">5. Grain renderer baseline</a></li>
+<li><a href="#capture-and-layer-operations"
+id="toc-capture-and-layer-operations">6. Capture and layer
+operations</a></li>
+<li><a href="#input-onset-and-effects"
+id="toc-input-onset-and-effects">7. Input, onset, and effects</a></li>
+<li><a href="#host-interface-and-persistence"
+id="toc-host-interface-and-persistence">8. Host interface and
+persistence</a></li>
+<li><a href="#implementation-phases-and-gates"
+id="toc-implementation-phases-and-gates">9. Implementation phases and
+gates</a></li>
+<li><a href="#priority-instructions-for-codex"
+id="toc-priority-instructions-for-codex">10. Priority instructions for
+Codex</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="native-rack-implementation-handoff">Native Rack implementation
+handoff</h1>
+<p><strong>Target:</strong> a Leviathan instrument informed by the
+supplied arbhar firmware analysis.<br />
+<strong>Status:</strong> implementable architecture and selected tested
+kernels, <strong>not a complete compatibility specification or existing
+Rack plugin</strong>.<br />
+<strong>Read first:</strong> <a
+href="ARBHAR_REVERSE_ENGINEERING.html">main report</a>, <a
+href="PARAMETER_BIBLE.html">parameter bible</a>, <a
+href="tables/open_questions.csv">open questions</a>.</p>
+<h2 id="engineering-decision">1. Engineering decision</h2>
+<p>Build the audio engine in native C++ rather than wrapping the
+complete Pd/ARM runtime. Use the original patches as the signal-flow
+specification and the ARM routines as behavioral evidence. The actual
+update depends on Pd APIs, process scheduling, shared memory, hardware
+interfaces, and file scripts; a CPU emulator alone does not supply those
+services.</p>
+<p>Keep three categories visibly separate in code and documentation:</p>
+<ol type="1">
+<li><strong>Recovered behavior:</strong> exact tables, confirmed data
+geometry, static kernels, enum values, and traced graph
+connections.</li>
+<li><strong>Compatibility approximations:</strong> areas whose musical
+behavior is known but whose exact implementation is not yet recovered,
+such as full scheduler jitter or analog input coloration.</li>
+<li><strong>Rack adaptations:</strong> voltage scaling, host sample-rate
+policy, file dialogs, visual presentation, and explicit microphone
+substitutes.</li>
+</ol>
+<p>Do not label this a clean-room implementation, bit-exact emulation,
+licensed source port, or completed arbhar clone. Those claims are not
+established by this analysis. Do not ship manufacturer binaries, source
+snapshots, or extracted assets as plugin resources merely because they
+are present in this research bundle.</p>
+<h2 id="proposed-code-organization">2. Proposed code organization</h2>
+<p>The names and interfaces below are <strong>recommended
+architecture</strong>, not recovered original C++ types.</p>
+<pre class="text"><code>ArbharLikeEngine
+  ControlSnapshot
+  PerformanceState / GestureState
+  EventQueue
+  LayerStore[6]                  // stereo data, metadata, generation
+  CaptureEngine                 // current and retiring writer states
+  GrainEngine continuous
+  GrainEngine struck
+  FollowTransport
+  WavetableEngine
+  InputConditioning
+  OutputAndEffectsGraph
+    Reverb
+    FeedbackDelay
+    PhaseAndMonoPolicy
+  ImportExportWorker            // never called synchronously from process()</code></pre>
+<p><code>LayerStore</code> owns prepared audio storage. Each grain
+identifies a layer generation and snapshots launch parameters. It must
+not dereference a buffer replaced or freed by a file worker. A simple
+initial approach retains the old generation until all referencing grains
+finish and routes disposal to the worker. A more memory-efficient
+strategy can follow after correctness is established.</p>
+<p>Each <code>GrainEngine</code> owns a preallocated pool. Reserve
+<strong>82 storage slots per engine</strong> for an initial
+compatibility-oriented implementation, but <strong>do not set the
+audible polyphony contract to 82</strong>. Model active, retiring,
+available, and scheduled states separately. The unresolved original
+allocation/retirement policy should live behind a small replaceable
+strategy rather than be spread across the renderer.</p>
+<p>The two engines need separate scheduler state and random state. The
+firmware uses separate Pd processes and libc randomness; a single
+host-global random stream is not known to reproduce it. A seeded native
+generator is acceptable as a labelled approximation, with seed
+persistence and deterministic replay.</p>
+<h2 id="time-and-sample-rate-policy">3. Time and sample-rate policy</h2>
+<p>Start with a <strong>48 kHz internal compatibility domain</strong>
+for the first deterministic reference engine. This keeps recovered
+positions, grain lengths, capture fades, and file capacities in the same
+nominal sample domain while the behavior is being validated. Resample at
+a clearly defined boundary for other host rates, or initially restrict
+the research harness to 48 kHz. This is a recommendation, not a claim
+that the hardware’s measured clock is exactly 48 kHz.</p>
+<p>An eventual host-rate-native engine is also reasonable, but must
+classify every constant before converting it:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Constant kind</th>
+<th>Port policy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Seconds or milliseconds</td>
+<td>Convert through the selected processing rate.</td>
+</tr>
+<tr class="even">
+<td>Buffer/frame coordinates</td>
+<td>Preserve duration when resampling; update all associated
+metadata.</td>
+</tr>
+<tr class="odd">
+<td>Per-sample slew coefficient</td>
+<td>Convert by a time-constant model only after its intended domain is
+established.</td>
+</tr>
+<tr class="even">
+<td>Per-block gain/retirement update</td>
+<td>Preserve a defined control/DSP tick; do not apply per host
+sample.</td>
+</tr>
+<tr class="odd">
+<td>File rate 49,148 Hz</td>
+<td>Treat as an interchange convention, not the global live sample
+rate.</td>
+</tr>
+<tr class="even">
+<td>WT correction 0.976642</td>
+<td>Keep isolated and selectable until its calibration role is
+settled.</td>
+</tr>
+</tbody>
+</table>
+<p>The observed retirement decrement is 1/64 <strong>per perform-block
+visit</strong>, while a recorder Dub slew is about 0.0078 <strong>per
+sample</strong>. Confusing these domains will produce radically
+different envelopes. Do not hardcode a retirement time in milliseconds
+until the actual block cadence on that path is established.</p>
+<p>At nominal 48 kHz, allocate six stereo channels pairs of 624,000
+frames, with the usual Scan region spanning 480,000. Keep the additional
+144,000 frames available. Do not expose the entire storage capacity as
+the ordinary Scan range by default.</p>
+<h2 id="control-event-and-snapshot-semantics">4. Control, event, and
+snapshot semantics</h2>
+<p>Use normalized or musical units at the Rack boundary, then convert
+once into the compatibility domain. Never scatter ADC constants such as
+4095 across the module widget and DSP code. A
+<code>ControlSnapshot</code> should carry at least: selected
+playback/record layer, Scan/Follow state, duration, spray range, pitch
+ratio, texture coordinate, direction probability, pan policy, Dub
+target, onset settings, and the explicit configuration enums.</p>
+<p>Control lifetimes must be explicit:</p>
+<ul>
+<li><strong>Launch-sampled:</strong> grain pitch, position, duration,
+direction, and other identified per-grain settings.</li>
+<li><strong>Continuously evolving:</strong> transport position, capture
+envelope, global output/effect controls, and internal clocks.</li>
+<li><strong>Gesture-staged:</strong> Track &amp; Hold’s selected
+controls, committed at the documented release event.</li>
+</ul>
+<p>The exact original classification of every field is incomplete. Mark
+uncertain fields and test them; do not automatically update every active
+grain whenever a knob changes.</p>
+<p>Capture, Strike, onset, parameter commits, preset changes, and file
+adoption should be timestamped events. For initially ambiguous
+simultaneous events, choose a deterministic order, document it as an
+approximation, and keep the ordering centralized. The first
+high-priority compatibility task is replacing that approximation with a
+tested original-event truth table.</p>
+<p><code>StrikeCVDelay</code> is a genuine configurable delay: Classic
+is zero in its factory text, the other five named factories and the
+initialization fallback are ten milliseconds. Delay the intended event
+and latch the intended controls at an explicit time. Do not treat the
+setting as a cosmetic trigger-pulse offset.</p>
+<h2 id="grain-renderer-baseline">5. Grain renderer baseline</h2>
+<p>Use <code>reference/recovered_tables.hpp</code> and
+<code>reference/recovered_kernels.hpp</code> to construct a research
+baseline. The supplied implementation is standard C++17, independent of
+the Rack SDK. It includes:</p>
+<ul>
+<li>static rational clipping and a four-point interpolation branch;</li>
+<li>squared Length/Spray mapping and duration conversion;</li>
+<li>the ideal equal-power Dry/Wet law;</li>
+<li>a Follow helper checked against the restricted instruction-text
+fixture;</li>
+<li>a static reconstruction of the 101-by-515 window bank.</li>
+</ul>
+<p>For Length, normalized <code>u</code> becomes integer-like units
+<code>100000*u*u</code>; the player converts using 1.44 and clamps
+128–144,000 nominal samples. For Spray, the units convert using 4.8. A
+complete grain start-position calculation is <strong>not</strong>
+supplied. The original has distinct Scan/Follow and boundary-aware
+placement paths; do not quietly substitute bipolar randomness and call
+it recovered.</p>
+<p>The <code>cubic4</code> helper does not supply boundary policy or
+anti-aliasing. Design the reader so that boundary handling is an
+explicit function: current layer edge, end of valid captured material,
+tail region, reverse read, and record-head protection. Use synthetic
+ramps to make incorrect branches obvious.</p>
+<p>Similarly, <code>sampleWindowLinear</code> is a safe proposed lookup,
+not the original window-phase implementation. Keep the texture-to-row
+and phase-direction logic outside the immutable bank so it can be
+replaced without changing the extracted templates.</p>
+<p>Population gain must not become an arbitrary limiter. Preserve the
+recovered table and the identified control-rate smoothing as a candidate
+implementation while tracing exactly which grains count toward it. A
+safety limiter added for development should be bypassable and marked as
+an adaptation so it cannot hide incompatible gain behavior.</p>
+<h2 id="capture-and-layer-operations">6. Capture and layer
+operations</h2>
+<p>Do not begin with a perpetual circular buffer. Implement finite
+capture into a selected layer, a stop/fade transition, and an explicit
+retrigger/handover path. Maintain both playback-layer selection and
+recording-layer selection because locking/coupling features can
+distinguish them.</p>
+<p>The recorder has two writer records and fading transitions. Preserve
+that capability in the data model even before the exact overlap equation
+is reconstructed. The Dub control is not sufficiently reverse engineered
+to justify a claimed exact feedback formula; use a clearly named
+provisional blend behind a strategy interface and prioritize its
+replacement.</p>
+<p>Accumulative mode should be separate from ordinary capture. Implement
+explicit parked write position and resume semantics only after the
+corresponding event tests are available. Clear, copy, undo, and scene
+import should carry layer-generation changes and invalidate or retire
+active readers deliberately rather than causing dangling references.</p>
+<p>All file decoding/resampling, bulk copying, directory inspection, and
+scene serialization must occur outside the per-sample callback. The
+audio thread can publish completion requests to a bounded queue. It
+should never call <code>system</code>, run SoX, launch Pd, mount USB, or
+take a filesystem mutex.</p>
+<h2 id="input-onset-and-effects">7. Input, onset, and effects</h2>
+<p>Expose IN and ONSET/RIGHT as explicit roles. In a mono compatibility
+mode, ONSET is the analysis source; in stereo mode it is the second
+audio channel. The hardware’s microphone normalization should become a
+documented host adaptation, not automatic microphone access. Keep input
+gain/analog coloration separate from digital granular processing so
+later measurements can replace the model.</p>
+<p>For onset, reproduce the <strong>connected</strong> analysis graph:
+four high-pass stages at 300 Hz and the identified <code>bonk~</code>
+configuration. Locate the appropriate dependency implementation and its
+licensing before claiming fidelity. A provisional spectral-flux detector
+can be useful during development but must not be presented as the
+extracted algorithm. Threshold settings alone are not the entire onset
+behavior: hold time, capture state, and the six onset profiles determine
+the resulting events.</p>
+<p>Translate the primary reverb and delay graph as dedicated native
+classes. Preserve ordering and control ramps. The patch-level rational
+shaper is not interchangeable with <code>std::tanh</code>. Delay
+feedback and reverb may be active simultaneously; configuration does not
+require choosing exactly one effect.</p>
+<p>Keep the auxiliary <code>rev3~</code> branch disabled in the
+conservative baseline until a nonzero normal control path is identified.
+The reverb duck/restore event must not clear internal delay lines unless
+further evidence proves that behavior. The full delay macro law is an
+open task; a local branch equation is not yet a complete front-panel
+mapping.</p>
+<h2 id="host-interface-and-persistence">8. Host interface and
+persistence</h2>
+<p>Use Rack voltage values, not normalized DSP samples, at ports. A
+proposed initial scale is one internal audio unit = 5 V. Use Schmitt
+thresholds 0.1/1 V and a 10 V, 1 ms pulse for the trigger output. These
+follow <a href="https://vcvrack.com/manual/VoltageStandards">Rack
+conventions</a>, not measured physical arbhar thresholds.</p>
+<p>Internal grain polyphony is independent of Rack’s polyphonic cables.
+Begin with one instrument instance and explicit handling of polyphonic
+inputs: summed audio or a deliberately selected channel, first-channel
+CV, and no automatic multiplication of six-layer engines for every cable
+voice. State the policy in the module documentation.</p>
+<p>Serialize configuration, performance mode, layer metadata, and random
+seeds with a versioned schema. Persisting audio in a patch versus
+external files is a product choice; either way, support missing-file
+recovery without freezing the DSP thread. On preset load, distinguish
+preset-only, layer-only, and full-scene operations according to
+<code>LoadConfiguration</code> rather than assuming every load replaces
+everything.</p>
+<p>The panel can integrate the hardware expansion’s CV ports. A
+Leviathan-specific visual design and a transparent naming policy are
+separate from this technical compatibility work. No branded panel asset
+or module design has been generated in this bundle.</p>
+<h2 id="implementation-phases-and-gates">9. Implementation phases and
+gates</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Phase</th>
+<th>Deliverable</th>
+<th>Gate before proceeding</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>A — deterministic core harness</td>
+<td>Layer geometry, selected kernels, fixed random seed, one synthetic
+grain</td>
+<td>Native reference tests pass; exact frame-boundary fixtures
+added.</td>
+</tr>
+<tr class="even">
+<td>B — dual engines and scheduler</td>
+<td>Separate continuous/Strike streams, pool/retirement state</td>
+<td>Event logs explain every allocated/retired slot and all simultaneous
+events.</td>
+</tr>
+<tr class="odd">
+<td>C — Capture/Dub/Follow</td>
+<td>Finite capture, handover, accumulative mode, separate record
+layer</td>
+<td>Ramp/impulse traces pass; no ring-wrap assumptions; all boundary
+cases specified.</td>
+</tr>
+<tr class="even">
+<td>D — controls and presets</td>
+<td>Exact factory/fallback distinctions, quantisation, staged
+gestures</td>
+<td>Preset JSON round-trips; control timing and enum truth tables
+tested.</td>
+</tr>
+<tr class="odd">
+<td>E — native effects and onset</td>
+<td>Graph translation, verified macro ranges, detector profile
+logic</td>
+<td>Impulse/step responses and route transitions match chosen oracle or
+carry explicit approximation labels.</td>
+</tr>
+<tr class="even">
+<td>F — Rack integration</td>
+<td>Ports, persistence, UI, asynchronous files, sample-rate support</td>
+<td>No callback allocation/blocking; stress tests and multi-rate timing
+pass.</td>
+</tr>
+<tr class="odd">
+<td>G — fidelity refinement</td>
+<td>Hardware/original-process differential corpus</td>
+<td>Audible and numerical differences documented by category, not hidden
+in a “quality” knob.</td>
+</tr>
+</tbody>
+</table>
+<p>A useful first sounding module can be built before every fidelity gap
+closes, but it should be described as an experimental recreation. Do not
+turn an incomplete reverse-engineering assumption into an undocumented
+permanent architecture decision.</p>
+<h2 id="priority-instructions-for-codex">10. Priority instructions for
+Codex</h2>
+<p>Start from the native reference tests and the JSON schema, not by
+porting the unverified C source wholesale. Keep original firmware
+evidence read-only. Implement a standalone event-logged engine before
+the Rack widget. Place every unverified transfer or lifecycle policy
+behind a named function with a reference to <code>OPEN-xx</code> in
+<code>tables/open_questions.csv</code>.</p>
+<p>The next reverse-engineering tranche should address <strong>OPEN-01
+through OPEN-04</strong>: allocation/retirement, scheduler timing,
+capture/Dub transitions, and delay macro scaling. These determine the
+instrument’s feel more than adding extra visual features. All other
+implementation claims should remain bounded by the evidence grades in
+the main report.</p>
+</body>
+</html>

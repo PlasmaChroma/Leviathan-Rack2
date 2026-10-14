@@ -13,11 +13,17 @@
 
 #include <rack.hpp>
 #include <chrono>
+#include <string>
 
 using namespace rack;
 
 // Declare the Plugin, defined in plugin.cpp
 extern Plugin* pluginInstance;
+
+// Plugin-scoped writable storage. Deriving this from Rack's loaded manifest
+// keeps sibling editions such as Leviathan-Pro independent without teaching
+// shared module code about either slug.
+std::string leviathanPluginUserRootPath();
 
 // Declare each Model, defined in each module source file
 // extern Model* modelMyModule;
@@ -31,6 +37,7 @@ extern Model* modelWyrm;
 extern Model* modelSil;
 extern Model* modelChronomaw;
 extern Model* modelBulkhead;
+extern Model* modelHydra;
 extern Model* modelUndertow;
 extern Model* modelIris;
 extern Model* modelNautiloid;
@@ -38,12 +45,26 @@ extern Model* modelDeepcache;
 extern Model* modelUmi;
 extern Model* modelDoorstop;
 extern Model* modelChromatide;
+extern Model* modelPuffy;
+extern Model* modelMandelwake;
+extern Model* modelCantor;
+extern Model* modelTheme;
+extern Model* modelOctavia;
+extern Model* modelOctaviaConsole;
+extern Model* modelSibyl;
+extern Model* modelMoirai;
+extern Model* modelPhonex;
+extern Model* modelChimera;
+extern Model* modelVessel;
+extern Model* modelVTune;
+extern Model* modelStrand;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
-// Runtime feature flags loaded from `res/dragonking.txt`.
+// Runtime feature flags loaded from Rack's user directory at
+// `<plugin slug>/dragonking.txt`.
 bool isDragonKingDebugEnabled();
 bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isCrownstepAddMoveEnabled();
@@ -52,6 +73,10 @@ bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
+bool isIntegralFluxLumenPreviewEnabled();
+bool isUndertowDrawLoggingEnabled();
+bool isPuffyDrawLoggingEnabled();
+bool isWyrmDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();

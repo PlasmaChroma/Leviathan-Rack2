@@ -1,0 +1,3 @@
+numpy>=1.24
+# Optional disassembly: a system LLVM shared library with ARM target support.
+# Tested here with libLLVM-19; LLVM is not installed by this requirements file.

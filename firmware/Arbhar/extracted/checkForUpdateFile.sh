@@ -1,0 +1,31 @@
+sudo sh /home/pi/mountusb
+
+
+SOURCE_DIR=/media/usb/_updater/
+FILE=$(find $SOURCE_DIR -type f -name "arbhar_updater*" | sort -V | tail -n 1)
+#"arbhar_updater.gz"
+
+if [ ! -e "$FILE" ]
+then
+	echo "no updater available. lookig for: "$FILE""
+else
+#	echo $FILE
+	sudo mkdir /home/pi/arbhar_v2
+	sudo rm /home/pi/arbhar_v2/arbhar_v2_*
+	cd /home/pi/arbhar_v2
+	sudo cp "$FILE" /home/pi/arbhar_v2/
+	tar -xvf "$FILE"
+	#cd /home/pi/
+	#sleep 0.5
+	sudo rm /boot/arbhar_v2_*
+	sudo cp /home/pi/arbhar_v2/arbhar_v2_* /boot
+	sudo rm /home/pi/arbhar_v2/arbhar_updater.gz
+	fileNoPath="${FILE##*/}"
+        filename="${fileNoPath%.gz}"
+	echo $filename
+	sudo touch "/media/usb/applied_updater_"$filename""
+	sync
+	echo "sync after checking updater"
+fi
+
+#sudo sh /home/pi/arbhar_v2/unmountusb.sh

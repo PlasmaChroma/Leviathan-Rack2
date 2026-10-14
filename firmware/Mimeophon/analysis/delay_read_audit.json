@@ -1,0 +1,49 @@
+{
+  "firmware_sha256": "31323684dacda3d6313565a1a47596005870d1defed55e0336fd419ca82040b9",
+  "scope": "Binary-checked disassembly slices and exact rational algebra; not CPU execution or float32 equivalence",
+  "load_mapping": "Manually annotated memory inputs; address generation is not interpreted",
+  "weights": [
+    "t*(t-1)/2",
+    "1-t*(t+1)/2",
+    "t*(3-t)/2",
+    "t*(t-1)/2"
+  ],
+  "sites": [
+    {
+      "start": "0x0802443a",
+      "end_inclusive": "0x08024478",
+      "verified_instruction_count": 17,
+      "symbolic_match": true
+    },
+    {
+      "start": "0x0802454a",
+      "end_inclusive": "0x08024588",
+      "verified_instruction_count": 17,
+      "symbolic_match": true
+    },
+    {
+      "start": "0x08025610",
+      "end_inclusive": "0x08025654",
+      "verified_instruction_count": 19,
+      "symbolic_match": true
+    },
+    {
+      "start": "0x080256c4",
+      "end_inclusive": "0x0802570c",
+      "verified_instruction_count": 21,
+      "symbolic_match": true
+    },
+    {
+      "start": "0x080257d2",
+      "end_inclusive": "0x08025816",
+      "verified_instruction_count": 19,
+      "symbolic_match": true
+    },
+    {
+      "start": "0x08025886",
+      "end_inclusive": "0x080258ce",
+      "verified_instruction_count": 21,
+      "symbolic_match": true
+    }
+  ]
+}

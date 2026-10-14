@@ -1,0 +1,28 @@
+{
+  "flash_base": "0x8020000",
+  "flash_end_exclusive": "0x8048400",
+  "stack_top": "0x20030000",
+  "ram_initializer_flash": "0x08047250",
+  "ram_initializer_destination": "0x20000000",
+  "ram_initializer_bytes": 4080,
+  "bss_start": "0x20000ff0",
+  "bss_end_exclusive": "0x200243c8",
+  "startup_evidence": "0x08021414..0x08021442; literals 0x08021444..0x08021454",
+  "reel_planes": [
+    {
+      "base": "0xd0000000",
+      "sample_format": "signed int16",
+      "sample_capacity": 8388608,
+      "bytes": 16777216
+    },
+    {
+      "base": "0xd1000000",
+      "sample_format": "signed int16",
+      "sample_capacity": 8388608,
+      "bytes": 16777216
+    }
+  ],
+  "reel_evidence": "0x080268fc..0x0802692a and 0x080291ee..0x08029212",
+  "calibration_region": "0x0800c000 (outside supplied image; reads at 0x08022d40 and following)",
+  "containers": "HEX lossless; ELF synthetic and not an original build ELF; no live RAM is captured"
+}

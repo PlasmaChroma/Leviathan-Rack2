@@ -1,0 +1,85 @@
+Stack frame:
+
+
+
+ R0 =  %08X
+
+
+
+
+ R1 =  %08X
+
+
+
+
+ R2 =  %08X
+
+
+
+
+ R3 =  %08X
+
+
+
+
+ R12 = %08X
+
+
+
+
+ LR =  %08X
+
+
+
+
+ PC =  %08X
+
+
+
+
+ PSR = %08X
+
+
+
+
+FSR/FAR:
+
+
+
+ CFSR =  %08X
+
+
+ HFSR =  %08X
+
+
+ DFSR =  %08X
+
+
+ AFSR =  %08X
+
+
+ MMFAR = %08X
+
+
+ BFAR =  %08X
+
+
+Misc
+
+
+
+ LR/EXC_RETURN= %08X
+
+
+
+[HardFault]
+
+
+
+
+[BusFault]
+
+[UsageFault]
+
+
+

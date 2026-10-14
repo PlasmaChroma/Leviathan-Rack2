@@ -1,0 +1,12 @@
+{
+  "filename": "sp67.dat",
+  "bytes": 178932,
+  "sha256": "b50a87b9bd4f6ad90007918a16e8a4d033e2236c863faec55f5585abe34927d9",
+  "application_base": "0x08020000",
+  "initial_sp": "0x20020000",
+  "reset_vector": "0x08036431",
+  "last_nonzero_file_offset": "0x29ae3",
+  "trailing_zero_bytes": 8208,
+  "whole_file_entropy": 7.225245450868008,
+  "scope": "Uploaded file only; no bootloader or hardware execution"
+}

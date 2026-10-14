@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="142.24mm" height="128.5mm" viewBox="0 0 142.24 128.5" version="1.1" id="Chimera-background" sodipodi:docname="Chimera.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs2">
+    <linearGradient id="chimera-face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2b38" id="stop1" />
+      <stop offset="1" stop-color="#111922" id="stop2" style="stop-color:#000000;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient36" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.00996908,0,0,0.00996908,10.176204,-8.7190724)" x1="5021.8892" y1="1496.1719" x2="7176.0854" y2="1489.1353" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art">
+    <g id="theme_background">
+      <rect width="142.24" height="128.5" fill="#000000" id="rect2" />
+    </g>
+  </g>
+</svg>

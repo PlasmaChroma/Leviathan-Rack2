@@ -1,0 +1,2 @@
+# Optional: only the original-instruction differential tests need this package.
+unicorn==2.1.4

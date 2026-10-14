@@ -1,0 +1,25 @@
+signal,mcu_signal,direction,evidence_byte_address,confidence,note
+CH1 clock output,RB5,output,0x00083C..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH2 clock output,RB3,output,0x000848..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH3 clock output,RB1,output,0x000854..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH4 clock output,RB2,output,0x000860..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH5 clock output,RB4,output,0x00086C..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH6 clock output,RB0,output,0x000878..0x000880,High: logical lane to GPIO,Jack wiring and voltage buffer not physically traced
+CH1 button,RC2,input,0x0011F2; 0x00FE0D mask table,High,Active-low software interpretation
+CH2 button,RC5,input,0x0011FA; 0x00FE0D mask table,High,Active-low software interpretation
+CH3 button,RD7,input,0x001202; 0x00FE0D mask table,High,Active-low software interpretation
+CH4 button,RC1,input,0x00120A; 0x00FE0D mask table,High,Active-low software interpretation
+CH5 button,RC6,input,0x001212; 0x00FE0D mask table,High,Active-low software interpretation
+CH6 button,RD6,input,0x00121A; 0x00FE0D mask table,High,Active-low software interpretation
+PGM_A button,RC0,input,0x001222,High,Active-low
+PGM_B button,RE2,input,0x00122A,High,Active-low
+Leading tempo input,RA4,input,0x000884; 0x004B16,High,Rising-edge interval capture
+MOD gate input,RA0,input,ISR after UART; 0x004F66,High inference,Gate level and rising-edge toggle tracked
+State select gate,RA5,input,0x007A5C..0x007BB6,High inference,State stepping; also read by LED service
+State CV / combo control,RA3 / AN3,analog input,0x008214; 0x008240; 0x0078FC,High inference,Only analog channel selected; external summing/attenuation unknown
+Select Bus serial receive,RC7 / RX1,input,0x008252..0x00826A; 0x0071AA,High inference,USART1 receive enabled; transmit disabled
+LED serial data,RD5,output,0x009742; 0x009756,High,Part number of external LED driver not recovered
+LED serial clock,RD2,output,0x009742; 0x009756,High,Software bit-banged
+LED latch,RD4,output,0x00979E,High,"16-bit shift words, LSB-first"
+Other LED/UI lines,"RC3, RC4, RD0, RD1, RD3",output,0x003F32..0x004668,Medium,Exact lamp/color assignments not fully resolved
+Unresolved configured outputs,"RE0, RE1",output configuration,0x008226..0x008228,Unresolved,No explicit LATE write identified; do not infer attached circuit

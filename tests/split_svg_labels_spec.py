@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+import tempfile
+import xml.etree.ElementTree as ET
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "split_svg_labels", ROOT / "tools" / "split_svg_labels.py"
+)
+assert SPEC and SPEC.loader
+splitter = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(splitter)
+
+
+def by_id(root: ET.Element, wanted: str) -> ET.Element:
+    return next(elem for elem in root.iter() if elem.attrib.get("id") == wanted)
+
+
+def main() -> int:
+    fixture = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g id="panel_art">
+    <g id="background-transform" transform="translate(2 3)" opacity="0.8">
+      <g id="theme_background"><rect id="base-fill" width="100" height="100" fill="#102030"/></g>
+      <path id="background-highlight" d="M 0 0 L 20 20" stroke="white"/>
+    </g>
+    <rect id="generic" width="100" height="100" fill="#c04080"/>
+    <g id="glass_input">
+      <path id="input" d="M 1 1 H 40 V 40 H 1 Z" style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
+      <path id="highlight" d="M 1 1 H 40" fill="#ffffff"/>
+    </g>
+    <g id="glass_output">
+      <rect id="output" x="50" y="50" width="40" height="40" fill="rgb(28, 204, 217)"/>
+    </g>
+  </g>
+  <g id="labels">
+    <text id="static-title">TITLE</text>
+    <g id="theme_text"><text id="functional-label">TEST</text></g>
+    <g id="ancestor" transform="translate(3 4)" opacity="0.5">
+      <g id="theme_text_input"><text id="in-label">IN</text>
+        <g id="theme_text_output"><text id="out-label">OUT</text></g>
+      </g>
+    </g>
+  </g>
+</svg>"""
+    with tempfile.TemporaryDirectory(prefix="split-svg-spec-") as directory:
+        source = Path(directory) / "fixture.svg"
+        source.write_text(fixture, encoding="utf-8")
+        panel, labels, theme_text = splitter.split_svg(
+            source_path=source,
+            label_id="labels",
+            panel_suffix=".panel",
+            labels_suffix=".labels",
+            theme_text_id="theme_text",
+            theme_text_suffix=".theme-text",
+            overwrite=True,
+            cleanup=True,
+            strip_panel_text=True,
+            outline_label_text=False,
+            inkscape_path=None,
+            inkscape_timeout_sec=1.0,
+        )
+
+        source_root = ET.parse(source).getroot()
+        panel_root = ET.parse(panel).getroot()
+        labels_root = ET.parse(labels).getroot()
+        theme_text_root = ET.parse(theme_text["legacy"]).getroot()
+        input_root = ET.parse(theme_text["input"]).getroot()
+        output_root = ET.parse(theme_text["output"]).getroot()
+        background_root = ET.parse(theme_text["background"]).getroot()
+        checks = {
+            "both directional text assets and original background are generated": set(theme_text) == {"legacy", "input", "output", "background"},
+            "background fill is stripped from panel only": all(e.get("id") != "base-fill" for e in panel_root.iter()) and by_id(source_root, "base-fill").get("fill") == "#102030",
+            "original background preserves authored fill": by_id(background_root, "base-fill").get("fill") == "#102030",
+            "background extraction preserves ancestor transform and opacity": by_id(background_root, "background-transform").get("transform") == "translate(2 3)" and by_id(background_root, "background-transform").get("opacity") == "0.8",
+            "background shading remains in foreground artwork": by_id(panel_root, "background-highlight") is not None and all(e.get("id") != "background-highlight" for e in background_root.iter()),
+            "input text stays in input layer": by_id(input_root, "in-label") is not None and all(e.get("id") != "out-label" for e in input_root.iter()),
+            "nested output role overrides input role": by_id(output_root, "out-label") is not None and all(e.get("id") != "in-label" for e in output_root.iter()),
+            "text ancestry retains transform and opacity": by_id(output_root, "ancestor").get("transform") == "translate(3 4)" and by_id(output_root, "ancestor").get("opacity") == "0.5",
+            "directional labels do not leak into static labels": all(e.get("id") not in ("in-label", "out-label") for e in labels_root.iter()),
+            "master preview pigment remains colored": "fill:#5740bf" in by_id(source_root, "input").attrib["style"],
+            "semantic style pigment becomes neutral": "fill:#000000" in by_id(panel_root, "input").attrib["style"],
+            "semantic attribute pigment becomes neutral": by_id(panel_root, "output").attrib["fill"] == "#000000",
+            "achromatic highlight is preserved": by_id(panel_root, "highlight").attrib["fill"] == "#ffffff",
+            "generic authored pigment is preserved": by_id(panel_root, "generic").attrib["fill"] == "#c04080",
+            "semantic identity is preserved": by_id(panel_root, "glass_input").attrib["data-theme-runtime-substrate"] == "neutral",
+            "labels are absent from panel": all(elem.attrib.get("id") != "labels" for elem in panel_root.iter()),
+            "theme text is absent from static labels": all(elem.attrib.get("id") != "theme_text" for elem in labels_root.iter()),
+            "static title remains in labels": by_id(labels_root, "static-title") is not None,
+            "theme text output contains functional labels": by_id(theme_text_root, "functional-label") is not None,
+            "theme text output excludes static title": all(elem.attrib.get("id") != "static-title" for elem in theme_text_root.iter()),
+        }
+
+        legacy_panel, legacy_background = splitter.split_background_only(source, overwrite=True, outline_label_text=False)
+        legacy_root = ET.parse(legacy_panel).getroot()
+        legacy_bg = ET.parse(legacy_background).getroot()
+        checks.update({
+            "legacy mode keeps static text and extracts named directional groups": by_id(legacy_root, "static-title").text == "TITLE" and by_id(ET.parse(theme_text["output"]).getroot(), "out-label").text == "OUT" and all(e.get("id") != "out-label" for e in legacy_root.iter()),
+            "legacy mode preserves authored foreground pigment": "fill:#5740bf" in by_id(legacy_root, "input").get("style"),
+            "legacy mode extracts only background": all(e.get("id") != "base-fill" for e in legacy_root.iter()) and by_id(legacy_root, "background-highlight") is not None,
+            "legacy background retains transform": by_id(legacy_bg, "background-transform").get("transform") == "translate(2 3)",
+        })
+        try:
+            splitter.split_background_only(source)
+            checks["legacy mode protects existing outputs"] = False
+        except RuntimeError:
+            checks["legacy mode protects existing outputs"] = True
+
+    with tempfile.TemporaryDirectory() as directory:
+        source = Path(directory) / "roles.svg"
+        source.write_text("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+          <g id="theme_background"><rect width="10" height="10"/></g>
+          <g id="labels" transform="translate(1 2)" opacity="0.7">
+            <text id="title">TITLE</text>
+            <text id="input" data-theme-text="input"><tspan>IN</tspan></text>
+            <path id="output" data-theme-text="output" d="M1 1L2 2"/>
+          </g><g id="components"><circle id="anchor" cx="5" cy="6" r="1"/></g>
+        </svg>""", encoding="utf-8")
+        _, labels, roles = splitter.split_svg(
+            source, "labels", ".panel", ".labels", "theme_text", ".theme-text",
+            True, True, True, False, None, 1.0)
+        ins = ET.parse(roles["input"]).getroot()
+        outs = ET.parse(roles["output"]).getroot()
+        checks["individual text role includes its tspans"] = by_id(ins, "input")[0].text == "IN"
+        checks["outlined labels support individual output roles"] = by_id(outs, "output").get("d") == "M1 1L2 2"
+        checks["individual roles retain ancestry"] = by_id(outs, "labels").get("transform") == "translate(1 2)"
+        checks["individual roles leave branding static"] = by_id(ET.parse(labels).getroot(), "title").text == "TITLE"
+        panel, _ = splitter.split_background_only(source, overwrite=True, outline_label_text=False)
+        legacy = ET.parse(panel).getroot()
+        checks["legacy role extraction removes duplicate labels"] = not any(e.get("id") in ("input", "output") for e in legacy.iter())
+        checks["legacy extraction preserves anchors and static title"] = by_id(legacy, "anchor").get("cx") == "5" and by_id(legacy, "title").text == "TITLE"
+        checks["legacy role extraction keeps inherited opacity"] = by_id(ET.parse(roles["input"]).getroot(), "labels").get("opacity") == "0.7"
+
+    # Keep the authored organization discoverable in Inkscape, including panels
+    # that use legacy background-only generation.
+    panel_names = "bifurx Sibyl bulkhead Cantor Chimera crownstep deck doorstop flux iris Moirai nautiloid Octavia Phonex proc Puffy sil undertow wyrm".split()
+    for panel_name in panel_names:
+        master = ET.parse(ROOT / "res" / (panel_name + ".svg")).getroot()
+        groups = [e for e in master.iter() if e.get("id") in ("theme_text_input", "theme_text_output")]
+        expected = 1 if panel_name == "nautiloid" else 2
+        checks[panel_name + " has editable named text groups"] = len(groups) == expected and all(
+            e.tag == "{http://www.w3.org/2000/svg}g" and
+            e.get("{http://www.inkscape.org/namespaces/inkscape}label") ==
+            ("Input Text" if e.get("id") == "theme_text_input" else "Output Text") for e in groups)
+        checks[panel_name + " needs no per-label role tags"] = not any(e.get("data-theme-text") for e in master.iter())
+
+    for name, passed in checks.items():
+        print(f"[{'PASS' if passed else 'FAIL'}] {name}")
+    failed = sum(not passed for passed in checks.values())
+    print(f"Split SVG labels spec: {len(checks) - failed}/{len(checks)} passed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

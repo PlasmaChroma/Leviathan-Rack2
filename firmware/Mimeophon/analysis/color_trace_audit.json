@@ -1,0 +1,328 @@
+{
+  "scope": "Binary-checked bounded instruction translation; finite host float/FMA, not ARM execution",
+  "firmware_sha256": "31323684dacda3d6313565a1a47596005870d1defed55e0336fd419ca82040b9",
+  "slices": {
+    "left": {
+      "instruction_count": 131,
+      "exits": [
+        "0x080248e0"
+      ],
+      "ranges_half_open": [
+        [
+          "0x080246fe",
+          "0x080248e0"
+        ],
+        [
+          "0x080253b4",
+          "0x080253bc"
+        ],
+        [
+          "0x080253dc",
+          "0x080253e8"
+        ],
+        [
+          "0x08025384",
+          "0x08025390"
+        ]
+      ]
+    },
+    "right": {
+      "instruction_count": 120,
+      "exits": [
+        "0x08024b58"
+      ],
+      "ranges_half_open": [
+        [
+          "0x0802494a",
+          "0x080249a6"
+        ],
+        [
+          "0x08024a04",
+          "0x08024b58"
+        ],
+        [
+          "0x08025364",
+          "0x08025384"
+        ]
+      ]
+    },
+    "halo_tail": {
+      "instruction_count": 182,
+      "exits": [
+        "0x08025158"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08024f10",
+          "0x08025158"
+        ],
+        [
+          "0x0802535e",
+          "0x08025364"
+        ]
+      ]
+    },
+    "mod_init": {
+      "instruction_count": 20,
+      "exits": [
+        "0x0802388c"
+      ],
+      "ranges_half_open": [
+        [
+          "0x0802385c",
+          "0x0802388c"
+        ]
+      ]
+    },
+    "mod_random_a": {
+      "instruction_count": 33,
+      "exits": [
+        "0x08023f9e"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08025b5e",
+          "0x08025baa"
+        ],
+        [
+          "0x08025df6",
+          "0x08025e0e"
+        ],
+        [
+          "0x0802686a",
+          "0x08026872"
+        ]
+      ]
+    },
+    "mod_random_b": {
+      "instruction_count": 33,
+      "exits": [
+        "0x08023fa6"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08025acc",
+          "0x08025b18"
+        ],
+        [
+          "0x08025dde",
+          "0x08025df6"
+        ],
+        [
+          "0x08026862",
+          "0x0802686a"
+        ]
+      ]
+    },
+    "mod_positions": {
+      "instruction_count": 37,
+      "exits": [
+        "0x08024f10"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08024e2c",
+          "0x08024e9c"
+        ],
+        [
+          "0x08024efc",
+          "0x08024f10"
+        ]
+      ]
+    },
+    "mod_counters": {
+      "instruction_count": 18,
+      "exits": [
+        "0x08023f8e"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08023f64",
+          "0x08023f8e"
+        ],
+        [
+          "0x080253bc",
+          "0x080253c2"
+        ]
+      ]
+    },
+    "expiry_events": {
+      "instruction_count": 188,
+      "exits": [
+        "0x08023fa6"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08023f64",
+          "0x08023fa6"
+        ],
+        [
+          "0x080253bc",
+          "0x080253c2"
+        ],
+        [
+          "0x08025a9e",
+          "0x08025baa"
+        ],
+        [
+          "0x08025dda",
+          "0x08025e0e"
+        ],
+        [
+          "0x08025fca",
+          "0x08025fe0"
+        ],
+        [
+          "0x080263e0",
+          "0x080263f8"
+        ],
+        [
+          "0x080263fc",
+          "0x08026416"
+        ],
+        [
+          "0x080266e2",
+          "0x08026706"
+        ],
+        [
+          "0x080267ae",
+          "0x080267b6"
+        ],
+        [
+          "0x08026862",
+          "0x08026872"
+        ]
+      ]
+    },
+    "consume_requests": {
+      "instruction_count": 43,
+      "exits": [
+        "0x08024298"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08024288",
+          "0x08024298"
+        ],
+        [
+          "0x0802599e",
+          "0x080259ea"
+        ],
+        [
+          "0x08025eda",
+          "0x08025ee4"
+        ],
+        [
+          "0x08025eec",
+          "0x08025ef8"
+        ]
+      ]
+    },
+    "reverse_windows": {
+      "instruction_count": 72,
+      "exits": [
+        "0x080243bc"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08025c80",
+          "0x08025d44"
+        ],
+        [
+          "0x08025e1e",
+          "0x08025e3c"
+        ],
+        [
+          "0x08025ea8",
+          "0x08025ebc"
+        ]
+      ]
+    },
+    "hold_transport": {
+      "instruction_count": 46,
+      "exits": [
+        "0x080241c8"
+      ],
+      "ranges_half_open": [
+        [
+          "0x080241a4",
+          "0x080241c8"
+        ],
+        [
+          "0x080253fa",
+          "0x0802543e"
+        ],
+        [
+          "0x08025d84",
+          "0x08025d94"
+        ]
+      ]
+    },
+    "hold_retarget": {
+      "instruction_count": 90,
+      "exits": [
+        "0x08024288"
+      ],
+      "ranges_half_open": [
+        [
+          "0x080259ea",
+          "0x08025a9e"
+        ],
+        [
+          "0x08025e74",
+          "0x08025ea8"
+        ],
+        [
+          "0x08025ebc",
+          "0x08025eda"
+        ],
+        [
+          "0x08025ee4",
+          "0x08025eec"
+        ],
+        [
+          "0x08025f18",
+          "0x08025f1c"
+        ]
+      ]
+    },
+    "hold_input": {
+      "instruction_count": 37,
+      "exits": [
+        "0x08027042"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08027004",
+          "0x08027042"
+        ],
+        [
+          "0x0802712a",
+          "0x08027130"
+        ],
+        [
+          "0x08027156",
+          "0x08027162"
+        ]
+      ]
+    },
+    "clock_prefix": {
+      "instruction_count": 30,
+      "exits": [
+        "0x08023b20",
+        "0x08025fb6",
+        "0x080264e8"
+      ],
+      "ranges_half_open": [
+        [
+          "0x08023af8",
+          "0x08023b20"
+        ],
+        [
+          "0x08025f9a",
+          "0x08025fb6"
+        ]
+      ]
+    }
+  }
+}

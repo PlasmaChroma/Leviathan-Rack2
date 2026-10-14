@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="60.96mm"
+   height="128.5mm"
+   viewBox="0 0 6096 12850"
+   version="1.1"
+   id="svg21"
+   sodipodi:docname="Puffy.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview21"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="3.421466"
+     inkscape:cx="109.60214"
+     inkscape:cy="256.17674"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg21"
+     showgrid="false" />
+  <defs
+     id="defs8">
+    <linearGradient
+       id="panel"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#24140b"
+         id="stop1" />
+      <stop
+         offset="0.48"
+         stop-color="#100b13"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#050711"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="gold"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#fff3b1"
+         id="stop4" />
+      <stop
+         offset="0.42"
+         stop-color="#ffd44d"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#ff9f08"
+         id="stop6" />
+    </linearGradient>
+    <linearGradient
+       id="viewport"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#1f192c"
+         id="stop7" />
+      <stop
+         offset="1"
+         stop-color="#0f0d17"
+         id="stop8" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient500"
+       gradientUnits="userSpaceOnUse"
+       x1="5355.9189"
+       y1="1516.2338"
+       x2="6904.7725"
+       y2="1512.3004"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-3063.3137,-867.14524)" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="theme_background"><rect
+     width="6096"
+     height="12850"
+     fill="#000000"
+     id="rect8"
+     style="display:inline;fill:#000000;fill-opacity:1"
+     x="0"
+     y="0"
+     sodipodi:insensitive="true" /></g>
+  <rect
+     x="63.777615"
+     y="911.76904"
+     width="5968.4448"
+     height="5409.4658"
+     rx="0"
+     fill="#000000"
+     stroke="#1ccad8"
+     stroke-opacity="1"
+     stroke-width="24.338"
+     id="puffy_border"
+     style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:24.338;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <rect
+     x="75.509567"
+     y="6380.4795"
+     width="5967.4419"
+     height="1573.8412"
+     rx="0"
+     fill="#000000"
+     stroke="#1ccad8"
+     stroke-opacity="1"
+     stroke-width="24.338"
+     id="transfer_preview_border"
+     style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:25.3589;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <g
+     id="puffy_section_fields"
+     style="display:inline">
+    <g
+       id="glass">
+      <g
+         id="glass_input">
+        <path
+         d="M 235,8800 H 5861 C 5980,8800 6040,8860 6040,8980 V 10420 C 6040,10540 5980,10600 5861,10600 H 2820 C 2740,10600 2700,10640 2700,10720 V 12020 C 2700,12100 2660,12140 2580,12140 H 235 C 116,12140 56,12080 56,11960 V 8980 C 56,8860 116,8800 235,8800 Z"
+           id="puffy_input_field"
+           style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+      </g>
+      <g
+         id="glass_output">
+        <rect
+         x="3520"
+         y="10630"
+         width="2520"
+         height="1510"
+         rx="118"
+         ry="126"
+         id="puffy_output_field"
+           style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
+      </g>
+    </g>
+  </g>
+  <g
+     id="labels">
+
+
+
+
+
+
+
+    <text
+       id="reworked_module_title_text"
+       x="3032.9185"
+       y="468.40002"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         style="fill:url(#linearGradient500)"
+         x="3032.9185"
+         y="468.40002">Puffy</tspan></text>
+    <text
+       id="reworked_module_description"
+       x="3044.825"
+       y="813.54999"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         x="3044.825"
+         y="813.54999">saturator</tspan></text>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="1994.9664"
+       y="10499.721"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="1994.9666"
+         y="10499.721">━━━━ PUFF ━━━━</tspan></text>
+<text
+       x="4274.5742"
+       y="10330.878"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text14"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         x="4274.5742"
+         y="10330.878">SENS</tspan></text>
+<text
+       x="5477.2314"
+       y="10330.878"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="mix_label"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="5477.2314"
+         y="10330.878">WET</tspan></text>
+<text
+       x="650"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text18"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
+<text
+       x="2050"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text19"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+       x="4050"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text20"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
+<text
+       x="5450"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text21"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT R</text>
+    </g>
+</g>
+  <g
+     id="components"
+     opacity="0"
+     style="display:inline;opacity:1">
+    <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="1412.0334"
+       y="11943.102"
+       width="3271.9331"
+       height="1224.054"
+       style="display:none" />
+    <rect
+       id="negative_character_pillbox"
+       x="153.69994"
+       y="5807.7893"
+       width="1350"
+       height="450"
+       rx="225"
+       ry="225"
+       style="fill:#425f34;fill-opacity:1" />
+    <rect
+       id="positive_character_pillbox"
+       x="4592.1999"
+       y="5807.7893"
+       width="1350"
+       height="450"
+       rx="225"
+       ry="225"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="puff_param"
+       cx="820.40002"
+       cy="9585.2002"
+       r="300"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="sensitivity_param"
+       cx="4296.5327"
+       cy="9585.2002"
+       r="200"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="mix_param"
+       cx="5477.2314"
+       cy="9585.2002"
+       r="200"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="puff_cv_amount_param"
+       cx="2148.1055"
+       cy="9585.2002"
+       r="180"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="input_l"
+       cx="650"
+       cy="11193.589"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="input_r"
+       cx="2050"
+       cy="11193.589"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="puff_cv_input"
+       cx="3212.3191"
+       cy="9585.2002"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="output_l"
+       cx="4050"
+       cy="11193.589"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="output_r"
+       cx="5450"
+       cy="11193.589"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="limit_light"
+       cx="4750"
+       cy="11193.589"
+       r="100"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="limiter_mode_group"
+       cx="3061"
+       cy="11834"
+       r="254"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="polarity_link_button"
+       cx="424.63328"
+       cy="5502.9893"
+       r="270.93333"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="roaming_button"
+       cx="5688.1997"
+       cy="5493.8003"
+       r="254"
+       style="fill:#425f34;fill-opacity:1" />
+  </g>
+  <rect
+     id="fish_rect"
+     x="73.699944"
+     y="946.40009"
+     width="5948.5"
+     height="5391.3892"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.8001;stroke-dasharray:none;stroke-opacity:1" />
+  <rect
+     id="transfer_preview_rect"
+     x="76.940689"
+     y="6413.54"
+     width="5942.2183"
+     height="2302.0186"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:36.0816;stroke-dasharray:none;stroke-opacity:1" />
+</svg>

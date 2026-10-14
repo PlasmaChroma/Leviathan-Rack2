@@ -1,0 +1,58 @@
+[
+  {
+    "name": "application_flash",
+    "base": "0x08020000",
+    "bytes": 49152,
+    "end_exclusive": "0x0802c000",
+    "permissions": "RX",
+    "note": "Recovered bytes, not whole device flash"
+  },
+  {
+    "name": "runtime_data",
+    "base": "0x20000000",
+    "bytes": 372,
+    "end_exclusive": "0x20000174",
+    "permissions": "RW",
+    "note": "Copied from flash offset 0xbe08 by startup"
+  },
+  {
+    "name": "runtime_bss",
+    "base": "0x20000174",
+    "bytes": 22796,
+    "end_exclusive": "0x20005a80",
+    "permissions": "RW",
+    "note": "Zeroed by startup"
+  },
+  {
+    "name": "halo_auxiliary_float_ring",
+    "base": "0xd0000000",
+    "bytes": 131072,
+    "end_exclusive": "0xd0020000",
+    "permissions": "RW",
+    "note": "32768 floats; 8-tap feedback network"
+  },
+  {
+    "name": "main_delay_ring_A",
+    "base": "0xd0800000",
+    "bytes": 8388608,
+    "end_exclusive": "0xd1000000",
+    "permissions": "RW",
+    "note": "2097152 floats; four head structs share A/B"
+  },
+  {
+    "name": "main_delay_ring_B",
+    "base": "0xd1000000",
+    "bytes": 8388608,
+    "end_exclusive": "0xd1800000",
+    "permissions": "RW",
+    "note": "2097152 floats; four head structs share A/B"
+  },
+  {
+    "name": "nonvolatile_settings_scan",
+    "base": "0x080c0000",
+    "bytes": 262144,
+    "end_exclusive": "0x08100000",
+    "permissions": "R?",
+    "note": "Referenced by startup; contents NOT in this update"
+  }
+]

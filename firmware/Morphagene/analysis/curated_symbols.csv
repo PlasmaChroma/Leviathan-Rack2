@@ -1,0 +1,28 @@
+name,address,kind,evidence
+Reset_Handler,0x8021414,function,"Copy RAM initializer, zero BSS, then system init/main"
+system_initialize,0x802145c,function,Clock/peripheral register setup
+main,0x8022b68,function,Main entry from reset
+audio_dma_configure,0x8025b04,function,"Receives TX, RX and halfword count"
+audio_dma_irq,0x8025b9c,function,Calls DSP for two halves of 32-halfword buffers
+cv_dma_irq,0x8025d58,function,Converts 32-float half buffers to 12-bit CV words
+control_adc_irq,0x80263e4,function,"Six moving sums, 16/16/64/64/4/64 conversions"
+dsp_initialize,0x8026730,function,"State, rate defaults and SDRAM initialization"
+splice_insert_variant,0x8026c80,function,Sorted splice-marker insertion; not generic audio initialization
+process_audio_block,0x8027518,function,Large DSP entry; original odd entry 0x08027519 includes Thumb flag
+options,0x200012a8,data,"Parsed runtime options, outside startup initializer"
+adc_sos,0x20021c68,data,16-conversion average
+adc_morph,0x20021c6c,data,16-conversion average
+adc_organize,0x20021c70,data,64-conversion average
+adc_varispeed,0x20021c74,data,64-conversion average
+adc_slide,0x20021c78,data,4-conversion average
+adc_gene_size,0x20021c7c,data,64-conversion average
+whole_splice_flag,0x20021e14,data,Distinct endpoint mode
+morph_launch_factor,0x20021f48,data,Not the playback increment
+gene_duration,0x20021f90,data,Output-time duration in ordinary mode
+morph_smoothed,0x20022084,data,0.01 per-frame smoother
+rate_target,0x200220e8,data,Base Vari-Speed target
+rng_state,0x200220f8,data,32-bit LCG
+reel_left_pointer,0x200220fc,data,Initialized to 0xd0000000
+reel_right_pointer,0x20022100,data,Initialized to 0xd1000000
+morph_chord_ratios,0x20022124,data,"Three live ratios, not options struct"
+splice_markers,0x2002215c,data,Sorted sample offsets; full bounds/state policies still under analysis

@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="7.9999996"
-   inkscape:cx="159.43751"
-   inkscape:cy="432.81252"
+   inkscape:zoom="3.9999998"
+   inkscape:cx="139.00001"
+   inkscape:cy="337.12502"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -266,20 +266,20 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect
+      <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
    width="7135.2925"
    height="12887.627"
    rx="0"
    ry="0"
-   fill="url(#bgGrad)"
+   fill="#000000"
    id="black_background"
-   style="display:inline;fill:url(#bgGrad);stroke-width:23.6122"
-   sodipodi:insensitive="true" />
+   style="display:inline;fill:#000000;stroke-width:23.6122"
+   sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"
-   style="display:inline;opacity:0.5"
+   style="display:none;opacity:0.5"
    transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
@@ -337,7 +337,7 @@
    fill="none"
    id="top_horizontal_line"
    style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" /></g><path
-   d="m 679.961,11431.042 0.078,-1134.188"
+   d="m 679.961,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -346,7 +346,7 @@
    id="fm_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 6401.961,11431.042 0.078,-1134.188"
+   d="m 6409.9595,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -355,7 +355,7 @@
    id="span_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 3543.4534,11454.444 0.078,-1134.188"
+   d="m 3543.4534,11454.444 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -364,7 +364,7 @@
    id="freq_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000025;stroke-dasharray:none"
    sodipodi:nodetypes="cc" /><path
-   d="m 1650.7542,11431.042 0.078,-1134.188"
+   d="m 1650.7542,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -373,7 +373,7 @@
    id="res_line"
    style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none"
    sodipodi:nodetypes="cc" /><path
-   d="m 5450.7542,11413.942 0.078,-1134.188"
+   d="m 5450.7542,11413.942 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -556,31 +556,33 @@
    style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none"
    inkscape:label="Out_Under_Black" /><g
    id="glass"
-   style="display:inline"><path
-     d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z"
-     fill="#000000"
-     opacity="0.1"
-     stroke="#ffffff"
-     stroke-opacity="0.06"
-     stroke-width="43.3423"
-     id="inputs"
-     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
-     inkscape:label="inputs"
-     sodipodi:nodetypes="sssssssssssssssss" /><rect
-     x="4042.1721"
-     y="10894.673"
-     width="944.95349"
-     height="1250.9"
-     rx="58.695"
-     ry="63.930157"
-     fill="#000000"
-     opacity="0.1"
-     stroke="#ffffff"
-     stroke-opacity="0.06"
-     stroke-width="40.4311"
-     id="outputs-3"
-     style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
-     inkscape:label="outputs" /></g>
+   style="display:inline"><g
+     id="glass_input"><path
+       d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="43.3423"
+       id="inputs"
+       style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
+       inkscape:label="inputs"
+       sodipodi:nodetypes="sssssssssssssssss" /></g><g
+     id="glass_output"><rect
+       x="4042.1721"
+       y="10894.673"
+       width="944.95349"
+       height="1250.9"
+       rx="58.695"
+       ry="63.930157"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="40.4311"
+       id="outputs-3"
+       style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
+       inkscape:label="outputs" /></g></g>
       
     
     
@@ -596,7 +598,7 @@
    id="reworked_module_title_text"
    x="3541.4487"
    y="447.27814"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient500);stroke-width:28.1347"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan1"
@@ -606,7 +608,7 @@
    id="reworked_LEVIATHAN_LOGO"
    x="3554.0957"
    y="12598.223"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
         
@@ -645,13 +647,14 @@
    id="reworked_module_description"
    x="3555.2595"
    y="815.19421"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan2"
      x="3555.2595"
      y="815.19421">filter</tspan></text>
-        <text
+        <g id="theme_text_input" inkscape:label="Input Text">
+<text
    id="signal_in"
    x="2591.3838"
    y="11995.578"
@@ -660,7 +663,8 @@
      sodipodi:role="line"
      id="tspan45"
      x="2591.3838"
-     y="11995.578">IN</tspan></text><text
+     y="11995.578">IN</tspan></text>
+<text
    id="reso_cv_label"
    x="1634.9987"
    y="11995.578"
@@ -669,7 +673,8 @@
      sodipodi:role="line"
      id="tspan44"
      x="1634.9987"
-     y="11995.578">RES</tspan></text><text
+     y="11995.578">RES</tspan></text>
+<text
    id="level_lbl"
    x="1646.7407"
    y="9375.2188"
@@ -678,7 +683,8 @@
      sodipodi:role="line"
      id="tspan43"
      x="1646.7407"
-     y="9375.2188">LEVEL</tspan></text><text
+     y="9375.2188">LEVEL</tspan></text>
+<text
    id="span_lbl"
    x="5450.1885"
    y="9378"
@@ -687,7 +693,8 @@
      sodipodi:role="line"
      id="tspan50"
      x="5450.1885"
-     y="9378">SPAN</tspan></text><text
+     y="9378">SPAN</tspan></text>
+<text
    id="fm_cv_label"
    x="679.99829"
    y="11995.578"
@@ -696,7 +703,8 @@
      sodipodi:role="line"
      id="tspan_fm"
      x="679.99829"
-     y="11995.578">FM</tspan></text><text
+     y="11995.578">FM</tspan></text>
+<text
    id="voct_label"
    x="3544.9988"
    y="11995.578"
@@ -705,7 +713,8 @@
      sodipodi:role="line"
      id="tspan46"
      x="3544.9988"
-     y="11995.578">V/OCT</tspan></text><text
+     y="11995.578">V/OCT</tspan></text>
+<text
    id="span_cv_label"
    x="6409.9985"
    y="11995.578"
@@ -714,7 +723,8 @@
      sodipodi:role="line"
      id="tspan49"
      x="6409.9985"
-     y="11995.578">SPAN</tspan></text><text
+     y="11995.578">SPAN</tspan></text>
+<text
    id="balance_cv_label"
    x="5454.9985"
    y="11995.578"
@@ -723,16 +733,8 @@
      sodipodi:role="line"
      id="tspan48"
      x="5454.9985"
-     y="11995.578">BAL</tspan></text><text
-   id="signal_out"
-   x="4509.9985"
-   y="11995.578"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
-     sodipodi:role="line"
-     id="tspan47"
-     x="4509.9985"
-     y="11995.578">OUT</tspan></text><text
+     y="11995.578">BAL</tspan></text>
+<text
    id="sm_lbl"
    x="2846.76"
    y="9016.75"
@@ -741,7 +743,8 @@
      sodipodi:role="line"
      id="tspan60"
      x="2846.76"
-     y="9016.75">SM</tspan></text><text
+     y="9016.75">SM</tspan></text>
+<text
    id="xm_lbl"
    x="4254.6919"
    y="9019.8945"
@@ -751,21 +754,53 @@
      id="tspan61"
      x="4254.6919"
      y="9019.8945">XM</tspan></text>
+</g>
+<g id="theme_text_output" inkscape:label="Output Text">
+<text
+   id="signal_out"
+   x="4509.9985"
+   y="11995.578"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan47"
+     x="4509.9985"
+     y="11995.578">OUT</tspan></text>
+</g>
       </g><g
+   id="plasma_conduit_anchors"
+   inkscape:label="Plasma Conduit Anchors"
+   style="display:inline;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1"><path
+     id="fm_conduit"
+     d="M 680,11389.972 680,9530" /><path
+     id="res_conduit"
+     d="M 1651.4443,10295.81 1651.4443,11389.972" /><path
+     id="voct_conduit"
+     d="M 3546,11389.972 3546,10160" /><path
+     id="balance_conduit"
+     d="M 5451.3232,10295.81 5451.3232,11389.972" /><path
+     id="span_conduit"
+     d="M 6409.9985,11389.972 6409.9985,9530" /></g><g
    id="components"
-   style="display:none;opacity:0.169"><ellipse
+   style="display:inline;opacity:0.169"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
-     id="MODE_PARAM"
-     cx="1150.0443"
+     id="MODE_LEFT_PARAM"
+     cx="816.59473"
      cy="7570.0098"
-     rx="294.84427"
-     ry="295.80988" /><ellipse
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:11.8608"
+     rx="270.93332"
+     ry="270.89343" /><ellipse
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
+     id="MODE_RIGHT_PARAM"
+     cx="1320.0333"
+     cy="7570.0098"
+     rx="270.93332"
+     ry="270.89343" /><ellipse
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_MENU_BUTTON"
      cx="313.15613"
      cy="7570.0098"
-     rx="113.15611"
-     ry="113.84389" /><ellipse
+     rx="270.93332"
+     ry="270.89343" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LEVEL_PARAM"
      cx="1651.4443"
@@ -806,15 +841,15 @@
      width="300"
      height="2600"
      x="530"
-     y="8230"
+     y="8170"
      rx="103.84615"
      ry="80.68969" /><rect
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617"
      id="SPAN_CV_ATTEN_PARAM"
      width="300"
      height="2600"
-     x="6252"
-     y="8230"
+     x="6259.9985"
+     y="8170"
      rx="103.84616"
      ry="80.68972" /><ellipse
      style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
@@ -878,4 +913,45 @@
    height="6336.0991"
    x="78.962128"
    y="946.43658"
-   ry="0" /></svg>
+   ry="0" />
+<g
+   id="perfect_wave_raster_anchors"
+   style="display:none">
+  <rect
+   id="BIFURX_TOP_RASTER"
+   x="0"
+   y="0"
+   width="7112.0004"
+   height="946.43658" />
+  <rect
+   id="SPECTRUM_MODERN"
+   x="78.962128"
+   y="946.43658"
+   width="6949.7729"
+   height="6336.0991" />
+  <rect
+   id="BRANDING_WAVE_LEFT_RASTER"
+   x="665.60999"
+   y="12338.19"
+   width="1306.748"
+   height="511.81" />
+  <rect
+   id="BRANDING_WAVE_RIGHT_RASTER"
+   x="5139.6738"
+   y="12338.19"
+   width="1306.748"
+   height="511.81" />
+  <rect
+   id="BRANDING_LEVIATHAN_LOGO_RASTER"
+   x="1920.0337"
+   y="11943.102"
+   width="3271.9331"
+   height="1224.054" />
+  <rect
+   id="BIFURX_TITLE_RASTER"
+   x="2266.0002"
+   y="3.9000001"
+   width="2580"
+   height="946.66699" />
+</g>
+</svg>

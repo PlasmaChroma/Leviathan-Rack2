@@ -1,0 +1,12 @@
+call_site,wire_hex_bytes,decoded_register_7bit,decoded_data_9bit,compatible_register_name
+0x08026c16,0c72,6,114,power_down_control
+0x08026c2e,0e0e,7,14,digital_audio_interface
+0x08026c4a,0017,0,23,left_line_input
+0x08026c66,0217,1,23,right_line_input
+0x08026c82,0400,2,0,left_headphone
+0x08026c9e,0600,3,0,right_headphone
+0x08026cba,0a00,5,0,digital_audio_path
+0x08026cd6,0812,4,18,analog_audio_path
+0x08026cf2,1000,8,0,sample_rate_control
+0x08026d0c,1201,9,1,active_control
+0x08026d24,0c62,6,98,power_down_control

@@ -1,0 +1,14 @@
+test arbhar_play~ crashes
+Add shmem to arbhar_rec~
+implement shmem recording
+Implement shmem playback
+Create shmem/ file functions
+ADCs to shmem
+Controls to shmem
+Arbhar modes to shmem
+Shmem <> MIDI 
+
+Trigger control from shmem
+Strike to shmem
+In play~
+

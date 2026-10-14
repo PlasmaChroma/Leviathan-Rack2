@@ -1,0 +1,308 @@
+[
+  {
+    "name": "vector_table",
+    "address": "0x08020000",
+    "kind": "data",
+    "note": "114 entries including initial SP"
+  },
+  {
+    "name": "runtime_start",
+    "address": "0x080201c8",
+    "kind": "function",
+    "note": "Startup memory initialization and call to main"
+  },
+  {
+    "name": "Reset_Handler_trampoline",
+    "address": "0x08020298",
+    "kind": "function",
+    "note": "Vector reset target, Thumb bit removed"
+  },
+  {
+    "name": "tick_increment_candidate",
+    "address": "0x08020420",
+    "kind": "function",
+    "note": "Support routine"
+  },
+  {
+    "name": "tick_read_candidate",
+    "address": "0x08020430",
+    "kind": "function",
+    "note": "Support routine"
+  },
+  {
+    "name": "millisecond_delay_candidate",
+    "address": "0x0802043c",
+    "kind": "function",
+    "note": "Support routine"
+  },
+  {
+    "name": "dsp_initialize",
+    "address": "0x080232d0",
+    "kind": "function",
+    "note": "Audio buffers, DSP state, tables, DMA startup"
+  },
+  {
+    "name": "clear_main_delay_buffers",
+    "address": "0x08023988",
+    "kind": "function",
+    "note": "Clears two 2^21-float rings"
+  },
+  {
+    "name": "process_stereo_block",
+    "address": "0x080239b4",
+    "kind": "function",
+    "note": "Main floating-point DSP, analyst label"
+  },
+  {
+    "name": "audio_callback_rx_first_half",
+    "address": "0x0802697c",
+    "kind": "function",
+    "note": "4 stereo frames; outputs to other TX half"
+  },
+  {
+    "name": "audio_callback_rx_second_half",
+    "address": "0x08026ab4",
+    "kind": "function",
+    "note": "4 stereo frames; outputs to other TX half"
+  },
+  {
+    "name": "codec_setup_candidate",
+    "address": "0x08026bf0",
+    "kind": "function",
+    "note": "Hardware setup; codec identity not established"
+  },
+  {
+    "name": "zone_led_color_candidate",
+    "address": "0x08026eb0",
+    "kind": "function",
+    "note": "Table-branch-controlled display values"
+  },
+  {
+    "name": "clock_initialize_candidate",
+    "address": "0x08027548",
+    "kind": "function",
+    "note": "RCC/PLL configuration"
+  },
+  {
+    "name": "main",
+    "address": "0x08027648",
+    "kind": "function",
+    "note": "System/hardware main routine"
+  },
+  {
+    "name": "default_interrupt_handler",
+    "address": "0x08027c94",
+    "kind": "function",
+    "note": "Shared unused interrupt target"
+  },
+  {
+    "name": "delay_heads",
+    "address": "0x20001a14",
+    "kind": "data",
+    "note": "Four 44-byte structures, two per main buffer"
+  },
+  {
+    "name": "audio_rx_words",
+    "address": "0x20001adc",
+    "kind": "data",
+    "note": "16 signed 32-bit transfer words"
+  },
+  {
+    "name": "main_delay_mask",
+    "address": "0x20001b20",
+    "kind": "data",
+    "note": "0x1fffff"
+  },
+  {
+    "name": "halo_aux_ring_mask",
+    "address": "0x20001b4c",
+    "kind": "data",
+    "note": "32767"
+  },
+  {
+    "name": "halo_allpass_969",
+    "address": "0x20001b6c",
+    "kind": "data",
+    "note": "969 float ring"
+  },
+  {
+    "name": "halo_aux_ring_pointer",
+    "address": "0x20002a9c",
+    "kind": "data",
+    "note": "0xd0000000"
+  },
+  {
+    "name": "modulation_lcg_state",
+    "address": "0x20002acc",
+    "kind": "data",
+    "note": "32-bit LCG state"
+  },
+  {
+    "name": "active_polynomial_coefficients",
+    "address": "0x20002ad4",
+    "kind": "data",
+    "note": "Four zone-selected coefficients"
+  },
+  {
+    "name": "audio_tx_words",
+    "address": "0x20002ae8",
+    "kind": "data",
+    "note": "16 signed 32-bit transfer words"
+  },
+  {
+    "name": "halo_allpass_803",
+    "address": "0x20002b64",
+    "kind": "data",
+    "note": "803 float ring"
+  },
+  {
+    "name": "main_delay_length",
+    "address": "0x200037f8",
+    "kind": "data",
+    "note": "2097152 samples"
+  },
+  {
+    "name": "tempo_delay_ratios",
+    "address": "0x20003804",
+    "kind": "data",
+    "note": "13 initialized floats"
+  },
+  {
+    "name": "audio_float_output",
+    "address": "0x200038a4",
+    "kind": "data",
+    "note": "8 floats = 4 stereo frames"
+  },
+  {
+    "name": "halo_allpass_1236",
+    "address": "0x200038e8",
+    "kind": "data",
+    "note": "1236 float ring"
+  },
+  {
+    "name": "color_filter_state",
+    "address": "0x20004c74",
+    "kind": "data",
+    "note": "Two observed 44-byte filter state groups"
+  },
+  {
+    "name": "halo_matrix_gain_state",
+    "address": "0x20004d24",
+    "kind": "data",
+    "note": "Smoothed coefficient multiplying Hadamard outputs"
+  },
+  {
+    "name": "audio_float_input",
+    "address": "0x20004d7c",
+    "kind": "data",
+    "note": "8 floats = 4 stereo frames"
+  },
+  {
+    "name": "adc_control_words",
+    "address": "0x20004f98",
+    "kind": "data",
+    "note": "Seven observed 32-bit ADC/control slots"
+  },
+  {
+    "name": "firmware_revision_integer",
+    "address": "0x200050fc",
+    "kind": "data",
+    "note": "Main stores integer 86"
+  },
+  {
+    "name": "halo_allpass_1511",
+    "address": "0x20000278",
+    "kind": "data",
+    "note": "1511 float ring"
+  },
+  {
+    "name": "exp2_fraction",
+    "address": "0x08028dc4",
+    "kind": "data",
+    "note": "2^(i/2048), verified numerical fit; used by rate/exponential conversion"
+  },
+  {
+    "name": "halo_matrix_gain",
+    "address": "0x0802adc4",
+    "kind": "data",
+    "note": "Scalar multiplying the unnormalized 8x8 Hadamard feedback matrix"
+  },
+  {
+    "name": "repeats_gain",
+    "address": "0x0802afc4",
+    "kind": "data",
+    "note": "Repeats control gain target; not a measurement of complete closed-loop gain"
+  },
+  {
+    "name": "color_coefficient_a",
+    "address": "0x0802b1c4",
+    "kind": "data",
+    "note": "Color-related coefficient table; unusual byte-index access also exists"
+  },
+  {
+    "name": "color_allpass_coefficient",
+    "address": "0x0802b5c4",
+    "kind": "data",
+    "note": "Four cascaded allpass-average filter stages; coefficient interpolated in time"
+  },
+  {
+    "name": "color_control_shape",
+    "address": "0x0802b9c4",
+    "kind": "data",
+    "note": "Color-related shape/gain/control law; full transfer function not reconstructed"
+  },
+  {
+    "name": "zone_minimum_samples",
+    "address": "0x0802be10",
+    "kind": "data",
+    "note": "Nominal zone minimum delay in samples"
+  },
+  {
+    "name": "zone_transition_scale",
+    "address": "0x0802be30",
+    "kind": "data",
+    "note": "Per-zone scale, likely transition/read-head window length; semantics partly inferred"
+  },
+  {
+    "name": "zone_polynomial_c0",
+    "address": "0x0802be50",
+    "kind": "data",
+    "note": "First coefficient in amplitude-dependent polynomial gain"
+  },
+  {
+    "name": "zone_polynomial_c1",
+    "address": "0x0802be60",
+    "kind": "data",
+    "note": "Second coefficient in amplitude-dependent polynomial gain"
+  },
+  {
+    "name": "zone_polynomial_c2",
+    "address": "0x0802be70",
+    "kind": "data",
+    "note": "Third coefficient in amplitude-dependent polynomial gain"
+  },
+  {
+    "name": "zone_polynomial_c3",
+    "address": "0x0802be80",
+    "kind": "data",
+    "note": "Fourth coefficient in amplitude-dependent polynomial gain"
+  },
+  {
+    "name": "zone_slew_coefficient",
+    "address": "0x0802be90",
+    "kind": "data",
+    "note": "Per-zone coefficient selected into live state"
+  },
+  {
+    "name": "rate_aux_coefficients",
+    "address": "0x0802beb0",
+    "kind": "data",
+    "note": "Rate/time auxiliary coefficients; exact role not fully traced"
+  },
+  {
+    "name": "zone_near_unity_coefficient",
+    "address": "0x0802beec",
+    "kind": "data",
+    "note": "Per-zone near-unity filter coefficient; precise filter role not fully traced"
+  }
+]

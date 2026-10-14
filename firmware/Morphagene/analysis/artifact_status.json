@@ -1,0 +1,24 @@
+{
+  "input": "Original supplied MG204 ZIP and original analysis files retained",
+  "firmware": "Complete transported application; 644 CRC-valid payloads; not full-device flash",
+  "tables": "14 exact blocks / 8056 words; individual roles and active extents qualified in manifest",
+  "disassembly": "Recursive static evidence plus unvalidated broad sweep; unresolved transfers retained",
+  "reconstruction": "Selected finite-input components; not a complete emulator",
+  "changed_claims": [
+    "clock quantizer direction/bin retention",
+    "stored Morph fractions",
+    "ordered Gene float arithmetic",
+    "conditional recording filter",
+    "upper Morph discrete rate selection",
+    "adaptive interpolation"
+  ],
+  "checks": "Read validation_results.json and component_test_results.json for actual execution",
+  "not_performed": [
+    "hardware measurement",
+    "flashing",
+    "instruction-accurate CPU emulation",
+    "Rack module modification",
+    "plugin build (no plugin code was changed)",
+    "Ghidra runtime import validation"
+  ]
+}

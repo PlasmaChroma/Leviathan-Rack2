@@ -1,0 +1,36 @@
+test_all_table_hashes (__main__.ReferenceTests.test_all_table_hashes) ... ok
+test_analysis_pitch_endpoints (__main__.ReferenceTests.test_analysis_pitch_endpoints) ... ok
+test_elf_payload_identity (__main__.ReferenceTests.test_elf_payload_identity) ... ok
+test_exp2_table (__main__.ReferenceTests.test_exp2_table) ... ok
+test_factory_shape (__main__.ReferenceTests.test_factory_shape) ... ok
+test_fast_sqrt_normal_error (__main__.ReferenceTests.test_fast_sqrt_normal_error) ... ok
+test_fast_sqrt_zero_not_repaired (__main__.ReferenceTests.test_fast_sqrt_zero_not_repaired) ... ok
+test_firmware_identity (__main__.ReferenceTests.test_firmware_identity) ... ok
+test_focus_exact_bypass (__main__.ReferenceTests.test_focus_exact_bypass) ... ok
+test_focus_narrows_analysis (__main__.ReferenceTests.test_focus_narrows_analysis) ... ok
+test_focus_nonpositive_bypass (__main__.ReferenceTests.test_focus_nonpositive_bypass) ... ok
+test_group_limits (__main__.ReferenceTests.test_group_limits) ... ok
+test_invalid_array_offsets_rejected (__main__.ReferenceTests.test_invalid_array_offsets_rejected) ... ok
+test_linear_interpolation (__main__.ReferenceTests.test_linear_interpolation) ... ok
+test_linear_wrap (__main__.ReferenceTests.test_linear_wrap) ... ok
+test_malformed_wav_rejected (__main__.ReferenceTests.test_malformed_wav_rejected) ... ok
+test_planar_grid_center (__main__.ReferenceTests.test_planar_grid_center) ... ok
+test_planar_last_corner (__main__.ReferenceTests.test_planar_last_corner) ... ok
+test_quadrature_detector_bounded_tone (__main__.ReferenceTests.test_quadrature_detector_bounded_tone) ... ok
+test_ramp (__main__.ReferenceTests.test_ramp) ... ok
+test_sine_tables (__main__.ReferenceTests.test_sine_tables) ... ok
+test_soft_clip_endpoints (__main__.ReferenceTests.test_soft_clip_endpoints) ... ok
+test_synth_last_four_not_used (__main__.ReferenceTests.test_synth_last_four_not_used) ... ok
+test_synth_unity_radius_equivalence (__main__.ReferenceTests.test_synth_unity_radius_equivalence) ... ok
+test_synth_zero_partials_mute (__main__.ReferenceTests.test_synth_zero_partials_mute) ... ok
+test_wav_64_frame_dimensions (__main__.ReferenceTests.test_wav_64_frame_dimensions) ... ok
+test_wav_header_quirk_reported (__main__.ReferenceTests.test_wav_header_quirk_reported) ... ok
+test_wav_pcm16_roundtrip (__main__.ReferenceTests.test_wav_pcm16_roundtrip) ... ok
+test_wav_pcm_formats (__main__.ReferenceTests.test_wav_pcm_formats) ... ok
+test_writer_does_not_mutate (__main__.ReferenceTests.test_writer_does_not_mutate) ... ok
+test_writer_refuses_overflow (__main__.ReferenceTests.test_writer_refuses_overflow) ... ok
+
+----------------------------------------------------------------------
+Ran 31 tests in 0.043s
+
+OK

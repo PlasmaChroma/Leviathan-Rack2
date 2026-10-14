@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="71.12mm" height="128.5mm" viewBox="0 0 7112 12850" version="1.1" id="Phonex-background">
+  <defs>
+    <linearGradient id="phonex-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17232a" />
+      <stop offset="0.52" stop-color="#0b1318" />
+      <stop offset="1" stop-color="#070b0e" />
+    </linearGradient>
+    <linearGradient id="phonex-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d19a45" />
+      <stop offset="0.5" stop-color="#42d7df" />
+      <stop offset="1" stop-color="#d19a45" />
+    </linearGradient>
+    <pattern id="phonex-grid" width="240" height="240" patternUnits="userSpaceOnUse">
+      <path d="M240 0H0V240" fill="none" stroke="#75dbe0" stroke-width="8" opacity="0.055" />
+    </pattern>
+  </defs>
+  <g id="panel_art" inkscape:label="Panel artwork">
+    <g id="theme_background">
+      <rect width="7112" height="12850" fill="#000000" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,29 @@
+{
+  "method": "Manually reviewed strike onsets from full-file waveforms; analysis windows end at the next onset or 3.5 seconds, whichever comes first.",
+  "recordings": [
+    {
+      "path": "Samples/Doorstop/170359__liamq__spring-door-stop.wav",
+      "onsets": [1.045, 4.603, 6.981]
+    },
+    {
+      "path": "Samples/Doorstop/277197__wjoojoo__door_spring03.wav",
+      "onsets": [0.037]
+    },
+    {
+      "path": "Samples/Doorstop/344741__xenosns__door-stopper-twang.wav",
+      "onsets": [2.752, 8.149, 13.131, 18.971, 23.611, 30.533, 35.072, 38.229, 41.829]
+    },
+    {
+      "path": "Samples/Doorstop/59737__morgantj__doorstopperspring2.mp3",
+      "onsets": [0.432, 2.325, 5.952, 8.229, 10.363, 11.781, 13.525, 15.397, 17.797, 19.328, 21.616, 23.680, 25.392, 26.592, 28.373]
+    },
+    {
+      "path": "Samples/Doorstop/702997__funky_audio__toontwang_door-stopper-twangs_funky-audio_fass.wav",
+      "onsets": [0.309, 4.704, 9.291, 13.723, 18.485, 23.056, 27.515]
+    },
+    {
+      "path": "Samples/Doorstop/81458__joedeshon__spring_door_stop_01.wav",
+      "onsets": [0.032]
+    }
+  ]
+}

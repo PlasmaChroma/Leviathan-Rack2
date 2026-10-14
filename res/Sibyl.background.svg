@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="71.12mm" height="128.5mm" viewBox="0 0 7112 12850" version="1.1" id="Sibyl-background" sodipodi:docname="Sibyl.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs11">
+    <linearGradient id="sibyl-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1320" id="stop1" />
+      <stop offset="0.5" stop-color="#080b14" id="stop2" />
+      <stop offset="1" stop-color="#040508" id="stop3" />
+    </linearGradient>
+    <linearGradient id="sibyl-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7254d9" id="stop4" />
+      <stop offset="0.5" stop-color="#30d7de" id="stop5" />
+      <stop offset="1" stop-color="#7254d9" id="stop6" />
+    </linearGradient>
+    <linearGradient id="sibyl-title" gradientUnits="userSpaceOnUse" x1="2900" y1="447.27814" x2="4212" y2="447.27814">
+      <stop offset="0" stop-color="#7a5cff" id="stop7" />
+      <stop offset="1" stop-color="#1cccd9" id="stop8" />
+    </linearGradient>
+    <linearGradient id="sibyl-section" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141c2e" stop-opacity="0.6" id="stop9" />
+      <stop offset="1" stop-color="#0a0d17" stop-opacity="0.8" id="stop10" />
+    </linearGradient>
+    <radialGradient id="oracle-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#43e2e6" stop-opacity="0.18" id="stop11" />
+      <stop offset="0.55" stop-color="#7358df" stop-opacity="0.08" id="stop12" />
+      <stop offset="1" stop-color="#11172a" stop-opacity="0" id="stop13" />
+    </radialGradient>
+  </defs>
+  <g id="panel_art" inkscape:label="Panel artwork">
+    <g id="theme_background">
+      <rect x="0" y="0" width="7112" height="12850" fill="#000000" id="rect11" />
+    </g>
+  </g>
+</svg>

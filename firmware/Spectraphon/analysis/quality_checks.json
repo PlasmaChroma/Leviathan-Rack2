@@ -1,0 +1,11 @@
+{
+  "json_csv_parse_check": "passed",
+  "original_bytes_preserved": "passed",
+  "elf_readelf_check": "passed",
+  "html_internal_navigation": "passed",
+  "html_chapter_count": 7,
+  "html_external_scripts": 0,
+  "host_tests_passed": 31,
+  "visual_browser_render_checked": false,
+  "note": "HTML structural checks performed; no graphical-browser screenshot was taken."
+}

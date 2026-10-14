@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="50.8mm" height="128.5mm" viewBox="0 0 50.8 128.5" version="1.1" id="svg1" sodipodi:docname="Octavia.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs1">
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient36" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.00996908,0,0,0.00996908,-35.580841,-8.7190724)" x1="5153.5303" y1="1496.1719" x2="7077.3545" y2="1489.1353" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="glass_input" data-theme-runtime-substrate="neutral">
+    <rect id="MASTER_INPUT_GLASS" x="0.40000001" y="105" width="24.799999" height="14.4" rx="1.1907305" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" style="stroke-width:0.969224" />
+    <rect id="MONITOR_INPUT_GLASS" x="33.599998" y="58.200001" width="16.799999" height="46.200001" rx="1.223843" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" style="stroke-width:0.982608" />
+  </g>
+  <g id="glass_output" data-theme-runtime-substrate="neutral">
+    <rect id="CONTROL_OUTPUT_GLASS" x="25.700001" y="105" width="24.799999" height="14.4" rx="1.3667514" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="none" style="stroke-width:1.03839" />
+  </g>
+  <g id="components" aria-label="Component anchors" inkscape:label="Components" style="display:none">
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="5.0799999" y="120.34594" width="32.71933" height="10.4107" />
+    <rect id="BRANDING_AI_CHIP_RASTER" x="39.119999" y="122.25129" width="6.5999999" height="6.5999999" />
+    <rect id="OCTOPUS_STATUS" x="1.25" y="9.3999996" width="48.299999" height="47.237999" style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
+    <circle id="READ_ACTIVITY_LIGHT" cx="29.057079" cy="74.933327" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="WRITE_ACTIVITY_LIGHT" cx="29.292398" cy="86.666664" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="PORT_VALUE_LABEL" cx="18.043377" cy="60.445999" r="1" style="fill:#306928;fill-opacity:1" />
+    <circle id="START_PARAM" cx="29.057079" cy="60.445999" r="2.3800001" style="fill:#306928;fill-opacity:1" />
+    <rect id="LUFS_METER" x="2.5444441" y="64.699997" width="8" height="38.599998" style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
+    <rect id="DBFS_METER" x="15.055555" y="64.699997" width="8" height="38.599998" style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
+    <circle id="MASTER_L_INPUT" cx="6.5444441" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MASTER_R_INPUT" cx="19.055555" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_A_INPUT" cx="44" cy="63.199986" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_B_INPUT" cx="44" cy="74.933327" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_C_INPUT" cx="44" cy="86.666664" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_D_INPUT" cx="44" cy="98.400002" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_A_LIGHT" cx="37.5" cy="63.199986" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_B_LIGHT" cx="37.5" cy="74.933327" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_C_LIGHT" cx="37.5" cy="86.666664" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="MONITOR_D_LIGHT" cx="37.5" cy="98.400002" r="1.27" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_A_OUTPUT" cx="31.844444" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_B_OUTPUT" cx="44.355556" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+  </g>
+</svg>

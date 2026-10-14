@@ -1,6 +1,6 @@
 #include "platter_trace_replay.hpp"
 
-#include "../src/TemporalDeckTest.hpp"
+#include "../src/temporaldeck/TemporalDeckTest.hpp"
 
 #include <algorithm>
 #include <cctype>

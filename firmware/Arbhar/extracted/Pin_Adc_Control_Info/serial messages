@@ -1,0 +1,35 @@
+Serial messages
+
+Scan snake: 128 0-71
+Back colour: 129 $1
+Back Amplitude: 130 $1
+Length 131 0-71
+132 spare
+133 LAYER LED0
+134 LAYER LED1
+135 LAYER LED2
+136 LAYER LED3
+137 LAYER LED4
+138 LAYER LED5
+139 LAYER LED6
+140 PLAYHEAD STATE
+141 PLAYHEAD POSITION
+142 REC HEAD STATE
+143 REC HEAD POSITIOM
+144 CAPTURE BUTTON
+Trigger button LED :145 0-7
+alpha-omega W 146
+alpha-omega Y 147
+150 shift button held
+Save Mode 151
+152 return value
+save Rec layer 153
+154 return value
+to be decided 155
+156 return value
+157 layer white pulse state
+158 toggle spit on off
+request BL 168
+
+
+

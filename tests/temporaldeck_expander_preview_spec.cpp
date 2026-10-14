@@ -1,5 +1,5 @@
-#include "../src/TemporalDeckEngine.hpp"
-#include "../src/TemporalDeckExpanderProtocol.hpp"
+#include "../src/temporaldeck/TemporalDeckEngine.hpp"
+#include "../src/temporaldeck/TemporalDeckExpanderProtocol.hpp"
 
 #include <cstdint>
 #include <iostream>

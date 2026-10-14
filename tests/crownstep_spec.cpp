@@ -1,4 +1,4 @@
-#include "../src/CrownstepCore.hpp"
+#include "../src/crownstep/CrownstepCore.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -183,6 +183,17 @@ TestResult testPitchRangeParamMapsLegacyScalarAnchors() {
   return {"Pitch range param maps legacy scalar anchors", pass,
           "quarter=" + std::to_string(quarterParam) + " full=" + std::to_string(fullParam) +
             " triple=" + std::to_string(tripleParam) + " span=" + std::to_string(fullSpan)};
+}
+
+TestResult testDefaultPitchRangeIsTwentyFourSemitones() {
+	const float span = crownstep::pitchRangeSemitoneSpan(
+		crownstep::PITCH_RANGE_PARAM_DEFAULT, crownstep::BOARD_SIZE);
+	return {
+		"Default Checkers pitch range spans 24 semitones",
+		std::fabs(span - 24.f) < 1e-5f,
+		"param=" + std::to_string(crownstep::PITCH_RANGE_PARAM_DEFAULT)
+			+ " span=" + std::to_string(span)
+	};
 }
 
 TestResult testCheckersRulesAdapterMatchesCoreFunctions() {
@@ -558,6 +569,7 @@ int main() {
   tests.push_back(testAiChoosesAvailableCapture());
   tests.push_back(testPitchDividerModesScaleBoardValuesAndCenterOffset());
   tests.push_back(testPitchRangeParamMapsLegacyScalarAnchors());
+  tests.push_back(testDefaultPitchRangeIsTwentyFourSemitones());
   tests.push_back(testCheckersRulesAdapterMatchesCoreFunctions());
   tests.push_back(testChessInitialBoardAndMoveCount());
   tests.push_back(testChessPinnedPieceCannotExposeKing());

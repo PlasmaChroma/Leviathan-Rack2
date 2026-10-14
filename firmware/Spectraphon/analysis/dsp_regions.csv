@@ -1,0 +1,15 @@
+start,end_reference,name,evidence,note
+0x0802e87e,0x0802e8e8,FM_index_control_mapping,T,60*u^4; mirrored sides
+0x0802e998,0x0802ea0c,SAM_reference_and_pole_setup,T,Exponential Slide and quadratic Focus pole
+0x0802ec94,0x0802ed12,DMA_buffer_pointer_setup,B/T,Eight output-lane pointers
+0x0802f296,0x0802f4aa,harmonic_quadrature_reference_generation,T,Sine LUT and recurrence
+0x0802f4ac,0x0802f716,B_quadrature_analyzer,T,"DC block, cascaded filters, magnitude bit hack"
+0x0802f716,0x0802f9bc,A_quadrature_analyzer,T,Mirrored analyzer; max 60 processed terms
+0x0802fa04,0x0802fc16,Chaos_A_branch_region,partial,Not fully translated
+0x080302b8,0x0803038c,output_clip_and_store_region,T,Lane mapping still incomplete
+0x0803092c,0x08030c70,standard_B_synthesis_region,T,Paired polynomial recurrence
+0x08030cd4,0x08030fd2,standard_A_synthesis_region,T,"Seeds, recurrence, compensation"
+0x08031038,0x08031300,Noise_A_branch_region_approximate,partial,"LCG/filter path; end is descriptive, not a function boundary"
+0x080338f4,0x080339fa,WAV_header_format_region,T,Potential PCM16 header inconsistency
+0x080346ee,0x08034718,external_memory_base_initialization,B,Separate A/B bases; two 12 MiB clears
+0x08034fd6,0x080350c6,Array_dimension_inference_region,T,4096 scalars ->8x8; otherwise framecount x1

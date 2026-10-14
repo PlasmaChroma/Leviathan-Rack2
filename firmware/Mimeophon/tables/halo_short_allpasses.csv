@@ -1,0 +1,5 @@
+runtime_base,samples,nominal_ms,allpass_coefficient,read_interpolation
+0x20001b6c,969,20.1875,0.7,Linear interpolation with modulated fractional read
+0x20002b64,803,16.729166666666668,0.7,Linear interpolation with modulated fractional read
+0x200038e8,1236,25.75,0.4,Integer ring read in audited path
+0x20000278,1511,31.479166666666668,0.4,Integer ring read in audited path

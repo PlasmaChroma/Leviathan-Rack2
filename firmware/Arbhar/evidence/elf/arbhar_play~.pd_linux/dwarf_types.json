@@ -1,0 +1,1011 @@
+[
+  {
+    "name": "timespec",
+    "tag": "DW_TAG_structure_type",
+    "offset": 271,
+    "size": "8",
+    "members": [
+      {
+        "name": "tv_sec",
+        "type": "__time_t",
+        "offset": "0",
+        "value": null,
+        "source_line": "11"
+      },
+      {
+        "name": "tv_nsec",
+        "type": "__syscall_slong_t",
+        "offset": "4",
+        "value": null,
+        "source_line": "12"
+      }
+    ]
+  },
+  {
+    "name": "_IO_FILE",
+    "tag": "DW_TAG_structure_type",
+    "offset": 311,
+    "size": "152",
+    "members": [
+      {
+        "name": "_flags",
+        "type": "int",
+        "offset": "0",
+        "value": null,
+        "source_line": "51"
+      },
+      {
+        "name": "_IO_read_ptr",
+        "type": "char*",
+        "offset": "4",
+        "value": null,
+        "source_line": "54"
+      },
+      {
+        "name": "_IO_read_end",
+        "type": "char*",
+        "offset": "8",
+        "value": null,
+        "source_line": "55"
+      },
+      {
+        "name": "_IO_read_base",
+        "type": "char*",
+        "offset": "12",
+        "value": null,
+        "source_line": "56"
+      },
+      {
+        "name": "_IO_write_base",
+        "type": "char*",
+        "offset": "16",
+        "value": null,
+        "source_line": "57"
+      },
+      {
+        "name": "_IO_write_ptr",
+        "type": "char*",
+        "offset": "20",
+        "value": null,
+        "source_line": "58"
+      },
+      {
+        "name": "_IO_write_end",
+        "type": "char*",
+        "offset": "24",
+        "value": null,
+        "source_line": "59"
+      },
+      {
+        "name": "_IO_buf_base",
+        "type": "char*",
+        "offset": "28",
+        "value": null,
+        "source_line": "60"
+      },
+      {
+        "name": "_IO_buf_end",
+        "type": "char*",
+        "offset": "32",
+        "value": null,
+        "source_line": "61"
+      },
+      {
+        "name": "_IO_save_base",
+        "type": "char*",
+        "offset": "36",
+        "value": null,
+        "source_line": "64"
+      },
+      {
+        "name": "_IO_backup_base",
+        "type": "char*",
+        "offset": "40",
+        "value": null,
+        "source_line": "65"
+      },
+      {
+        "name": "_IO_save_end",
+        "type": "char*",
+        "offset": "44",
+        "value": null,
+        "source_line": "66"
+      },
+      {
+        "name": "_markers",
+        "type": "_IO_marker*",
+        "offset": "48",
+        "value": null,
+        "source_line": "68"
+      },
+      {
+        "name": "_chain",
+        "type": "_IO_FILE*",
+        "offset": "52",
+        "value": null,
+        "source_line": "70"
+      },
+      {
+        "name": "_fileno",
+        "type": "int",
+        "offset": "56",
+        "value": null,
+        "source_line": "72"
+      },
+      {
+        "name": "_flags2",
+        "type": "int",
+        "offset": "60",
+        "value": null,
+        "source_line": "73"
+      },
+      {
+        "name": "_old_offset",
+        "type": "__off_t",
+        "offset": "64",
+        "value": null,
+        "source_line": "74"
+      },
+      {
+        "name": "_cur_column",
+        "type": "short unsigned int",
+        "offset": "68",
+        "value": null,
+        "source_line": "77"
+      },
+      {
+        "name": "_vtable_offset",
+        "type": "signed char",
+        "offset": "70",
+        "value": null,
+        "source_line": "78"
+      },
+      {
+        "name": "_shortbuf",
+        "type": "char[1]",
+        "offset": "71",
+        "value": null,
+        "source_line": "79"
+      },
+      {
+        "name": "_lock",
+        "type": "_IO_lock_t*",
+        "offset": "72",
+        "value": null,
+        "source_line": "81"
+      },
+      {
+        "name": "_offset",
+        "type": "__off64_t",
+        "offset": "80",
+        "value": null,
+        "source_line": "89"
+      },
+      {
+        "name": "_codecvt",
+        "type": "_IO_codecvt*",
+        "offset": "88",
+        "value": null,
+        "source_line": "91"
+      },
+      {
+        "name": "_wide_data",
+        "type": "_IO_wide_data*",
+        "offset": "92",
+        "value": null,
+        "source_line": "92"
+      },
+      {
+        "name": "_freeres_list",
+        "type": "_IO_FILE*",
+        "offset": "96",
+        "value": null,
+        "source_line": "93"
+      },
+      {
+        "name": "_freeres_buf",
+        "type": "?*",
+        "offset": "100",
+        "value": null,
+        "source_line": "94"
+      },
+      {
+        "name": "__pad5",
+        "type": "size_t",
+        "offset": "104",
+        "value": null,
+        "source_line": "95"
+      },
+      {
+        "name": "_mode",
+        "type": "int",
+        "offset": "108",
+        "value": null,
+        "source_line": "96"
+      },
+      {
+        "name": "_unused2",
+        "type": "char[40]",
+        "offset": "112",
+        "value": null,
+        "source_line": "98"
+      }
+    ]
+  },
+  {
+    "name": "_IO_marker",
+    "tag": "DW_TAG_structure_type",
+    "offset": 722,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_IO_codecvt",
+    "tag": "DW_TAG_structure_type",
+    "offset": 761,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "_IO_wide_data",
+    "tag": "DW_TAG_structure_type",
+    "offset": 772,
+    "size": null,
+    "members": []
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1281,
+    "size": "4",
+    "members": [
+      {
+        "name": "BCM2835_REGBASE_ST",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_GPIO",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_PWM",
+        "type": "?",
+        "offset": null,
+        "value": "3",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_CLK",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_PADS",
+        "type": "?",
+        "offset": null,
+        "value": "5",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_SPI0",
+        "type": "?",
+        "offset": null,
+        "value": "6",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_BSC0",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_BSC1",
+        "type": "?",
+        "offset": null,
+        "value": "8",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_AUX",
+        "type": "?",
+        "offset": null,
+        "value": "9",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_REGBASE_SPI1",
+        "type": "?",
+        "offset": null,
+        "value": "10",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1357,
+    "size": "4",
+    "members": [
+      {
+        "name": "BCM2835_GPIO_FSEL_INPT",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_OUTP",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT0",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT1",
+        "type": "?",
+        "offset": null,
+        "value": "5",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT2",
+        "type": "?",
+        "offset": null,
+        "value": "6",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT3",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT4",
+        "type": "?",
+        "offset": null,
+        "value": "3",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_ALT5",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_FSEL_MASK",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1427,
+    "size": "4",
+    "members": [
+      {
+        "name": "BCM2835_GPIO_PUD_OFF",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_PUD_DOWN",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_GPIO_PUD_UP",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1461,
+    "size": "4",
+    "members": [
+      {
+        "name": "RPI_GPIO_P1_03",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_05",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_07",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_08",
+        "type": "?",
+        "offset": null,
+        "value": "14",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_10",
+        "type": "?",
+        "offset": null,
+        "value": "15",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_11",
+        "type": "?",
+        "offset": null,
+        "value": "17",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_12",
+        "type": "?",
+        "offset": null,
+        "value": "18",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_13",
+        "type": "?",
+        "offset": null,
+        "value": "21",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_15",
+        "type": "?",
+        "offset": null,
+        "value": "22",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_16",
+        "type": "?",
+        "offset": null,
+        "value": "23",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_18",
+        "type": "?",
+        "offset": null,
+        "value": "24",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_19",
+        "type": "?",
+        "offset": null,
+        "value": "10",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_21",
+        "type": "?",
+        "offset": null,
+        "value": "9",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_22",
+        "type": "?",
+        "offset": null,
+        "value": "25",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_23",
+        "type": "?",
+        "offset": null,
+        "value": "11",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_24",
+        "type": "?",
+        "offset": null,
+        "value": "8",
+        "source_line": null
+      },
+      {
+        "name": "RPI_GPIO_P1_26",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_03",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_05",
+        "type": "?",
+        "offset": null,
+        "value": "3",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_07",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_08",
+        "type": "?",
+        "offset": null,
+        "value": "14",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_10",
+        "type": "?",
+        "offset": null,
+        "value": "15",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_11",
+        "type": "?",
+        "offset": null,
+        "value": "17",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_12",
+        "type": "?",
+        "offset": null,
+        "value": "18",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_13",
+        "type": "?",
+        "offset": null,
+        "value": "27",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_15",
+        "type": "?",
+        "offset": null,
+        "value": "22",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_16",
+        "type": "?",
+        "offset": null,
+        "value": "23",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_18",
+        "type": "?",
+        "offset": null,
+        "value": "24",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_19",
+        "type": "?",
+        "offset": null,
+        "value": "10",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_21",
+        "type": "?",
+        "offset": null,
+        "value": "9",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_22",
+        "type": "?",
+        "offset": null,
+        "value": "25",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_23",
+        "type": "?",
+        "offset": null,
+        "value": "11",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_24",
+        "type": "?",
+        "offset": null,
+        "value": "8",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_26",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_29",
+        "type": "?",
+        "offset": null,
+        "value": "5",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_31",
+        "type": "?",
+        "offset": null,
+        "value": "6",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_32",
+        "type": "?",
+        "offset": null,
+        "value": "12",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_33",
+        "type": "?",
+        "offset": null,
+        "value": "13",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_35",
+        "type": "?",
+        "offset": null,
+        "value": "19",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_36",
+        "type": "?",
+        "offset": null,
+        "value": "16",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_37",
+        "type": "?",
+        "offset": null,
+        "value": "26",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_38",
+        "type": "?",
+        "offset": null,
+        "value": "20",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P1_40",
+        "type": "?",
+        "offset": null,
+        "value": "21",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P5_03",
+        "type": "?",
+        "offset": null,
+        "value": "28",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P5_04",
+        "type": "?",
+        "offset": null,
+        "value": "29",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P5_05",
+        "type": "?",
+        "offset": null,
+        "value": "30",
+        "source_line": null
+      },
+      {
+        "name": "RPI_V2_GPIO_P5_06",
+        "type": "?",
+        "offset": null,
+        "value": "31",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_03",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_05",
+        "type": "?",
+        "offset": null,
+        "value": "3",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_07",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_08",
+        "type": "?",
+        "offset": null,
+        "value": "14",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_10",
+        "type": "?",
+        "offset": null,
+        "value": "15",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_11",
+        "type": "?",
+        "offset": null,
+        "value": "17",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_12",
+        "type": "?",
+        "offset": null,
+        "value": "18",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_13",
+        "type": "?",
+        "offset": null,
+        "value": "27",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_15",
+        "type": "?",
+        "offset": null,
+        "value": "22",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_16",
+        "type": "?",
+        "offset": null,
+        "value": "23",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_18",
+        "type": "?",
+        "offset": null,
+        "value": "24",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_19",
+        "type": "?",
+        "offset": null,
+        "value": "10",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_21",
+        "type": "?",
+        "offset": null,
+        "value": "9",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_22",
+        "type": "?",
+        "offset": null,
+        "value": "25",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_23",
+        "type": "?",
+        "offset": null,
+        "value": "11",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_24",
+        "type": "?",
+        "offset": null,
+        "value": "8",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_26",
+        "type": "?",
+        "offset": null,
+        "value": "7",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_29",
+        "type": "?",
+        "offset": null,
+        "value": "5",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_31",
+        "type": "?",
+        "offset": null,
+        "value": "6",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_32",
+        "type": "?",
+        "offset": null,
+        "value": "12",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_33",
+        "type": "?",
+        "offset": null,
+        "value": "13",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_35",
+        "type": "?",
+        "offset": null,
+        "value": "19",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_36",
+        "type": "?",
+        "offset": null,
+        "value": "16",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_37",
+        "type": "?",
+        "offset": null,
+        "value": "26",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_38",
+        "type": "?",
+        "offset": null,
+        "value": "20",
+        "source_line": null
+      },
+      {
+        "name": "RPI_BPLUS_GPIO_J8_40",
+        "type": "?",
+        "offset": null,
+        "value": "21",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1915,
+    "size": "4",
+    "members": [
+      {
+        "name": "BCM2835_SPI_BIT_ORDER_LSBFIRST",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_SPI_BIT_ORDER_MSBFIRST",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      }
+    ]
+  },
+  {
+    "name": "",
+    "tag": "DW_TAG_enumeration_type",
+    "offset": 1943,
+    "size": "4",
+    "members": [
+      {
+        "name": "BCM2835_I2C_REASON_OK",
+        "type": "?",
+        "offset": null,
+        "value": "0",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_I2C_REASON_ERROR_NACK",
+        "type": "?",
+        "offset": null,
+        "value": "1",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_I2C_REASON_ERROR_CLKT",
+        "type": "?",
+        "offset": null,
+        "value": "2",
+        "source_line": null
+      },
+      {
+        "name": "BCM2835_I2C_REASON_ERROR_DATA",
+        "type": "?",
+        "offset": null,
+        "value": "4",
+        "source_line": null
+      }
+    ]
+  }
+]

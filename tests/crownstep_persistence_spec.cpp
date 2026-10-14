@@ -1,4 +1,4 @@
-#include "../src/CrownstepShared.hpp"
+#include "../src/crownstep/CrownstepShared.hpp"
 
 #include <cmath>
 #include <atomic>
@@ -201,6 +201,88 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
 }
 
+TestResult testNewModulePitchDefaults() {
+	Crownstep module;
+	const float span = crownstep::pitchRangeSemitoneSpan(
+		module.params[Crownstep::RANGE_PARAM].getValue(), module.boardCellCount());
+	const bool pass = module.pitchBipolarEnabled && nearlyEqual(span, 24.f, 1e-5f);
+	return {
+		"New Crownstep modules default to bipolar 24-semitone pitch",
+		pass,
+		"bipolar=" + std::to_string(module.pitchBipolarEnabled ? 1 : 0)
+			+ " span=" + std::to_string(span)
+	};
+}
+
+TestResult testApplyGameSetupAndStartNewGame() {
+	Crownstep module;
+	Move move;
+	move.originIndex = 8;
+	move.destinationIndex = 12;
+	module.moveHistory.push_back(move);
+	module.history.push_back(module.makeStepFromMove(move));
+	module.selectedSquare = 8;
+	module.gameOver = true;
+	module.winnerSide = crownstep::HUMAN_SIDE;
+
+	module.applyGameSetupAndStartNewGame(Crownstep::GAME_MODE_CHESS, Crownstep::PLAYER_FOLLOW);
+
+	const crownstep::BoardState expected = crownstep::chessMakeInitialBoard();
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_CHESS &&
+		module.playerMode == Crownstep::PLAYER_FOLLOW &&
+		module.board == expected &&
+		module.moveHistory.empty() &&
+		module.history.empty() &&
+		module.selectedSquare == -1 &&
+		!module.gameOver &&
+		module.winnerSide == 0 &&
+		module.turnSide == crownstep::HUMAN_SIDE &&
+		module.aiSide() == crownstep::HUMAN_SIDE;
+	return {
+		"Apply setup starts one clean game with the requested sides",
+		pass,
+		"mode=" + std::to_string(module.gameMode)
+			+ " player=" + std::to_string(module.playerMode)
+			+ " history=" + std::to_string(module.history.size())
+	};
+}
+
+TestResult testSameGameSetupPreservesChessTexture() {
+	Crownstep module;
+	module.setGameMode(Crownstep::GAME_MODE_CHESS, true);
+	module.boardTextureMode = Crownstep::BOARD_TEXTURE_MARBLE;
+	module.history.push_back(Step {});
+
+	module.applyGameSetupAndStartNewGame(module.gameMode, module.playerMode);
+
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_CHESS &&
+		module.boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE &&
+		module.history.empty();
+	return {
+		"Same-mode Chess restart preserves the selected texture",
+		pass,
+		"texture=" + std::to_string(module.boardTextureMode)
+			+ " history=" + std::to_string(module.history.size())
+	};
+}
+
+TestResult testApplyGameSetupClampsInvalidValues() {
+	Crownstep module;
+	module.applyGameSetupAndStartNewGame(999, -999);
+	const bool pass =
+		module.gameMode == Crownstep::GAME_MODE_OTHELLO &&
+		module.playerMode == Crownstep::PLAYER_INIT &&
+		module.board == crownstep::othelloMakeInitialBoard();
+	return {
+		"Apply setup safely clamps invalid values",
+		pass,
+		"mode=" + std::to_string(module.gameMode)
+			+ " player=" + std::to_string(module.playerMode)
+	};
+}
+
 TestResult testDiagonalLayoutModesAreDistinct() {
   bool pass = true;
   std::string detail;
@@ -299,6 +381,87 @@ TestResult testRootCvUsesOneVoltPerOctaveSemitoneQuantization() {
             std::to_string(negativeSemitoneRoot)};
 }
 
+TestResult testGameActionsStayOffAudio() {
+  Crownstep module;
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  Step step;
+  step.pitch = 1.25f;
+  step.accent = 0.75f;
+  step.mod = 0.2f;
+  module.history.assign(2, step);
+  module.publishPlaybackSnapshot();
+  module.process(args); // Arm the button/clock triggers low.
+  module.inputs[Crownstep::CLOCK_INPUT].setVoltage(10.f);
+  module.process(args);
+  const bool initialClock = nearlyEqual(module.heldPitch, step.pitch);
+
+  std::atomic<bool> mutexHeld{false};
+  std::thread holder([&] {
+    std::lock_guard<std::recursive_mutex> lock(module.sequenceMutex);
+    mutexHeld.store(true, std::memory_order_release);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  });
+  while (!mutexHeld.load(std::memory_order_acquire)) std::this_thread::yield();
+  module.inputs[Crownstep::CLOCK_INPUT].setVoltage(0.f);
+  module.params[Crownstep::NEW_GAME_PARAM].setValue(1.f);
+  const auto begin = std::chrono::steady_clock::now();
+  module.process(args);
+  const double elapsedMs = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - begin).count();
+  holder.join();
+  bool pass = initialClock && elapsedMs < 50.0 && module.history.size() == 2
+    && nearlyEqual(module.outputs[Crownstep::PITCH_OUTPUT].getVoltage(), NO_SEQUENCE_PITCH_VOLTS)
+    && module.heldAccent == 0.f && module.modOutputVolts == 0.f && !module.eocGateHigh;
+  module.inputs[Crownstep::CLOCK_INPUT].setVoltage(10.f);
+  module.process(args);
+  pass = pass && module.displayedStep == 0; // Old history stays inaccessible while UI is paused.
+  module.serviceGameActionsFromUiThread();
+  pass = pass && module.history.empty() && module.moveHistory.empty();
+  module.history.assign(2, step);
+  module.publishPlaybackSnapshot();
+  module.process(args);
+  pass = pass && module.displayedStep == 0; // Do not replay a clock consumed during the pause.
+  module.inputs[Crownstep::CLOCK_INPUT].setVoltage(0.f);
+  module.process(args);
+  module.inputs[Crownstep::CLOCK_INPUT].setVoltage(10.f);
+  module.process(args);
+  pass = pass && module.displayedStep == 1 && nearlyEqual(module.heldPitch, step.pitch);
+
+  module.params[Crownstep::DEBUG_ADD_MOVES_PARAM].setValue(1.f);
+  module.process(args);
+  pass = pass && module.history.size() == 2;
+  module.serviceGameActionsFromUiThread();
+  pass = pass && module.history.size() == 12;
+  return {"Game actions defer mutation, reset immediately, and preserve the next clock",
+    pass, "newGameAudioMs=" + std::to_string(elapsedMs)};
+}
+
+TestResult testRestoreDiscardsQueuedGameActions() {
+  Crownstep module;
+  Step step;
+  step.pitch = 1.f;
+  module.history.assign(2, step);
+  module.playhead = 1;
+  module.publishPlaybackSnapshot();
+  json_t* saved = module.dataToJson();
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  module.process(args);
+  module.params[Crownstep::NEW_GAME_PARAM].setValue(1.f);
+  module.params[Crownstep::DEBUG_ADD_MOVES_PARAM].setValue(1.f);
+  module.process(args);
+  module.resetPlayback();
+  module.dataFromJson(saved);
+  json_decref(saved);
+  module.serviceGameActionsFromUiThread();
+  module.process(args);
+  return {"Restoration discards pending game actions and preserves the saved playhead",
+    module.history.size() == 2 && module.playhead == 1, "playhead=" + std::to_string(module.playhead)};
+}
+
 TestResult testPlaybackSnapshotDoesNotWaitForSequenceMutex() {
   Crownstep module;
   Step step;
@@ -341,9 +504,15 @@ TestResult testPlaybackSnapshotDoesNotWaitForSequenceMutex() {
 int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
+  tests.push_back(testNewModulePitchDefaults());
+  tests.push_back(testApplyGameSetupAndStartNewGame());
+  tests.push_back(testSameGameSetupPreservesChessTexture());
+  tests.push_back(testApplyGameSetupClampsInvalidValues());
   tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
   tests.push_back(testDiagonalLayoutModesAreDistinct());
   tests.push_back(testPlaybackSnapshotDoesNotWaitForSequenceMutex());
+  tests.push_back(testGameActionsStayOffAudio());
+  tests.push_back(testRestoreDiscardsQueuedGameActions());
 
   int failed = 0;
   std::cout << "Crownstep Persistence Spec\n";
