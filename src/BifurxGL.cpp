@@ -1,5 +1,5 @@
 #include "Bifurx.hpp"
-#include "GlLifecycleUtils.hpp"
+#include "common/GlLifecycleUtils.hpp"
 #include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>

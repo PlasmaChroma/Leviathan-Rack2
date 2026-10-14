@@ -1,5 +1,5 @@
 #include "BifurxDisplay.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "BifurxRenderData.hpp"
 #include "BifurxRenderPrep.hpp"
 #include "BifurxWorker.hpp"

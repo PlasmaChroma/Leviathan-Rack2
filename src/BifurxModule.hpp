@@ -5,7 +5,7 @@
 #include "BifurxOutputStage.hpp"
 #include "BifurxOversampling.hpp"
 #include "BifurxTransitionSmoother.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 
 #include <array>
 #include <atomic>

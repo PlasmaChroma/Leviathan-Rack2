@@ -1,7 +1,7 @@
 #include "plugin.hpp"
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "OctaviaConsoleMailbox.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <ui/TextField.hpp>

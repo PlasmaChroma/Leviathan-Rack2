@@ -1,7 +1,7 @@
 #pragma once
 
-#include "plugin.hpp"
-#include "theme/ThemeTypes.hpp"
+#include "../plugin.hpp"
+#include "../theme/ThemeTypes.hpp"
 
 #include <vector>
 

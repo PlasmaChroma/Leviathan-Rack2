@@ -1,5 +1,5 @@
 #include "PlasmaSwitch.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../common/NvgGraphicsLifecycle.hpp"
 #include "VisualAssets.hpp"
 
 #include <chrono>

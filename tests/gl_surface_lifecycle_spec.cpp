@@ -7,8 +7,8 @@
 #include <window/Window.hpp>
 #undef PRIVATE
 #include "../src/visual/AdaptiveGlSurface.hpp"
-#include "../src/GlResourceRetirement.hpp"
-#include "../src/NvgOwnedImage.hpp"
+#include "../src/common/GlResourceRetirement.hpp"
+#include "../src/common/NvgOwnedImage.hpp"
 #define NANOVG_GL2
 #include <nanovg_gl.h>
 #include <cstdio>

@@ -2,7 +2,7 @@
 
 #include "BulkheadGeometry.hpp"
 #include "plugin.hpp"
-#include "SpscLatestSnapshot.hpp"
+#include "common/SpscLatestSnapshot.hpp"
 #include <array>
 #include <vector>
 

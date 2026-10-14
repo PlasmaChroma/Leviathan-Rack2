@@ -1,7 +1,7 @@
 #include "../src/Nautiloid.hpp"
 #include "../src/Iris.hpp"
 #include "../src/Chromatide.hpp"
-#include "../src/UiExpanderUtils.hpp"
+#include "../src/common/UiExpanderUtils.hpp"
 
 #include <chrono>
 #include <cmath>

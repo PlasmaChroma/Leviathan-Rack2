@@ -1,5 +1,5 @@
 #include "Umi.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
 #pragma once
-#include "../GlResourceRetirement.hpp"
-#include "../GlLifecycleUtils.hpp"
+#include "../common/GlResourceRetirement.hpp"
+#include "../common/GlLifecycleUtils.hpp"
 #include <vector>
 #include <array>
 #include <limits>

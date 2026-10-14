@@ -1,7 +1,7 @@
 #pragma once
 
-#include "DebugTerminalMetrics.hpp"
-#include "MathHelpers.hpp"
+#include "common/DebugTerminalMetrics.hpp"
+#include "common/MathHelpers.hpp"
 #include "plugin.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>

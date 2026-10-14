@@ -60,7 +60,7 @@ def stage(pro_root: Path, drm_dir: Path, rack_dir: Path) -> Path:
         raise RuntimeError("Premium staging directory must not redirect outside its dedicated build path")
     ownership = output / ".premium-files.json"
     previous = set(json.loads(ownership.read_text()) if ownership.is_file() else [])
-    current = set(payload) | {"src/PanelAnchorAtlas.cpp"}
+    current = set(payload) | {"src/common/PanelAnchorAtlas.cpp"}
     stale = previous - current
 
     def target(relative: str) -> Path:
@@ -71,7 +71,7 @@ def stage(pro_root: Path, drm_dir: Path, rack_dir: Path) -> Path:
 
     for relative in previous | current:
         target(relative)
-    payload["src/PanelAnchorAtlas.cpp"] = generated_atlas(ROOT, output, payload, stale)
+    payload["src/common/PanelAnchorAtlas.cpp"] = generated_atlas(ROOT, output, payload, stale)
     for relative in stale:
         path = target(relative)
         if path.is_file():

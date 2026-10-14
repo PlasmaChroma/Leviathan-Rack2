@@ -1,7 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "NautiloidFractal.hpp"
 #include "NautiloidColor.hpp"
 #include "NautiloidIrisExpander.hpp"

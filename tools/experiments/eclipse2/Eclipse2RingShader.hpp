@@ -1,7 +1,7 @@
 #pragma once
 #include "visual/VisualAssets.hpp"
 #include "visual/AdaptiveGlSurface.hpp"
-#include "GlLifecycleUtils.hpp"
+#include "common/GlLifecycleUtils.hpp"
 #include "Eclipse2RingExperiment.hpp"
 #include <array>
 

@@ -1,5 +1,5 @@
 #include "Bulkhead.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 
 namespace {
 constexpr float SPEED_OF_SOUND_MPS = 343.f;

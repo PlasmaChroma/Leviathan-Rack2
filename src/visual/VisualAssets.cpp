@@ -6,9 +6,9 @@
 
 #include "../theme/ThemeUiPoller.hpp"
 #include "ApertureLightTransfer.hpp"
-#include "../MathHelpers.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
-#include "../PanelSvgUtils.hpp"
+#include "../common/MathHelpers.hpp"
+#include "../common/NvgGraphicsLifecycle.hpp"
+#include "../common/PanelSvgUtils.hpp"
 #include "../theme/ThemeService.hpp"
 
 #include <chrono>

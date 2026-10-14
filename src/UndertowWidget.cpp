@@ -2,7 +2,7 @@
 #include "Undertow.hpp"
 #include "UndertowDrawLog.hpp"
 #include "UndertowShape.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"

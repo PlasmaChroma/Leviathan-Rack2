@@ -1,5 +1,5 @@
 #include "Chromatide.hpp"
-#include "UiExpanderUtils.hpp"
+#include "common/UiExpanderUtils.hpp"
 #include <algorithm>
 
 Chromatide::Chromatide() {

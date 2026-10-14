@@ -1,6 +1,6 @@
 #include "theme/ThemedTextWidget.hpp"
 #include "ChromatideWidget.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include <app/Scene.hpp>
 

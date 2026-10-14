@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "DoorstopEngineRouter.hpp"
 #include "DoorstopVisualFeedback.hpp"
 #include "plugin.hpp"

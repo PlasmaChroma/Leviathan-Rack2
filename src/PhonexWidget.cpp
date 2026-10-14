@@ -1,6 +1,6 @@
 #include "Phonex.hpp"
 
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "PhonexRom.hpp"
 #include "visual/VisualAssets.hpp"
 

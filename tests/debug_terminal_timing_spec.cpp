@@ -1,4 +1,4 @@
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include <cassert>
 #include <thread>
 

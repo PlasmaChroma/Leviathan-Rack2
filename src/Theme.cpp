@@ -1,5 +1,5 @@
 #include "plugin.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "theme/ThemeColorClipboard.hpp"
 
 #include "theme/ThemePersistence.hpp"

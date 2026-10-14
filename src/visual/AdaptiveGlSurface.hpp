@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../plugin.hpp"
-#include "../GlResourceRetirement.hpp"
+#include "../common/GlResourceRetirement.hpp"
 
 namespace visual_assets {
 

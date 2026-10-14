@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "plugin.hpp"
 #include "PuffyEngine.hpp"
 

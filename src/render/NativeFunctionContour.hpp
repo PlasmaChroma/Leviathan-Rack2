@@ -1,6 +1,6 @@
 #pragma once
 #include "FunctionCurve.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../common/NvgGraphicsLifecycle.hpp"
 #include <array>
 #include <chrono>
 

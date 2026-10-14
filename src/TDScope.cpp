@@ -1,6 +1,6 @@
 #include "TDScope.hpp"
 #include "TDScopeShared.hpp"
-#include "NvgGraphicsLifecycle.hpp"
+#include "common/NvgGraphicsLifecycle.hpp"
 #include <nanovg_gl.h>
 
 #include <chrono>

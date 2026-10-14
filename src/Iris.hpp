@@ -1,7 +1,7 @@
 #pragma once
 
-#include "DebugTerminalMetrics.hpp"
-#include "MathHelpers.hpp"
+#include "common/DebugTerminalMetrics.hpp"
+#include "common/MathHelpers.hpp"
 #include "IrisIO.hpp"
 #include "IrisWorkerCompletion.hpp"
 #include "NautiloidIrisExpander.hpp"

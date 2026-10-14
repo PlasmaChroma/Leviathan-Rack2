@@ -17,7 +17,7 @@
 #endif
 
 #include "plugin.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "TemporalDeck.hpp"
@@ -31,7 +31,7 @@
 #include "OctaviaRecording.hpp"
 #include "OctaviaAnalysis.hpp"
 #include "OctaviaObservationBus.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include "third_party/httplib.h"
 #include "OctaviaServerLifecycle.hpp"
 #include "OctaviaPresence.hpp"

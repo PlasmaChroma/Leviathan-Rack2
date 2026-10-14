@@ -1,8 +1,8 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "DebugTerminalTransport.hpp"
-#include "MathHelpers.hpp"
+#include "common/DebugTerminalTransport.hpp"
+#include "common/MathHelpers.hpp"
 #include "BifurxInputStage.hpp"
 #include "BifurxOutputStage.hpp"
 #include "BifurxOversampling.hpp"
@@ -12,7 +12,7 @@
 #include "BifurxModule.hpp"
 #include "BifurxDisplay.hpp"
 #include "BifurxRenderClient.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 
 #include <algorithm>
 #include <array>

@@ -1,6 +1,6 @@
 #include "IntegralFlux.hpp"
-#include "DebugTerminalTransport.hpp"
-#include "MathHelpers.hpp"
+#include "common/DebugTerminalTransport.hpp"
+#include "common/MathHelpers.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <atomic>

@@ -1,6 +1,6 @@
 #include "Iris.hpp"
-#include "MathHelpers.hpp"
-#include "UiExpanderUtils.hpp"
+#include "common/MathHelpers.hpp"
+#include "common/UiExpanderUtils.hpp"
 #include "IrisPolyphony.hpp"
 #include "Nautiloid.hpp"
 #include "NautiloidFractal.hpp"

@@ -1,6 +1,6 @@
 #include "VisualAssets.hpp"
 
-#include "../GlLifecycleUtils.hpp"
+#include "../common/GlLifecycleUtils.hpp"
 #include "AdaptiveGlSurface.hpp"
 
 #include <nanovg_gl.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
 #include <cstdint>

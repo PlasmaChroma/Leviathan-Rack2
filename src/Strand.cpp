@@ -1,5 +1,5 @@
 #include "Strand.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 struct StrandFrequencyDisplayWidget : widget::TransparentWidget {

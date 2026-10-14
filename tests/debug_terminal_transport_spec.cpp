@@ -1,4 +1,4 @@
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include <jansson.h>
 #include <cassert>
 #include <cstdio>

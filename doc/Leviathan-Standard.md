@@ -29,7 +29,7 @@ Generated assets include:
 | `<name>.theme-text-output.svg` | Output labels, outlined for runtime |
 | `<name>.theme-text.svg` | Older single-role text layer, where still present |
 
-Do not edit generated SVGs or `src/PanelAnchorAtlas.cpp` directly. Some editable masters are deliberately excluded from distribution, so runtime code must use packaged assets rather than rely on the master being installed.
+Do not edit generated SVGs or `src/common/PanelAnchorAtlas.cpp` directly. Some editable masters are deliberately excluded from distribution, so runtime code must use packaged assets rather than rely on the master being installed.
 
 ### Inkscape organization
 
@@ -88,7 +88,7 @@ Use the workflow already appropriate to the module; do not blindly run the stand
 
 ## 3. Layout and panel assembly
 
-[PanelSvgUtils.hpp](src/PanelSvgUtils.hpp) is the shared layout interface. Put stable, descriptive control/port/rectangle anchors in the master's components or other established anchor layers, then query them rather than duplicating panel coordinates throughout C++.
+[PanelSvgUtils.hpp](src/common/PanelSvgUtils.hpp) is the shared layout interface. Put stable, descriptive control/port/rectangle anchors in the master's components or other established anchor layers, then query them rather than duplicating panel coordinates throughout C++.
 
 - `loadPointFromSvgMm()` locates point anchors.
 - `loadRectFromSvgMm()` locates rectangles such as display areas and branding bounds.
@@ -179,7 +179,7 @@ The `lumin` rendering code under `src/render` includes specialized stroke and an
 
 ## 6. Graphics ownership and host lifecycle
 
-Follow [NvgGraphicsLifecycle.hpp](src/NvgGraphicsLifecycle.hpp), [GlLifecycleUtils.hpp](src/GlLifecycleUtils.hpp), and [GlResourceRetirement.hpp](src/GlResourceRetirement.hpp).
+Follow [NvgGraphicsLifecycle.hpp](src/common/NvgGraphicsLifecycle.hpp), [GlLifecycleUtils.hpp](src/common/GlLifecycleUtils.hpp), and [GlResourceRetirement.hpp](src/common/GlResourceRetirement.hpp).
 
 - NanoVG image handles belong to their creating `NVGcontext*`. Never delete a handle through a different context.
 - On context replacement, clear or invalidate context-bound state and rebuild lazily. A cached integer handle is not proof that the underlying resource remains valid.
@@ -225,7 +225,7 @@ Rack's established DSP/SIMD approximations are also used in the plugin. Reuse th
 
 ## 8. Thread handoff, snapshots, and persistence
 
-[SpscLatestSnapshot.hpp](src/SpscLatestSnapshot.hpp) is a reusable latest-value transport for **exactly one producer and one consumer**. Payloads must be trivially copyable. Intermediate publications may be replaced, so this is appropriate for display snapshots, not lossless trigger/command delivery. The returned reference remains valid only until that consumer's next `readLatest()` call.
+[SpscLatestSnapshot.hpp](src/common/SpscLatestSnapshot.hpp) is a reusable latest-value transport for **exactly one producer and one consumer**. Payloads must be trivially copyable. Intermediate publications may be replaced, so this is appropriate for display snapshots, not lossless trigger/command delivery. The returned reference remains valid only until that consumer's next `readLatest()` call.
 
 Choose queues/mailboxes according to the owning module's event semantics. Document producer/consumer counts, admission rules, overflow behavior, cancellation, and destruction. A pointer is not an ownership lease; workers must retain valid storage until completion, and old results must not overwrite newer state.
 
@@ -237,7 +237,7 @@ The [Temporal Deck / TD.Scope drag contract](doc/drag-contract.md) is a concrete
 
 ## 9. Diagnostics and performance measurements
 
-Gate developer/debug functionality with `isDragonKingDebugEnabled()` from `plugin.hpp`. Reuse [DebugTerminalTransport.hpp](src/DebugTerminalTransport.hpp), [DebugTerminalMetrics.hpp](src/DebugTerminalMetrics.hpp), and [tools/debug_terminal/server.py](tools/debug_terminal/server.py) for external telemetry. Avoid doing socket or formatting work in the audio callback; publish bounded timing/state data for consumption elsewhere.
+Gate developer/debug functionality with `isDragonKingDebugEnabled()` from `plugin.hpp`. Reuse [DebugTerminalTransport.hpp](src/common/DebugTerminalTransport.hpp), [DebugTerminalMetrics.hpp](src/common/DebugTerminalMetrics.hpp), and [tools/debug_terminal/server.py](tools/debug_terminal/server.py) for external telemetry. Avoid doing socket or formatting work in the audio callback; publish bounded timing/state data for consumption elsewhere.
 
 The first three performance metrics have a stable meaning and order:
 

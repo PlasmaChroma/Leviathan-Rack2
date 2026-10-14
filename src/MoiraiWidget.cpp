@@ -1,6 +1,6 @@
 #include "Moirai.hpp"
 #include "MoiraiCurves.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 

@@ -1,5 +1,5 @@
 #include "Bulkhead.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 namespace {

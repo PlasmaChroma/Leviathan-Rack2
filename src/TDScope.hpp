@@ -1,9 +1,9 @@
 #pragma once
 
-#include "DebugTerminalTransport.hpp"
-#include "MathHelpers.hpp"
-#include "PanelSvgUtils.hpp"
-#include "SpscLatestSnapshot.hpp"
+#include "common/DebugTerminalTransport.hpp"
+#include "common/MathHelpers.hpp"
+#include "common/PanelSvgUtils.hpp"
+#include "common/SpscLatestSnapshot.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"

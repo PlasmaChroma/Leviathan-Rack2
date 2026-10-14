@@ -1,5 +1,5 @@
 #include "TemporalDeckArcLights.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckSettings.hpp"

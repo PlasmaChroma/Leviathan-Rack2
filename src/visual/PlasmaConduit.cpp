@@ -1,6 +1,6 @@
 #include "PlasmaConduit.hpp"
 
-#include "../PanelSvgUtils.hpp"
+#include "../common/PanelSvgUtils.hpp"
 
 #include <chrono>
 #include <vector>

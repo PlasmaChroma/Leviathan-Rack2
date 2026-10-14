@@ -23,7 +23,7 @@ OWNER = "Bifurx"
 MANIFEST_DIR = ".leviathan-sync"
 MANIFEST_NAME = f"{MANIFEST_DIR}/{OWNER.lower()}.json"
 LEGACY_MANIFEST_NAME = ".bifurx-sync-manifest.json"
-GENERATED_ATLAS_PATH = "src/PanelAnchorAtlas.cpp"
+GENERATED_ATLAS_PATH = "src/common/PanelAnchorAtlas.cpp"
 
 SOURCE_FILES = (
     "src/Bifurx.cpp",
@@ -54,25 +54,25 @@ SOURCE_FILES = (
     "src/BifurxUI.cpp",
     "src/BifurxWorker.cpp",
     "src/BifurxWorker.hpp",
-    "src/DebugTerminalTransport.cpp",
-    "src/DebugTerminalTransport.hpp",
-    "src/DebugTerminalMetrics.hpp",
-    "src/GlLifecycleUtils.cpp",
-    "src/GlLifecycleUtils.hpp",
-    "src/GlResourceRetirement.cpp",
-    "src/GlResourceRetirement.hpp",
+    "src/common/DebugTerminalTransport.cpp",
+    "src/common/DebugTerminalTransport.hpp",
+    "src/common/DebugTerminalMetrics.hpp",
+    "src/common/GlLifecycleUtils.cpp",
+    "src/common/GlLifecycleUtils.hpp",
+    "src/common/GlResourceRetirement.cpp",
+    "src/common/GlResourceRetirement.hpp",
     "src/IrisSourceField.hpp",
     "src/IrisWavetable.hpp",
-    "src/MathHelpers.cpp",
-    "src/MathHelpers.hpp",
+    "src/common/MathHelpers.cpp",
+    "src/common/MathHelpers.hpp",
     "src/NautiloidColor.hpp",
     "src/NautiloidFractal.hpp",
-    "src/NanoSvgRasterizer.cpp",
-    "src/NvgGraphicsLifecycle.cpp",
-    "src/NvgGraphicsLifecycle.hpp",
-    "src/PanelAnchorAtlas.hpp",
-    "src/PanelSvgUtils.cpp",
-    "src/PanelSvgUtils.hpp",
+    "src/common/NanoSvgRasterizer.cpp",
+    "src/common/NvgGraphicsLifecycle.cpp",
+    "src/common/NvgGraphicsLifecycle.hpp",
+    "src/common/PanelAnchorAtlas.hpp",
+    "src/common/PanelSvgUtils.cpp",
+    "src/common/PanelSvgUtils.hpp",
     "src/UndertowShape.hpp",
     "src/theme/ThemeService.cpp",
     "src/theme/ThemeService.hpp",
@@ -180,6 +180,7 @@ CXXFLAGS +=
 LDFLAGS +=
 
 SOURCES += $(wildcard src/*.cpp)
+SOURCES += $(wildcard src/common/*.cpp)
 SOURCES += $(wildcard src/visual/*.cpp)
 SOURCES += $(wildcard src/theme/*.cpp)
 
@@ -259,7 +260,7 @@ python3 tools/sync_bifurx_to_pro.py
 Run with `--check` to report drift without writing. Files listed in
 `.leviathan-sync/bifurx.json` are source-managed and should be edited in
 `Leviathan-Rack2`. Per-module ownership prevents one synchronizer from deleting
-a shared file still claimed by another module. `src/PanelAnchorAtlas.cpp` is
+a shared file still claimed by another module. `src/common/PanelAnchorAtlas.cpp` is
 regenerated from the union of panel SVGs in this repository.
 
 The `Makefile`, `plugin.json`, `src/plugin.cpp`, `src/plugin.hpp`, this file,

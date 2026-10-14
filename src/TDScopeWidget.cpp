@@ -1,4 +1,4 @@
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "TDScope.hpp"
 #include "visual/VisualAssets.hpp"
 

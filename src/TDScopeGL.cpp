@@ -1,7 +1,7 @@
 #include "TDScope.hpp"
 #include "TDScopeShared.hpp"
-#include "GlLifecycleUtils.hpp"
-#include "GlResourceRetirement.hpp"
+#include "common/GlLifecycleUtils.hpp"
+#include "common/GlResourceRetirement.hpp"
 #include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 

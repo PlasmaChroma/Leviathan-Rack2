@@ -1,5 +1,5 @@
 #include "plugin.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "SibylControl.hpp"
 #include "SibylResponse.hpp"
 #include "SibylCapabilities.hpp"
@@ -17,11 +17,11 @@
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
 #include "OctaviaObservationBus.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #ifndef SIBYL_MODULE_TEST
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "SibylProcessCapture.hpp"
 #endif
 #include <jansson.h>

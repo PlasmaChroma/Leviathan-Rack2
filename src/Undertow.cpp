@@ -1,5 +1,5 @@
 #include "Undertow.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "UndertowShape.hpp"
 #include "WavePreviewTracer.hpp"
 

@@ -1,8 +1,8 @@
 #include "CrownstepShared.hpp"
 #include "CrownstepSettingsOverlay.hpp"
-#include "MathHelpers.hpp"
-#include "PanelSvgUtils.hpp"
-#include "NvgGraphicsLifecycle.hpp"
+#include "common/MathHelpers.hpp"
+#include "common/PanelSvgUtils.hpp"
+#include "common/NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 

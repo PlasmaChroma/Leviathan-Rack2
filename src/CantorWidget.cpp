@@ -1,6 +1,6 @@
 #include "Cantor.hpp"
 
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <cmath>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 #include "VesselExpanderProtocol.hpp"
 #include "vessel/DualBowlAdapter.hpp"
 #include "vessel/RubIntensity.hpp"

@@ -1,6 +1,6 @@
 #include "Nautiloid.hpp"
-#include "MathHelpers.hpp"
-#include "UiExpanderUtils.hpp"
+#include "common/MathHelpers.hpp"
+#include "common/UiExpanderUtils.hpp"
 #include "Iris.hpp"
 #include "NautiloidCachePolicy.hpp"
 

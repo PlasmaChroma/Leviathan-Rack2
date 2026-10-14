@@ -1,6 +1,6 @@
 #include "BifurxDebug.hpp"
 #include "BifurxSpectrumNanoVG.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 
 #include <unordered_map>
 

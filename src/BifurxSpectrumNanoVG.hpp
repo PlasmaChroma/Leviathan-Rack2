@@ -2,7 +2,7 @@
 
 #include "BifurxDisplay.hpp"
 #include "BifurxDebug.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 
 #include <fstream>
 #include <ctime>

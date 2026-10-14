@@ -1,4 +1,4 @@
-#include "../src/MathHelpers.hpp"
+#include "../src/common/MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>

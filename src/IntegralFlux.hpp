@@ -1,7 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>

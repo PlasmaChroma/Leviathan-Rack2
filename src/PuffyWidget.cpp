@@ -1,6 +1,6 @@
 #include "PuffyWidget.hpp"
 
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "PuffyDrawDiagnostics.hpp"
 #include "PuffyFishWidget.hpp"
 #include "PuffyTransferPreviewWidget.hpp"

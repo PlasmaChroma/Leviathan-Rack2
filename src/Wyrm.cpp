@@ -1,6 +1,6 @@
 #include "Wyrm.hpp"
-#include "MathHelpers.hpp"
-#include "DebugTerminalTransport.hpp"
+#include "common/MathHelpers.hpp"
+#include "common/DebugTerminalTransport.hpp"
 
 #include <chrono>
 

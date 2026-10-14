@@ -2,7 +2,7 @@
 
 #include "ChronomawEngine.hpp"
 #include "plugin.hpp"
-#include "SpscLatestSnapshot.hpp"
+#include "common/SpscLatestSnapshot.hpp"
 #include <atomic>
 
 struct Chronomaw : Module {

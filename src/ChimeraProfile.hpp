@@ -4,7 +4,7 @@
 
 #include "ChimeraTypes.hpp"
 #include "ChimeraGeneSize.hpp"
-#include "FastAudioMath.hpp"
+#include "common/FastAudioMath.hpp"
 #include <cmath>
 #include <cstdint>
 #include <cstring>

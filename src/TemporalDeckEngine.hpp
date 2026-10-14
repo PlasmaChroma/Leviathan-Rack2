@@ -1,7 +1,7 @@
 #pragma once
 
 #include "TemporalDeckExpanderProtocol.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "TemporalDeckTest.hpp"
 #include "TemporalDeckScratchSmoothing.hpp"
 

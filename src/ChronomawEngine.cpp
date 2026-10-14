@@ -1,5 +1,5 @@
 #include "ChronomawEngine.hpp"
-#include "MathHelpers.hpp"
+#include "common/MathHelpers.hpp"
 #include "ChronomawWaveforms.hpp"
 
 #include "plugin.hpp"

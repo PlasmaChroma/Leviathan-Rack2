@@ -1,4 +1,4 @@
-#include "../src/NvgGraphicsLifecycle.hpp"
+#include "../src/common/NvgGraphicsLifecycle.hpp"
 #include <nanovg.h>
 
 #include <cstdio>

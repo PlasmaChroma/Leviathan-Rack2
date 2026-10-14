@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DebugTerminalTransport.hpp"
-#include "plugin.hpp"
+#include "../plugin.hpp"
 
 #include <atomic>
 #include <chrono>

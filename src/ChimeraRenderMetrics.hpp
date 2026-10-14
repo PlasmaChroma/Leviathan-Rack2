@@ -1,5 +1,5 @@
 #pragma once
-#include "DebugTerminalMetrics.hpp"
+#include "common/DebugTerminalMetrics.hpp"
 
 namespace chimera {
 

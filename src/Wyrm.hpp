@@ -1,8 +1,8 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "DebugTerminalTransport.hpp"
-#include "MathHelpers.hpp"
+#include "common/DebugTerminalTransport.hpp"
+#include "common/MathHelpers.hpp"
 
 #include <array>
 #include <atomic>

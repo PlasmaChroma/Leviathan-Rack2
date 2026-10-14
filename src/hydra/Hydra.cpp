@@ -1,6 +1,6 @@
 #include "../plugin.hpp"
-#include "../DebugTerminalMetrics.hpp"
-#include "../PanelSvgUtils.hpp"
+#include "../common/DebugTerminalMetrics.hpp"
+#include "../common/PanelSvgUtils.hpp"
 #include "../visual/ApertureLight.hpp"
 #include "../visual/VisualAssets.hpp"
 

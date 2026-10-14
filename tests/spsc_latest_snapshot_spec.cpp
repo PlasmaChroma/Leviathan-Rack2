@@ -1,4 +1,4 @@
-#include "../src/SpscLatestSnapshot.hpp"
+#include "../src/common/SpscLatestSnapshot.hpp"
 #include "../src/TemporalDeckExpanderProtocol.hpp"
 #include "../src/SilSpectrumSnapshot.hpp"
 

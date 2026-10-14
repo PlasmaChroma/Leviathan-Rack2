@@ -1,6 +1,6 @@
 #include "SharedSvgCache.hpp"
 #include "SharedSvgCacheState.hpp"
-#include "../NvgGraphicsLifecycle.hpp"
+#include "../common/NvgGraphicsLifecycle.hpp"
 
 #include <nanovg.h>
 #include <nanosvg.h>

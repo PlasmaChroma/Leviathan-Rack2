@@ -1,7 +1,7 @@
 #include "theme/ThemedTextWidget.hpp"
 #include "Umi.hpp"
-#include "NvgGraphicsLifecycle.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/NvgGraphicsLifecycle.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <array>

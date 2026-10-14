@@ -1,6 +1,6 @@
 #include "theme/ThemedTextWidget.hpp"
 #include "Mandelwake.hpp"
-#include "PanelSvgUtils.hpp"
+#include "common/PanelSvgUtils.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 

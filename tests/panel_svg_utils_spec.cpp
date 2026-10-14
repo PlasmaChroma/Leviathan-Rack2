@@ -1,5 +1,5 @@
-#include "../src/PanelSvgUtils.hpp"
-#include "../src/PanelAnchorAtlas.hpp"
+#include "../src/common/PanelSvgUtils.hpp"
+#include "../src/common/PanelAnchorAtlas.hpp"
 
 #include <algorithm>
 #include <cmath>
