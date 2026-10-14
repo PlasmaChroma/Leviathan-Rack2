@@ -139,7 +139,8 @@ private:
     int rateMode_;
     bool fullGene_;
     double ratios_[3];
-    profile1::OnsetChoice lastOnset_;
+    // Neutral choice until the first onset, without advancing the PRNG.
+    profile1::OnsetChoice lastOnset_{false, 0.f, 0, 1.0};
     int mappedMode_;
     double mappedCoordinate_, mappedPitch_, mappedRate_;
     double mappedBaseRate_ = 0, mappedPitchScale_ = 1;

@@ -72,7 +72,7 @@ struct PhonexStatusDisplay final : TransparentWidget {
 			else {
 				primary = module->activeDisplayText();
 				if (primary.size() > 34)
-					primary = primary.substr(0, 31) + "...";
+					primary.replace(31, std::string::npos, "...");
 			}
 			if (module->unsupportedUnicode.load(std::memory_order_relaxed))
 				secondary = "UNICODE BOUNDARY";

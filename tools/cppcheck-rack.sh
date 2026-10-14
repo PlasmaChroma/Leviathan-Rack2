@@ -600,12 +600,13 @@ if (( MAKE_XML )) && [[ -f "$XML_REPORT" ]]; then
 fi
 
 echo
-echo "Severity counts (best effort):"
+echo "Formatted diagnostic severity counts:"
 for severity in error warning style performance portability information; do
-    # Works with common gcc/default Cppcheck formatting.
+    # Match the diagnostic severity field, not words inside its message.
+    # The gcc template renders style/performance findings as warnings.
     count="$(
         grep -Eic \
-            "([[:space:]:\(])${severity}([[:space:]:\)])" \
+            "(:[0-9]+(:[0-9]+)?:[[:space:]]+${severity}:|\] \(${severity}\))" \
             "$TEXT_REPORT" 2>/dev/null || true
     )"
     printf "  %-12s %s\n" "$severity" "$count"

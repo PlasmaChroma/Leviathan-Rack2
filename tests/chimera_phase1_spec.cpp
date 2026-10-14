@@ -138,6 +138,10 @@ int main() {
     check(finiteCompletionFrame(100, 480) == 580, "finite completion is due after last rendered frame");
 
     Core core;
+    const OnsetChoice initialOnset = core.lastOnset();
+    check(!initialOnset.chord && initialOnset.crossmix == 0.f &&
+          initialOnset.slot == 0 && initialOnset.ratio == 1.0,
+          "core exposes a neutral onset choice before the first event");
     CoreInput input = {};
     input.controls = controls();
     input.live = StereoFrame{5.f, nan};

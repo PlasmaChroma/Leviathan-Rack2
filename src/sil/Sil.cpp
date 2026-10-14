@@ -768,7 +768,7 @@ struct Sil : Module {
 		spec.fft->rfft(spec.fftInL, spec.fftOutL);
 		spec.fft->rfft(spec.fftInR, spec.fftOutR);
 
-		auto getMagnitudePow = [&](float* fftOut, int bin) {
+		auto getMagnitudePow = [&](const float* fftOut, int bin) {
 			if (bin <= 0) return fftOut[0] * fftOut[0];
 			if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
 			const float re = fftOut[2 * bin];
@@ -1365,8 +1365,8 @@ struct Sil : Module {
 		mudCleanR = removeMud.peakingR.process(impactAirR);
 		removeMudLed = removeMud.ledAmount;
 
-		float midEnhancedL = mudCleanL;
-		float midEnhancedR = mudCleanR;
+		float midEnhancedL;
+		float midEnhancedR;
 		float midEnhanceLed = 0.f;
 		{
 			const float monoPostMud = 0.5f * (mudCleanL + mudCleanR);
@@ -1420,8 +1420,6 @@ struct Sil : Module {
 		const float cleanedL = midEnhancedL;
 		const float cleanedR = midEnhancedR;
 		pushRollingSample(cleanedL, cleanedR);
-		float gluedL = cleanedL;
-		float gluedR = cleanedR;
 		float glueLed = 0.f;
 		if (glueThresholdUpdateDivider.process()) {
 			const float programDbFs = estimateRollingProgramDbFs();
@@ -1466,12 +1464,12 @@ struct Sil : Module {
 		}
 		const float gain = glue.gainLin;
 		glue.gainLin += glue.gainStep;
-		gluedL = cleanedL * gain;
-		gluedR = cleanedR * gain;
+		const float gluedL = cleanedL * gain;
+		const float gluedR = cleanedR * gain;
 		glue.ledAmount = clampf(glue.gainReductionDb / kGlueMaxGainReductionDb, 0.f, 1.f);
 		glueLed = glue.ledAmount;
-		float enhancedL = gluedL;
-		float enhancedR = gluedR;
+		float enhancedL;
+		float enhancedR;
 		float stereoEnhanceLed = 0.f;
 		{
 			const float mid = 0.5f * (gluedL + gluedR);
@@ -1511,12 +1509,12 @@ struct Sil : Module {
 			stereoEnhance.smoothedMidCutDb =
 				stereoEnhance.targetMidCutDb + midCoeff * (stereoEnhance.smoothedMidCutDb - stereoEnhance.targetMidCutDb);
 
-			const float sideCoeff =
+			const float sideLiftCoeff =
 				(stereoEnhance.targetSideLiftDb > stereoEnhance.smoothedSideLiftDb)
 					? stereoSideGainAttackCoeff
 					: stereoSideGainReleaseCoeff;
 			stereoEnhance.smoothedSideLiftDb =
-				stereoEnhance.targetSideLiftDb + sideCoeff * (stereoEnhance.smoothedSideLiftDb - stereoEnhance.targetSideLiftDb);
+				stereoEnhance.targetSideLiftDb + sideLiftCoeff * (stereoEnhance.smoothedSideLiftDb - stereoEnhance.targetSideLiftDb);
 
 			if (decisionTick) {
 				stereoEnhance.midActivation = clampf(
@@ -2634,7 +2632,7 @@ struct SilWidget : ModuleWidget {
 		}
 	}
 
-	SilWidget(Sil* module) {
+	explicit SilWidget(Sil* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Sil", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
@@ -2886,7 +2884,7 @@ struct SilWidget : ModuleWidget {
 		menu->addChild(createMenuLabel("Visuals"));
 		menu->addChild(createSubmenuItem("Color Scheme", "",
 			[=](Menu* submenu) {
-				auto addSchemeItem = [=](Sil::ColorScheme scheme, std::string label) {
+				auto addSchemeItem = [=](Sil::ColorScheme scheme, const std::string& label) {
 					submenu->addChild(createCheckMenuItem(label, "",
 						[=]() { return sil->colorScheme == scheme; },
 						[=]() { sil->colorScheme = scheme; }
