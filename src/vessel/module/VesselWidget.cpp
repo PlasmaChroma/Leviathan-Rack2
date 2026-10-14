@@ -55,8 +55,10 @@ struct VesselTintMask final : TransparentWidget {
     int sourceWidth = 0;
     int sourceHeight = 0;
     bool decodeAttempted = false;
+    float luminanceLift = 0.f;
 
-    VesselTintMask(math::Rect rectMm, const char* path) : sourcePath(path ? path : "") {
+    VesselTintMask(math::Rect rectMm, const char* path, float lift = 0.f)
+        : sourcePath(path ? path : ""), luminanceLift(clamp(lift, 0.f, 1.f)) {
         box.pos = mm2px(rectMm.pos);
         box.size = mm2px(rectMm.size);
     }
@@ -83,7 +85,10 @@ struct VesselTintMask final : TransparentWidget {
         for (std::size_t i = 0; i + 3 < pixels.size(); i += 4) {
             const int luminance = (54 * int(pixels[i]) + 183 * int(pixels[i + 1])
                 + 19 * int(pixels[i + 2]) + 128) >> 8;
-            pixels[i] = pixels[i + 1] = pixels[i + 2] = std::uint8_t(luminance);
+            // Lift the cached overlay, retaining surface detail and source alpha.
+            // This runs only on decode, never per frame or in the audio path.
+            const int lifted = luminance + int((255 - luminance) * luminanceLift);
+            pixels[i] = pixels[i + 1] = pixels[i + 2] = std::uint8_t(lifted);
         }
         return true;
     }
@@ -122,7 +127,7 @@ struct VesselPitchTintLayer final : TransparentWidget {
         Vessel* module,
         math::Rect metalRasterRectMm,
         math::Rect crystalRasterRectMm) : vessel(module) {
-        metalRaster = new VesselTintMask(metalRasterRectMm, "res/Vessel/Metal-Crop-Only.png");
+        metalRaster = new VesselTintMask(metalRasterRectMm, "res/Vessel/Metal-Crop-Only.png", 0.10f);
         crystalRaster = new VesselTintMask(crystalRasterRectMm, "res/Vessel/Crystal-Crop-Only.png");
         addChild(metalRaster);
         addChild(crystalRaster);
@@ -675,9 +680,10 @@ struct BowlDisplay : TransparentWidget {
         const bool fault = vessel && vessel->visualFault.load(std::memory_order_relaxed);
         const float delta = vessel ? vessel->visualSeparation.load(std::memory_order_relaxed) : 0.f;
         char text[48]; std::snprintf(text, sizeof(text), "L: %.1f Hz  R: %.1f Hz", hz-.5f*delta, hz+.5f*delta);
-        nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFontSize(args.vg, 9.f);
+        // Match Proc's frequency label beneath its waveform preview.
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFontSize(args.vg, 11.5f);
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg, fault ? nvgRGB(255, 133, 99) : nvgRGB(181, 213, 220));
+        nvgFillColor(args.vg, fault ? nvgRGB(255, 133, 99) : nvgRGB(255, 255, 255));
         nvgText(args.vg, 1, mm2px(5.6f), fault ? "RATE / CONTACT FAULT" : "ENERGY", nullptr);
         if (!fault) {
             nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
