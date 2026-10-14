@@ -623,11 +623,54 @@ def generated_atlas(
         return (temp_root / GENERATED_ATLAS_PATH).read_bytes()
 
 
+TEXT_SUFFIXES = (
+    ".cpp", ".hpp", ".h", ".cc", ".c", ".inc", ".py", ".md", ".txt", ".json", ".svg",
+)
+
+
+def canonical(relative: str, data: bytes) -> bytes:
+    """Normalize managed text files to LF.
+
+    The source repository is edited on mixed-EOL checkouts, while Pro is
+    committed through both Linux and Windows (autocrlf) clones. Writing LF and
+    comparing EOL-insensitively keeps synchronizations reproducible.
+    """
+    if relative.endswith(TEXT_SUFFIXES) and b"\r" in data:
+        return data.replace(b"\r\n", b"\n")
+    return data
+
+
+def destination_bytes(
+    relative: str, source: bytes, reference: bytes | None
+) -> bytes:
+    """Render managed content using the destination file's EOL convention.
+
+    Pro's history mixes LF files (committed through Windows autocrlf) and
+    CRLF/mixed files (byte copies). Following each file's previous style keeps
+    synchronization diffs limited to real changes.
+    """
+    if not relative.endswith(TEXT_SUFFIXES) or reference is None:
+        return source
+    lines = reference.count(b"\n")
+    if lines == 0:
+        return source
+    ratio = reference.count(b"\r\n") / lines
+    normalized = canonical(relative, source)
+    if ratio < 0.1:
+        return normalized
+    if ratio > 0.9:
+        return normalized.replace(b"\n", b"\r\n")
+    return source
+
+
 def expected_files(repo_root: Path) -> dict[str, bytes]:
     missing = [relative for relative in SOURCE_FILES if not (repo_root / relative).is_file()]
     if missing:
         raise RuntimeError("missing source files:\n  " + "\n  ".join(missing))
-    return {relative: (repo_root / relative).read_bytes() for relative in SOURCE_FILES}
+    return {
+        relative: canonical(relative, (repo_root / relative).read_bytes())
+        for relative in SOURCE_FILES
+    }
 
 
 def read_manifest(path: Path) -> dict[str, str]:
@@ -732,6 +775,20 @@ def synchronize(
                 f"another module uses {sources}"
             )
 
+    # Previous destination content (by old path or same basename) supplies each
+    # file's EOL convention. Read before stale files are removed.
+    previous_by_name = {Path(p).name: p for p in previous}
+    previous_by_name.setdefault(Path(GENERATED_ATLAS_PATH).name, "src/PanelAnchorAtlas.cpp")
+    references: dict[str, bytes] = {}
+    for relative in list(expected) + [GENERATED_ATLAS_PATH]:
+        for candidate in (relative, previous_by_name.get(Path(relative).name)):
+            if candidate is None:
+                continue
+            candidate_path = safe_path(destination, candidate)
+            if candidate_path.is_file():
+                references[relative] = candidate_path.read_bytes()
+                break
+
     stale_candidates = set(previous) - set(expected) - RELEASED_MANAGED_PATHS
     stale = sorted(
         relative for relative in stale_candidates
@@ -756,19 +813,25 @@ def synchronize(
     for relative, data in sorted(expected.items()):
         path = safe_path(destination, relative)
         current = path.read_bytes() if path.is_file() else None
-        if current == data:
+        if current is not None and canonical(relative, current) == data:
             continue
         changes.append(("update " if current is not None else "create ") + relative)
         if not dry_run:
-            write_atomic(path, data)
+            source_bytes = (repo_root / relative).read_bytes()
+            write_atomic(path, destination_bytes(relative, source_bytes, references.get(relative)))
 
-    atlas_data = generated_atlas(repo_root, destination, expected, set(stale))
+    atlas_data = canonical(
+        GENERATED_ATLAS_PATH, generated_atlas(repo_root, destination, expected, set(stale))
+    )
     atlas_path = safe_path(destination, GENERATED_ATLAS_PATH)
     current_atlas = atlas_path.read_bytes() if atlas_path.is_file() else None
-    if current_atlas != atlas_data:
+    if current_atlas is None or canonical(GENERATED_ATLAS_PATH, current_atlas) != atlas_data:
         changes.append(("update " if current_atlas is not None else "create ") + GENERATED_ATLAS_PATH)
         if not dry_run:
-            write_atomic(atlas_path, atlas_data)
+            write_atomic(
+                atlas_path,
+                destination_bytes(GENERATED_ATLAS_PATH, atlas_data, references.get(GENERATED_ATLAS_PATH)),
+            )
 
     manifest = {
         "format": 2,
