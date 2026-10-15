@@ -182,23 +182,23 @@
    stop-color="#182682"
    id="stop_wave_3" />
     </linearGradient>
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="8.0000002"
-   inkscape:cx="210.99999"
-   inkscape:cy="310.68749"
+   inkscape:zoom="2.0000001"
+   inkscape:cx="26.499999"
+   inkscape:cy="230.74999"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -258,7 +258,7 @@
    inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
-  
+
   <g
    id="panel_art"
    style="display:inline">
@@ -266,17 +266,17 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect
+      <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
    width="7135.2925"
    height="12887.627"
    rx="0"
    ry="0"
-   fill="url(#bgGrad)"
+   fill="#000000"
    id="black_background"
-   style="display:inline;fill:url(#bgGrad);stroke-width:23.6122"
-   sodipodi:insensitive="true" />
+   style="display:inline;fill:#000000;stroke-width:23.6122"
+   sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"
    style="display:none;opacity:0.5"
@@ -292,7 +292,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -309,7 +309,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -327,7 +327,7 @@
    stroke-width="60"
    id="gray_outline"
    style="display:none;stroke:#3c3f42;stroke-opacity:1" />
-      
+
     <path
    d="M 1397.1228,1952.2443 H 7648.7534"
    stroke="url(#accentGrad)"
@@ -351,7 +351,8 @@
    id="outputs"
    style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none;stroke-width:46.3885;stroke-dasharray:none"
    inkscape:label="Out_Under_Black" /><g
-   id="glass"><path
+   id="glass"><g
+   id="glass_input"><path
      d="M 235.34972,7794.9995 H 6845.0537 C 6963.6807,7794.9995 7022.9942,7851.3046 7022.9942,7963.9149 V 10619.182 Q 7022.9942,10749.182 6892.9942,10749.182 H 4745.5181 Q 4615.5181,10749.182 4615.5181,10879.182 V 12005.859 Q 4615.5181,12135.859 4485.5181,12135.859 H 235.34972 C 116.72271,12135.859 57.409203,12079.554 57.409203,11966.944 V 7963.9149 C 57.409203,7851.3046 116.72271,7794.9995 235.34972,7794.9995 Z"
      fill="#000000"
      opacity="0.1"
@@ -361,11 +362,12 @@
      id="frame_left"
      style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
      inkscape:label="inputs"
-     sodipodi:nodetypes="sccccccccccscccs" /><rect
+     sodipodi:nodetypes="sccccccccccscccs" /></g><g
+   id="glass_output"><rect
      x="4641.5"
      y="10775.2"
      width="2368.228"
-     height="1339.5333"
+     height="1360.659"
      rx="172.54369"
      ry="158.23055"
      fill="#000000"
@@ -375,7 +377,9 @@
      stroke-width="41.308"
      id="outputs-3"
      style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
-     inkscape:label="outputs" /></g><path
+     inkscape:label="outputs" /></g></g><g
+   id="plasma_conduit_anchors"
+   inkscape:label="Plasma Conduit Anchors"><path
    d="m 1812.5205,9954.4275 1059.159,0.311"
    stroke="url(#accentGrad)"
    stroke-width="40.8409"
@@ -385,7 +389,7 @@
    id="sync_line"
    style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 814.12214,8620.0078 2745.60146,0.4012"
+   d="m 814.12214,8620.0078 2365.87786,0.4012"
    stroke="url(#accentGrad)"
    stroke-width="40.7513"
    stroke-linecap="round"
@@ -429,21 +433,21 @@
    fill="none"
    id="fold_line"
    style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1"
-   sodipodi:nodetypes="cc" />
-    
-    
-    
-    
-    
-    
+   sodipodi:nodetypes="cc" /></g>
+
+
+
+
+
+
   </g>
-  
+
 
   <g
    id="wyrm_components"
    inkscape:label="wyrm_components"
    style="display:none">
-    
+
     <circle
    id="WYRM_FREQ_PARAM"
    cx="814.55664"
@@ -451,8 +455,14 @@
    r="260"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
+   id="WYRM_COARSE_STEP_MODE_PARAM"
+   cx="814.55664"
+   cy="9954.583"
+   r="190"
+   style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
    id="WYRM_FINE_PARAM"
-   cx="2225.269"
+   cx="2139.9653"
    cy="8622.5996"
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -470,27 +480,33 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_LOCK_BUTTON"
-   cx="6269.5"
+   cx="6318.5615"
    cy="7572"
-   r="160"
+   r="270.93332"
    style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_EDITOR_EXPAND_BUTTON"
-   cx="5717"
+   cx="5815.1226"
    cy="7572"
-   r="160"
+   r="270.93332"
    style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_RESET_BUTTON"
    cx="6822"
    cy="7572"
-   r="160"
+   r="270.93332"
    style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
-   id="WYRM_WAVEFORM_SELECT"
-   cx="622"
+   id="WYRM_WAVE_LEFT_PARAM"
+   cx="313.15613"
    cy="7575"
-   r="160"
+   r="270.93332"
+   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_WAVE_RIGHT_PARAM"
+   cx="816.59473"
+   cy="7575"
+   r="270.93332"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_SLITHER_PARAM"
@@ -518,7 +534,19 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_VOCT_INPUT"
-   cx="3565.9817"
+   cx="3180"
+   cy="8628.1416"
+   r="190"
+   style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_VOCT_MODE_LABEL"
+   cx="3180"
+   cy="9323"
+   r="20"
+   style="fill:#00ff88;fill-opacity:1;stroke:none" />
+    <circle
+   id="WYRM_ENV_MODE_PARAM"
+   cx="4229.981"
    cy="8628.1416"
    r="190"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -571,7 +599,7 @@
    id="reworked_module_title_text"
    x="3541.4487"
    y="447.27814"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient500);stroke-width:28.1347"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan1"
@@ -581,70 +609,93 @@
    id="reworked_LEVIATHAN_LOGO"
    x="3554.0957"
    y="12598.223"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         <text
    id="reworked_module_description"
    x="3555.2595"
    y="815.19421"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan16"
      x="3555.2595"
      y="815.19421">oscillator</tspan></text>
-        <text
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
    id="signal_in"
    x="814.55664"
-   y="9712.5996"
+   y="9432.6006"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
-     id="tspan45"
+     id="tspan6">FREQ</tspan></text>
+<text
+   id="oct_mode_label"
+   x="814.55664"
+   y="10554.601"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan_oct_mode"
      x="814.55664"
-     y="9712.5996">FREQ</tspan></text><text
+     y="10554.601">OCT</tspan></text>
+<text
+   id="oct_mode_label-7"
+   x="4222.3608"
+   y="9338.4219"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan7"
+     x="4222.3608"
+     y="9338.4219">ENV</tspan></text>
+<text
    id="reso_cv_label"
-   x="2213.7649"
+   x="2139.9653"
    y="9338.4219"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan44"
-     x="2213.7649"
-     y="9338.4219">FINE</tspan></text><text
+     x="2139.9653"
+     y="9338.4219">FINE</tspan></text>
+<text
    id="slither_lbl"
    x="1240.0049"
    y="11970"
@@ -653,7 +704,8 @@
      sodipodi:role="line"
      id="tspan2"
      x="1240.0049"
-     y="11970">SL.AMP</tspan></text><text
+     y="11970">SL.AMP</tspan></text>
+<text
    id="speed_lbl"
    x="3390.0198"
    y="11970"
@@ -662,16 +714,18 @@
      sodipodi:role="line"
      id="tspan3"
      x="3390.0198"
-     y="11970">SL.SPD</tspan></text><text
+     y="11970">SL.SPD</tspan></text>
+<text
    id="fm_cv_label"
-   x="3564.8525"
+   x="3180"
    y="9338.7041"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan_fm"
-     x="3564.8525"
-     y="9338.7041">V/OCT</tspan></text><text
+     x="3180"
+     y="9338.7041">V/OCT</tspan></text>
+<text
    id="voct_label"
    x="5215.4648"
    y="10485.518"
@@ -680,7 +734,8 @@
      sodipodi:role="line"
      id="tspan46"
      x="5215.4648"
-     y="10485.518">FM</tspan></text><text
+     y="10485.518">FM</tspan></text>
+<text
    id="span_cv_label"
    x="1800.5645"
    y="10644.632"
@@ -689,7 +744,8 @@
      sodipodi:role="line"
      id="tspan49"
      x="1800.5645"
-     y="10644.632">SYNC</tspan></text><text
+     y="10644.632">SYNC</tspan></text>
+<text
    id="lfo_label"
    x="4041.2812"
    y="10554.601"
@@ -698,7 +754,8 @@
      sodipodi:role="line"
      id="tspan4"
      x="4041.2812"
-     y="10554.601">LFO</tspan></text><text
+     y="10554.601">LFO</tspan></text>
+<text
    id="soft_label"
    x="2872.6011"
    y="10554.601"
@@ -707,7 +764,8 @@
      sodipodi:role="line"
      id="tspan5"
      x="2872.6011"
-     y="10554.601">SOFT</tspan></text><text
+     y="10554.601">SOFT</tspan></text>
+<text
    id="balance_cv_label"
    x="6429.4541"
    y="10495.108"
@@ -716,25 +774,8 @@
      sodipodi:role="line"
      id="tspan19"
      x="6429.4541"
-     y="10495.108">FOLD</tspan></text><text
-   id="signal_out"
-   x="5213.4487"
-   y="11947.179"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
-     sodipodi:role="line"
-     id="tspan33"
-     x="5213.4487"
-     y="11947.179">OUT</tspan></text><text
-   id="label_fold_out"
-   x="6429.4541"
-   y="11950.049"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
-     sodipodi:role="line"
-     id="tspan34"
-     x="6429.4541"
-     y="11950.049">FOLD</tspan></text><text
+     y="10495.108">FOLD</tspan></text>
+<text
    id="xm_lbl"
    x="4254.6919"
    y="7729.8999"
@@ -744,7 +785,31 @@
      id="tspan61"
      x="0"
      y="0">XM</tspan></text>
-      </g><rect
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+   id="signal_out"
+   x="5213.4487"
+   y="11947.179"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan33"
+     x="5213.4487"
+     y="11947.179">OUT</tspan></text>
+<text
+   id="label_fold_out"
+   x="6429.4541"
+   y="11950.049"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan34"
+     x="6429.4541"
+     y="11950.049">FOLD</tspan></text>
+    </g>
+</g><rect
    id="WYRM_WAVE_EDITOR"
    x="78.404099"
    y="952.07806"
@@ -756,15 +821,27 @@
    style="display:none">
   <rect
    id="BRANDING_WAVE_LEFT_RASTER"
-   x="665.610"
-   y="12338.190"
+   x="665.60999"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
   <rect
    id="BRANDING_WAVE_RIGHT_RASTER"
-   x="5139.674"
-   y="12338.190"
+   x="5139.6738"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
+  <rect
+   id="BRANDING_LEVIATHAN_LOGO_RASTER"
+   x="1920.0337"
+   y="11943.102"
+   width="3271.9331"
+   height="1224.054" />
+  <rect
+   id="WYRM_TITLE_RASTER"
+   x="2269.3296"
+   y="74.900002"
+   width="2573.3408"
+   height="804.66699" />
 </g>
 </svg>

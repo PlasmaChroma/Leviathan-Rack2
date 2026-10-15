@@ -1,19 +1,30 @@
 #include "../src/plugin.hpp"
 
 #include <cmath>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <iostream>
+#include <limits>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 // Provide the plugin global expected by module source.
 Plugin* pluginInstance = nullptr;
 
+std::string leviathanPluginUserRootPath() {
+	return system::join(system::getTempDirectory(), "Leviathan");
+}
+
 // Bifurx includes the shared DragonKing debug setting from plugin.cpp in the
 // plugin build. The runtime spec includes Bifurx.cpp directly, so keep this
 // test self-contained instead of linking the full plugin translation unit.
+bool testDragonKingDebugEnabled = false;
 bool isDragonKingDebugEnabled() {
-	return false;
+	return testDragonKingDebugEnabled;
 }
 
 bool isModuleTeardownLoggingEnabled() {
@@ -34,7 +45,10 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
-#include "../src/Bifurx.cpp"
+#include "../src/bifurx/Bifurx.hpp"
+#include "../src/bifurx/BifurxWorker.hpp"
+#include "../src/bifurx/Bifurx.cpp"
+#include "../src/bifurx/BifurxRenderPrep.hpp"
 
 using namespace bifurx;
 
@@ -48,11 +62,604 @@ struct TestResult {
   std::string detail;
 };
 
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+struct WorkerGate {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool entered = false;
+  bool open = false;
+  uint64_t enteredId = 0;
+  uint64_t enteredSeq = 0;
+
+  void block(uint64_t id, uint64_t seq) {
+    std::unique_lock<std::mutex> lock(mutex);
+    enteredId = id;
+    enteredSeq = seq;
+    entered = true;
+    cv.notify_all();
+    cv.wait(lock, [&]() { return open; });
+  }
+  bool waitEntered() {
+    std::unique_lock<std::mutex> lock(mutex);
+    return cv.wait_for(lock, std::chrono::seconds(5), [&]() { return entered; });
+  }
+  void release() {
+    std::lock_guard<std::mutex> lock(mutex);
+    open = true;
+    cv.notify_all();
+  }
+  ~WorkerGate() { release(); }
+};
+
+BifurxUiRenderRequest workerRequest(uint64_t id, uint64_t requestSeq, float sampleRate = 48000.f) {
+  BifurxUiRenderRequest request;
+  request.displayId = id;
+  request.requestSeq = requestSeq;
+  request.previewSeq = uint32_t(requestSeq);
+  request.previewState.sampleRate = sampleRate;
+  request.previewState.mode = 0;
+  request.previewState.freqA = 200.f;
+  request.previewState.freqB = 1200.f;
+  return request;
+}
+
+std::shared_ptr<const BifurxUiRenderSnapshot> waitWorkerSnapshot(
+  BifurxUiRenderService& service, uint64_t id, uint64_t seq) {
+  for (int attempt = 0; attempt < 5000; ++attempt) {
+    auto snapshot = service.getLatestSnapshot(id);
+    if (snapshot && snapshot->requestSeq == seq) return snapshot;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return nullptr;
+}
+#endif
+
+bool adoptPublishedRenderTargets(BifurxSpectrumBase& display) {
+  display.syncBase();
+  if (!display.shouldUseVisualWorker()) return display.state.hasCurve;
+  for (int attempt = 0; attempt < 2000; ++attempt) {
+    if (display.adoptWorkerCurveSnapshot()) return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return false;
+}
+
+TestResult testIirBoundaryIntegration() {
+  bool pass = true;
+  BifurxIirOversampling2x filter;
+  float peak = 0.f; int peakIndex = -1;
+  std::array<float, 256> impulse{};
+  for (int n = 0; n < 256; ++n) {
+    impulse[n] = filter.processOutput(filter.processInput(n == 0 ? 1.f : 0.f, .5f), .5f, false);
+    if (std::fabs(impulse[n]) > peak) { peak = std::fabs(impulse[n]); peakIndex = n; }
+  }
+  pass &= peakIndex == 4;
+  for (float hz : {1000.f, 10000.f, 18000.f, 20000.f}) {
+    std::complex<double> response{};
+    for (int n = 0; n < 256; ++n)
+      response += double(impulse[n]) * std::exp(std::complex<double>(0., -6.283185307179586 * hz * n / 48000.));
+    pass &= std::fabs(20. * std::log10(std::abs(response))) < .01;
+    pass &= std::abs(response - std::complex<double>(linearBoundaryResponseForTest(3, 6.283185307179586 * hz / 48000.))) < .001;
+  }
+  filter.reset();
+  for (int n = 0; n < 256; ++n)
+    pass &= impulse[n] == filter.processOutput(filter.processInput(n == 0 ? 1.f : 0.f, .5f), .5f, false);
+  for (int n = 0; n < 20000; ++n) {
+    const float out = filter.processOutput(filter.processInput(20.f * std::sin(n * .731f), .8f), .8f, true);
+    pass &= std::isfinite(out) && std::fabs(out) <= 5.f;
+  }
+  Bifurx module, loaded;
+  for (int choice : {1, 2, 3}) {
+    module.boundaryResampling.store(choice);
+    json_t* j = module.dataToJson(); loaded.dataFromJson(j); json_decref(j);
+    pass &= loaded.boundaryResampling.load() == choice;
+  }
+  json_t* old = json_object();
+  json_object_set_new(old, "legacyBoundaryResampling", json_true());
+  loaded.dataFromJson(old); pass &= loaded.boundaryResampling.load() == 1;
+  json_object_set_new(old, "legacyBoundaryResampling", json_false());
+  loaded.dataFromJson(old); pass &= loaded.boundaryResampling.load() == 2;
+  json_object_set_new(old, "boundaryResampling", json_integer(999));
+  loaded.dataFromJson(old); pass &= loaded.boundaryResampling.load() == 2;
+  json_decref(old);
+  return {"IIR4 response, reset, limiter bounds and patch migration", pass, "impulse peak=" + std::to_string(peakIndex)};
+}
+
+TestResult testPremiumBoundaryPassband() {
+  bool pass = true; float worstDb = 0.f; std::string detail;
+  for (float rate : {44100.f, 48000.f, 96000.f, 192000.f}) {
+    const float top = rate == 44100.f ? 16000.f : 18000.f;
+    std::vector<float> frequencies{100.f, 1000.f, 10000.f, top};
+    for (int i=1; i<32; ++i) frequencies.push_back(100.f * std::pow(top/100.f, float(i)/32.f));
+    for (float hz : frequencies) {
+      Bifurx m;
+      m.params[Bifurx::MODE_PARAM].setValue(9.f);
+      m.params[Bifurx::FREQ_PARAM].setValue(0.f);
+      m.params[Bifurx::SPAN_PARAM].setValue(0.f);
+      m.params[Bifurx::RESO_PARAM].setValue(0.f);
+      m.params[Bifurx::BALANCE_PARAM].setValue(0.f);
+      m.params[Bifurx::LEVEL_PARAM].setValue(0.5f);
+      m.softLimitingEnabled.store(false);
+      Module::ProcessArgs args{}; args.sampleRate = rate; args.sampleTime = 1.f/rate;
+      double inSq = 0., outSq = 0.;
+      for (int n = 0; n < 32768; ++n) {
+        const float in = 0.01f * std::sin(6.28318530717958647692 * hz * n / rate);
+        m.inputs[Bifurx::IN_INPUT].setVoltage(in); m.process(args);
+        if (n >= 16384) { inSq += in*in; float out = m.outputs[Bifurx::OUT_OUTPUT].getVoltage(); outSq += out*out; }
+      }
+      const float db = 10.f * std::log10(outSq/inSq);
+      worstDb = std::max(worstDb, std::fabs(db));
+      pass &= std::fabs(db) < 0.25f;
+      if (hz == top) detail += std::to_string(int(rate))+":"+std::to_string(db)+"dB ";
+    }
+  }
+  BifurxNonlinearOversampling2x boundary;
+  float peak = 0.f; int peakIndex = -1;
+  for (int i = 0; i < 160; ++i) {
+    const float v = boundary.processOutput(boundary.processInput(i == 0 ? 1.f : 0.f, 0.5f), 0.5f, false);
+    if (std::fabs(v) > peak) { peak = std::fabs(v); peakIndex = i; }
+  }
+  pass &= peakIndex == 62;
+  return {"Premium full-module passband and boundary delay", pass, detail+"worst="+std::to_string(worstDb)+"dB impulse="+std::to_string(peakIndex)+" samples"};
+}
+
+TestResult testSpectrumLevelTrackingAndLowBins() {
+  bool pass = true; float maxError = 0.f;
+  for (float rate : {44100.f, 48000.f, 96000.f, 192000.f}) {
+    // Use resolved tones: the restored interpolated display can miss sparse high-frequency peaks.
+    for (float bin : {8.f, 8.5f, 16.f, 16.35f}) {
+      float referencePeak = 0.f;
+      // Stay above the display floor even between sparse high-frequency plot points.
+      for (float db : {0.f, -6.f, -20.f}) {
+        BifurxUiRenderRequest request; request.previewState.sampleRate = rate; request.previewState.mode = 10;
+        auto payload = std::make_shared<BifurxUiRenderPayload>();
+        const float amp = 5.f * std::pow(10.f, db/20.f);
+        for (int i = 0; i < kFftSize; ++i) payload->analysisFrame.output[i] = amp * std::sin(6.28318530717958647692 * bin * i/kFftSize);
+        request.payload = payload;
+        BifurxUiRenderSnapshot snapshot; prepareCurveSnapshot(request, &snapshot);
+        const float peak = *std::max_element(snapshot.overlayTargetOutputDbfs, snapshot.overlayTargetOutputDbfs+kCurvePointCount);
+        // The restored smoothed display tracks level changes; its peak is not a calibrated tone meter.
+        if (db == 0.f) referencePeak = peak;
+        const float error = std::fabs((peak-referencePeak)-db);
+        maxError = std::max(maxError, error); pass &= std::isfinite(peak) && error < 0.15f;
+      }
+    }
+  }
+  // Negative sampling coordinates clamp to DC; no extrapolation past array ends.
+  float positions[kCurvePointCount], spectrum[2*kFftSize]{}, response[kCurvePointCount]{}, output[kCurvePointCount]{};
+  spectrum[4] = 1000.f;
+  std::fill_n(positions, kCurvePointCount, -100.f); float top = 0.f;
+  prepareOverlayTargetsFromSpectra(48000.f, positions, spectrum, spectrum, true, false, false, response, output, &top);
+  const float negative = output[0]; std::fill_n(positions, kCurvePointCount, 0.f);
+  prepareOverlayTargetsFromSpectra(48000.f, positions, spectrum, spectrum, true, false, false, response, output, &top);
+  pass &= output[0] == negative;
+  return {"Spectrum level tracking and bounded low-bin sampling", pass, "max level tracking error="+std::to_string(maxError)+" dB"};
+}
+
+TestResult testPremiumMonoAndInvalidCvContracts() {
+  bool pass = true;
+  Module::ProcessArgs args{}; args.sampleRate = 48000.f; args.sampleTime = 1.f / args.sampleRate;
+  for (int channels : {1, 2, 4, 16}) {
+    Bifurx m;
+    m.inputs[Bifurx::IN_INPUT].channels = channels;
+    m.outputs[Bifurx::OUT_OUTPUT].channels = channels;
+    for (int c = 0; c < channels; ++c) {
+      m.inputs[Bifurx::IN_INPUT].setVoltage(float(c + 1), c);
+      m.outputs[Bifurx::OUT_OUTPUT].setVoltage(9.f, c);
+    }
+    m.processBypass(args);
+    pass &= m.outputs[Bifurx::OUT_OUTPUT].getChannels() == 1;
+    pass &= m.outputs[Bifurx::OUT_OUTPUT].getVoltage() == 1.f;
+    for (int mode : {0, 10, 0}) {
+      m.params[Bifurx::MODE_PARAM].setValue(float(mode));
+      for (int i = 0; i < 512; ++i) m.process(args);
+      pass &= m.outputs[Bifurx::OUT_OUTPUT].getChannels() == 1;
+      for (int c = 1; c < 16; ++c) pass &= m.outputs[Bifurx::OUT_OUTPUT].getVoltage(c) == 0.f;
+    }
+    m.outputs[Bifurx::OUT_OUTPUT].channels = 0;
+    m.process(args);
+    m.outputs[Bifurx::OUT_OUTPUT].channels = channels;
+    m.process(args);
+    pass &= m.outputs[Bifurx::OUT_OUTPUT].getChannels() == 1;
+  }
+  for (int input : {Bifurx::VOCT_INPUT, Bifurx::FM_INPUT, Bifurx::RESO_CV_INPUT, Bifurx::BALANCE_CV_INPUT, Bifurx::SPAN_CV_INPUT}) {
+    for (float resonance : {0.f, 1.f}) for (float invalid : {std::numeric_limits<float>::quiet_NaN(), INFINITY, -INFINITY}) {
+      Bifurx reference, subject;
+      for (Bifurx* m : {&reference, &subject}) {
+        m->inputs[input].channels = 1;
+        m->params[Bifurx::FM_AMT_PARAM].setValue(1.f);
+        m->params[Bifurx::SPAN_CV_ATTEN_PARAM].setValue(1.f);
+        m->params[Bifurx::TITO_PARAM].setValue(1.f);
+        m->params[Bifurx::RESO_PARAM].setValue(resonance);
+        m->highResonanceSelfOscEnabled.store(true);
+      }
+      subject.inputs[input].setVoltage(invalid);
+      for (int i = 0; i < 512; ++i) { reference.process(args); subject.process(args); }
+      pass &= reference.cachedFreqA0 == subject.cachedFreqA0 && reference.cachedResoNorm == subject.cachedResoNorm
+        && reference.cachedBalanceNorm == subject.cachedBalanceNorm && reference.cachedSpanNorm == subject.cachedSpanNorm;
+      reference.inputs[input].setVoltage(1.f); subject.inputs[input].setVoltage(1.f);
+      for (int i = 0; i < 512; ++i) { reference.process(args); subject.process(args); }
+      pass &= reference.cachedFreqA0 == subject.cachedFreqA0;
+      pass &= std::isfinite(subject.outputs[Bifurx::OUT_OUTPUT].getVoltage())
+        && reference.outputs[Bifurx::OUT_OUTPUT].getVoltage() == subject.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    }
+  }
+  return {"Premium mono paths and neutral invalid CV", pass, "bypass/processing/display/reconnect, all CV NaN and infinities"};
+}
+
+TestResult testPremiumQualityConcurrentAndResetAnalysis() {
+  Bifurx m; Module::ProcessArgs args{}; args.sampleRate=48000.f;args.sampleTime=1.f/48000.f;
+  std::thread ui([&] { for(int i=0;i<100000;++i) m.modulationQualityMode.store(i%3,std::memory_order_relaxed); });
+  bool pass=true;
+  for(int i=0;i<100000;++i) {m.process(args);pass &= std::isfinite(m.outputs[Bifurx::OUT_OUTPUT].getVoltage());}
+  ui.join();
+  m.subscribeAnalysisVisual();m.visualWorkerMode.store(Bifurx::VISUAL_WORKER_OFF);
+  for(int i=0;i<4096;++i)m.process(args);
+  BifurxSpectrumBase display;display.module=&m;display.runRenderTick(1.f/60.f);pass &= display.state.hasOverlay;
+  Module::SampleRateChangeEvent e{};e.sampleRate=96000.f;m.onSampleRateChange(e);
+  args.sampleRate=96000.f;args.sampleTime=1.f/96000.f;m.process(args);
+  display.runRenderTick(1.f/60.f);pass &= !display.state.hasOverlay;
+  for(int i=0;i<4096;++i)m.process(args);
+  display.runRenderTick(1.f/60.f);pass &= display.state.hasOverlay;
+  return {"Premium concurrent quality requests and sample-rate analysis invalidation",pass,"100000 atomic edits; stale FFT cleared until fresh-rate capture"};
+}
+
+TestResult testPremiumCounterAndQualityOwnership() {
+  bool pass = true;
+  for (float rate : {44100.f, 48000.f, 96000.f, 192000.f}) {
+    Module::ProcessArgs args{}; args.sampleRate = rate; args.sampleTime = 1.f / rate;
+    Bifurx m; m.subscribeAnalysisVisual();
+    for (int i = 0; i < 512; ++i) m.process(args);
+    m.previewTargetStillSamples = std::numeric_limits<int>::max() - 64;
+    for (int i = 0; i < 512; ++i) m.process(args);
+    pass &= m.previewTargetStillSamples == kPreviewInstantSettleHoldSamples;
+    m.params[Bifurx::FREQ_PARAM].setValue(0.9f);
+    for (int i = 0; i < 128; ++i) m.process(args);
+    pass &= m.previewTargetStillSamples >= 0 && m.previewTargetStillSamples <= kPreviewInstantSettleHoldSamples;
+    pass &= m.llTelemetryPublishSeq.load() == 0;
+    for (int quality : {2, 0, 1, 2}) {
+      m.modulationQualityMode.store(quality);
+      m.process(args);
+      pass &= m.audioQualityMode == quality && m.controlFastCacheValid;
+    }
+  }
+  return {"Premium stationary counter and audio-owned quality", pass, "four rates; debug-off telemetry stays asleep"};
+}
+
+TestResult testPremiumLowFrequencyResponse() {
+  bool pass = true; double maxError = 0.;
+  for (float rate : {44100.f, 48000.f, 96000.f, 192000.f}) for (float hz : {4.f, 10.f, 20.f, 100.f, 1000.f}) {
+    for (float q : {0.5f, 1.f, 8.f}) {
+      auto c = makeSvfCoeffs(rate, hz, 1.f / q);
+      // Independent analog-domain TPT evaluation at the production warped frequency.
+      const double u = std::tan(3.14159265358979323846 * hz / rate) / c.g;
+      const std::complex<double> den(1. - u * u, c.k * u);
+      const std::complex<double> expected[] = {1. / den, std::complex<double>(0., u) / den, -u*u / den, (1.-u*u) / den};
+      for (int type = 0; type < 4; ++type) {
+        auto actual = makeDisplayBiquad(rate, hz, q, type).response(6.28318530717958647692 * hz / rate);
+        const double error = std::abs(actual - expected[type]);
+        maxError = std::max(maxError, error);
+        pass &= error < 0.0005;
+      }
+    }
+  }
+  return {"Premium low-frequency TPT display precision", pass, "max complex error=" + std::to_string(maxError)};
+}
+
+TestResult testPremiumFrameRateIndependentAnimation() {
+  float results[3]{}; int index = 0;
+  for (int fps : {30, 60, 120}) {
+    BifurxSpectrumBase display;
+    display.state.hasOverlay = true; display.state.hasOverlayTarget = true;
+    for (int i = 0; i < kCurvePointCount; ++i) {
+      display.state.overlayOutputDbfs[i] = -60.f; display.state.overlayTargetOutputDbfs[i] = 0.f;
+    }
+    for (int frame = 0; frame < fps / 5; ++frame) display.updateAnimation(1.f / fps);
+    results[index++] = display.state.overlayOutputDbfs[0];
+  }
+  return {"Premium overlay smoothing uses elapsed seconds", std::fabs(results[0]-results[1]) < 0.001f && std::fabs(results[1]-results[2]) < 0.001f, "30/60/120 FPS at 200 ms"};
+}
+
+TestResult testNotchCurveReachesDisplayFloor() {
+  bool pass = true;
+  for (int mode : {0, 2, 3, 7, 9}) {
+    for (float rate : {44100.f, 48000.f, 96000.f}) {
+      BifurxSpectrumBase display;
+      display.state.hasPreview = true; display.state.previewState.mode = mode;
+      display.state.previewState.sampleRate = rate;
+      display.state.previewState.freqA = 311.f; display.state.previewState.freqB = 2200.f;
+      display.state.lastPreviewSeq = display.state.curvePreviewSeq = 1;
+      display.state.displayedPreviewState = display.state.previewState;
+      const auto model = makePreviewModel(display.state.previewState);
+      for (int i = 0; i < kCurvePointCount; ++i)
+        display.state.curveDb[i] = clamp(previewModelResponseDb(model, logFrequencyAt(float(i) / (kCurvePointCount - 1), 10.f, 20000.f)), kResponseMinDb, kResponseMaxDb);
+      std::vector<BifurxCurvePoint> points;
+      display.calculateRefinedCurvePoints(&points, 200.f, 100.f);
+      int nulls = 0;
+      for (const auto& p : points) {
+        if (p.priority == 3) { ++nulls; pass &= std::fabs(p.y - 92.72f) < .001f; }
+        else pass &= std::fabs(p.y - display.curveYAtX01(p.x01, 92.72f, 1.4f)) < .001f;
+      }
+      pass &= nulls == (mode == 3 ? 2 : (mode == 2 || mode == 7 ? 1 : 0));
+      // Cached geometry must retain the same floor extensions.
+      std::vector<BifurxCurvePoint> cached;
+      display.calculateRefinedCurvePoints(&cached, 200.f, 100.f);
+      pass &= cached.size() == points.size();
+      for (size_t i = 0; i < points.size(); ++i) pass &= cached[i].y == points[i].y;
+    }
+  }
+  return {"Notch curve nulls reach the floor without moving surrounding response", pass, "N+L, N+N, H+N and non-notch controls at three rates"};
+}
+
+TestResult testRendererInitializesOnceAndSlewsSubsequentCurves() {
+  bool pass = true;
+  for (int mode : {Bifurx::VISUAL_WORKER_OFF, Bifurx::VISUAL_WORKER_ON}) {
+    Bifurx module;
+    module.visualWorkerMode.store(mode);
+    BifurxSpectrumBase display;
+    display.module = &module;
+    pass &= !display.state.hasCurve;
+    BifurxPreviewState preview;
+    preview.sampleRate = 48000.f;
+    preview.freqA = preview.freqB = 100.f;
+    module.publishPreviewState(preview);
+    if (!adoptPublishedRenderTargets(display)) return {"Curve initialization and slew", false, "initial adoption timed out"};
+    pass &= display.state.hasCurve;
+    for (int i = 0; i < kCurvePointCount; ++i) pass &= display.state.curveDb[i] == display.state.curveTargetDb[i];
+    display.runRenderTick(1.f / 60.f);
+    pass &= !display.state.hasCurveTarget;
+    float before[kCurvePointCount];
+    std::copy(display.state.curveDb, display.state.curveDb + kCurvePointCount, before);
+    preview.freqA = preview.freqB = 5000.f;
+    module.publishPreviewState(preview);
+    if (!adoptPublishedRenderTargets(display)) return {"Curve initialization and slew", false, "second adoption timed out"};
+    for (int i = 0; i < kCurvePointCount; ++i) pass &= display.state.curveDb[i] == before[i];
+    auto tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.animationActive && tick.contentChanged;
+    for (int i = 0; i < kCurvePointCount; ++i)
+      pass &= std::fabs(display.state.curveDb[i] - before[i]) <= kCurveVisualSlewDbPerSec / 60.f + 1e-4f;
+    BifurxMarkerLayout layout;
+    for (int frame = 0; frame < 100 && tick.animationActive; ++frame) {
+      display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+      tick = display.runRenderTick(1.f / 60.f);
+    }
+    pass &= !tick.animationActive && tick.contentChanged;
+    display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+    pass &= display.cachedMarkerLayoutCurveRevision == display.state.curveRevision;
+    pass &= !display.runRenderTick(1.f / 60.f).contentChanged;
+  }
+  return {"Both render paths initialize once, slew later curves, and present the final frame", pass, ""};
+}
+
+TestResult testFinalOverlayFrameIsDirtyThenIdles() {
+  BifurxSpectrumBase display;
+  display.state.hasOverlay = true;
+  display.state.hasOverlayTarget = true;
+  for (int i = 0; i < kCurvePointCount; ++i) {
+    display.state.overlayOutputDbfs[i] = -30.024f;
+    display.state.overlayTargetOutputDbfs[i] = -30.f;
+  }
+  const auto finalTick = display.runRenderTick(1.f / 60.f);
+  const bool settled = !finalTick.animationActive && finalTick.contentChanged
+    && display.state.overlayOutputDbfs[0] == -30.f;
+  return {"FFT settling frame redraws once and then idles", settled && !display.runRenderTick(1.f / 60.f).contentChanged, ""};
+}
+
+TestResult testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches() {
+  bool pass = true;
+  for (int mode : {Bifurx::VISUAL_WORKER_OFF, Bifurx::VISUAL_WORKER_ON}) {
+    Bifurx module;
+    module.visualWorkerMode.store(mode);
+    module.fftScaleDynamic.store(false);
+    module.subscribeAnalysisVisual();
+    BifurxPreviewState preview;
+    preview.sampleRate = 48000.f;
+    module.publishPreviewState(preview);
+    BifurxSpectrumBase display;
+    display.module = &module;
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "initial adoption timed out"};
+    display.runRenderTick(1.f / 60.f);
+    BifurxMarkerLayout layout;
+    std::vector<BifurxCurvePoint> curve;
+    display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+    display.calculateRefinedCurvePoints(&curve, 240.f, 100.f);
+    const auto curveRevision = display.state.curveRevision;
+    for (int i = 0; i < 2 * kFftSize; ++i) {
+      const float sample = .05f * std::sin(2.f * kRuntimePi * 440.f * float(i) / 48000.f);
+      module.pushAnalysisSample(sample, sample);
+    }
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "FFT adoption timed out"};
+    pass &= display.cachedMarkerLayoutValid && display.refinedCurveTemplateValid
+      && display.state.curveRevision == curveRevision;
+    display.runRenderTick(1.f / 60.f);
+    pass &= display.state.hasOverlay && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
+      && display.state.dynamicTopTargetDbfs < kDisplayTopDbfsCeiling - 1.f;
+    const auto requestSeq = display.renderClient.requestSeq();
+    const auto analysisSeq = display.state.lastAnalysisSeq;
+    // No further audio samples or preview publications: both toggles must work.
+    module.fftScaleDynamic.store(true);
+    auto tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.contentChanged && display.state.displayTopTargetDbfs == display.state.dynamicTopTargetDbfs
+      && display.state.displayTopDbfs < kDisplayTopDbfsCeiling;
+    module.fftScaleDynamic.store(false);
+    tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.contentChanged && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
+      && display.state.displayTopTargetDbfs == kDisplayTopDbfsCeiling
+      && display.renderClient.requestSeq() == requestSeq && display.state.lastAnalysisSeq == analysisSeq;
+    float previousOutput[kCurvePointCount];
+    std::copy(display.state.overlayOutputDbfs, display.state.overlayOutputDbfs + kCurvePointCount, previousOutput);
+    for (int i = 0; i < 2 * kFftSize; ++i) {
+      const float sample = .5f * std::sin(2.f * kRuntimePi * 440.f * float(i) / 48000.f);
+      module.pushAnalysisSample(sample, sample);
+    }
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "second FFT adoption timed out"};
+    float targetMotion = 0.f;
+    for (int i = 0; i < kCurvePointCount; ++i) {
+      pass &= display.state.overlayOutputDbfs[i] == previousOutput[i];
+      targetMotion = std::max(targetMotion, std::fabs(display.state.overlayTargetOutputDbfs[i] - previousOutput[i]));
+    }
+    pass &= targetMotion > 1.f && display.runRenderTick(1.f / 60.f).animationActive;
+    module.unsubscribeAnalysisVisual();
+  }
+  return {"Paused scale toggles reuse analysis; FFT-only updates preserve curve caches and interpolate", pass, ""};
+}
+
+TestResult testDisablingWorkerCatchesUpPendingPreviewAndAnalysis() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  module.subscribeAnalysisVisual();
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  for (int i = 0; i < 2 * kFftSize; ++i) module.pushAnalysisSample(.1f, .1f);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  // Consume publications and submit, but deliberately do not adopt the result.
+  display.syncBase();
+  const bool pending = display.state.hasPreview && !display.state.hasCurve && !display.state.hasOverlay;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_OFF);
+  const auto tick = display.runRenderTick(1.f / 60.f);
+  const bool caughtUp = display.state.hasCurve && display.state.hasOverlay
+    && display.state.curvePreviewSeq == display.state.lastPreviewSeq
+    && display.state.overlayAnalysisSeq == display.state.lastAnalysisSeq;
+  module.unsubscribeAnalysisVisual();
+  return {"Disabling worker catches up an unadopted preview and FFT without new audio", pending && caughtUp && tick.contentChanged, ""};
+}
+
+TestResult testInactivePresentationReleasesWorkerWithoutPreparingTargets() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  display.presentationActive = false;
+  const auto hiddenTick = display.runRenderTick(1.f / 60.f);
+  const bool hiddenIdle = !hiddenTick.contentChanged && !display.state.hasPreview
+    && display.renderClient.displayId() == 0;
+  display.presentationActive = true;
+  display.syncBase();
+  const bool activeRegistered = display.state.hasPreview && display.renderClient.displayId() != 0;
+  display.presentationActive = false;
+  const auto releasedTick = display.runRenderTick(1.f / 60.f);
+  const bool released = !releasedTick.contentChanged && display.renderClient.displayId() == 0
+    && display.state.hasPreview;
+  return {"Inactive presentation releases the worker and skips target preparation",
+    hiddenIdle && activeRegistered && released, ""};
+}
+
+TestResult testSpanShapeLutTracksReferenceCurve() {
+  float maxError = 0.f;
+  bool monotonic = true;
+  float previous = shapedSpan(0.f);
+  constexpr int steps = 20000;
+  for (int i = 1; i <= steps; ++i) {
+    const float x = float(i) / float(steps);
+    const float actual = shapedSpan(x);
+    const float reference = std::pow(x, 1.45f);
+    maxError = std::max(maxError, std::fabs(actual - reference));
+    monotonic = monotonic && actual >= previous;
+    previous = actual;
+  }
+  const bool endpoints = shapedSpan(0.f) == 0.f && shapedSpan(1.f) == 1.f;
+  return {
+    "SPAN lookup table preserves the authored shaping curve",
+    endpoints && monotonic && maxError < 7e-6f,
+    "maxError=" + std::to_string(maxError)
+  };
+}
+
 float freqNormForCenterHz(float centerHz) {
   constexpr float kFreqMinHz = 4.f;
   constexpr float kFreqLog2Span = 12.7731392f;  // log2(28000 / 4)
   const float safeCenter = std::max(centerHz, kFreqMinHz);
   return clamp(std::log2(safeCenter / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
+}
+
+TestResult testResonanceCurveUsesFullControlTravel() {
+  struct ResonancePoint {
+    float knob;
+    float expectedQ;
+  };
+  constexpr ResonancePoint points[] = {
+    {0.f, 0.5f},
+    {0.25f, 0.9f},
+    {0.5f, 1.75f},
+    {0.75f, 5.f},
+    {1.f, 33.3333f},
+  };
+
+  bool targetsPass = true;
+  std::string measured;
+  for (const ResonancePoint& point : points) {
+    const float q = 1.f / resoToDamping(point.knob);
+    const float relativeError = std::fabs(q - point.expectedQ) / point.expectedQ;
+    targetsPass = targetsPass && relativeError < 0.025f;
+    measured += " [r=" + std::to_string(point.knob) + " Q=" + std::to_string(q) + "]";
+  }
+
+  bool monotonic = true;
+  float previousQ = 1.f / resoToDamping(0.f);
+  for (int i = 1; i <= 100; ++i) {
+    const float q = 1.f / resoToDamping(float(i) / 100.f);
+    monotonic = monotonic && q > previousQ;
+    previousQ = q;
+  }
+
+  const bool belgradOnsetPreserved = std::fabs(kSelfOscResoStart - 0.80f) < 1e-6f;
+  return {
+    "Resonance curve uses full travel while preserving 0.80 self-osc onset",
+    targetsPass && monotonic && belgradOnsetPreserved,
+    "targets=" + std::to_string(int(targetsPass)) +
+      " monotonic=" + std::to_string(int(monotonic)) +
+      " onset=" + std::to_string(kSelfOscResoStart) + measured
+  };
+}
+
+TestResult testFrequencyQuantityRoundTripsAccurately() {
+  constexpr float frequencies[] = {4.f, 10.f, 440.f, 4000.f, 28000.f};
+  float worstRelativeError = 0.f;
+  bool pass = true;
+  for (float hz : frequencies) {
+    const float param = bifurxParamFromFrequencyHz(hz);
+    const float roundTripHz = bifurxFrequencyHzFromParam(param);
+    const float relativeError = std::fabs(roundTripHz - hz) / std::max(hz, 1.f);
+    worstRelativeError = std::max(worstRelativeError, relativeError);
+    pass = pass && relativeError < 2e-6f;
+  }
+  pass = pass
+    && bifurxParamFromFrequencyHz(4.f) == 0.f
+    && bifurxParamFromFrequencyHz(28000.f) == 1.f;
+  return {
+    "Frequency text-entry mapping round-trips accurately at endpoints and interior values",
+    pass,
+    "worstRelativeError=" + std::to_string(worstRelativeError)
+  };
+}
+
+TestResult testPreviewInvalidatesForModelDependencies() {
+  BifurxPreviewState base;
+  base.freqA = 400.f;
+  base.freqB = 1600.f;
+  base.qA = 2.f;
+  base.qB = 3.f;
+  base.spanNorm = 0.25f;
+  base.resoNorm = 0.4f;
+
+  BifurxPreviewState spanChanged = base;
+  spanChanged.spanNorm = 0.75f;
+  BifurxPreviewState resoChanged = base;
+  resoChanged.resoNorm = 0.6f;
+  const bool pass = previewStatesDiffer(base, spanChanged)
+    && previewStatesDiffer(base, resoChanged)
+    && !previewStatesDiffer(base, base);
+  return {
+    "Preview invalidation includes SPAN and resonance model dependencies",
+    pass,
+    "spanChanged=" + std::to_string(int(previewStatesDiffer(base, spanChanged)))
+      + " resoChanged=" + std::to_string(int(previewStatesDiffer(base, resoChanged)))
+  };
 }
 
 void configureBaseParams(Bifurx& module, int mode, float freqNorm, float spanNorm, float reso, float balance) {
@@ -124,6 +731,9 @@ float measureRuntimeGainDb(
 struct TitoOutputCapture {
   bool finite = true;
   float rms = 0.f;
+  float mean = 0.f;
+  float minimum = INFINITY;
+  float maximum = -INFINITY;
   std::vector<float> samples;
 };
 
@@ -161,12 +771,13 @@ TitoOutputCapture captureTitoOutput(
   args.sampleRate = 48000.f;
   args.sampleTime = 1.f / args.sampleRate;
 
-  const int settleSamples = 4096;
-  const int measureSamples = 4096;
+  const int settleSamples = 48000;
+  const int measureSamples = 48000;
   TitoOutputCapture capture;
   capture.samples.reserve(measureSamples);
 
   float outSq = 0.f;
+  float outSum = 0.f;
   for (int n = 0; n < settleSamples + measureSamples; ++n) {
     const float t = float(n) / args.sampleRate;
     module.inputs[Bifurx::IN_INPUT].setVoltage(titoStimulusSample(t, n));
@@ -176,11 +787,50 @@ TitoOutputCapture captureTitoOutput(
     if (n >= settleSamples) {
       capture.samples.push_back(out);
       outSq += out * out;
+      outSum += out;
+      capture.minimum = std::min(capture.minimum, out);
+      capture.maximum = std::max(capture.maximum, out);
     }
   }
 
   capture.rms = std::sqrt(std::max(outSq / float(std::max(1, measureSamples)), 0.f));
-  capture.finite = capture.finite && std::isfinite(capture.rms);
+  capture.mean = outSum / float(std::max(1, measureSamples));
+  capture.finite = capture.finite && std::isfinite(capture.rms) && std::isfinite(capture.mean);
+  return capture;
+}
+
+TitoOutputCapture captureTitoFullScaleSine(float tito, float reso, float sourceHz) {
+  Bifurx module;
+  module.onReset();
+  configureBaseParams(module, 5, freqNormForCenterHz(900.f), 0.58f, reso, 0.f);
+  module.params[Bifurx::LEVEL_PARAM].setValue(0.5f);
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
+  clearCvInputs(module);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  constexpr int settleSamples = 48000;
+  constexpr int measureSamples = 48000;
+  TitoOutputCapture capture;
+  float outSq = 0.f;
+  float outSum = 0.f;
+  for (int n = 0; n < settleSamples + measureSamples; ++n) {
+    const float in = 5.f * std::sin(2.f * kRuntimePi * sourceHz * float(n) * args.sampleTime);
+    module.inputs[Bifurx::IN_INPUT].setVoltage(in);
+    module.process(args);
+    const float out = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    capture.finite = capture.finite && std::isfinite(out);
+    if (n >= settleSamples) {
+      outSq += out * out;
+      outSum += out;
+      capture.minimum = std::min(capture.minimum, out);
+      capture.maximum = std::max(capture.maximum, out);
+    }
+  }
+  capture.rms = std::sqrt(std::max(outSq / float(measureSamples), 0.f));
+  capture.mean = outSum / float(measureSamples);
+  capture.finite = capture.finite && std::isfinite(capture.rms) && std::isfinite(capture.mean);
   return capture;
 }
 
@@ -209,14 +859,15 @@ ZeroInputCapture captureZeroInputOutput(
   float balance,
   float level,
   int settleSamples,
-  int measureSamples
+  int measureSamples,
+  float tito = 0.f
 ) {
   Bifurx module;
   module.onReset();
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(level);
-  module.params[Bifurx::TITO_PARAM].setValue(0.f);
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
   module.highResonanceSelfOscEnabled = true;
   clearCvInputs(module);
 
@@ -247,7 +898,7 @@ bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
   if (!outState) {
     return false;
   }
-  Bifurx module;
+  Bifurx module; module.subscribeAnalysisVisual();
   module.onReset();
   module.resetCircuitStates();
 
@@ -269,9 +920,9 @@ bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
     return false;
   }
 
-  const int idx = module.previewPublishedIndex.load(std::memory_order_acquire);
-  *outState = module.previewStates[idx];
-  return true;
+  double publishTimeSec = 0.0;
+  uint32_t copiedSeq = seqBefore;
+  return module.readPreviewState(seqBefore, outState, &publishTimeSec, &copiedSeq);
 }
 
 bool capturePreviewState(
@@ -285,7 +936,7 @@ bool capturePreviewState(
   if (!outState) {
     return false;
   }
-  Bifurx module;
+  Bifurx module; module.subscribeAnalysisVisual();
   module.onReset();
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
@@ -306,9 +957,1141 @@ bool capturePreviewState(
     return false;
   }
 
-  const int idx = module.previewPublishedIndex.load(std::memory_order_acquire);
-  *outState = module.previewStates[idx];
-  return true;
+  double publishTimeSec = 0.0;
+  uint32_t copiedSeq = seqBefore;
+  return module.readPreviewState(seqBefore, outState, &publishTimeSec, &copiedSeq);
+}
+
+TestResult testPublishedSnapshotsRemainCoherentUnderContention() {
+  Bifurx module;
+  std::atomic<bool> writerDone {false};
+  std::atomic<bool> coherent {true};
+  std::atomic<int> reads {0};
+
+  std::thread writer([&]() {
+    for (int i = 1; i <= 50000; ++i) {
+      const float base = float(i);
+      BifurxPreviewState state;
+      state.sampleRate = 48000.f;
+      state.freqA = base;
+      state.freqB = base + 100000.f;
+      state.qA = base + 200000.f;
+      state.qB = base + 300000.f;
+      state.balance = base + 400000.f;
+      state.spanNorm = base + 500000.f;
+      module.publishPreviewState(state);
+    }
+    writerDone.store(true, std::memory_order_release);
+  });
+
+  std::thread reader([&]() {
+    uint32_t lastSeq = 0;
+    while (!writerDone.load(std::memory_order_acquire)
+        || lastSeq != module.previewPublishSeq.load(std::memory_order_acquire)) {
+      BifurxPreviewState state;
+      double publishTimeSec = 0.0;
+      uint32_t seq = lastSeq;
+      if (!module.readPreviewState(lastSeq, &state, &publishTimeSec, &seq)) {
+        std::this_thread::yield();
+        continue;
+      }
+      const float base = state.freqA;
+      const bool snapshotCoherent =
+        state.freqB == base + 100000.f &&
+        state.qA == base + 200000.f &&
+        state.qB == base + 300000.f &&
+        state.balance == base + 400000.f &&
+        state.spanNorm == base + 500000.f &&
+        std::isfinite(publishTimeSec) &&
+        seq > lastSeq;
+      coherent.store(coherent.load(std::memory_order_relaxed) && snapshotCoherent, std::memory_order_relaxed);
+      lastSeq = seq;
+      reads.fetch_add(1, std::memory_order_relaxed);
+    }
+  });
+
+  writer.join();
+  reader.join();
+  const bool pass = coherent.load(std::memory_order_relaxed) && reads.load(std::memory_order_relaxed) > 0;
+  return {
+    "Published preview snapshots remain coherent under contention",
+    pass,
+    "reads=" + std::to_string(reads.load(std::memory_order_relaxed))
+  };
+}
+
+TestResult testAnalysisFramesPublishAsOverlappingWindows() {
+  Bifurx module;
+  module.subscribeAnalysisVisual();
+  alignas(16) float raw[kFftSize] = {};
+  alignas(16) float output[kFftSize] = {};
+  uint32_t seq = 0;
+
+  for (int i = 0; i < kFftSize - 1; ++i) {
+    module.pushAnalysisSample(float(i), float(i + 10));
+  }
+  const bool earlyPublish = module.copyAnalysisFrame(0, raw, output, &seq);
+  module.pushAnalysisSample(float(kFftSize - 1), float(kFftSize + 9));
+  const bool firstPublished = module.copyAnalysisFrame(0, raw, output, &seq);
+  const uint32_t firstSeq = seq;
+  const bool firstWindow = firstPublished && raw[0] == 0.f && raw[kFftSize - 1] == float(kFftSize - 1)
+    && output[0] == 10.f && output[kFftSize - 1] == float(kFftSize + 9);
+
+  for (int i = kFftSize; i < kFftSize + kFftHopSize; ++i) {
+    module.pushAnalysisSample(float(i), float(i + 10));
+  }
+  const bool secondPublished = module.copyAnalysisFrame(firstSeq, raw, output, &seq);
+  const bool overlappingWindow = secondPublished
+    && raw[0] == float(kFftHopSize)
+    && raw[kFftSize - 1] == float(kFftSize + kFftHopSize - 1);
+  module.unsubscribeAnalysisVisual();
+  const bool pass = !earlyPublish && firstWindow && overlappingWindow && seq == firstSeq + 1u;
+  return {
+    "Analysis publishes coherent 50-percent-overlapped frames without rotation",
+    pass,
+    "firstSeq=" + std::to_string(firstSeq) + " secondSeq=" + std::to_string(seq)
+  };
+}
+
+TestResult testAnalysisCaptureSleepsWithoutVisualSubscriber() {
+  Bifurx module;
+  for (int i = 0; i < kFftSize + kFftHopSize; ++i) {
+    module.pushAnalysisSample(float(i), float(i));
+  }
+  const bool slept = module.analysisPublishSeq.load(std::memory_order_acquire) == 0u
+    && module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0
+    && module.analysisCaptureCountdown == 0;
+
+  module.subscribeAnalysisVisual();
+  for (int i = 0; i < 64; ++i) {
+    module.pushAnalysisSample(float(i), float(i));
+  }
+  const bool woke = module.analysisCaptureSlots[0] >= 0
+    && module.analysisCapturePositions[0] == 64;
+  module.unsubscribeAnalysisVisual();
+  module.pushAnalysisSample(0.f, 0.f);
+  const bool stoppedCleanly = module.analysisVisualSubscribers.load(std::memory_order_acquire) == 0u
+    && module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0
+    && module.analysisCaptureCountdown == 0;
+  return {
+    "Analysis capture sleeps without a live visual subscriber",
+    slept && woke && stoppedCleanly,
+    "slept=" + std::to_string(int(slept)) + " woke=" + std::to_string(int(woke))
+      + " stopped=" + std::to_string(int(stoppedCleanly))
+  };
+}
+
+TestResult testVisualWorkerDefaultSetterHonorsMode() {
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_OFF);
+  const bool off = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_OFF;
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_AUTO);
+  const bool automatic = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_AUTO;
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_ON);
+  const bool on = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_ON;
+  return {
+    "Visual worker global default setter honors supported modes",
+    off && automatic && on,
+    "off=" + std::to_string(int(off)) + " auto=" + std::to_string(int(automatic))
+      + " on=" + std::to_string(int(on))
+  };
+}
+
+TestResult testWorkerAnalysisFramePoolIsBoundedAndReusable() {
+  BifurxSpectrumBase display;
+  const bool lazyBeforeUse = display.renderClient.allocatedPayloadSlots() == 0;
+
+  auto first = display.renderClient.tryAcquirePayload();
+  auto second = display.renderClient.tryAcquirePayload();
+  auto third = display.renderClient.tryAcquirePayload();
+  auto exhausted = display.renderClient.tryAcquirePayload();
+  BifurxUiRenderPayload* const firstAddress = first.get();
+  const bool threeDistinctSlots = first && second && third
+    && first.get() != second.get()
+    && first.get() != third.get()
+    && second.get() != third.get();
+  const bool bounded = !exhausted;
+
+  first.reset();
+  auto recycled = display.renderClient.tryAcquirePayload();
+  const bool reusesReleasedSlot = recycled && recycled.get() == firstAddress;
+  const bool compactRequest = sizeof(BifurxUiRenderRequest) < 256;
+
+  return {
+    "Worker analysis payload pool is lazy, bounded, compact, and reusable",
+    lazyBeforeUse && threeDistinctSlots && bounded && reusesReleasedSlot && compactRequest,
+    "requestBytes=" + std::to_string(sizeof(BifurxUiRenderRequest)) +
+      " payloadBytes=" + std::to_string(sizeof(BifurxUiRenderPayload)) +
+      " reused=" + std::to_string(int(reusesReleasedSlot))
+  };
+}
+
+TestResult testSynchronousFftScratchIsLazyAndThreadLocalReusable() {
+  bool startsUnallocated = false;
+  bool baseConstructionStaysLazy = false;
+  bool sameArenaReused = false;
+  bool allocatedAfterUse = false;
+  int64_t firstUseUs = 0;
+
+  std::thread probe([&]() {
+    startsUnallocated = !synchronousOverlayScratchAllocatedForCurrentThreadForTest();
+    BifurxSpectrumBase firstDisplay;
+    BifurxSpectrumBase secondDisplay;
+    baseConstructionStaysLazy = !synchronousOverlayScratchAllocatedForCurrentThreadForTest();
+    const auto firstUseStart = std::chrono::steady_clock::now();
+    const void* const firstArena = synchronousOverlayScratchIdentityForTest();
+    firstUseUs = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - firstUseStart
+    ).count();
+    const void* const secondArena = synchronousOverlayScratchIdentityForTest();
+    sameArenaReused = firstArena == secondArena;
+    allocatedAfterUse = synchronousOverlayScratchAllocatedForCurrentThreadForTest();
+  });
+  probe.join();
+
+  const bool compactBase = sizeof(BifurxSpectrumBase) < 64u * 1024u;
+  return {
+    "Synchronous FFT scratch is lazy and reused once per calling thread",
+    startsUnallocated && baseConstructionStaysLazy && sameArenaReused && allocatedAfterUse && compactBase,
+    "baseBytes=" + std::to_string(sizeof(BifurxSpectrumBase)) +
+      " scratchBytes=" + std::to_string(synchronousOverlayScratchBytesForTest()) +
+      " firstUseUs=" + std::to_string(firstUseUs) +
+      " lazy=" + std::to_string(int(baseConstructionStaysLazy)) +
+      " reused=" + std::to_string(int(sameArenaReused))
+  };
+}
+
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+TestResult testWorkerAdmissionRestartAndTerminalShutdown() {
+  BifurxUiRenderService service;
+  bool pass = service.registerDisplay() == 0 && !service.submitLatest(workerRequest(1, 1));
+  service.failNextStartForTest();
+  pass &= !service.start() && service.registerDisplay() == 0;
+  pass &= service.start() && service.start();
+  const uint64_t first = service.registerDisplay();
+  pass &= first != 0 && service.submitLatest(workerRequest(first, 1));
+  auto retained = waitWorkerSnapshot(service, first, 1);
+  pass &= bool(retained);
+  service.unregisterDisplay(first);
+  pass &= retained && retained->displayId == first && !service.getLatestSnapshot(first);
+  service.stop();
+  pass &= service.registerDisplay() == 0 && !service.submitLatest(workerRequest(first, 2));
+  pass &= service.start();
+  const uint64_t second = service.registerDisplay();
+  pass &= second > first && !service.getLatestSnapshot(first);
+  pass &= service.submitLatest(workerRequest(second, 1));
+  pass &= bool(waitWorkerSnapshot(service, second, 1));
+  service.shutdown();
+  pass &= !service.start() && service.registerDisplay() == 0
+    && !service.submitLatest(workerRequest(second, 2)) && !service.getLatestSnapshot(second);
+  BifurxUiRenderService separate;
+  pass &= separate.start() && separate.registerDisplay() != 0;
+  separate.stop();
+  return {"Worker admission, restart, terminal closure, and local isolation", pass, ""};
+}
+
+TestResult testModuleRebindingReleasesOldWorkerSession() {
+  Bifurx first;
+  Bifurx second;
+  first.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  second.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  preview.freqA = 250.f;
+  first.publishPreviewState(preview);
+  preview.freqA = 2500.f;
+  second.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &first;
+  display.syncBase();
+  const uint64_t firstId = display.renderClient.displayId();
+  display.module = &second;
+  display.syncBase();
+  const bool rebound = firstId != 0 && display.renderClient.displayId() != 0
+    && display.renderClient.displayId() != firstId
+    && display.state.hasPreview && display.state.previewState.freqA == 2500.f
+    && !display.state.hasCurve;
+  return {"Module rebinding releases the old worker session and presentation", rebound, ""};
+}
+
+TestResult testPreviewRateChangeReconcilesSynchronously() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  display.syncBase();
+  const uint64_t firstId = display.renderClient.displayId();
+  preview.sampleRate = 96000.f;
+  module.publishPreviewState(preview);
+  display.syncBase();
+  const bool reconciled = firstId != 0 && display.renderClient.displayId() == 0
+    && display.state.hasCurve && display.state.cachedAxisSampleRate == 96000.f;
+  return {"Preview rate change releases worker and installs synchronous curve", reconciled, ""};
+}
+
+TestResult testRenderClientOwnsAndReleasesLocalServiceRegistration() {
+  BifurxUiRenderService service;
+  BifurxRenderClient client(service);
+  const bool initiallyUnregistered = client.displayId() == 0;
+  const bool registered = client.ensureRegistered();
+  const uint64_t id = client.displayId();
+  const bool stableRegistration = registered && id != 0 && client.ensureRegistered()
+    && client.displayId() == id;
+  auto payload = client.tryAcquirePayload();
+  payload.reset();
+  const bool poolAllocated = client.allocatedPayloadSlots() == 1;
+  client.release();
+  client.release();
+  const bool released = client.displayId() == 0 && client.requestSeq() == 0
+    && client.allocatedPayloadSlots() == 0 && !service.getLatestSnapshot(id);
+  service.shutdown();
+  const bool terminalAdmissionRejected = !client.ensureRegistered() && client.displayId() == 0;
+  return {"Render client releases registration and payloads through one path",
+    initiallyUnregistered && stableRegistration && poolAllocated && released && terminalAdmissionRejected, ""};
+}
+
+TestResult testWorkerQueuedChurnAndFairness() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  std::mutex claimsMutex;
+  std::vector<uint64_t> claims;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) {
+    { std::lock_guard<std::mutex> lock(claimsMutex); claims.push_back(id); }
+    if (seq == 1 && claims.size() == 1) gate.block(id, seq);
+  }, {});
+  bool pass = service.start();
+  const uint64_t a = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(a, 1)) && gate.waitEntered();
+  for (uint64_t seq = 2; seq <= 40; ++seq) pass &= service.submitLatest(workerRequest(a, seq));
+  const uint64_t b = service.registerDisplay();
+  const uint64_t c = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(b, 1)) && service.submitLatest(workerRequest(c, 1));
+  for (uint64_t seq = 2; seq <= 20; ++seq) pass &= service.submitLatest(workerRequest(b, seq));
+  for (int i = 0; i < 300; ++i) {
+    const uint64_t transient = service.registerDisplay();
+    pass &= service.submitLatest(workerRequest(transient, 1));
+    service.unregisterDisplay(transient);
+  }
+  const auto stateA = service.testState(a);
+  const auto stateB = service.testState(b);
+  pass &= stateA.claimedId == a && stateA.pendingRequestSeq == 40;
+  pass &= stateB.pendingRequestSeq == 20;
+  pass &= stateA.queuedIds.size() == 2 && stateA.queuedIds[0] == b && stateA.queuedIds[1] == c;
+  gate.release();
+  pass &= bool(waitWorkerSnapshot(service, b, 20));
+  pass &= bool(waitWorkerSnapshot(service, c, 1));
+  pass &= bool(waitWorkerSnapshot(service, a, 40));
+  service.stop();
+  { std::lock_guard<std::mutex> lock(claimsMutex);
+    pass &= claims.size() >= 3 && claims[0] == a && claims[1] == b && claims[2] == c;
+  }
+  return {"Worker queue remains bounded during churn and a flooded display yields", pass, ""};
+}
+
+TestResult testWorkerUnregisterInFlightAndStopJoin() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks({}, [&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); });
+  bool pass = service.start();
+  const uint64_t first = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(first, 1)) && gate.waitEntered();
+  service.unregisterDisplay(first);
+  const uint64_t next = service.registerDisplay();
+  pass &= next > first && !service.getLatestSnapshot(first);
+  pass &= service.submitLatest(workerRequest(next, 2));
+  gate.release();
+  auto nextSnapshot = waitWorkerSnapshot(service, next, 2);
+  pass &= nextSnapshot && nextSnapshot->displayId == next && service.testState().discarded >= 1;
+  service.stop();
+
+  WorkerGate stopGate;
+  std::atomic<int> claimCount{0};
+  service.setTestHooks([&](uint64_t id, uint64_t seq) {
+    claimCount.fetch_add(1);
+    stopGate.block(id, seq);
+  }, {});
+  pass &= service.start();
+  const uint64_t stoppedId = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(stoppedId, 1)) && stopGate.waitEntered();
+  pass &= service.submitLatest(workerRequest(stoppedId, 2));
+  const uint64_t queuedId = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(queuedId, 1));
+  std::atomic<int> finished{0};
+  std::thread firstStop([&]() { service.stop(); finished.fetch_add(1); });
+  for (int i = 0; i < 5000 && service.testState().runState != 2; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  pass &= service.testState().runState == 2 && !service.start()
+    && service.registerDisplay() == 0 && !service.submitLatest(workerRequest(stoppedId, 2));
+  std::thread secondStop([&]() { service.stop(); finished.fetch_add(1); });
+  std::thread terminal([&]() { service.shutdown(); finished.fetch_add(1); });
+  for (int i = 0; i < 5000 && service.testState().stopWaiters < 2; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  pass &= service.testState().stopWaiters == 2 && finished.load() == 0;
+  stopGate.release();
+  firstStop.join(); secondStop.join(); terminal.join();
+  pass &= finished.load() == 3 && claimCount.load() == 1
+    && service.testState().permanentlyClosed && !service.start();
+  return {"Unregister discards in-flight work; concurrent stop and shutdown await join", pass, ""};
+}
+
+TestResult testWorkerPayloadInheritanceAndRateValidity() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && gate.waitEntered();
+  const uint64_t target = service.registerDisplay();
+  auto analysis = workerRequest(target, 1);
+  analysis.analysisSeq = 71;
+  auto payload = std::make_shared<BifurxUiRenderPayload>();
+  payload->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+  payload->analysisFrame.output[kFftSize / 2] = 30.f;
+  analysis.payload = payload;
+  pass &= service.submitLatest(std::move(analysis));
+  pass &= service.submitLatest(workerRequest(target, 2));
+  auto state = service.testState(target);
+  pass &= state.pendingHasPayload && state.pendingAnalysisSeq == 71 && state.pendingRequestSeq == 2;
+  gate.release();
+  auto snapshot = waitWorkerSnapshot(service, target, 2);
+  pass &= snapshot && snapshot->hasOverlayTarget && snapshot->analysisSeq == 71;
+  if (snapshot) {
+    float maxDb = -1000.f;
+    for (float db : snapshot->overlayTargetModuleDb) maxDb = std::max(maxDb, db);
+    pass &= std::fabs(maxDb - 20.f * std::log10(3.f)) < .05f;
+  }
+  auto changedRate = workerRequest(target, 3, 96000.f);
+  changedRate.previewSeq = 2; // Equal preview sequence must not reuse the old-rate curve.
+  pass &= service.submitLatest(std::move(changedRate));
+  auto newRate = waitWorkerSnapshot(service, target, 3);
+  pass &= newRate && newRate->cachedAxisSampleRate == 96000.f && !newRate->hasOverlayTarget;
+  service.stop();
+  return {"Worker payload inheritance and completed-target rate validity", pass, ""};
+}
+
+TestResult testWorkerQueuedUnregisterRetiresLeaseOutsideLock() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && gate.waitEntered();
+  const uint64_t queued = service.registerDisplay();
+  std::atomic<bool> retired{false};
+  auto payload = std::shared_ptr<BifurxUiRenderPayload>(new BifurxUiRenderPayload,
+    [&](BifurxUiRenderPayload* p) {
+      // A destructor reached under the service mutex would deadlock here.
+      retired.store(service.testState().displayCount >= 1);
+      delete p;
+    });
+  auto request = workerRequest(queued, 1);
+  request.payload = payload;
+  pass &= service.submitLatest(std::move(request));
+  payload.reset();
+  service.unregisterDisplay(queued);
+  pass &= retired.load() && !service.getLatestSnapshot(queued);
+  pass &= service.testState().queuedIds.empty();
+  gate.release();
+  pass &= bool(waitWorkerSnapshot(service, blocker, 1));
+  service.stop();
+  return {"Queued unregister retires payload outside the scheduling mutex", pass, ""};
+}
+
+TestResult testWorkerInFlightCarryForwardAndRateMismatch() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t display = service.registerDisplay();
+  auto analysis = workerRequest(display, 1);
+  analysis.analysisSeq = 41;
+  auto payload = std::make_shared<BifurxUiRenderPayload>();
+  payload->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+  payload->analysisFrame.output[kFftSize / 2] = 20.f;
+  analysis.payload = payload;
+  pass &= service.submitLatest(std::move(analysis)) && gate.waitEntered();
+  pass &= service.submitLatest(workerRequest(display, 2));
+  pass &= !service.testState(display).pendingHasPayload;
+  gate.release();
+  auto carried = waitWorkerSnapshot(service, display, 2);
+  pass &= carried && carried->hasOverlayTarget && carried->analysisSeq == 41;
+  if (carried) {
+    float peak = -1000.f;
+    for (float db : carried->overlayTargetModuleDb) peak = std::max(peak, db);
+    pass &= std::fabs(peak - 20.f * std::log10(2.f)) < .05f;
+  }
+  service.stop();
+
+  WorkerGate rateGate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) rateGate.block(id, seq); }, {});
+  pass &= service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && rateGate.waitEntered();
+  const uint64_t target = service.registerDisplay();
+  auto oldRate = workerRequest(target, 1);
+  oldRate.analysisSeq = 91;
+  oldRate.payload = payload;
+  pass &= service.submitLatest(std::move(oldRate));
+  pass &= service.submitLatest(workerRequest(target, 2, 96000.f));
+  pass &= !service.testState(target).pendingHasPayload;
+  rateGate.release();
+  auto newRate = waitWorkerSnapshot(service, target, 2);
+  pass &= newRate && newRate->cachedAxisSampleRate == 96000.f
+    && !newRate->hasOverlayTarget && newRate->analysisSeq != 91;
+  service.stop();
+  return {"In-flight overlay carries forward; queued payload cannot cross sample rates", pass, ""};
+}
+
+TestResult testWorkerLateAdmissionAndIdExhaustion() {
+  BifurxUiRenderService service;
+  bool pass = service.start();
+  const uint64_t existing = service.registerDisplay();
+  pass &= existing != 0;
+  WorkerGate registerGate;
+  service.setAdmissionTestHook([&](uint64_t id, uint64_t seq) {
+    if (id == 0) registerGate.block(id, seq);
+  });
+  uint64_t lateId = 99;
+  std::thread registerThread([&]() { lateId = service.registerDisplay(); });
+  pass &= registerGate.waitEntered();
+  service.shutdown();
+  registerGate.release();
+  registerThread.join();
+  pass &= lateId == 0;
+
+  BifurxUiRenderService submitService;
+  pass &= submitService.start();
+  const uint64_t submitId = submitService.registerDisplay();
+  WorkerGate submitGate;
+  submitService.setAdmissionTestHook([&](uint64_t id, uint64_t seq) {
+    if (id == submitId && seq == 1) submitGate.block(id, seq);
+  });
+  bool accepted = true;
+  std::thread submitThread([&]() { accepted = submitService.submitLatest(workerRequest(submitId, 1)); });
+  pass &= submitGate.waitEntered();
+  submitService.shutdown();
+  submitGate.release();
+  submitThread.join();
+  pass &= !accepted;
+
+  BifurxUiRenderService exhausted;
+  exhausted.setNextDisplayIdForTest(std::numeric_limits<uint64_t>::max());
+  pass &= exhausted.start();
+  const uint64_t last = exhausted.registerDisplay();
+  pass &= last == std::numeric_limits<uint64_t>::max() && exhausted.registerDisplay() == 0;
+  exhausted.stop();
+  pass &= exhausted.start() && exhausted.registerDisplay() == 0;
+  exhausted.stop();
+  return {"Shutdown defeats late admission and display IDs never wrap", pass, ""};
+}
+#endif
+
+TestResult testWorkerLatestRequestRetainsOwnedAnalysisPayload() {
+  BifurxUiRenderService service;
+  service.start();
+  const uint64_t displayId = service.registerDisplay();
+  constexpr uint64_t finalRequestSeq = 64;
+  constexpr float finalOutputGain = 3.f;
+
+  for (uint64_t seq = 1; seq <= finalRequestSeq; ++seq) {
+    BifurxUiRenderRequest request;
+    request.displayId = displayId;
+    request.requestSeq = seq;
+    request.previewSeq = 1;
+    request.analysisSeq = uint32_t(seq);
+    request.previewState.sampleRate = 48000.f;
+    request.previewState.mode = 0;
+    auto payload = std::make_shared<BifurxUiRenderPayload>();
+    payload->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+    payload->analysisFrame.output[kFftSize / 2] = 10.f * ((seq == finalRequestSeq) ? finalOutputGain : 1.f);
+    request.payload = std::move(payload);
+    service.submitLatest(std::move(request));
+  }
+
+  BifurxUiRenderRequest curveOnly;
+  curveOnly.displayId = displayId; curveOnly.requestSeq = finalRequestSeq+1;
+  curveOnly.previewSeq = 2; curveOnly.analysisSeq = finalRequestSeq;
+  curveOnly.previewState.sampleRate = 48000.f;
+  service.submitLatest(std::move(curveOnly));
+  std::shared_ptr<const BifurxUiRenderSnapshot> snapshot;
+  for (int attempt = 0; attempt < 2000; ++attempt) {
+    snapshot = service.getLatestSnapshot(displayId);
+    if (snapshot && snapshot->requestSeq == finalRequestSeq+1) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  float maxResponseDb = -1000.f;
+  if (snapshot) {
+    for (int i = 0; i < kCurvePointCount; ++i) {
+      maxResponseDb = std::max(maxResponseDb, snapshot->overlayTargetModuleDb[i]);
+    }
+  }
+  const float expectedResponseDb = 20.f * std::log10(finalOutputGain);
+  const bool latestWins = snapshot && snapshot->requestSeq == finalRequestSeq+1
+    && snapshot->analysisSeq == finalRequestSeq;
+  const bool payloadStayedAlive = snapshot && snapshot->hasOverlayTarget
+    && std::fabs(maxResponseDb - expectedResponseDb) < 0.05f;
+
+  service.unregisterDisplay(displayId);
+  service.stop();
+  return {
+    "Worker coalescing retains owned FFT payload and publishes the latest request",
+    displayId != 0 && latestWins && payloadStayedAlive,
+    "latest=" + std::to_string(snapshot ? snapshot->requestSeq : 0) +
+      " maxResponseDb=" + std::to_string(maxResponseDb) +
+      " expectedDb=" + std::to_string(expectedResponseDb)
+  };
+}
+
+TestResult testProductionOutputSafetyStageContract() {
+  bool transparent = true;
+  bool monotonic = true;
+  bool bounded = true;
+  float previous = applyLevelOutputStage(0.f, 0.5f, true);
+  for (int i = 0; i <= 20000; ++i) {
+    const float input = 10.f * float(i) / 20000.f;
+    const float output = applyLevelOutputStage(input, 0.5f, true);
+    if (input <= kOutputSoftLimitKneeVolts) {
+      transparent = transparent && output == input;
+    }
+    monotonic = monotonic && output >= previous;
+    bounded = bounded && output <= kOutputSoftLimitCeilingVolts;
+    previous = output;
+  }
+
+  const float atFive = applyLevelOutputStage(5.f, 0.f, true);
+  const float atSix = applyLevelOutputStage(6.f, 1.f, true);
+  const bool referencePoints = std::fabs(atFive - (4.f + std::tanh(1.f))) < 1e-5f
+    && std::fabs(atSix - (4.f + std::tanh(2.f))) < 1e-5f;
+  const bool symmetric = std::fabs(applyLevelOutputStage(-6.f, 0.5f, true) + atSix) < 1e-6f;
+  const bool bypassExact = applyLevelOutputStage(12.5f, 0.5f, false) == 12.5f
+    && applyLevelOutputStage(-12.5f, 0.5f, false) == -12.5f;
+  const bool finiteRecovery = applyLevelOutputStage(NAN, 0.5f, true) == 0.f
+    && applyLevelOutputStage(INFINITY, 0.5f, false) == 0.f;
+  return {
+    "Production output stage is linear to 4 V and softly bounded by 5 V",
+    transparent && monotonic && bounded && referencePoints && symmetric && bypassExact && finiteRecovery,
+    "out(5,6)=(" + std::to_string(atFive) + "," + std::to_string(atSix)
+      + ") bypass=" + std::to_string(int(bypassExact))
+  };
+}
+
+template <typename NonlinearFn>
+std::vector<float> renderNonlinearSine(
+  NonlinearFn&& nonlinear,
+  bool oversampled,
+  float sampleRate,
+  int coherentBin,
+  int measuredFrames
+) {
+  constexpr int factor = 2;
+  constexpr int quality = 8;
+  constexpr int warmupFrames = 4096;
+  dsp::Upsampler<factor, quality> upsampler;
+  dsp::Decimator<factor, quality> decimator;
+  std::vector<float> output(measuredFrames);
+  const float phaseStep = 2.f * kRuntimePi * float(coherentBin) / float(measuredFrames);
+  for (int n = -warmupFrames; n < measuredFrames; ++n) {
+    const float input = 5.f * std::sin(phaseStep * float(n));
+    float sample = 0.f;
+    if (oversampled) {
+      float lanes[factor] {};
+      upsampler.process(input, lanes);
+      for (float& lane : lanes) {
+        lane = nonlinear(lane);
+      }
+      sample = decimator.process(lanes);
+    }
+    else {
+      sample = nonlinear(input);
+    }
+    if (n >= 0) {
+      output[n] = sample;
+    }
+  }
+  (void) sampleRate;
+  return output;
+}
+
+float coherentAmplitude(const std::vector<float>& samples, int bin) {
+  double real = 0.0;
+  double imag = 0.0;
+  const int count = int(samples.size());
+  for (int n = 0; n < count; ++n) {
+    const double phase = 2.0 * double(kRuntimePi) * double(bin) * double(n) / double(count);
+    real += double(samples[n]) * std::cos(phase);
+    imag -= double(samples[n]) * std::sin(phase);
+  }
+  return float(2.0 * std::sqrt(real * real + imag * imag) / double(count));
+}
+
+int foldedBin(int harmonic, int fundamentalBin, int frameCount) {
+  int bin = (harmonic * fundamentalBin) % frameCount;
+  if (bin > frameCount / 2) {
+    bin = frameCount - bin;
+  }
+  return bin;
+}
+
+TestResult testPremiumProductionBoundaryAliasReduction() {
+  constexpr int count = 16384;
+  bool pass = true; float worstReduction = 1000.f;
+  for (int fundamental : {1428, 2011, 2701}) for (float drive : {0.75f, 1.f}) for (bool limiter : {false, true}) {
+    BifurxNonlinearOversampling2x boundary;
+    std::vector<float> direct(count), filtered(count);
+    for (int n = -4096; n < count; ++n) {
+      const float x = (limiter ? 8.f : 5.f) * std::sin(6.28318530717958647692 * fundamental * n/count);
+      const float y = limiter ? boundary.processOutput(x, drive, true) : boundary.processInput(x, drive);
+      if (n >= 0) {
+        direct[n] = limiter ? applyLevelOutputStage(x, drive, true) : applyLevelInputStage(x, drive);
+        filtered[n] = y;
+      }
+    }
+    double directAlias = 0., filteredAlias = 0.;
+    for (int h : {3, 5, 7, 9, 11, 13}) if (h * fundamental > count/2) {
+      const int bin = foldedBin(h, fundamental, count);
+      double a = coherentAmplitude(direct, bin), b = coherentAmplitude(filtered, bin);
+      directAlias += a*a; filteredAlias += b*b;
+    }
+    const float reduction = 10.f * std::log10((directAlias+1e-20)/(filteredAlias+1e-20));
+    worstReduction = std::min(worstReduction, reduction); // Candidate gate: at least a twofold reduction in selected folded power.
+    pass &= reduction > 3.f;
+  }
+  return {"Premium production FIR aliases at multiple fundamentals and drive levels", pass, "minimum reduction="+std::to_string(worstReduction)+" dB"};
+}
+
+TestResult testPremiumVisualWatchdogAndWorkerMetadata() {
+  bool pass = true;
+  Bifurx headless;
+  Module::ProcessArgs headlessArgs{}; headlessArgs.sampleRate=48000.f;headlessArgs.sampleTime=1.f/48000.f;
+  for(int i=0;i<1024;++i) {headless.params[Bifurx::FREQ_PARAM].setValue(float(i%100)/100.f);headless.process(headlessArgs);}
+  pass &= headless.previewPublishSeq.load()==0 && headless.llTelemetryPublishSeq.load()==0;
+  headless.subscribeAnalysisVisual();headless.process(headlessArgs);
+  pass &= headless.previewPublishSeq.load()!=0;
+
+  Bifurx m; m.subscribeAnalysisVisual(); m.visualWatchdogEnabled.store(true); m.visualHeartbeat.store(1);
+  Module::ProcessArgs args{}; args.sampleRate=48000.f; args.sampleTime=1.f/48000.f;
+  for (int i=0; i<16000; ++i) m.process(args);
+  const uint32_t asleep=m.analysisPublishSeq.load();
+  for (int i=0; i<8000; ++i) m.process(args);
+  pass &= asleep == m.analysisPublishSeq.load() && m.visualLeaseSamples==0;
+  m.visualHeartbeat.fetch_add(1);
+  for (int i=0; i<4096; ++i) m.process(args);
+  pass &= m.analysisPublishSeq.load()!=asleep;
+  m.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxSpectrumBase display; display.module=&m;
+  pass &= adoptPublishedRenderTargets(display);
+  pass &= display.state.displayedPreviewState.freqA == display.renderClient.snapshot()->previewState.freqA;
+  m.params[Bifurx::FREQ_PARAM].setValue(.9f);
+  for (int i=0; i<256; ++i) m.process(args);
+  display.syncBase();
+  pass &= display.state.displayedPreviewState.freqA != display.state.previewState.freqA;
+  pass &= adoptPublishedRenderTargets(display);
+  pass &= display.state.displayedPreviewState.freqA == display.renderClient.snapshot()->previewState.freqA;
+  return {"Premium visual lease sleeps and displayed metadata follows worker", pass, "250 ms lease; fresh frame within 4096 samples"};
+}
+
+TestResult testPremiumBoundarySwitchContinuity() {
+  const bool previousDebug = testDragonKingDebugEnabled;
+  testDragonKingDebugEnabled = true;
+  bool pass=true;float worst=0.f;
+  for(float rate : {44100.f,48000.f,96000.f,192000.f}) {
+    Bifurx m;configureBaseParams(m,9,freqNormForCenterHz(20.f),0.f,0.f,0.f);
+    Module::ProcessArgs args{};args.sampleRate=rate;args.sampleTime=1.f/rate;
+    float previous=0.f;
+    for(int n=0;n<20000;++n) {
+      if(n==4000)m.boundaryResampling.store(1);
+      if(n==8000)m.boundaryResampling.store(3);
+      if(n==10000)m.boundaryResampling.store(2);
+      if(n==11000)m.boundaryResampling.store(3);
+      if(n==12000)m.params[Bifurx::MODE_PARAM].setValue(10.f);
+      if(n==16000)m.params[Bifurx::MODE_PARAM].setValue(9.f);
+      m.inputs[Bifurx::IN_INPUT].setVoltage(std::sin(6.28318530717958647692*220.f*n/rate));m.process(args);
+      const float out=m.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      if(n>1000)worst=std::max(worst,std::fabs(out-previous));
+      pass &= std::isfinite(out);previous=out;
+    }
+    pass &= m.transitionSmoother.isStable();
+  }
+  testDragonKingDebugEnabled = previousDebug;
+  return {"Premium boundary A/B and Display Only exit transitions",pass && worst<.2f,"worst adjacent step="+std::to_string(worst)+" V for 1 V peak / 220 Hz"};
+}
+
+TestResult testPremiumLowFrequencyProductionAgreement() {
+  bool pass=true;float worst=0.f;
+  for(float rate : {44100.f,48000.f,96000.f,192000.f}) for(float hz : {10.f,20.f}) {
+    Bifurx m; m.subscribeAnalysisVisual(); configureBaseParams(m,5,freqNormForCenterHz(hz),0.f,1.f,0.f);
+    m.params[Bifurx::LEVEL_PARAM].setValue(.5f); m.softLimitingEnabled.store(false);
+    Module::ProcessArgs args{};args.sampleRate=rate;args.sampleTime=1.f/rate;
+    double input=0.,output=0.;const int total=int(rate*8.f);
+    for(int n=0;n<total;++n) {
+      const float x=.0001f*std::sin(6.28318530717958647692*hz*n/rate);
+      m.inputs[Bifurx::IN_INPUT].setVoltage(x);m.process(args);
+      if(n>=total/2) {float y=m.outputs[Bifurx::OUT_OUTPUT].getVoltage(); input+=x*x;output+=y*y;}
+    }
+    const float measured=10.f*std::log10(output/input);
+    const float expected=previewModelResponseDb(makePreviewModel(m.lastPreviewState),hz);
+    const float error=std::fabs(measured-expected);worst=std::max(worst,error);pass &= error<.25f;
+  }
+  return {"Premium high-Q low-frequency full-module display agreement",pass,"worst="+std::to_string(worst)+" dB at 10/20 Hz, four rates"};
+}
+
+TestResult testTwoTimesOversamplingSuppressesDrivenLevelAliases() {
+  constexpr float sampleRate = 48000.f;
+  constexpr int measuredFrames = 16384;
+  constexpr int fundamentalBin = 1428; // 4183.594 Hz, matching the live Octavia probe.
+  const auto nonlinear = [](float input) {
+    return applyLevelInputStage(input, 1.f);
+  };
+  const std::vector<float> hostRate = renderNonlinearSine(
+    nonlinear, false, sampleRate, fundamentalBin, measuredFrames);
+  const std::vector<float> twoTimes = renderNonlinearSine(
+    nonlinear, true, sampleRate, fundamentalBin, measuredFrames);
+
+  double hostAliasSq = 0.0;
+  double twoTimesAliasSq = 0.0;
+  std::string bins;
+  for (int harmonic : {7, 9, 11, 13}) {
+    const int bin = foldedBin(harmonic, fundamentalBin, measuredFrames);
+    const float hostAmplitude = coherentAmplitude(hostRate, bin);
+    const float twoTimesAmplitude = coherentAmplitude(twoTimes, bin);
+    hostAliasSq += double(hostAmplitude) * double(hostAmplitude);
+    twoTimesAliasSq += double(twoTimesAmplitude) * double(twoTimesAmplitude);
+    bins += " [h" + std::to_string(harmonic) + "=" + std::to_string(bin) +
+      " host=" + std::to_string(hostAmplitude) + " 2x=" + std::to_string(twoTimesAmplitude) + "]";
+  }
+  const float reductionDb = 10.f * std::log10(float(
+    std::max(hostAliasSq, 1e-20) / std::max(twoTimesAliasSq, 1e-20)));
+  const float hostFundamental = coherentAmplitude(hostRate, fundamentalBin);
+  const float twoTimesFundamental = coherentAmplitude(twoTimes, fundamentalBin);
+  const float fundamentalDeltaDb = 20.f * std::log10(std::max(twoTimesFundamental, 1e-20f) /
+    std::max(hostFundamental, 1e-20f));
+  return {
+    "Selective 2x processing suppresses folded LEVEL-drive harmonics",
+    reductionDb > 12.f && std::fabs(fundamentalDeltaDb) < 1.f,
+    "aliasReductionDb=" + std::to_string(reductionDb) +
+      " fundamentalDeltaDb=" + std::to_string(fundamentalDeltaDb) + bins
+  };
+}
+
+TestResult testTwoTimesOversamplingSuppressesSoftLimiterAliases() {
+  constexpr float sampleRate = 48000.f;
+  constexpr int measuredFrames = 16384;
+  constexpr int fundamentalBin = 1428;
+  const auto nonlinear = [](float input) {
+    return applyLevelOutputStage(input, 0.5f, true);
+  };
+  const std::vector<float> hostRate = renderNonlinearSine(
+    nonlinear, false, sampleRate, fundamentalBin, measuredFrames);
+  const std::vector<float> twoTimes = renderNonlinearSine(
+    nonlinear, true, sampleRate, fundamentalBin, measuredFrames);
+
+  double hostAliasSq = 0.0;
+  double twoTimesAliasSq = 0.0;
+  for (int harmonic : {7, 9, 11, 13}) {
+    const int bin = foldedBin(harmonic, fundamentalBin, measuredFrames);
+    const float hostAmplitude = coherentAmplitude(hostRate, bin);
+    const float twoTimesAmplitude = coherentAmplitude(twoTimes, bin);
+    hostAliasSq += double(hostAmplitude) * double(hostAmplitude);
+    twoTimesAliasSq += double(twoTimesAmplitude) * double(twoTimesAmplitude);
+  }
+  const float reductionDb = 10.f * std::log10(float(
+    std::max(hostAliasSq, 1e-20) / std::max(twoTimesAliasSq, 1e-20)));
+  const float hostFundamental = coherentAmplitude(hostRate, fundamentalBin);
+  const float twoTimesFundamental = coherentAmplitude(twoTimes, fundamentalBin);
+  const float fundamentalDeltaDb = 20.f * std::log10(std::max(twoTimesFundamental, 1e-20f) /
+    std::max(hostFundamental, 1e-20f));
+  return {
+    "Selective 2x processing suppresses folded soft-limiter harmonics",
+    reductionDb > 12.f && std::fabs(fundamentalDeltaDb) < 1.f,
+    "aliasReductionDb=" + std::to_string(reductionDb) +
+      " fundamentalDeltaDb=" + std::to_string(fundamentalDeltaDb)
+  };
+}
+
+TestResult testOversampledLimiterPreservesFiveVoltBoundary() {
+  BifurxNonlinearOversampling2x oversampling;
+  constexpr int frames = 32768;
+  constexpr float phaseStep = 2.f * kRuntimePi * 1428.f / 16384.f;
+  float peak = 0.f;
+  bool finite = true;
+  for (int n = 0; n < frames; ++n) {
+    const float input = 8.f * std::sin(phaseStep * float(n));
+    const float output = oversampling.processOutput(input, 0.5f, true);
+    finite = finite && std::isfinite(output);
+    peak = std::max(peak, std::fabs(output));
+  }
+  return {
+    "Oversampled soft limiter preserves the physical five-volt boundary",
+    finite && peak <= kOutputSoftLimitCeilingVolts,
+    "peak=" + std::to_string(peak)
+  };
+}
+
+TestResult testTransitionSmootherIsTransparentAndSampleRateIndependent() {
+  constexpr float sampleRates[] = {44100.f, 48000.f, 96000.f, 192000.f};
+  bool pass = true;
+  float worstStep = 0.f;
+  float worstDurationErrorMs = 0.f;
+  for (float sampleRate : sampleRates) {
+    BifurxTransitionSmoother smoother;
+    smoother.prepare(0, false, sampleRate);
+    const float initial = smoother.apply(4.f);
+    smoother.prepare(1, false, sampleRate);
+    const float first = smoother.apply(4.f);
+    float previous = first;
+    int transitionFrames = 1;
+    const int guardFrames = int(sampleRate * 0.02f);
+    while (!smoother.isStable() && transitionFrames < guardFrames) {
+      smoother.prepare(1, false, sampleRate);
+      const float target = smoother.activeMode == 0 ? 4.f : -4.f;
+      const float output = smoother.apply(target);
+      worstStep = std::max(worstStep, std::fabs(output - previous));
+      previous = output;
+      transitionFrames++;
+    }
+    const float transparent = smoother.apply(1.25f);
+    const float durationMs = 1000.f * float(transitionFrames) / sampleRate;
+    worstDurationErrorMs = std::max(
+      worstDurationErrorMs,
+      std::fabs(durationMs - 1000.f * kBifurxTransitionSeconds)
+    );
+    pass = pass && initial == 4.f && first == 4.f
+      && smoother.isStable() && smoother.activeMode == 1
+      && std::fabs(previous + 4.f) < 1e-6f
+      && transparent == 1.25f && worstStep < 0.15f
+      && worstDurationErrorMs < 0.06f;
+  }
+
+  BifurxTransitionSmoother limiterToggle;
+  limiterToggle.prepare(0, false, 48000.f);
+  limiterToggle.apply(7.f);
+  limiterToggle.prepare(0, true, 48000.f);
+  float limiterPeak = 0.f;
+  for (int n = 0; n < 512 && !limiterToggle.isStable(); ++n) {
+    limiterToggle.prepare(0, true, 48000.f);
+    const float target = limiterToggle.activeSoftLimitingEnabled ? 5.f : 7.f;
+    limiterPeak = std::max(limiterPeak, std::fabs(limiterToggle.apply(target)));
+  }
+  pass = pass && limiterToggle.activeSoftLimitingEnabled
+    && limiterToggle.isStable() && limiterPeak <= 7.f;
+
+  return {
+    "Transition smoother is transparent and switches at a silent midpoint",
+    pass,
+    "worstStep=" + std::to_string(worstStep) +
+      " durationErrorMs=" + std::to_string(worstDurationErrorMs)
+  };
+}
+
+TestResult testRuntimeModeAndLimiterChangesPreserveContinuity() {
+  constexpr float sampleRates[] = {44100.f, 48000.f, 96000.f, 192000.f};
+  bool finite = true;
+  bool completed = true;
+  float worstModeStep = 0.f;
+  float worstLimiterStep = 0.f;
+  float worstLimiterSettledPeak = 0.f;
+
+  for (float sampleRate : sampleRates) {
+    Module::ProcessArgs args;
+    args.sampleRate = sampleRate;
+    args.sampleTime = 1.f / sampleRate;
+    for (int phaseIndex = 0; phaseIndex < 24; ++phaseIndex) {
+      Bifurx module;
+      module.onReset();
+      configureBaseParams(module, 9, freqNormForCenterHz(1200.f), 0.33f, 0.35f, 0.f);
+      module.softLimitingEnabled.store(false, std::memory_order_relaxed);
+      clearCvInputs(module);
+      const float phase = 2.f * kRuntimePi * float(phaseIndex) / 24.f;
+      const int settleSamples = int(0.20f * sampleRate);
+      float previous = 0.f;
+      for (int n = 0; n < settleSamples; ++n) {
+        module.inputs[Bifurx::IN_INPUT].setVoltage(
+          4.f * std::sin(2.f * kRuntimePi * 220.f * float(n) / sampleRate + phase));
+        module.process(args);
+        previous = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      }
+      module.params[Bifurx::MODE_PARAM].setValue(8.f);
+      const int transitionGuard = int(sampleRate * 0.02f);
+      bool armed = false;
+      for (int n = 0; n < transitionGuard; ++n) {
+        const int sampleIndex = settleSamples + n;
+        module.inputs[Bifurx::IN_INPUT].setVoltage(
+          4.f * std::sin(2.f * kRuntimePi * 220.f * float(sampleIndex) / sampleRate + phase));
+        module.process(args);
+        const float output = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+        worstModeStep = std::max(worstModeStep, std::fabs(output - previous));
+        previous = output;
+        finite = finite && std::isfinite(output);
+        armed = armed || !module.transitionSmoother.isStable();
+        if (armed && module.transitionSmoother.isStable()) break;
+      }
+      completed = completed && armed && module.transitionSmoother.isStable()
+        && module.transitionSmoother.activeMode == 8;
+    }
+
+    Bifurx limiterModule;
+    limiterModule.onReset();
+    configureBaseParams(limiterModule, 0, freqNormForCenterHz(1200.f), 0.33f, 0.35f, 0.f);
+    limiterModule.params[Bifurx::LEVEL_PARAM].setValue(1.f);
+    limiterModule.softLimitingEnabled.store(false, std::memory_order_relaxed);
+    clearCvInputs(limiterModule);
+    const int settleSamples = int(0.10f * sampleRate);
+    float previous = 0.f;
+    for (int n = 0; n < settleSamples; ++n) {
+      limiterModule.inputs[Bifurx::IN_INPUT].setVoltage(8.f);
+      limiterModule.process(args);
+      previous = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    }
+    limiterModule.softLimitingEnabled.store(true, std::memory_order_relaxed);
+    const int transitionGuard = int(sampleRate * 0.02f);
+    bool armed = false;
+    for (int n = 0; n < transitionGuard; ++n) {
+      limiterModule.process(args);
+      const float output = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      worstLimiterStep = std::max(worstLimiterStep, std::fabs(output - previous));
+      previous = output;
+      finite = finite && std::isfinite(output);
+      armed = armed || !limiterModule.transitionSmoother.isStable();
+      if (armed && limiterModule.transitionSmoother.isStable()) break;
+    }
+    const float settled = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    worstLimiterSettledPeak = std::max(worstLimiterSettledPeak, std::fabs(settled));
+    completed = completed && armed && limiterModule.transitionSmoother.isStable()
+      && limiterModule.transitionSmoother.activeSoftLimitingEnabled;
+  }
+
+  const bool pass = finite && completed
+    && worstModeStep < 0.20f && worstLimiterStep < 0.20f
+    && worstLimiterSettledPeak <= kOutputSoftLimitCeilingVolts;
+  return {
+    "Runtime mode and limiter transitions suppress click-sized steps",
+    pass,
+    "modeStep=" + std::to_string(worstModeStep) +
+      " limiterStep=" + std::to_string(worstLimiterStep) +
+      " limiterSettledPeak=" + std::to_string(worstLimiterSettledPeak)
+  };
+}
+
+TestResult testResetClearsRuntimeState() {
+  Bifurx module;
+  configureBaseParams(module, 5, freqNormForCenterHz(900.f), 0.58f, 0.75f, 0.f);
+  module.params[Bifurx::TITO_PARAM].setValue(0.7f);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  for (int n = 0; n < 4096; ++n) {
+    module.inputs[Bifurx::IN_INPUT].setVoltage(4.f * std::sin(2.f * kRuntimePi * 733.f * float(n) * args.sampleTime));
+    module.process(args);
+  }
+  const bool wasExcited = std::fabs(module.coreA.ic1eq) + std::fabs(module.coreA.ic2eq)
+    + std::fabs(module.coreB.ic1eq) + std::fabs(module.coreB.ic2eq) > 1e-5f;
+
+  // Rack's ResetEvent base implementation dispatches the deprecated no-argument
+  // hook after resetting parameters. Call that hook directly in this standalone
+  // harness, which has no live Rack engine/history context.
+  module.onReset();
+  const bool coresCleared = module.coreA.ic1eq == 0.f && module.coreA.ic2eq == 0.f
+    && module.coreB.ic1eq == 0.f && module.coreB.ic2eq == 0.f;
+  const bool cachesCleared = !module.controlFastCacheValid
+    && module.titoCoeffFreqA == 0.f && module.titoCoeffFreqB == 0.f
+    && module.titoSmDcCorrection == 0.f
+    && module.selfOscCoeffFreqA == 0.f && module.selfOscCoeffFreqB == 0.f
+    && module.cachedFrequencyRangeSampleRate == 0.f
+    && module.cachedPitchSampleRate == 0.f
+    && !module.cachedCharacterStateValid
+    && !module.previewFilterInitialized
+    && !module.transitionSmoother.initialized;
+  const bool analysisCleared = module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0 && module.analysisCaptureCountdown == 0;
+
+  module.inputs[Bifurx::IN_INPUT].setVoltage(0.f);
+  module.process(args);
+  const float firstOutput = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+  const bool silentRestart = std::isfinite(firstOutput) && std::fabs(firstOutput) < 1e-7f;
+  return {
+    "Reset clears Bifurx circuit, coefficient, smoothing, and capture state",
+    wasExcited && coresCleared && cachesCleared && analysisCleared && silentRestart,
+    "excited=" + std::to_string(int(wasExcited)) + " firstOutput=" + std::to_string(firstOutput)
+  };
+}
+
+TestResult testVoctStepsImmediatelyWithoutImplicitGlide() {
+  Bifurx module;
+  configureBaseParams(module, 5, freqNormForCenterHz(440.f), 0.f, 0.35f, 0.f);
+  clearCvInputs(module);
+  // The standalone Rack harness has no Engine cable bookkeeping, so mark the
+  // port connected directly before exercising its voltage.
+  module.inputs[Bifurx::VOCT_INPUT].channels = 1;
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  module.inputs[Bifurx::VOCT_INPUT].setVoltage(0.f);
+  module.process(args);
+  const float baseHz = module.cachedFreqA0;
+
+  module.inputs[Bifurx::VOCT_INPUT].setVoltage(1.f);
+  module.process(args);
+  const float steppedHz = module.cachedFreqA0;
+  const float ratio = steppedHz / std::max(baseHz, 1e-6f);
+  const bool pass = std::fabs(ratio - 2.f) < 2e-4f;
+  return {
+    "V/Oct follows a one-volt pitch step on the next sample without internal glide",
+    pass,
+    "baseHz=" + std::to_string(baseHz) + " steppedHz=" + std::to_string(steppedHz)
+      + " ratio=" + std::to_string(ratio)
+  };
+}
+
+TestResult testSpanIsPreservedAtFrequencyRails() {
+  constexpr float spanParam = 0.55f;
+  const float expectedRatio = std::exp2(8.f * shapedSpan(spanParam));
+  float measuredRatios[2] = {};
+  bool pass = true;
+
+  for (int edge = 0; edge < 2; ++edge) {
+    Bifurx module;
+    configureBaseParams(module, 5, edge == 0 ? 0.f : 1.f, spanParam, 0.35f, 0.f);
+    clearCvInputs(module);
+    Module::ProcessArgs args;
+    args.sampleRate = 48000.f;
+    args.sampleTime = 1.f / args.sampleRate;
+    module.process(args);
+    measuredRatios[edge] = module.cachedFreqB0 / std::max(module.cachedFreqA0, 1e-6f);
+    pass = pass && std::fabs(measuredRatios[edge] / expectedRatio - 1.f) < 5e-4f;
+  }
+
+  return {
+    "SPAN separation is preserved by shifting the cutoff pair at both frequency rails",
+    pass,
+    "expectedRatio=" + std::to_string(expectedRatio)
+      + " low=" + std::to_string(measuredRatios[0])
+      + " high=" + std::to_string(measuredRatios[1])
+  };
+}
+
+TestResult testRuntimeHighHighHasUnityCascadeGain() {
+  constexpr float cascadeHpToHp = 0.731f;
+  const float combined = combineModeResponse<float>(
+    9,
+    0.f, 0.f, 0.f, 0.f,
+    0.f, 0.f, 0.f, 0.f,
+    0.f, 0.f, 0.f, 0.f, 0.f, cascadeHpToHp,
+    1.f, 1.f
+  );
+  return {
+    "Production High + High applies unity gain to the cascaded high-pass output",
+    combined == cascadeHpToHp,
+    "cascade=" + std::to_string(cascadeHpToHp) + " combined=" + std::to_string(combined)
+  };
 }
 
 std::vector<float> curveSignatureDb(const BifurxPreviewState& state, const std::vector<float>& hz) {
@@ -568,6 +2351,8 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   float bestXmDistance = 0.f;
   int worstSmMode = -1;
   int worstXmMode = -1;
+  float worstSmDc = 0.f;
+  int worstSmDcMode = -1;
   std::string weakCases;
 
   for (int mode = 0; mode < 10; ++mode) {
@@ -581,7 +2366,14 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
       && std::isfinite(xmDistance) && std::isfinite(smDistance)
       && std::isfinite(clean.rms) && std::isfinite(xm.rms) && std::isfinite(sm.rms);
     const bool audibleContrast = (xmDistance > 0.012f) || (smDistance > 0.012f);
-    pass = pass && finite && audibleContrast;
+    const float smDcDelta = std::fabs(sm.mean - clean.mean);
+    const bool smDcControlled = smDcDelta < 0.15f;
+    pass = pass && finite && audibleContrast && smDcControlled;
+
+    if (smDcDelta > worstSmDc) {
+      worstSmDc = smDcDelta;
+      worstSmDcMode = mode;
+    }
 
     if (smDistance < worstSmDistance) {
       worstSmDistance = smDistance;
@@ -609,28 +2401,64 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
     "worstXm=m" + std::to_string(worstXmMode) + ":" + std::to_string(worstXmDistance) +
       " worstSm=m" + std::to_string(worstSmMode) +
       ":" + std::to_string(worstSmDistance) +
+      " worstSmDc=m" + std::to_string(worstSmDcMode) +
+      ":" + std::to_string(worstSmDc) +
       " bestXm=" + std::to_string(bestXmDistance) +
       " bestSm=" + std::to_string(bestSmDistance) +
       " weak=" + weakCases
   };
 }
 
+TestResult testRuntimeTitoSmRejectsFullScaleDcWithoutLosingVpp() {
+  bool pass = true;
+  float worstDc = 0.f;
+  float minimumVpp = INFINITY;
+  std::string detail;
+  for (float sourceHz : {261.6256f, 4186.009f}) {
+    for (float reso : {0.75f, 0.85f}) {
+      const TitoOutputCapture sm = captureTitoFullScaleSine(-1.f, reso, sourceHz);
+      const float vpp = sm.maximum - sm.minimum;
+      worstDc = std::max(worstDc, std::fabs(sm.mean));
+      minimumVpp = std::min(minimumVpp, vpp);
+      pass = pass && sm.finite && std::fabs(sm.mean) < 0.10f
+        && vpp > 9.5f && vpp <= 10.001f;
+      detail += " f=" + std::to_string(sourceHz) + " r=" + std::to_string(reso)
+        + " dc=" + std::to_string(sm.mean) + " vpp=" + std::to_string(vpp);
+    }
+  }
+  return {
+    "Runtime full-scale SM rejects DC while retaining rail-to-rail Vpp",
+    pass,
+    "worstDc=" + std::to_string(worstDc) + " minimumVpp=" + std::to_string(minimumVpp) + detail
+  };
+}
+
 TestResult testRuntimeSelfOscSoftOnsetRamp() {
   const ZeroInputCapture low = captureZeroInputOutput(5, 900.f, 0.58f, 0.78f, 0.f, 0.5f, 12000, 20000);
-  const ZeroInputCapture onset = captureZeroInputOutput(5, 900.f, 0.58f, 0.90f, 0.f, 0.5f, 12000, 20000);
-  const ZeroInputCapture hot = captureZeroInputOutput(5, 900.f, 0.58f, 1.00f, 0.f, 0.5f, 12000, 20000);
+  constexpr float plateauRes[] = {0.90f, 0.94f, 0.98f, 1.00f};
+  ZeroInputCapture plateau[4];
+  bool finite = low.finite;
+  bool bounded = true;
+  float plateauMin = INFINITY;
+  float plateauMax = 0.f;
+  std::string contour;
+  for (int i = 0; i < 4; ++i) {
+    plateau[i] = captureZeroInputOutput(5, 900.f, 0.58f, plateauRes[i], 0.f, 0.5f, 12000, 20000);
+    finite = finite && plateau[i].finite;
+    bounded = bounded && plateau[i].peakAbs < 5.f;
+    plateauMin = std::min(plateauMin, plateau[i].rms);
+    plateauMax = std::max(plateauMax, plateau[i].rms);
+    contour += " r=" + std::to_string(plateauRes[i]) + ":" + std::to_string(plateau[i].rms);
+  }
 
-  const bool finite = low.finite && onset.finite && hot.finite;
-  const bool onsetRises = onset.rms > std::max(low.rms * 1.4f, 1e-4f);
-  const bool hotRemainsActive = hot.rms > 0.02f;
-  const bool bounded = onset.peakAbs < 20.f && hot.peakAbs < 20.f;
-  const bool pass = finite && onsetRises && hotRemainsActive && bounded;
+  const bool onsetRises = plateau[0].rms > std::max(low.rms * 1.4f, 1e-4f);
+  const float plateauRatio = plateauMax / std::max(plateauMin, 1e-6f);
+  const bool controlledPlateau = plateauMin > 1.f && plateauRatio < 1.15f;
+  const bool pass = finite && onsetRises && controlledPlateau && bounded;
   return {
-    "Runtime self-osc onset ramps near upper-RESO region without abrupt jump",
+    "Runtime self-oscillation rises after 0.80 and settles into a controlled plateau",
     pass,
-    "rms(low,onset,hot)=(" + std::to_string(low.rms) + "," + std::to_string(onset.rms) + "," +
-      std::to_string(hot.rms) + ") peak(onset,hot)=(" + std::to_string(onset.peakAbs) + "," +
-      std::to_string(hot.peakAbs) + ")"
+    "low=" + std::to_string(low.rms) + contour + " plateauRatio=" + std::to_string(plateauRatio)
   };
 }
 
@@ -642,6 +2470,84 @@ TestResult testRuntimeSelfOscHighResBounded() {
     pass,
     "finite=" + std::to_string(int(hot.finite)) + " rms=" + std::to_string(hot.rms) +
       " peakAbs=" + std::to_string(hot.peakAbs)
+  };
+}
+
+TestResult testRuntimeSelfOscFlavorMap() {
+  constexpr float resonancePoints[] = {0.82f, 0.84f, 0.86f, 0.90f, 0.95f, 1.00f};
+  constexpr int resonanceCount = int(sizeof(resonancePoints) / sizeof(resonancePoints[0]));
+  float modeRms[kBifurxDisplayOnlyMode][resonanceCount] = {};
+  bool finite = true;
+  bool bounded = true;
+  std::string modes;
+  for (int mode = 0; mode < kBifurxDisplayOnlyMode; ++mode) {
+    modes += " m" + std::to_string(mode) + "=";
+    for (int point = 0; point < resonanceCount; ++point) {
+      const ZeroInputCapture capture = captureZeroInputOutput(
+        mode, 900.f, 0.58f, resonancePoints[point], 0.f, 0.5f, 24000, 12000);
+      modeRms[mode][point] = capture.rms;
+      finite = finite && capture.finite;
+      bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+      modes += std::to_string(capture.rms) + ",";
+    }
+  }
+
+  constexpr int regularModes[] = {0, 1, 2, 4, 5, 6, 8, 9};
+  bool stagedOnset = true;
+  bool controlledPlateau = true;
+  for (int mode : regularModes) {
+    stagedOnset = stagedOnset
+      && modeRms[mode][0] < 0.05f
+      && modeRms[mode][1] < 0.05f
+      && modeRms[mode][2] > 0.4f
+      && modeRms[mode][3] > 1.7f * modeRms[mode][2];
+    const float plateauMin = std::min(modeRms[mode][3], std::min(modeRms[mode][4], modeRms[mode][5]));
+    const float plateauMax = std::max(modeRms[mode][3], std::max(modeRms[mode][4], modeRms[mode][5]));
+    controlledPlateau = controlledPlateau
+      && plateauMin > 1.f
+      && plateauMax / std::max(plateauMin, 1e-6f) < 1.12f;
+  }
+  const bool topologyContrast = modeRms[3][4] < 0.2f
+    && modeRms[7][4] > 1.f;
+
+  constexpr float levelPoints[] = {0.2f, 0.5f, 0.8f, 1.0f};
+  float levelMin = INFINITY;
+  float levelMax = 0.f;
+  std::string levels;
+  for (float level : levelPoints) {
+    const ZeroInputCapture capture = captureZeroInputOutput(
+      5, 900.f, 0.58f, 0.95f, 0.f, level, 24000, 12000);
+    finite = finite && capture.finite;
+    bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+    levelMin = std::min(levelMin, capture.rms);
+    levelMax = std::max(levelMax, capture.rms);
+    levels += " l" + std::to_string(level) + "=" + std::to_string(capture.rms);
+  }
+  const float levelRatio = levelMax / std::max(levelMin, 1e-6f);
+  const bool levelStable = levelMin > 1.f && levelRatio < 1.08f;
+
+  float titoMin = INFINITY;
+  float titoMax = 0.f;
+  std::string tito;
+  for (float amount : {-1.f, 0.f, 1.f}) {
+    const ZeroInputCapture capture = captureZeroInputOutput(
+      5, 900.f, 0.58f, 0.95f, 0.f, 0.5f, 24000, 12000, amount);
+    finite = finite && capture.finite;
+    bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+    titoMin = std::min(titoMin, capture.rms);
+    titoMax = std::max(titoMax, capture.rms);
+    tito += " t" + std::to_string(amount) + "=" + std::to_string(capture.rms);
+  }
+  const float titoRatio = titoMax / std::max(titoMin, 1e-6f);
+  const bool titoLevelStable = titoMin > 1.f && titoRatio < 1.05f;
+
+  const bool pass = finite && bounded && stagedOnset && controlledPlateau
+    && topologyContrast && levelStable && titoLevelStable;
+  return {
+    "Runtime self-oscillation preserves staged onset, mode contrast, and LEVEL stability",
+    pass,
+    "levelRatio=" + std::to_string(levelRatio) +
+      " titoRatio=" + std::to_string(titoRatio) + modes + levels + tito
   };
 }
 
@@ -716,7 +2622,176 @@ TestResult testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough() {
   };
 }
 
-TestResult testBrowserPreviewUsesSquareWaveFft() {
+TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
+  bool pass = true;
+  bool authoredMiddleDiffers = false;
+  for (int scheme = 0; scheme < Bifurx::SCHEME_LEN; ++scheme) {
+    const BifurxColors authored = BifurxColors::get((Bifurx::ColorScheme) scheme, true);
+    const BifurxColors continuous = BifurxColors::get((Bifurx::ColorScheme) scheme, false);
+    const NVGcolor midpoint = mixColor(authored.low, authored.high, 0.5f);
+    const auto close = [](float a, float b) { return std::fabs(a - b) < 1e-6f; };
+    pass = pass
+      && close(continuous.low.r, authored.low.r)
+      && close(continuous.low.g, authored.low.g)
+      && close(continuous.low.b, authored.low.b)
+      && close(continuous.high.r, authored.high.r)
+      && close(continuous.high.g, authored.high.g)
+      && close(continuous.high.b, authored.high.b)
+      && close(continuous.white.r, midpoint.r)
+      && close(continuous.white.g, midpoint.g)
+      && close(continuous.white.b, midpoint.b)
+      && close(continuous.white.a, midpoint.a);
+    authoredMiddleDiffers = authoredMiddleDiffers
+      || !close(authored.white.r, midpoint.r)
+      || !close(authored.white.g, midpoint.g)
+      || !close(authored.white.b, midpoint.b);
+  }
+
+  Bifurx source;
+  source.threeColorFftGradient.store(true, std::memory_order_relaxed);
+  source.legacyVisuals.store(true, std::memory_order_relaxed);
+  json_t* stateJ = source.dataToJson();
+  Bifurx loaded;
+  loaded.dataFromJson(stateJ);
+  json_decref(stateJ);
+  const bool roundTripEnabled = loaded.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool legacyVisualsRoundTrip = loaded.legacyVisuals.load(std::memory_order_relaxed);
+
+  Bifurx legacyDefault;
+  json_t* legacyJ = json_object();
+  legacyDefault.dataFromJson(legacyJ);
+  json_decref(legacyJ);
+  const bool threeColorDefaultEnabled = legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool modernVisualsDefault = !legacyDefault.legacyVisuals.load(std::memory_order_relaxed);
+
+  pass = pass && authoredMiddleDiffers && roundTripEnabled && legacyVisualsRoundTrip
+    && threeColorDefaultEnabled && modernVisualsDefault;
+  return {
+    "Three-color FFT gradient defaults on and persists",
+    pass,
+    "authoredMiddleDiffers=" + std::to_string(int(authoredMiddleDiffers)) +
+      " roundTripEnabled=" + std::to_string(int(roundTripEnabled)) +
+      " legacyVisualsRoundTrip=" + std::to_string(int(legacyVisualsRoundTrip)) +
+      " threeColorDefaultEnabled=" + std::to_string(int(threeColorDefaultEnabled)) +
+      " modernVisualsDefault=" + std::to_string(int(modernVisualsDefault))
+  };
+}
+
+TestResult testDebugNonlinearOversamplingTogglePersists() {
+  Bifurx source;
+  source.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
+  json_t* stateJ = source.dataToJson();
+  if (!stateJ) {
+    return {"Debug nonlinear oversampling toggle persists", false, "dataToJson returned null"};
+  }
+
+  Bifurx loaded;
+  loaded.dataFromJson(stateJ);
+  json_decref(stateJ);
+
+  Bifurx legacyDefault;
+  json_t* legacyJ = json_object();
+  legacyDefault.dataFromJson(legacyJ);
+  json_decref(legacyJ);
+
+  const bool restoredDisabled =
+    !loaded.nonlinearOversamplingEnabled.load(std::memory_order_relaxed);
+  const bool legacyDefaultsEnabled =
+    legacyDefault.nonlinearOversamplingEnabled.load(std::memory_order_relaxed);
+  return {
+    "Debug nonlinear oversampling toggle persists",
+    restoredDisabled && legacyDefaultsEnabled,
+    "restoredDisabled=" + std::to_string(int(restoredDisabled)) +
+      " legacyDefaultsEnabled=" + std::to_string(int(legacyDefaultsEnabled))
+  };
+}
+
+TestResult testDebugNonlinearOversamplingToggleIsProductionSafe() {
+  Module::ProcessArgs args{};
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  const bool previousDebug = testDragonKingDebugEnabled;
+  bool pass = true;
+
+  for (int savedBoundary : {1, 2, 3}) for (bool savedEnabled : {false, true}) {
+    json_t* state = json_object();
+    json_object_set_new(state, "boundaryResampling", json_integer(savedBoundary));
+    json_object_set_new(state, "nonlinearOversamplingEnabled", json_boolean(savedEnabled));
+    Bifurx module;
+    module.dataFromJson(state);
+    json_decref(state);
+
+    auto settle = [&]() {
+      for (int i = 0; i < 512; ++i) module.process(args);
+      pass &= module.transitionSmoother.isStable();
+    };
+    auto checkProduction = [&]() {
+      pass &= module.cachedNonlinearOversamplingEnabled;
+      pass &= module.audioBoundary == 3;
+      pass &= module.transitionSmoother.activeBoundary == 3;
+    };
+
+    testDragonKingDebugEnabled = false;
+    settle();
+    checkProduction();
+    testDragonKingDebugEnabled = true;
+    settle();
+    pass &= module.audioBoundary == (savedEnabled ? savedBoundary : 0);
+    testDragonKingDebugEnabled = false;
+    settle();
+    checkProduction();
+    // Runtime enforcement must not erase the saved developer preferences.
+    pass &= module.boundaryResampling.load() == savedBoundary;
+    pass &= module.nonlinearOversamplingEnabled.load() == savedEnabled;
+  }
+  testDragonKingDebugEnabled = previousDebug;
+  return {
+    "Debug audio settings cannot override production 2x IIR4",
+    pass,
+    "All six saved boundary/enable combinations; production load and live debug on/off"
+  };
+}
+
+TestResult testHiddenResponseLinePreservesFftColorResponse() {
+  BifurxUiRenderRequest hiddenRequest;
+  hiddenRequest.previewState.sampleRate = 48000.f;
+  hiddenRequest.previewState.mode = 0;
+  hiddenRequest.showModuleResponseOverlay = false;
+  auto analysisFrame = std::make_shared<BifurxUiRenderPayload>();
+  // Keep the impulse spectrum above response-color confidence attenuation.
+  analysisFrame->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+  analysisFrame->analysisFrame.output[kFftSize / 2] = 20.f;
+  hiddenRequest.payload = analysisFrame;
+
+  BifurxUiRenderSnapshot hiddenSnapshot;
+  prepareCurveSnapshot(hiddenRequest, &hiddenSnapshot);
+
+  BifurxUiRenderRequest visibleRequest = hiddenRequest;
+  visibleRequest.showModuleResponseOverlay = true;
+  BifurxUiRenderSnapshot visibleSnapshot;
+  prepareCurveSnapshot(visibleRequest, &visibleSnapshot);
+
+  float maxHiddenResponseDb = -1000.f;
+  float maxVisibilityDifference = 0.f;
+  for (int i = 0; i < kCurvePointCount; ++i) {
+    maxHiddenResponseDb = std::max(maxHiddenResponseDb, hiddenSnapshot.overlayTargetModuleDb[i]);
+    maxVisibilityDifference = std::max(
+      maxVisibilityDifference,
+      std::fabs(hiddenSnapshot.overlayTargetModuleDb[i] - visibleSnapshot.overlayTargetModuleDb[i])
+    );
+  }
+
+  const bool hasColorDrivingResponse = maxHiddenResponseDb > 5.5f;
+  const bool visibilityOnlyAffectsLine = maxVisibilityDifference < 1e-5f;
+  return {
+    "Hidden response line preserves two-color FFT response data",
+    hasColorDrivingResponse && visibilityOnlyAffectsLine,
+    "maxResponseDb=" + std::to_string(maxHiddenResponseDb) +
+      " visibilityDifference=" + std::to_string(maxVisibilityDifference)
+  };
+}
+
+TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
   BifurxSpectrumBase display;
   display.initializeStaticPreviewStateIfNeeded();
 
@@ -731,17 +2806,19 @@ TestResult testBrowserPreviewUsesSquareWaveFft() {
   }
 
   const BifurxPreviewState& preview = display.state.previewState;
-  const bool configured = preview.mode == 0 &&
-    std::fabs(preview.spanParamNorm - 0.33f) < 1e-4f &&
-    preview.freqA > 780.f && preview.freqA < 850.f &&
-    preview.freqB > 2400.f && preview.freqB < 2600.f;
-  const bool squareAlternates = previewProbeStimulusSample(preview, 0) > 0.f &&
-    previewProbeStimulusSample(preview, 200) < 0.f;
+  const bool configured = preview.mode == kBrowserPreviewMode &&
+    std::fabs(preview.spanParamNorm - kBrowserPreviewSpan) < 1e-4f &&
+    std::fabs(preview.resoNorm - kBrowserPreviewResonance) < 1e-4f &&
+    std::fabs(preview.balance - kBrowserPreviewBalance) < 1e-4f &&
+    preview.freqA > 90.f && preview.freqA < 120.f &&
+    preview.freqB > 3500.f && preview.freqB < 4500.f;
+  const bool undertowShapeVaries = previewProbeStimulusSample(preview, 0) > 4.f &&
+    previewProbeStimulusSample(preview, 60) < -3.f;
   const bool hasSpectrum = display.state.hasOverlay && (overlayMax - overlayMin) > 12.f;
 
   return {
-    "Browser preview FFT uses 144 Hz square into default-span Low + Low",
-    configured && squareAlternates && finite && hasSpectrum,
+    "Browser preview recreates the authored Undertow Morph into Low + Band scene",
+    configured && undertowShapeVaries && finite && hasSpectrum,
     "cutoffsHz=(" + std::to_string(preview.freqA) + "," + std::to_string(preview.freqB) +
       ") rangeDb=" + std::to_string(overlayMax - overlayMin) +
       " topDbfs=" + std::to_string(display.state.displayTopDbfs)
@@ -750,8 +2827,65 @@ TestResult testBrowserPreviewUsesSquareWaveFft() {
 
 }  // namespace
 
+#include "full_process_timing.hpp"
+
 int main() {
+	{
+		Bifurx timedModule;
+		if (!verifyFullProcessTiming(timedModule, timedModule.perfAudioProcessRangeAverage, testDragonKingDebugEnabled)) return 1;
+	}
   const std::vector<TestResult> tests = {
+    testIirBoundaryIntegration(),
+    testPremiumBoundarySwitchContinuity(),
+    testPremiumQualityConcurrentAndResetAnalysis(),
+    testPremiumLowFrequencyProductionAgreement(),
+    testPremiumProductionBoundaryAliasReduction(),
+    testPremiumVisualWatchdogAndWorkerMetadata(),
+    testPremiumBoundaryPassband(),
+    testSpectrumLevelTrackingAndLowBins(),
+    testPremiumMonoAndInvalidCvContracts(),
+    testPremiumCounterAndQualityOwnership(),
+    testPremiumLowFrequencyResponse(),
+    testPremiumFrameRateIndependentAnimation(),
+    testNotchCurveReachesDisplayFloor(),
+    testDisablingWorkerCatchesUpPendingPreviewAndAnalysis(),
+    testInactivePresentationReleasesWorkerWithoutPreparingTargets(),
+    testRendererInitializesOnceAndSlewsSubsequentCurves(),
+    testFinalOverlayFrameIsDirtyThenIdles(),
+    testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches(),
+    testSpanShapeLutTracksReferenceCurve(),
+    testResonanceCurveUsesFullControlTravel(),
+    testFrequencyQuantityRoundTripsAccurately(),
+    testPreviewInvalidatesForModelDependencies(),
+    testPublishedSnapshotsRemainCoherentUnderContention(),
+    testAnalysisFramesPublishAsOverlappingWindows(),
+    testAnalysisCaptureSleepsWithoutVisualSubscriber(),
+    testVisualWorkerDefaultSetterHonorsMode(),
+    testWorkerAnalysisFramePoolIsBoundedAndReusable(),
+    testSynchronousFftScratchIsLazyAndThreadLocalReusable(),
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+    testModuleRebindingReleasesOldWorkerSession(),
+    testPreviewRateChangeReconcilesSynchronously(),
+    testRenderClientOwnsAndReleasesLocalServiceRegistration(),
+    testWorkerAdmissionRestartAndTerminalShutdown(),
+    testWorkerQueuedChurnAndFairness(),
+    testWorkerUnregisterInFlightAndStopJoin(),
+    testWorkerPayloadInheritanceAndRateValidity(),
+    testWorkerQueuedUnregisterRetiresLeaseOutsideLock(),
+    testWorkerInFlightCarryForwardAndRateMismatch(),
+    testWorkerLateAdmissionAndIdExhaustion(),
+#endif
+    testWorkerLatestRequestRetainsOwnedAnalysisPayload(),
+    testProductionOutputSafetyStageContract(),
+    testTwoTimesOversamplingSuppressesDrivenLevelAliases(),
+    testTwoTimesOversamplingSuppressesSoftLimiterAliases(),
+    testOversampledLimiterPreservesFiveVoltBoundary(),
+    testTransitionSmootherIsTransparentAndSampleRateIndependent(),
+    testRuntimeModeAndLimiterChangesPreserveContinuity(),
+    testResetClearsRuntimeState(),
+    testVoctStepsImmediatelyWithoutImplicitGlide(),
+    testSpanIsPreservedAtFrequencyRails(),
+    testRuntimeHighHighHasUnityCascadeGain(),
     testRuntimeSpanMonotonicInPreviewState(),
     testRuntimeBalanceTiltsBandBandInSvf(),
     testRuntimeReportedLowCaseKeepsAudibleOutput(),
@@ -760,10 +2894,16 @@ int main() {
     testRuntimePreviewPublishesHighQBeyondLegacyClamp(),
     testRuntimePreviewMarkerGainTracksBandHeavyModes(),
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
+    testRuntimeTitoSmRejectsFullScaleDcWithoutLosingVpp(),
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
+    testRuntimeSelfOscFlavorMap(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
-    testBrowserPreviewUsesSquareWaveFft(),
+    testTwoColorFftGradientMidpointAndJsonRoundTrip(),
+    testDebugNonlinearOversamplingTogglePersists(),
+    testDebugNonlinearOversamplingToggleIsProductionSafe(),
+    testHiddenResponseLinePreservesFftColorResponse(),
+    testBrowserPreviewUsesAuthoredUndertowScene(),
   };
 
   int fails = 0;

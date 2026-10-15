@@ -1,4 +1,4 @@
-#include "../src/PuffyEngine.hpp"
+#include "../src/puffy/PuffyEngine.hpp"
 
 #include <algorithm>
 #include <cmath>

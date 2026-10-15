@@ -1,5 +1,5 @@
-#include "../src/NautiloidLocationCode.hpp"
-#include "../src/NautiloidFractal.hpp"
+#include "../src/nautiloid/NautiloidLocationCode.hpp"
+#include "../src/common/fractal/BuiltinFractals.hpp"
 
 #include <array>
 #include <cmath>
@@ -70,15 +70,15 @@ void testFixedVectors() {
     const char* code;
   };
   const Vector vectors[] = {
-    {"Mandelbrot origin", {iris::FRACTAL_MANDELBROT, 0.f, 0.0, 0.0},
+    {"Mandelbrot origin", {fractal::FRACTAL_MANDELBROT, 0.f, 0.0, 0.0},
      "EQAAgAAAAIAAAABm"},
-    {"maximum zoom at negative corner", {iris::FRACTAL_MANDELBROT, 4.f, -2.0, -2.0},
+    {"maximum zoom at negative corner", {fractal::FRACTAL_MANDELBROT, 4.f, -2.0, -2.0},
      "Ef__AAAAAAAAAADK"},
-    {"maximum zoom at positive corner", {iris::FRACTAL_MANDELBROT, 4.f, 2.0, 2.0},
+    {"maximum zoom at positive corner", {fractal::FRACTAL_MANDELBROT, 4.f, 2.0, 2.0},
      "Ef____________8d"},
-    {"Julia representative", {iris::FRACTAL_JULIA, 1.f, 0.5, -0.75},
+    {"Julia representative", {fractal::FRACTAL_JULIA, 1.f, 0.5, -0.75},
      "FEAAn____1AAAACK"},
-    {"arbitrary Tricorn viewport", {iris::FRACTAL_TRICORN, 2.345678f, -1.234567, 0.87654321},
+    {"arbitrary Tricorn viewport", {fractal::FRACTAL_TRICORN, 2.345678f, -1.234567, 0.87654321},
      "GpYfMPzasbgZSLDv"},
   };
   for (const Vector& vector : vectors) {
@@ -134,7 +134,7 @@ void testMalformedInput() {
 
   std::array<uint8_t, 12> payload {};
   check("all-zero payload rejected", !nautiloid_location::isValid(encodePayload(payload)));
-  payload[0] = uint8_t(2u << 4u) | uint8_t(iris::FRACTAL_MANDELBROT);
+  payload[0] = uint8_t(2u << 4u) | uint8_t(fractal::FRACTAL_MANDELBROT);
   check("unsupported version rejected", !nautiloid_location::isValid(encodePayload(payload)));
   payload[0] = uint8_t(1u << 4u) | 15u;
   check("invalid fractal mode rejected", !nautiloid_location::isValid(encodePayload(payload)));
@@ -144,8 +144,8 @@ void testCanonicalization() {
   const double infinity = std::numeric_limits<double>::infinity();
   const float nan = std::numeric_limits<float>::quiet_NaN();
   const nautiloid_location::State inputs[] = {
-    {iris::FRACTAL_MANDELBROT, -3.f, -9.0, 9.0},
-    {iris::FRACTAL_NOVA, 9.f, 9.0, -9.0},
+    {fractal::FRACTAL_MANDELBROT, -3.f, -9.0, 9.0},
+    {fractal::FRACTAL_NOVA, 9.f, 9.0, -9.0},
     {-100, nan, infinity, -infinity},
   };
   bool idempotent = true;
@@ -157,7 +157,7 @@ void testCanonicalization() {
   check("canonicalization is exactly idempotent", idempotent);
   const auto fallback = nautiloid_location::canonicalize(inputs[2]);
   check("non-finite and invalid values use deterministic defaults",
-        fallback.mode == iris::FRACTAL_MANDELBROT && fallback.zoom == 0.f &&
+        fallback.mode == fractal::FRACTAL_MANDELBROT && fallback.zoom == 0.f &&
         std::fabs(fallback.centerX) < 1e-9 && std::fabs(fallback.centerY) < 1e-9);
 }
 
@@ -168,22 +168,22 @@ void testIrisPixelEquivalence() {
     nautiloid_location::State requested {mode, 1.375f, -0.3125, 0.21875};
     const auto canonical = nautiloid_location::canonicalize(requested);
     const auto decoded = nautiloid_location::decode(nautiloid_location::encode(canonical));
-    iris::NautiloidFractalSourceParams aParams;
+    fractal::FractalSourceParams aParams;
     aParams.mode = canonical.mode;
     aParams.zoom = canonical.zoom;
     aParams.centerX = canonical.centerX;
     aParams.centerY = canonical.centerY;
-    iris::NautiloidFractalSourceParams bParams;
+    fractal::FractalSourceParams bParams;
     bParams.mode = decoded.state.mode;
     bParams.zoom = decoded.state.zoom;
     bParams.centerX = decoded.state.centerX;
     bParams.centerY = decoded.state.centerY;
-    iris::SourceField a;
-    iris::SourceField b;
+    fractal::SourceField a;
+    fractal::SourceField b;
     std::string error;
     all = all && decoded.valid &&
-      iris::makeNautiloidIrisSource(aParams, &a, &error) &&
-      iris::makeNautiloidIrisSource(bParams, &b, &error) &&
+      fractal::makeFractalSource(aParams, &a, &error) &&
+      fractal::makeFractalSource(bParams, &b, &error) &&
       a.width == b.width && a.height == b.height &&
       a.channels == b.channels && a.bitDepth == b.bitDepth && a.rgb8 == b.rgb8;
   }

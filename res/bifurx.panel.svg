@@ -49,7 +49,6 @@
   </defs>
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
       <g id="waves_layer" style="display:none;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)">
         <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
           <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
@@ -65,11 +64,11 @@
       <rect x="1096.182" y="1107.229" width="9973.2734" height="12667.627" rx="210" ry="210" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="60" id="gray_outline" style="display:none;stroke:#3c3f42;stroke-opacity:1" />
       <path d="M 1397.1228,1952.2443 H 7648.7534" stroke="url(#accentGrad)" stroke-width="40.8777" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" />
     </g>
-    <path d="m 679.961,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="fm_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 6401.961,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="span_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 3543.4534,11454.444 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="freq_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
-    <path d="m 1650.7542,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="res_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
-    <path d="m 5450.7542,11413.942 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="bal_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
+    <path d="m 679.961,11431.042 0,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="fm_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 6409.9595,11431.042 0,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="span_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 3543.4534,11454.444 0,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="freq_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
+    <path d="m 1650.7542,11431.042 0,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="res_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
+    <path d="m 5450.7542,11413.942 0,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="bal_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
     <g id="slider_ticks" style="display:none;fill:none;stroke:#ffffff;stroke-width:50.00000025;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.72;stroke-dasharray:none">
       <g id="left-ticks" style="stroke-width:50.00000025;stroke-dasharray:none">
         <g id="g24" transform="translate(90.000004)" style="stroke-width:50.00000025;stroke-dasharray:none">
@@ -106,21 +105,33 @@
     </g>
     <rect x="3974.6584" y="10837.059" width="1077.783" height="1338.3831" rx="73.67926" ry="73.546219" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.117" id="outputs" style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none" inkscape:label="Out_Under_Black" />
     <g id="glass" style="display:inline">
-      <path d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="inputs" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sssssssssssssssss" />
-      <rect x="4042.1721" y="10894.673" width="944.95349" height="1250.9" rx="58.695" ry="63.930157" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="40.4311" id="outputs-3" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <path d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="inputs" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sssssssssssssssss" />
+      </g>
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect x="4042.1721" y="10894.673" width="944.95349" height="1250.9" rx="58.695" ry="63.930157" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="40.4311" id="outputs-3" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+      </g>
     </g>
   </g>
-  <g id="components" style="display:none;opacity:0.169">
-    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_PARAM" cx="1150.0443" cy="7570.0098" rx="294.84427" ry="295.80988" />
-    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:11.8608" id="MODE_MENU_BUTTON" cx="313.15613" cy="7570.0098" rx="113.15611" ry="113.84389" />
+  <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1">
+    <path id="fm_conduit" d="M 680,11389.972 680,9530" />
+    <path id="res_conduit" d="M 1651.4443,10295.81 1651.4443,11389.972" />
+    <path id="voct_conduit" d="M 3546,11389.972 3546,10160" />
+    <path id="balance_conduit" d="M 5451.3232,10295.81 5451.3232,11389.972" />
+    <path id="span_conduit" d="M 6409.9985,11389.972 6409.9985,9530" />
+  </g>
+  <g id="components" style="display:inline;opacity:0.169">
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_LEFT_PARAM" cx="816.59473" cy="7570.0098" rx="270.93332" ry="270.89343" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_RIGHT_PARAM" cx="1320.0333" cy="7570.0098" rx="270.93332" ry="270.89343" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_MENU_BUTTON" cx="313.15613" cy="7570.0098" rx="270.93332" ry="270.89343" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="LEVEL_PARAM" cx="1651.4443" cy="8760.0117" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="RESO_PARAM" cx="1651.4443" cy="10295.81" rx="294.84427" ry="295.80988" />
     <circle style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:46" id="FREQ_PARAM" cx="3546" cy="10160" r="520" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="TITO_PARAM" cx="3542.3442" cy="8585.21" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="SPAN_PARAM" cx="5451.3442" cy="8760.0098" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="BALANCE_PARAM" cx="5451.3232" cy="10295.81" rx="294.84427" ry="295.80988" />
-    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4616" id="FM_AMT_PARAM" width="300" height="2600" x="530" y="8230" rx="103.84615" ry="80.68969" />
-    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617" id="SPAN_CV_ATTEN_PARAM" width="300" height="2600" x="6252" y="8230" rx="103.84616" ry="80.68972" />
+    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4616" id="FM_AMT_PARAM" width="300" height="2600" x="530" y="8170" rx="103.84615" ry="80.68969" />
+    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617" id="SPAN_CV_ATTEN_PARAM" width="300" height="2600" x="6259.9985" y="8170" rx="103.84616" ry="80.68972" />
     <ellipse style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="FM_AMT_LIGHT" cx="680" cy="7980.0312" rx="114.98675" ry="120.83137" />
     <ellipse style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="SPAN_CV_ATTEN_LIGHT" cx="6402" cy="7980.0312" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="IN_INPUT" cx="2589.9988" cy="11389.972" rx="398.39865" ry="405.17142" />
@@ -133,7 +144,11 @@
   </g>
   <rect style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:29.9279;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="SPECTRUM" width="6949.7729" height="6336.0991" x="78.962128" y="946.43658" ry="0" />
   <g id="perfect_wave_raster_anchors" style="display:none">
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.610" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.674" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BIFURX_TOP_RASTER" x="0" y="0" width="7112.0004" height="946.43658" />
+    <rect id="SPECTRUM_MODERN" x="78.962128" y="946.43658" width="6949.7729" height="6336.0991" />
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.60999" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.6738" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11943.102" width="3271.9331" height="1224.054" />
+    <rect id="BIFURX_TITLE_RASTER" x="2266.0002" y="3.9000001" width="2580" height="946.66699" />
   </g>
 </svg>

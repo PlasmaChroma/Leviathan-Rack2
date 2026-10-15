@@ -1,0 +1,25 @@
+{
+  "status": "Package copied to Rack plugin directory; activated on next Rack launch",
+  "flag": "IntegralFluxRoundStroke=true",
+  "package_sha256": "f343dd97bb4a5a5710570ffb5bab5918a216927c794dcd09c76b7fe0ccbdde35",
+  "packaged_dll_sha256": "1B5E6331F75223CF98DF8662866C9B751097F95D63A5FD48DBD48B9B37029C41",
+  "unstripped_dll_sha256": "E8905A1FE568A6FEE4F5E2A2561E4026AFBE86503001DBEE4B5AF554866FD935",
+  "validation": [
+    "30 composed images: max byte difference 1, alpha-normalized error 0.00185354",
+    "Surface fallback/context retirement tests passed",
+    "549 shared GL lifecycle checks passed",
+    "Legacy preview adapter test passed",
+    "9 Flux runtime checks passed",
+    "8 analyzer tests passed"
+  ],
+  "live_capture": {
+    "file": "integral_flux_draw_1_20260910_074152_0.csv",
+    "rows": 2776,
+    "enabled": true,
+    "private_draws": 2385,
+    "fallbacks": 4,
+    "result": "Failed live performance gate: modulated preview median 539.05 us versus prior 63.75 us; private surface median 482.4 us",
+    "summary": "summary.json",
+    "comparison": "Similar workload, not matched same-build A/B"
+  }
+}

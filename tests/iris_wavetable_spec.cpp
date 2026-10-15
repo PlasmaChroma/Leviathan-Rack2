@@ -1,7 +1,7 @@
-#include "../src/IrisWavetable.hpp"
-#include "../src/IrisIO.hpp"
-#include "../src/IrisPolyphony.hpp"
-#include "../src/NautiloidFractal.hpp"
+#include "../src/common/fractal/ImageWavetable.hpp"
+#include "../src/iris/IrisIO.hpp"
+#include "../src/iris/IrisPolyphony.hpp"
+#include "../src/common/fractal/BuiltinFractals.hpp"
 
 #define QOI_IMPLEMENTATION
 #include "../src/third_party/qoi.h"
@@ -49,7 +49,7 @@ int main() {
         iris::vOctSourceChannel(5, 1) == 0 &&
         iris::vOctSourceChannel(3, 0) == 0);
 
-  iris::SourceField neutralPaletteSource;
+  fractal::SourceField neutralPaletteSource;
   neutralPaletteSource.width = 3;
   neutralPaletteSource.height = 1;
   neutralPaletteSource.rgb8 = {
@@ -57,34 +57,34 @@ int main() {
     64u, 64u, 64u,
     192u, 192u, 192u
   };
-  iris::SourceField contrastPaletteSource = neutralPaletteSource;
-  iris::FractalPalette neutralPalette;
-  iris::FractalPalette contrastPalette;
+  fractal::SourceField contrastPaletteSource = neutralPaletteSource;
+  fractal::FractalPalette neutralPalette;
+  fractal::FractalPalette contrastPalette;
   contrastPalette.contrast = 1.35f;
-  iris::applyFractalPalette(&neutralPaletteSource, neutralPalette);
-  iris::applyFractalPalette(&contrastPaletteSource, contrastPalette);
+  fractal::applyFractalPalette(&neutralPaletteSource, neutralPalette);
+  fractal::applyFractalPalette(&contrastPaletteSource, contrastPalette);
   check("fractal palette contrast spreads shadows and highlights",
         contrastPaletteSource.rgb8[0] < neutralPaletteSource.rgb8[0] &&
         contrastPaletteSource.rgb8[6] > neutralPaletteSource.rgb8[6]);
 
-  iris::ConversionSettings settings;
+  fractal::ConversionSettings settings;
   settings.frameSize = 8;
   settings.rows = 2;
 
-  iris::ImageWavetable black;
+  fractal::ImageWavetable black;
   std::vector<uint8_t> pixels = solid(2, 2, 0u);
-  check("black image converts", iris::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &black));
+  check("black image converts", fractal::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &black));
   check("black maps to -1", std::fabs(black.samples[0] + 1.f) < 1e-6f);
 
-  iris::ImageWavetable white;
+  fractal::ImageWavetable white;
   pixels = solid(2, 2, 255u);
-  check("white image converts", iris::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &white));
+  check("white image converts", fractal::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &white));
   check("white maps to +1", std::fabs(white.samples[0] - 1.f) < 1e-6f);
 
-  settings.normalizeMode = iris::NORMALIZE_NONE;
-  iris::ImageWavetable gray;
+  settings.normalizeMode = fractal::NORMALIZE_NONE;
+  fractal::ImageWavetable gray;
   pixels = solid(1, 1, 128u);
-  check("gray image converts", iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &gray));
+  check("gray image converts", fractal::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &gray));
   check("50 percent gray maps near zero", std::fabs(gray.samples[0]) < 0.01f);
 
   pixels.resize(2u * 2u * 4u, 255u);
@@ -92,9 +92,9 @@ int main() {
     const size_t left = size_t(y * 2) * 4u;
     pixels[left + 0u] = pixels[left + 1u] = pixels[left + 2u] = 0u;
   }
-  iris::ImageWavetable horizontal;
+  fractal::ImageWavetable horizontal;
   check("horizontal gradient converts",
-        iris::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &horizontal));
+        fractal::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &horizontal));
   check("horizontal gradient rises across phase",
         horizontal.sample(0.05f, 0.f) < horizontal.sample(0.45f, 0.f));
 
@@ -103,16 +103,16 @@ int main() {
     const size_t bottom = size_t(2 + x) * 4u;
     pixels[bottom + 0u] = pixels[bottom + 1u] = pixels[bottom + 2u] = 255u;
   }
-  iris::ImageWavetable vertical;
+  fractal::ImageWavetable vertical;
   check("vertical gradient converts",
-        iris::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &vertical));
+        fractal::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &vertical));
   const float top = vertical.sample(0.f, 0.f);
   const float bottom = vertical.sample(0.f, 1.f);
   check("vertical scan follows image rows", top < bottom);
   check("vertical interpolation is linear",
         std::fabs(vertical.sample(0.f, 0.5f) - 0.5f * (top + bottom)) < 1e-5f);
 
-  iris::ImageWavetable manual;
+  fractal::ImageWavetable manual;
   manual.frameSize = 4;
   manual.stride = 5;
   manual.rowCount = 2;
@@ -120,7 +120,7 @@ int main() {
   check("horizontal interpolation", std::fabs(manual.sample(0.125f, 0.f) - 0.5f) < 1e-6f);
   check("phase wrap interpolation", std::fabs(manual.sample(0.875f, 0.f) + 0.5f) < 1e-6f);
 
-  iris::WavetableOscillator oscillator;
+  fractal::WavetableOscillator oscillator;
   oscillator.process(manual, 1.f, 0.25f, 0.f);
   check("oscillator phase advances", std::fabs(oscillator.phase - 0.25f) < 1e-6f);
   oscillator.reset(0.9f);
@@ -128,48 +128,48 @@ int main() {
   check("oscillator phase wraps", std::fabs(oscillator.phase - 0.15f) < 1e-5f);
 
   settings.invert = true;
-  iris::ImageWavetable inverted;
+  fractal::ImageWavetable inverted;
   pixels = solid(2, 2, 255u);
   check("inverted image converts",
-        iris::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &inverted));
+        fractal::buildWavetableFromRgba(pixels.data(), 2, 2, 4, settings, &inverted));
   check("inversion flips polarity", inverted.samples[0] < -0.99f);
 
   settings.invert = false;
-  settings.normalizeMode = iris::NORMALIZE_NONE;
+  settings.normalizeMode = fractal::NORMALIZE_NONE;
   pixels = solid(1, 1, 0u);
   pixels[0] = 255u;
-  iris::ImageWavetable red;
+  fractal::ImageWavetable red;
   check("RGBA red image converts",
-        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &red));
+        fractal::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &red));
   check("RGBA channels use resized pixel data", std::fabs(red.samples[0] - (2.f * 0.299f - 1.f)) < 0.01f);
   check("source preview keeps full RGB",
-        red.sourcePreviewWidth == iris::kSourcePreviewWidth &&
-        red.sourcePreviewHeight == iris::kSourcePreviewHeight &&
-        red.sourcePreviewRgb.size() == size_t(iris::kSourcePreviewWidth * iris::kSourcePreviewHeight * 3) &&
+        red.sourcePreviewWidth == fractal::kSourcePreviewWidth &&
+        red.sourcePreviewHeight == fractal::kSourcePreviewHeight &&
+        red.sourcePreviewRgb.size() == size_t(fractal::kSourcePreviewWidth * fractal::kSourcePreviewHeight * 3) &&
         red.sourcePreviewRgb[0] == 255u && red.sourcePreviewRgb[1] == 0u &&
         red.sourcePreviewRgb[2] == 0u);
-  settings.imageChannelMode = iris::IMAGE_CHANNEL_RED;
-  iris::ImageWavetable redChannel;
+  settings.imageChannelMode = fractal::IMAGE_CHANNEL_RED;
+  fractal::ImageWavetable redChannel;
   check("red channel interpretation selects red",
-        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &redChannel) &&
+        fractal::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &redChannel) &&
         redChannel.samples[0] > 0.99f);
-  settings.imageChannelMode = iris::IMAGE_CHANNEL_GREEN;
-  iris::ImageWavetable greenChannel;
+  settings.imageChannelMode = fractal::IMAGE_CHANNEL_GREEN;
+  fractal::ImageWavetable greenChannel;
   check("green channel interpretation rejects red",
-        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &greenChannel) &&
+        fractal::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &greenChannel) &&
         greenChannel.samples[0] < -0.99f);
-  settings.imageChannelMode = iris::IMAGE_CHANNEL_BLUE;
-  iris::ImageWavetable blueChannel;
+  settings.imageChannelMode = fractal::IMAGE_CHANNEL_BLUE;
+  fractal::ImageWavetable blueChannel;
   check("blue channel interpretation rejects red",
-        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &blueChannel) &&
+        fractal::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &blueChannel) &&
         blueChannel.samples[0] < -0.99f);
-  settings.imageChannelMode = iris::IMAGE_CHANNEL_ALL;
+  settings.imageChannelMode = fractal::IMAGE_CHANNEL_ALL;
 
-  settings.trimMode = iris::TRIM_AGGRESSIVE;
+  settings.trimMode = fractal::TRIM_AGGRESSIVE;
   pixels = solid(2, 4, 128u);
-  iris::ImageWavetable flat;
+  fractal::ImageWavetable flat;
   check("flat-row image converts",
-        iris::buildWavetableFromRgba(pixels.data(), 2, 4, 4, settings, &flat));
+        fractal::buildWavetableFromRgba(pixels.data(), 2, 4, 4, settings, &flat));
   check("trimming preserves at least two rows", flat.rowCount >= 2);
   check("wrap sample duplicates row start",
         std::fabs(flat.samples[size_t(flat.frameSize)] - flat.samples[0]) < 1e-7f);
@@ -177,7 +177,7 @@ int main() {
   const std::string binaryPath = "/tmp/leviathan_iris_wavetable_spec.bin";
   std::string ioError;
   check("binary table saves", iris::saveBinaryTable(binaryPath, horizontal, &ioError));
-  iris::ImageWavetable restored;
+  fractal::ImageWavetable restored;
   check("binary table loads", iris::loadBinaryTable(binaryPath, &restored, &ioError));
   check("binary round trip preserves samples",
         restored.samples.size() == horizontal.samples.size() &&
@@ -197,16 +197,16 @@ int main() {
     alphaA[size_t(i) * 4u + 3u] = 0u;
     alphaB[size_t(i) * 4u + 3u] = 255u;
   }
-  iris::SourceField sourceA;
-  iris::SourceField sourceB;
+  fractal::SourceField sourceA;
+  fractal::SourceField sourceB;
   check("source field import succeeds",
-        iris::buildSourceFieldFromRgba8(alphaA.data(), 2, 2, 4, &sourceA));
+        fractal::buildSourceFieldFromRgba8(alphaA.data(), 2, 2, 4, &sourceA));
   check("source field uses canonical dimensions",
-        sourceA.width == iris::kCanonicalSourceWidth &&
-        sourceA.height == iris::kCanonicalSourceHeight &&
+        sourceA.width == fractal::kCanonicalSourceWidth &&
+        sourceA.height == fractal::kCanonicalSourceHeight &&
         sourceA.channels == 3 && sourceA.bitDepth == 8 && sourceA.valid());
   check("alpha does not influence source field",
-        iris::buildSourceFieldFromRgba8(alphaB.data(), 2, 2, 4, &sourceB) &&
+        fractal::buildSourceFieldFromRgba8(alphaB.data(), 2, 2, 4, &sourceB) &&
         sourceA.rgb8 == sourceB.rgb8);
   sourceA.sourcePath = "/tmp/source-image.png";
   sourceA.sourceName = "source-image.png";
@@ -215,24 +215,24 @@ int main() {
   sourceA.originalChannels = 4;
   const std::string qoiPath = "/tmp/leviathan_iris_source_field_spec.qoi";
   check("source field QOI saves", iris::saveSourceField(qoiPath, sourceA, &ioError));
-  iris::SourceField qoiRestored;
+  fractal::SourceField qoiRestored;
   check("source field QOI loads", iris::loadSourceField(qoiPath, &qoiRestored, &ioError));
   check("source field QOI round trip preserves canonical pixels",
         qoiRestored.width == sourceA.width && qoiRestored.height == sourceA.height &&
         qoiRestored.channels == sourceA.channels && qoiRestored.rgb8 == sourceA.rgb8);
-  iris::ImageWavetable sourceBuiltA;
-  iris::ImageWavetable sourceBuiltB;
+  fractal::ImageWavetable sourceBuiltA;
+  fractal::ImageWavetable sourceBuiltB;
   check("source field builds wavetable",
-        iris::buildWavetableFromSourceField(sourceA, settings, &sourceBuiltA, &ioError));
+        fractal::buildWavetableFromSourceField(sourceA, settings, &sourceBuiltA, &ioError));
   check("QOI-restored source builds same wavetable",
-        iris::buildWavetableFromSourceField(qoiRestored, settings, &sourceBuiltB, &ioError) &&
+        fractal::buildWavetableFromSourceField(qoiRestored, settings, &sourceBuiltB, &ioError) &&
         sourceBuiltA.samples == sourceBuiltB.samples);
   std::remove(qoiPath.c_str());
 
   settings.frameSize = 5;
   settings.rows = 2;
-  settings.trimMode = iris::TRIM_OFF;
-  settings.normalizeMode = iris::NORMALIZE_BALANCED;
+  settings.trimMode = fractal::TRIM_OFF;
+  settings.normalizeMode = fractal::NORMALIZE_BALANCED;
   pixels.resize(5u * 2u * 4u, 255u);
   const uint8_t levels[5] = {0u, 32u, 96u, 160u, 255u};
   for (int y = 0; y < 2; ++y) {
@@ -241,9 +241,9 @@ int main() {
       pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = levels[x];
     }
   }
-  iris::ImageWavetable balanced;
+  fractal::ImageWavetable balanced;
   check("balanced normalization converts",
-        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &balanced));
+        fractal::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &balanced));
   check("balanced normalization maps median to zero", std::fabs(balanced.samples[2]) < 1e-5f);
   check("balanced normalization retains both polarities",
         balanced.samples[0] < -0.9f && balanced.samples[4] > 0.9f);
@@ -257,9 +257,9 @@ int main() {
       pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = darkDominantLevels[x];
     }
   }
-  iris::ImageWavetable darkDominantBalanced;
+  fractal::ImageWavetable darkDominantBalanced;
   check("balanced normalization rescues a median collapsed onto the dark floor",
-        iris::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &darkDominantBalanced) &&
+        fractal::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &darkDominantBalanced) &&
         darkDominantBalanced.samples[0] < -0.9f && darkDominantBalanced.samples[9] > 0.9f);
 
   const uint8_t brightDominantLevels[10] = {0u, 127u, 191u, 255u, 255u, 255u, 255u, 255u, 255u, 255u};
@@ -269,9 +269,9 @@ int main() {
       pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = brightDominantLevels[x];
     }
   }
-  iris::ImageWavetable brightDominantBalanced;
+  fractal::ImageWavetable brightDominantBalanced;
   check("balanced normalization rescues a median collapsed onto the bright ceiling",
-        iris::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &brightDominantBalanced) &&
+        fractal::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &brightDominantBalanced) &&
         brightDominantBalanced.samples[0] < -0.9f && brightDominantBalanced.samples[9] > 0.9f);
 
   const uint8_t separatedLevels[2][5] = {
@@ -287,9 +287,9 @@ int main() {
         separatedLevels[y][x];
     }
   }
-  iris::ImageWavetable rowBalanced;
+  fractal::ImageWavetable rowBalanced;
   check("balanced normalization converts separated row ranges",
-        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &rowBalanced));
+        fractal::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &rowBalanced));
   const size_t secondRowBase = size_t(rowBalanced.stride);
   bool separatedRowsRetainPolarity = true;
   for (int x = 0; x < rowBalanced.frameSize; ++x) {
@@ -311,17 +311,17 @@ int main() {
         overlappingLevels[y][x];
     }
   }
-  iris::ImageWavetable globallyBalanced;
+  fractal::ImageWavetable globallyBalanced;
   check("balanced normalization converts overlapping row ranges",
-        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &globallyBalanced));
+        fractal::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &globallyBalanced));
   check("balanced normalization uses one image-wide transfer function",
         std::fabs(globallyBalanced.samples[2] -
                   globallyBalanced.samples[size_t(globallyBalanced.stride)]) < 1e-5f);
 
   settings.dcRemove = true;
-  iris::ImageWavetable dcBalanced;
+  fractal::ImageWavetable dcBalanced;
   check("DC removal converts overlapping row ranges",
-        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &dcBalanced));
+        fractal::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &dcBalanced));
   bool everyNonFlatRowHasBothPolarities = true;
   for (int row = 0; row < dcBalanced.rowCount; ++row) {
     const size_t base = size_t(row) * size_t(dcBalanced.stride);
@@ -337,8 +337,8 @@ int main() {
         everyNonFlatRowHasBothPolarities);
   settings.dcRemove = false;
 
-  const iris::ImageWavetable factory = iris::makeDefaultTable();
-  check("factory table has full row terrain", factory.rowCount == iris::kDefaultRows);
+  const fractal::ImageWavetable factory = fractal::makeDefaultTable();
+  check("factory table has full row terrain", factory.rowCount == fractal::kDefaultRows);
   check("factory table starts with sine",
         std::fabs(factory.sample(0.125f, 0.f) - std::sin(0.25f * 3.14159265358979323846f)) < 1e-5f);
   check("factory table reaches triangle at first third",
@@ -351,7 +351,7 @@ int main() {
   const float nan = std::numeric_limits<float>::quiet_NaN();
   check("non-finite phase is contained", std::isfinite(factory.sample(nan, 0.5f)));
   check("non-finite scan is contained", std::isfinite(factory.sample(0.25f, nan)));
-  iris::WavetableOscillator guardedOscillator;
+  fractal::WavetableOscillator guardedOscillator;
   guardedOscillator.phase = nan;
   const float guardedOut = guardedOscillator.process(factory, nan, nan, nan);
   check("non-finite oscillator state is contained",
@@ -359,22 +359,22 @@ int main() {
   guardedOscillator.reset(nan);
   check("non-finite reset phase is contained", guardedOscillator.phase == 0.f);
 
-  iris::ImageWavetable shortStride = factory;
+  fractal::ImageWavetable shortStride = factory;
   shortStride.stride = shortStride.frameSize;
   shortStride.samples.resize(size_t(shortStride.rowCount) * size_t(shortStride.stride));
   check("table rejects stride without wrap sample", !shortStride.valid());
 
-  iris::ImageWavetable nonFiniteTable = factory;
+  fractal::ImageWavetable nonFiniteTable = factory;
   nonFiniteTable.samples[10] = nan;
   check("binary writer rejects non-finite samples",
         !iris::saveBinaryTable(binaryPath, nonFiniteTable, &ioError));
   std::remove(binaryPath.c_str());
 
-  iris::ConversionSettings smoothingSettings;
+  fractal::ConversionSettings smoothingSettings;
   smoothingSettings.frameSize = 8;
   smoothingSettings.rows = 2;
-  smoothingSettings.normalizeMode = iris::NORMALIZE_NONE;
-  smoothingSettings.waveSmoothing = 1.f / iris::kWaveSmoothingCapacityScale;
+  smoothingSettings.normalizeMode = fractal::NORMALIZE_NONE;
+  smoothingSettings.waveSmoothing = 1.f / fractal::kWaveSmoothingCapacityScale;
   std::vector<uint8_t> jagged(size_t(8 * 2) * 4u, 255u);
   for (int y = 0; y < 2; ++y) {
     for (int x = 0; x < 8; ++x) {
@@ -383,19 +383,19 @@ int main() {
       jagged[base + 0u] = jagged[base + 1u] = jagged[base + 2u] = value;
     }
   }
-  iris::ImageWavetable smoothed;
+  fractal::ImageWavetable smoothed;
   check("wave smoothing converts jagged image",
-        iris::buildWavetableFromRgba(jagged.data(), 8, 2, 4, smoothingSettings, &smoothed));
+        fractal::buildWavetableFromRgba(jagged.data(), 8, 2, 4, smoothingSettings, &smoothed));
   float maxAbs = 0.f;
   for (int x = 0; x < smoothed.frameSize; ++x) {
     maxAbs = std::max(maxAbs, std::fabs(smoothed.samples[size_t(x)]));
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
 
-  smoothingSettings.waveSmoothing = iris::kMaxWaveSmoothing;
-  iris::ImageWavetable extendedSmoothed;
+  smoothingSettings.waveSmoothing = fractal::kMaxWaveSmoothing;
+  fractal::ImageWavetable extendedSmoothed;
   check("extended wave smoothing converts jagged image",
-        iris::buildWavetableFromRgba(
+        fractal::buildWavetableFromRgba(
           jagged.data(), 8, 2, 4, smoothingSettings, &extendedSmoothed));
   float extendedMaxAbs = 0.f;
   for (int x = 0; x < extendedSmoothed.frameSize; ++x) {
@@ -405,47 +405,47 @@ int main() {
   check("expanded wave smoothing maximum exceeds former capacity",
         extendedMaxAbs < maxAbs);
 
-  iris::NautiloidFractalSourceParams nautiloidParams;
-  nautiloidParams.mode = iris::FRACTAL_BURNING_SHIP;
+  fractal::FractalSourceParams nautiloidParams;
+  nautiloidParams.mode = fractal::FRACTAL_BURNING_SHIP;
   nautiloidParams.zoom = 2.25f;
   nautiloidParams.centerX = -0.18f;
   nautiloidParams.centerY = 0.07f;
-  nautiloidParams.colorMode = nautiloid_color::EMBER;
+  nautiloidParams.colorMode = fractal_color::EMBER;
   nautiloidParams.generation = 42u;
-  iris::SourceField nautiloidSource;
+  fractal::SourceField nautiloidSource;
   check("Nautiloid Iris source helper generates canonical source",
-        iris::makeNautiloidIrisSource(nautiloidParams, &nautiloidSource, &ioError) &&
+        fractal::makeFractalSource(nautiloidParams, &nautiloidSource, &ioError) &&
         nautiloidSource.valid() &&
         nautiloidSource.sourceName == "Nautiloid: Burning Ship");
   check("Nautiloid Iris source helper stores generator metadata",
-        iris::sourceHasNautiloidFractalParams(nautiloidSource) &&
+        fractal::sourceHasFractalSourceParams(nautiloidSource) &&
         nautiloidSource.generatorFractalMode == nautiloidParams.mode &&
         std::fabs(nautiloidSource.generatorFractalZoom - nautiloidParams.zoom) < 1e-6f &&
         std::fabs(nautiloidSource.generatorFractalCenterX - nautiloidParams.centerX) < 1e-6f &&
         std::fabs(nautiloidSource.generatorFractalCenterY - nautiloidParams.centerY) < 1e-6f &&
         nautiloidSource.generatorFractalColorMode == nautiloidParams.colorMode &&
         nautiloidSource.generatorGeneration == nautiloidParams.generation);
-  iris::ImageWavetable nautiloidTable;
+  fractal::ImageWavetable nautiloidTable;
   check("Nautiloid Iris source converts to wavetable",
-        iris::buildWavetableFromSourceField(nautiloidSource, settings, &nautiloidTable, &ioError) &&
+        fractal::buildWavetableFromSourceField(nautiloidSource, settings, &nautiloidTable, &ioError) &&
         nautiloidTable.valid());
-  iris::NautiloidFractalSourceParams prismParams = nautiloidParams;
-  prismParams.colorMode = nautiloid_color::PRISM;
-  iris::SourceField prismNautiloidSource;
-  iris::ImageWavetable prismNautiloidTable;
+  fractal::FractalSourceParams prismParams = nautiloidParams;
+  prismParams.colorMode = fractal_color::PRISM;
+  fractal::SourceField prismNautiloidSource;
+  fractal::ImageWavetable prismNautiloidTable;
   const bool prismBuilt =
-    iris::makeNautiloidIrisSource(prismParams, &prismNautiloidSource, &ioError) &&
-    iris::buildWavetableFromSourceField(
+    fractal::makeFractalSource(prismParams, &prismNautiloidSource, &ioError) &&
+    fractal::buildWavetableFromSourceField(
       prismNautiloidSource, settings, &prismNautiloidTable, &ioError);
   check("Nautiloid color mode changes Iris source pixels",
         prismBuilt && prismNautiloidSource.rgb8 != nautiloidSource.rgb8);
   check("Nautiloid color mode changes the resulting wavetable",
         prismBuilt && prismNautiloidTable.samples != nautiloidTable.samples);
-  iris::NautiloidFractalSourceParams invertedParams = prismParams;
-  invertedParams.colorMode = nautiloid_color::INVERTED;
-  iris::SourceField invertedNautiloidSource;
+  fractal::FractalSourceParams invertedParams = prismParams;
+  invertedParams.colorMode = fractal_color::INVERTED;
+  fractal::SourceField invertedNautiloidSource;
   const bool invertedBuilt =
-    iris::makeNautiloidIrisSource(invertedParams, &invertedNautiloidSource, &ioError);
+    fractal::makeFractalSource(invertedParams, &invertedNautiloidSource, &ioError);
   bool invertedMatchesPrism = invertedBuilt && prismBuilt &&
     invertedNautiloidSource.rgb8.size() == prismNautiloidSource.rgb8.size();
   for (size_t i = 0; invertedMatchesPrism && i + 2u < invertedNautiloidSource.rgb8.size(); i += 3u) {
@@ -464,37 +464,37 @@ int main() {
   check("Nautiloid Inverted mode reverses Prism while preserving its dark interior",
         invertedMatchesPrism);
 
-  iris::SourceField multibrotSource;
-  iris::SourceField multijuliaSource;
-  iris::SourceField manowarSource;
-  iris::SourceField buffaloSource;
-  iris::SourceField barnsleySource;
+  fractal::SourceField multibrotSource;
+  fractal::SourceField multijuliaSource;
+  fractal::SourceField manowarSource;
+  fractal::SourceField buffaloSource;
+  fractal::SourceField barnsleySource;
   check("cubic Multibrot generates a source",
-        iris::makeBuiltinFractalSourceSized(
-          iris::FRACTAL_MULTIBROT, 0.f, 0.0, 0.0,
+        fractal::makeBuiltinFractalSourceSized(
+          fractal::FRACTAL_MULTIBROT, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &multibrotSource, &ioError) &&
         multibrotSource.valid());
   check("cubic Multijulia generates a source",
-        iris::makeBuiltinFractalSourceSized(
-          iris::FRACTAL_MULTIJULIA, 0.f, 0.0, 0.0,
+        fractal::makeBuiltinFractalSourceSized(
+          fractal::FRACTAL_MULTIJULIA, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &multijuliaSource, &ioError) &&
         multijuliaSource.valid());
   check("Manowar generates a source",
-        iris::makeBuiltinFractalSourceSized(
-          iris::FRACTAL_MANOWAR, 0.f, 0.0, 0.0,
+        fractal::makeBuiltinFractalSourceSized(
+          fractal::FRACTAL_MANOWAR, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &manowarSource, &ioError) &&
         manowarSource.valid() && manowarSource.sourceName == "Fractal: Manowar");
   check("Buffalo generates a source",
-        iris::makeBuiltinFractalSourceSized(
-          iris::FRACTAL_BUFFALO, 0.f, 0.0, 0.0,
+        fractal::makeBuiltinFractalSourceSized(
+          fractal::FRACTAL_BUFFALO, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &buffaloSource, &ioError) &&
         buffaloSource.valid() && buffaloSource.sourceName == "Fractal: Buffalo");
   check("Barnsley generates a source",
-        iris::makeBuiltinFractalSourceSized(
-          iris::FRACTAL_BARNSLEY, 0.f, 0.0, 0.0,
+        fractal::makeBuiltinFractalSourceSized(
+          fractal::FRACTAL_BARNSLEY, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &barnsleySource, &ioError) &&
         barnsleySource.valid() && barnsleySource.sourceName == "Fractal: Barnsley");
-  const auto sourceHasVariation = [](const iris::SourceField& source) {
+  const auto sourceHasVariation = [](const fractal::SourceField& source) {
     for (size_t i = 1u; i < source.rgb8.size(); ++i) {
       if (source.rgb8[i] != source.rgb8[0]) return true;
     }

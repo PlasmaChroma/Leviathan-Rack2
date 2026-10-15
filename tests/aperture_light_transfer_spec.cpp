@@ -1,4 +1,4 @@
-#include "../src/visual/ApertureLightTransfer.hpp"
+#include "../src/common/visual/ApertureLightTransfer.hpp"
 
 #include <algorithm>
 #include <cmath>

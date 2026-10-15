@@ -1,0 +1,1482 @@
+{
+  "date": "2026-09-10",
+  "rack": "2.6.6",
+  "gpu": "Intel Iris Xe",
+  "driver": "32.0.101.7088",
+  "modes": {
+    "0": "Installed host NanoVG",
+    "1": "Unoptimized CPU geometry bridge to host queue",
+    "2": "Optimized CPU geometry bridge to host queue"
+  },
+  "scope": "Two preview strokes plus interleaved host fills; CPU includes clear, frame setup, state specification, path commands, geometry expansion, queue submission and host end-frame; source point generation outside timed scope. Not a live module test.",
+  "validation": {
+    "image_comparisons": 3000,
+    "maximum_byte_difference": 0,
+    "host_callback_table_unchanged": true,
+    "GL_bindings_unchanged_by_submission": true,
+    "replacement_NVG_host_context_pass": true,
+    "native_GL_context_recreation_tested": false
+  },
+  "runs": [
+    {
+      "log": "callback-bridge-results.txt",
+      "sha256": "4a7dc3e601c7c06582e0b97d6be4ddfb13d1920dfd6f45d344b2810305a24daa",
+      "metrics": [
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 55.0,
+          "p95_us": 93.9
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 34.112,
+          "p95_us": 47.632
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 45.4,
+          "p95_us": 94.3
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 32.916,
+          "p95_us": 35.152
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 13.2,
+          "p95_us": 19.6
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.536,
+          "p95_us": 32.916
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 39.6,
+          "p95_us": 81.1
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 17.056,
+          "p95_us": 18.252
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 14.4,
+          "p95_us": 22.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 17.368,
+          "p95_us": 21.424
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 38.4,
+          "p95_us": 86.1
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.148,
+          "p95_us": 21.528
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 31.3,
+          "p95_us": 37.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.096,
+          "p95_us": 21.996
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 38.4,
+          "p95_us": 90.9
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.2,
+          "p95_us": 19.552
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 43.8,
+          "p95_us": 93.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.772,
+          "p95_us": 19.812
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 34.1,
+          "p95_us": 40.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 20.644,
+          "p95_us": 23.764
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 40.1,
+          "p95_us": 75.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 20.696,
+          "p95_us": 22.152
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 13.7,
+          "p95_us": 14.8
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 19.968,
+          "p95_us": 20.956
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 37.0,
+          "p95_us": 39.8
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.772,
+          "p95_us": 20.696
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 32.3,
+          "p95_us": 38.1
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.46,
+          "p95_us": 21.684
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 47.3,
+          "p95_us": 95.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.72,
+          "p95_us": 20.748
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 27.5,
+          "p95_us": 36.4
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.616,
+          "p95_us": 19.968
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 36.4,
+          "p95_us": 41.3
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.668,
+          "p95_us": 19.812
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 72.8,
+          "p95_us": 93.8
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.668,
+          "p95_us": 19.916
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 37.5,
+          "p95_us": 87.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 17.056,
+          "p95_us": 20.02
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 44.6,
+          "p95_us": 90.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 20.384,
+          "p95_us": 21.424
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 14.1,
+          "p95_us": 37.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 20.176,
+          "p95_us": 21.528
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 70.2,
+          "p95_us": 97.3
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 23.244,
+          "p95_us": 27.508
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 14.1,
+          "p95_us": 15.1
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 23.14,
+          "p95_us": 25.012
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 35.7,
+          "p95_us": 39.2
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 23.296,
+          "p95_us": 24.752
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 14.5,
+          "p95_us": 38.2
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 22.984,
+          "p95_us": 24.648
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 36.7,
+          "p95_us": 93.2
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 22.1,
+          "p95_us": 23.972
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 44.8,
+          "p95_us": 90.3
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 22.724,
+          "p95_us": 24.076
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 48.7,
+          "p95_us": 91.3
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 26.104,
+          "p95_us": 27.56
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 34.4,
+          "p95_us": 48.9
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 26.104,
+          "p95_us": 29.484
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 19.9,
+          "p95_us": 36.7
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 25.896,
+          "p95_us": 27.768
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 41.1,
+          "p95_us": 91.5
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 25.948,
+          "p95_us": 27.716
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 17.8,
+          "p95_us": 26.7
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 25.844,
+          "p95_us": 29.276
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 35.3,
+          "p95_us": 45.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 26.0,
+          "p95_us": 28.444
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 15.1,
+          "p95_us": 17.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 24.908,
+          "p95_us": 26.988
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 28.5,
+          "p95_us": 56.5
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.564,
+          "p95_us": 20.904
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 32.5,
+          "p95_us": 40.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 18.512,
+          "p95_us": 21.528
+        }
+      ]
+    },
+    {
+      "log": "callback-bridge-final-results.txt",
+      "sha256": "42106252edc1407c51510d47d4c0aceaf355f2a2bbeba02f5556d4704d95f6d4",
+      "metrics": [
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 32.9,
+          "p95_us": 79.8
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 34.528,
+          "p95_us": 49.868
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 42.8,
+          "p95_us": 65.2
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.332,
+          "p95_us": 36.14
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 30.0,
+          "p95_us": 37.3
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.644,
+          "p95_us": 36.192
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 44.0,
+          "p95_us": 90.6
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.8,
+          "p95_us": 35.36
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 33.2,
+          "p95_us": 40.9
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.644,
+          "p95_us": 47.216
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 36.8,
+          "p95_us": 73.2
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.852,
+          "p95_us": 43.628
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 26.4,
+          "p95_us": 38.4
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.644,
+          "p95_us": 37.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 52.5,
+          "p95_us": 96.6
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.8,
+          "p95_us": 35.932
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 33.0,
+          "p95_us": 94.1
+        },
+        {
+          "shape_mode": 0,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 33.644,
+          "p95_us": 37.128
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 37.1,
+          "p95_us": 82.8
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.428,
+          "p95_us": 40.768
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 41.1,
+          "p95_us": 92.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.116,
+          "p95_us": 40.404
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 29.3,
+          "p95_us": 38.2
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.012,
+          "p95_us": 41.6
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 43.4,
+          "p95_us": 93.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.012,
+          "p95_us": 41.028
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 14.1,
+          "p95_us": 24.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.74,
+          "p95_us": 53.508
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 35.8,
+          "p95_us": 38.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.272,
+          "p95_us": 40.56
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 29.1,
+          "p95_us": 35.9
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 30.888,
+          "p95_us": 32.552
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 70.6,
+          "p95_us": 95.7
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 30.836,
+          "p95_us": 32.5
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 38.1,
+          "p95_us": 59.6
+        },
+        {
+          "shape_mode": 0,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 31.096,
+          "p95_us": 34.84
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 35.5,
+          "p95_us": 38.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 27.508,
+          "p95_us": 29.12
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 41.2,
+          "p95_us": 84.6
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 27.56,
+          "p95_us": 37.544
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 28.0,
+          "p95_us": 36.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 27.404,
+          "p95_us": 30.056
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 75.9,
+          "p95_us": 98.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.328,
+          "p95_us": 30.888
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 26.4,
+          "p95_us": 36.6
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.016,
+          "p95_us": 30.732
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 35.4,
+          "p95_us": 68.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.328,
+          "p95_us": 30.992
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 17.0,
+          "p95_us": 28.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.12,
+          "p95_us": 33.332
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 44.3,
+          "p95_us": 92.9
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 29.276,
+          "p95_us": 31.252
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 41.0,
+          "p95_us": 100.2
+        },
+        {
+          "shape_mode": 1,
+          "density": 1,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 30.212,
+          "p95_us": 40.872
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 41.1,
+          "p95_us": 96.2
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 35.36,
+          "p95_us": 44.824
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 37.1,
+          "p95_us": 62.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 35.516,
+          "p95_us": 47.892
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 33.4,
+          "p95_us": 37.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 0,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 35.412,
+          "p95_us": 37.388
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 46.1,
+          "p95_us": 84.1
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 35.672,
+          "p95_us": 48.152
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 21.1,
+          "p95_us": 36.1
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 35.776,
+          "p95_us": 48.412
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 36.3,
+          "p95_us": 73.8
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 1,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.48,
+          "p95_us": 50.18
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 15.4,
+          "p95_us": 23.0
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 2,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.584,
+          "p95_us": 41.652
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 29.5,
+          "p95_us": 85.1
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 0,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.272,
+          "p95_us": 47.008
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "CPU",
+          "n": 360,
+          "median_us": 39.7,
+          "p95_us": 85.6
+        },
+        {
+          "shape_mode": 1,
+          "density": 2,
+          "repeat": 2,
+          "mode": 1,
+          "scope": "GPU",
+          "n": 360,
+          "median_us": 38.22,
+          "p95_us": 41.236
+        }
+      ]
+    }
+  ],
+  "hashes": {
+    "tools/experiments/lumin/callback_bridge.hpp": "a49770f2312f9efa37a33ab89b6d77c6c8bed8570fd335bb056fa06e62e11d80",
+    "tools/experiments/lumin/callback_bridge.cpp": "4425cf1ed2f26c0ff41a24d237d675c80a933f9711ab6a3d3d664f6569c71d0e",
+    "tools/experiments/lumin/callback_bridge_spec.cpp": "99fa2e9997656933721eb63a2b1462069ab2e0bae05caf02b2fa10c57413ba25",
+    "tools/experiments/lumin/prepare_round_stroke.py": "924b6df42b92669234c749584b2646dfafa2dc9bcdaecdfe112643c0f10a6ab9",
+    "build/tools/round_stroke/nanovg.c": "651b363b7c5bc24a86758e6e685d90cb15fd16bd50cefb1979176356c60deec1",
+    "build/tools/callback_bridge_spec.exe": "5134a4b94c1971d93cd46109eb8ff44d4b28c29ebf61efdd20bfbc3dfaee0beb"
+  }
+}

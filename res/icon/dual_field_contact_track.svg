@@ -92,22 +92,22 @@
     </linearGradient>
   </defs>
   <rect
-     x="10.6"
+     x="11.2"
      y="5.8499999"
-     width="2.8"
+     width="1.6"
      height="228.3"
-     rx="0.44999999"
+     rx="0.35"
      fill="url(#spine)"
      stroke="#0b1220"
      stroke-width="0.35"
      id="rect11"
      style="display:inline" />
   <rect
-     x="11.32"
+     x="11.55"
      y="9.5"
-     width="1.36"
+     width="0.9"
      height="222.18976"
-     rx="0.68000001"
+     rx="0.45"
      fill="url(#cyanViolet)"
      opacity="0.28"
      id="rect14"

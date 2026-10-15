@@ -149,17 +149,19 @@
   <g
      id="panel_art"
      inkscape:label="Panel artwork">
-    <rect
+    <g id="theme_background"><rect
        width="1524"
        height="12850"
-       fill="url(#bg)"
+       fill="#000000"
        id="rect13"
        x="0"
-       y="0" />
+       y="0" /></g>
     <g
        id="glass"
        inkscape:label="glass">
-      <rect
+      <g
+         id="glass_input">
+        <rect
          id="inputs"
          x="110"
          y="8080"
@@ -172,7 +174,10 @@
          stroke-opacity="0.16"
          stroke-width="20"
          style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
-      <rect
+      </g>
+      <g
+         id="glass_output">
+        <rect
          id="outputs"
          x="110"
          y="10910"
@@ -183,8 +188,9 @@
          fill-opacity="0.5"
          stroke="#a8fbff"
          stroke-opacity="0.18"
-         stroke-width="20"
-         style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
+           stroke-width="20"
+           style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
+      </g>
     </g>
     <rect
        x="82"
@@ -329,7 +335,13 @@
          id="tspan27"
          x="762"
          y="815.24359">phys. model</tspan></text>
-    <text
+
+
+
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
        x="762"
        y="9185.0098"
        fill="#e0eef6"
@@ -338,7 +350,7 @@
        letter-spacing="18"
        id="text24"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
-    <text
+<text
        x="753.95654"
        y="7849.1284"
        fill="#e0eef6"
@@ -351,7 +363,7 @@
          id="tspan28"
          x="762.95654"
          y="7849.1284">ENERGY</tspan></text>
-    <text
+<text
        x="762"
        y="10585.011"
        fill="#e0eef6"
@@ -360,7 +372,10 @@
        letter-spacing="18"
        id="text25"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
-    <text
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
        x="762"
        y="11970.025"
        fill="#e1f6f7"
@@ -369,5 +384,6 @@
        letter-spacing="18"
        id="text26"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">OUT</text>
-  </g>
+    </g>
+</g>
 </svg>

@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="Puffy-background" sodipodi:docname="Puffy.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs8">
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24140b" id="stop1" />
+      <stop offset="0.48" stop-color="#100b13" id="stop2" />
+      <stop offset="1" stop-color="#050711" id="stop3" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff3b1" id="stop4" />
+      <stop offset="0.42" stop-color="#ffd44d" id="stop5" />
+      <stop offset="1" stop-color="#ff9f08" id="stop6" />
+    </linearGradient>
+    <linearGradient id="viewport" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f192c" id="stop7" />
+      <stop offset="1" stop-color="#0f0d17" id="stop8" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-3063.3137,-867.14524)" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="theme_background">
+    <rect width="6096" height="12850" fill="#000000" id="rect8" style="display:inline;fill:#000000;fill-opacity:1" x="0" y="0" sodipodi:insensitive="true" />
+  </g>
+</svg>

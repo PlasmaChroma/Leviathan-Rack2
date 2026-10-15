@@ -12,7 +12,6 @@
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
     </linearGradient>
   </defs>
-  <rect width="6096" height="12850" fill="#090b0f" id="rect1" x="0" y="0" style="display:inline" />
   <g id="waves_layer" style="display:none;opacity:0.5" transform="translate(-2031.9966,142.46203)">
     <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:none">
       <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
@@ -27,14 +26,20 @@
   </g>
   <g id="iris_section_fields" style="display:inline">
     <g id="glass">
-      <path d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
-      <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <path d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" />
+      </g>
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#000000;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+      </g>
     </g>
     <rect x="76" y="900" width="5944" height="5408" rx="126" ry="126" id="iris_preview_field" style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
-    <path d="M 1126.72,7760.0522 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
-    <path d="M 2957.0742,9527.9561 H 5534.926" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
-    <path d="M 668.00081,11195.878 H 1790.0008" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
-    <path d="m 4704,7793.5083 h 545.2969" id="iris_soft_sync_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
+      <path d="M 1126.72,7760.0522 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
+      <path d="M 2957.0742,9527.9561 H 5534.926" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
+      <path d="M 668.00081,11195.878 H 1790.0008" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+      <path d="m 4704,7793.5083 h 545.2969" id="iris_soft_sync_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    </g>
   </g>
   <g id="components" style="display:inline">
     <circle id="IRIS_COARSE_PARAM" cx="870.79999" cy="7760" r="520" />
@@ -70,6 +75,6 @@
   <g id="perfect_wave_raster_anchors" style="display:none">
     <rect id="BRANDING_WAVE_LEFT_RASTER" x="157.610" y="12338.190" width="1306.748" height="511.810" />
     <rect id="BRANDING_WAVE_RIGHT_RASTER" x="4631.674" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0335" y="11843.102" width="3271.933" height="1224.054" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0335" y="11943.102" width="3271.933" height="1224.054" />
   </g>
 </svg>

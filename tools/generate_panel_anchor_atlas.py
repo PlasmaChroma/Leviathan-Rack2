@@ -347,7 +347,7 @@ PanelAnchorAtlasStatus getPanelAnchorAtlasStatus(const std::string& svgPath) {
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default=".")
-    parser.add_argument("--output", default="src/PanelAnchorAtlas.cpp")
+    parser.add_argument("--output", default="src/common/PanelAnchorAtlas.cpp")
     args = parser.parse_args()
     repo_root = pathlib.Path(args.repo_root).resolve()
     output = (repo_root / args.output).resolve()

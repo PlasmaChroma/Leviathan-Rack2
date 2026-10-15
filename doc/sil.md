@@ -66,11 +66,26 @@ Modern mastering standards demand "True Peak" detection rather than simple sampl
 
 ## **Spatial Integrity: Bass Mono and Mono-Compatible Widening**
 
+Implementation note (2026-10-15): this document began as design research. The
+current low-band recovery behavior and its tested limits are specified in
+[sil-spec.md](sil-spec.md#low-band-mono-recovery).
+
 Stereo width management is perhaps the most risky aspect of automated mastering. While a wide, immersive soundscape is desirable, excessive stereo processing can lead to phase cancellation and the disappearance of critical elements when the mix is summed to mono—a common occurrence on phone speakers and PA systems.19 The mastering module addresses this by incorporating a "Bass Mono" filter and a correlation-driven widening algorithm.
 
 ### **Linkwitz-Riley Bass Mono Filter**
 
-The "Bass Mono" component ensures that all frequency content below a specific threshold (typically 150-200Hz) is summed to mono.19 This keeps the low-end punchy and focused, providing a stable foundation for the track.25 To implement this without phase shifts or frequency build-up, the module uses a 4th-order Linkwitz-Riley (LR-4) crossover.36 The LR-4 design is unique in that its low-pass and high-pass outputs are in phase at all frequencies, providing an absolutely flat amplitude response across the crossover point when the two bands are recombined.36 This level of transparency is essential for mastering, where any alteration of the crossover region can degrade the clarity of the kick and bass relationship.36
+Sil uses a matched 4th-order Linkwitz-Riley crossover at 120 Hz. Coherent bass
+retains its stereo balance. When low-band correlation deteriorates, the stage
+smoothly folds bass toward a stable channel reference and attenuates low-band
+Side. Unlike averaging L/R, this can restore a centered waveform from an
+opposite-polarity pair. Reference normalization targets the average per-channel
+bass energy, with bounded gain.
+
+The crossover has a flat combined magnitude response when recovery is inactive,
+but introduces an all-pass phase response. Its transition is gradual: stereo
+Side is about 24.6 dB down at 60 Hz and 6 dB down at 120 Hz under full recovery.
+It does not make every frequency below 120 Hz perfectly mono, estimate delays,
+or reconstruct every independent source in a canceled mix.
 
 ### **Adaptive Stereo Widening and Phase Correlation**
 
@@ -78,9 +93,9 @@ The module’s automated widening algorithm uses real-time cross-correlation to 
 
 | Feature | Filter/Algorithm | Purpose |
 | :---- | :---- | :---- |
-| Bass Mono | 4th-order Linkwitz-Riley (LR-4) | Centers low end without phase smearing 36 |
+| Bass Mono | 120 Hz LR-4 split and adaptive reference fold | Restores centered bass; crossover introduces phase shift |
 | Stereo Widener | Mid/Side Gain Matrix | Increases perceived air and space 29 |
-| Phase Alignment | Cross-Correlation Analysis | Prevents cancellation in mono sum 39 |
+| Low-Band Recovery | Correlation and energy analysis | Folds toward a stable reference when bass correlation is poor |
 | Mono-Safe Logic | Spectral Weighting | Blends width and center spectral balance 43 |
 | Widening Limit | Correlation-Dependent Gain | Throttles width to maintain phase integrity 19 |
 

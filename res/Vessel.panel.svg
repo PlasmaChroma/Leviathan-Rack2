@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="81.28mm" height="128.5mm" viewBox="0 0 8128 12850" version="1.1" id="svg20" sodipodi:docname="Vessel.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs2">
+    <linearGradient id="vessel-edge">
+      <stop stop-color="#ad77e7" id="stop1" />
+      <stop offset="1" stop-color="#54d7d4" id="stop2" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient36" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.9969081,0,0,0.9969081,-2022.4432,-883.02087)" x1="5285.1714" y1="1485.2018" x2="6945.7134" y2="1489.1353" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art">
+    <rect x="50" y="50" width="8028" height="12750" rx="90" fill="none" stroke="url(#vessel-edge)" stroke-width="24" opacity="0.65" id="rect3" />
+    <g id="vessel_section_fields" style="display:inline">
+      <g id="glass">
+        <g id="glass_input" data-theme-runtime-substrate="neutral">
+          <path id="vessel_input_field" d="M 430,7550 H 5520 Q 5700,7550 5700,7730 V 10520 Q 5700,10700 5520,10700 H 3120 Q 3000,10700 3000,10820 V 11920 Q 3000,12100 2820,12100 H 430 Q 250,12100 250,11920 V 7730 Q 250,7550 430,7550 Z" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" />
+        </g>
+        <g id="glass_output" data-theme-runtime-substrate="neutral">
+          <rect id="vessel_output_field" x="3100" y="10800" width="2600" height="1300" rx="118" ry="126" style="display:inline;opacity:0.35;fill:#000000;fill-opacity:0.58;stroke:none" />
+        </g>
+      </g>
+    </g>
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1">
+      <path id="strike_velocity_conduit" d="M 900,9920 H 2200" />
+      <path id="speed_rub_conduit" d="m 3790.0002,9920 h 1300" />
+      <path id="coarse_fine_conduit" d="M 3973.995,8470 H 5314.9594" />
+    </g>
+    <g id="component_anchors" style="display:none">
+      <rect id="BRANDING_WAVE_LEFT_RASTER" x="1173.644" y="12338.190" width="1306.748" height="511.810" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5647.708" y="12338.190" width="1306.748" height="511.810" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2428.0334" y="11943.102" width="3271.9331" height="1224.054" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="ENERGY_DISPLAY" x="350" y="1100" width="7428" height="900.00006" style="fill:#2a1430;fill-opacity:1;stroke-width:1.06066" />
+      <rect id="BOWL_RASTER" x="664" y="2789" width="6800" height="4022" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="MALLET_ORBIT" x="339" y="2750" width="7450" height="900" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="STRIKE_AREA" x="350" y="2250" width="3674" height="5100" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="ROTATE_AREA" x="4104" y="2250" width="3674" height="5100" style="fill:#2a1430;fill-opacity:1" />
+      <rect id="MALLET_SELECTOR" x="5810.3257" y="8120.3262" width="2163.3489" height="4001.1489" style="display:inline;fill:#2a1430;fill-opacity:1;stroke:#55dfff;stroke-width:20.6512" />
+      <circle id="VTUNE_SPAWN" cx="7818" cy="7625" r="75" style="fill:#55dfff;fill-opacity:1" />
+      <circle id="VTUNE_EXPANDER_LIGHT" cx="7808" cy="580" r="10" style="fill:#2a1430;fill-opacity:1" />
+      <circle id="BINAURAL_PARAM" cx="902.39893" cy="8529.9785" r="75" style="fill:#55dfff;fill-opacity:1" />
+      <rect id="BINAURAL_BAND_LABEL" x="102.39893" y="7721.2002" width="1600" height="300" style="fill:#2a1430;fill-opacity:1" />
+      <circle id="BOWL_PARAM" cx="2309.981" cy="8529.9785" r="75" style="fill:#ff70cb;fill-opacity:1" />
+      <circle id="PITCH_PARAM" cx="3913.9941" cy="8470" r="75" style="fill:#55dfff;fill-opacity:1" />
+      <circle id="FINE_PARAM" cx="5254.9585" cy="8470" r="75" style="fill:#55dfff;fill-opacity:1" />
+      <circle id="STRIKE_INPUT" cx="900" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="VELOCITY_INPUT" cx="2200" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="INTENSITY_INPUT" cx="5070.0278" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="ROTATE_INPUT" cx="3770.0276" cy="9920" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="VOCT_INPUT" cx="900" cy="11230" r="75" style="fill:#70e69c;fill-opacity:1" />
+      <circle id="LEVEL_PARAM" cx="2200" cy="11230" r="75" style="fill:#55dfff;fill-opacity:1" />
+      <circle id="LEFT_OUTPUT" cx="3770.0276" cy="11230" r="75" style="fill:#ffbd66;fill-opacity:1" />
+      <circle id="RIGHT_OUTPUT" cx="5070.0278" cy="11230" r="75" style="fill:#ffbd66;fill-opacity:1" />
+    </g>
+  </g>
+</svg>

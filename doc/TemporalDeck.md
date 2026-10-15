@@ -126,3 +126,34 @@ This document consolidates the useful, non-Flux TemporalDeck content from:
 Docs that are mostly exploratory/reference (not canonical spec):
 - `doc/TD_Deep_Research.md`
 - `doc/Turntablist_Scratches_in_TemporalDeck.md`
+
+## Scratch smoothing
+
+The context-menu **Scratch smoothing** option defaults to On, including when
+loading patches that predate the option. Its value is saved per module.
+
+Smoothing follows internal scratch ownership and read-head motion: gesture entry,
+release, hand/scope/wheel/CV handoffs, stops, restarts, reversals, and abrupt travel
+changes can start a short 4 ms audio crossfade. It does not detect clicks from the
+source waveform or change the requested playhead position. A stationary scratch
+fades out after 8 ms of stillness over a further 8 ms, and resumes over 3 ms.
+
+Turn it Off to bypass these transition crossfades and stationary-hold fades for
+raw scratch articulation. Existing cartridge character and interpolation remain
+independent. Source transients during steady motion are not detected or suppressed.
+
+Arc clicks in the live buffer and RAM samples also use the optional transition
+crossfade, including repeated clicks during an existing fade. Position changes
+remain immediate. LongPlay retains a 5 ms residency-recovery fade, now using the same transition
+owner. Stream recovery takes priority over scratch transition requests until it
+finishes, including when optional scratch smoothing is Off.
+
+The runtime continuity state, named scratch sources, and timing/motion thresholds
+are owned by `TemporalDeckScratchSmoothing.hpp`. Source ownership handles release
+as well as entry; the explicit CV gate trigger is only used when POS is connected.
+
+Scratch DSP history is captured before the final hold/transition envelopes;
+the last audible sample is retained separately for transition continuity.
+Live Slip-to-NOW blending uses its actual selected duration, constant-sum gains
+for the converging heads, and eases motion coloration and the Slip low-pass mix
+to neutral before completing. Instant returns use the optional transition fade.

@@ -82,7 +82,7 @@ the older assumption that LRC is wholly unimplemented.
 
 ### 3.1 HaloKnob2
 
-`src/visual/HaloKnob2.cpp` already provides:
+`src/common/visual/HaloKnob2.cpp` already provides:
 
 - one independently cached `OpenGlWidget` surface per knob;
 - an analytic GLSL 1.20 ring, bloom, reflection, and cap composition;
@@ -119,9 +119,9 @@ contracts that should not be forced into a generic abstraction.
 
 Existing shared foundations include:
 
-- `src/NvgGraphicsLifecycle.hpp` for context-owned NanoVG image handles;
-- `src/GlLifecycleUtils.hpp` for optional GL resource validity checks;
-- `src/visual/PreviewSurface.hpp` for cached preview backgrounds;
+- `src/common/render/NvgGraphicsLifecycle.hpp` for context-owned NanoVG image handles;
+- `src/common/render/GlLifecycleUtils.hpp` for optional GL resource validity checks;
+- `src/common/render/PreviewSurface.hpp` for cached preview backgrounds;
 - shared raster-image and panel rendering infrastructure;
 - debug gating through `isDragonKingDebugEnabled()`;
 - the debug terminal for small external diagnostic packets.

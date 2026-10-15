@@ -27,7 +27,6 @@
     </linearGradient>
   </defs>
   <g inkscape:label="panel" transform="scale(100)" id="g15">
-    <rect width="20.32" height="128.5" fill="url(#panel)" id="rect5" x="0" y="0" />
     <rect x="0.44999999" y="0.44999999" width="19.42" height="127.6" rx="1.2" fill="none" stroke="#31425e" stroke-width="0.35" id="rect6" style="display:none" />
     <path d="m 3,15.100084 c 4,-5.9999991 10,6 14.3,-1 m -14.3,4 c 4,-6 10,6 14.3,-1" fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82" id="path6" style="stroke:#7a5cff;fill:none;stroke-opacity:1;fill-opacity:1;opacity:1" />
   </g>
@@ -40,6 +39,8 @@
     <circle id="warming_light" cx="450" cy="10059.958" r="50" />
     <circle id="ready_light" cx="450" cy="10759.958" r="50" />
     <circle id="error_light" cx="450" cy="11459.958" r="50" />
+  </g>
+  <g id="perfect_wave_raster_anchors" style="display:none">
     <rect id="BRANDING_WAVE_SOLO_RASTER" x="362.626" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

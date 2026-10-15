@@ -49,7 +49,6 @@
   </defs>
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
       <g id="waves_layer" style="display:none;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)">
         <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
           <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
@@ -67,30 +66,40 @@
     </g>
     <rect x="4588.1016" y="10720.973" width="2447.1992" height="1438.8242" rx="200.48636" ry="171.8649" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.117" id="outputs" style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none;stroke-width:46.3885;stroke-dasharray:none" inkscape:label="Out_Under_Black" />
     <g id="glass">
-      <path d="M 235.34972,7794.9995 H 6845.0537 C 6963.6807,7794.9995 7022.9942,7851.3046 7022.9942,7963.9149 V 10619.182 Q 7022.9942,10749.182 6892.9942,10749.182 H 4745.5181 Q 4615.5181,10749.182 4615.5181,10879.182 V 12005.859 Q 4615.5181,12135.859 4485.5181,12135.859 H 235.34972 C 116.72271,12135.859 57.409203,12079.554 57.409203,11966.944 V 7963.9149 C 57.409203,7851.3046 116.72271,7794.9995 235.34972,7794.9995 Z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="frame_left" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sccccccccccscccs" />
-      <rect x="4641.5" y="10775.2" width="2368.228" height="1339.5333" rx="172.54369" ry="158.23055" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="41.308" id="outputs-3" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <path d="M 235.34972,7794.9995 H 6845.0537 C 6963.6807,7794.9995 7022.9942,7851.3046 7022.9942,7963.9149 V 10619.182 Q 7022.9942,10749.182 6892.9942,10749.182 H 4745.5181 Q 4615.5181,10749.182 4615.5181,10879.182 V 12005.859 Q 4615.5181,12135.859 4485.5181,12135.859 H 235.34972 C 116.72271,12135.859 57.409203,12079.554 57.409203,11966.944 V 7963.9149 C 57.409203,7851.3046 116.72271,7794.9995 235.34972,7794.9995 Z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="frame_left" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sccccccccccscccs" />
+      </g>
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect x="4641.5" y="10775.2" width="2368.228" height="1360.659" rx="172.54369" ry="158.23055" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="41.308" id="outputs-3" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+      </g>
     </g>
-    <path d="m 1812.5205,9954.4275 1059.159,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="sync_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 814.12214,8620.0078 2745.60146,0.4012" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="freq_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 705.17435,11287.268 1059.15905,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="slither_amp_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 2853.2391,11284.637 1059.1003,0.538" stroke="url(#accentGrad)" stroke-width="40.8998" stroke-linecap="round" opacity="0.55" fill="none" id="slither_speed_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 5222.5176,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 6434.5391,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
+      <path d="m 1812.5205,9954.4275 1059.159,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="sync_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 814.12214,8620.0078 2365.87786,0.4012" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="freq_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 705.17435,11287.268 1059.15905,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="slither_amp_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 2853.2391,11284.637 1059.1003,0.538" stroke="url(#accentGrad)" stroke-width="40.8998" stroke-linecap="round" opacity="0.55" fill="none" id="slither_speed_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 5222.5176,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 6434.5391,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    </g>
   </g>
   <g id="wyrm_components" inkscape:label="wyrm_components" style="display:none">
     <circle id="WYRM_FREQ_PARAM" cx="814.55664" cy="8622.5996" r="260" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_FINE_PARAM" cx="2225.269" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_COARSE_STEP_MODE_PARAM" cx="814.55664" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FINE_PARAM" cx="2139.9653" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_ATTEN_PARAM" cx="5218.3877" cy="8486.3018" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FOLD_PARAM" cx="6428.4404" cy="8464.7998" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_LOCK_BUTTON" cx="6269.5" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5717" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_WAVEFORM_SELECT" cx="622" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_LOCK_BUTTON" cx="6318.5615" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5815.1226" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_WAVE_LEFT_PARAM" cx="313.15613" cy="7575" r="270.93332" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_WAVE_RIGHT_PARAM" cx="816.59473" cy="7575" r="270.93332" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_PARAM" cx="709.98511" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_SPEED_PARAM" cx="2860" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_CV_INPUT" cx="1800" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_SPEED_CV_INPUT" cx="3950.0149" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_VOCT_INPUT" cx="3565.9817" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_VOCT_INPUT" cx="3180" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_VOCT_MODE_LABEL" cx="3180" cy="9323" r="20" style="fill:#00ff88;fill-opacity:1;stroke:none" />
+    <circle id="WYRM_ENV_MODE_PARAM" cx="4229.981" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_INPUT" cx="5215.4648" cy="9795.4688" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SYNC_INPUT" cx="1800" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SYNC_MODE_PARAM" cx="2875" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -101,7 +110,9 @@
   </g>
   <rect id="WYRM_WAVE_EDITOR" x="78.404099" y="952.07806" width="6950.8921" height="6331.0181" style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" />
   <g id="perfect_wave_raster_anchors" style="display:none">
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.610" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.674" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.60999" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.6738" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11943.102" width="3271.9331" height="1224.054" />
+    <rect id="WYRM_TITLE_RASTER" x="2269.3296" y="74.900002" width="2573.3408" height="804.66699" />
   </g>
 </svg>

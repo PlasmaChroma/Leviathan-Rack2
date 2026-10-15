@@ -1,5 +1,6 @@
 #include "plugin.hpp"
-#include "visual/VisualAssets.hpp"
+#include "theme/ThemePersistence.hpp"
+#include "common/visual/VisualAssets.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -17,10 +18,20 @@ static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
 static std::atomic<bool> gScopeDrawLoggingEnabled{false};
 static std::atomic<bool> gIntegralFluxDrawLoggingEnabled{false};
+static std::atomic<bool> gIntegralFluxLumenPreviewEnabled{false};
+static std::atomic<bool> gUndertowDrawLoggingEnabled{false};
 static std::atomic<bool> gPuffyDrawLoggingEnabled{false};
+static std::atomic<bool> gWyrmDrawLoggingEnabled{false};
 static std::atomic<bool> gExtraGlValidationEnabled{false};
 static std::atomic<bool> gUserFractalParamsEnabled{false};
 static std::mutex gModuleTeardownLogMutex;
+
+std::string leviathanPluginUserRootPath() {
+	const std::string slug = (pluginInstance && !pluginInstance->slug.empty())
+		? pluginInstance->slug
+		: "Leviathan";
+	return system::join(asset::user(), slug);
+}
 
 void refreshDragonKingDebugEnabled() {
 	gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
@@ -31,7 +42,10 @@ void refreshDragonKingDebugEnabled() {
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
 	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gIntegralFluxDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+	gIntegralFluxLumenPreviewEnabled.store(false, std::memory_order_relaxed);
+	gUndertowDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gPuffyDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+	gWyrmDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gExtraGlValidationEnabled.store(false, std::memory_order_relaxed);
 	gUserFractalParamsEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
@@ -40,7 +54,7 @@ void refreshDragonKingDebugEnabled() {
 	// This is optional per-user developer configuration, not a distributable
 	// plugin asset. Keeping it under Rack's user directory also prevents a
 	// locally enabled debug file from being included in a release package.
-	const std::string flagPath = system::join(asset::user(), "Leviathan/dragonking.txt");
+	const std::string flagPath = system::join(leviathanPluginUserRootPath(), "dragonking.txt");
 	std::ifstream flagFile(flagPath);
 	if (!flagFile.good()) {
 		return;
@@ -60,13 +74,16 @@ void refreshDragonKingDebugEnabled() {
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
 		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
+		json_t* integralFluxLumenPreviewJ = json_object_get(root, "IntegralFluxLumenPreview");
+		json_t* undertowDrawLoggingJ = json_object_get(root, "UndertowDrawLogging");
 		json_t* puffyDrawLoggingJ = json_object_get(root, "PuffyDrawLogging");
+		json_t* wyrmDrawLoggingJ = json_object_get(root, "WyrmDrawLogging");
 		json_t* extraGlValidationJ = json_object_get(root, "extraGlValidation");
 		json_t* userFractalParamsJ = json_object_get(root, "UserFractalParams");
 		if (!extraGlValidationJ) {
 			extraGlValidationJ = json_object_get(root, "ExtraGlValidation");
 		}
-		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
+		gDragonKingDebugEnabled.store(debugJ == nullptr || json_is_true(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
 		gCrownstepAddMoveEnabled.store(json_boolean_value(crownstepAddMoveJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);
@@ -74,7 +91,10 @@ void refreshDragonKingDebugEnabled() {
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
 		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
 		gIntegralFluxDrawLoggingEnabled.store(json_boolean_value(integralFluxDrawLoggingJ), std::memory_order_relaxed);
+		gIntegralFluxLumenPreviewEnabled.store(json_is_true(integralFluxLumenPreviewJ), std::memory_order_relaxed);
+		gUndertowDrawLoggingEnabled.store(json_boolean_value(undertowDrawLoggingJ), std::memory_order_relaxed);
 		gPuffyDrawLoggingEnabled.store(json_boolean_value(puffyDrawLoggingJ), std::memory_order_relaxed);
+		gWyrmDrawLoggingEnabled.store(json_boolean_value(wyrmDrawLoggingJ), std::memory_order_relaxed);
 		gExtraGlValidationEnabled.store(json_boolean_value(extraGlValidationJ), std::memory_order_relaxed);
 		gUserFractalParamsEnabled.store(json_boolean_value(userFractalParamsJ), std::memory_order_relaxed);
 	}
@@ -113,8 +133,21 @@ bool isIntegralFluxDrawLoggingEnabled() {
 	return gIntegralFluxDrawLoggingEnabled.load(std::memory_order_relaxed);
 }
 
+bool isIntegralFluxLumenPreviewEnabled() {
+	return isDragonKingDebugEnabled()
+		&& gIntegralFluxLumenPreviewEnabled.load(std::memory_order_relaxed);
+}
+
+bool isUndertowDrawLoggingEnabled() {
+	return gUndertowDrawLoggingEnabled.load(std::memory_order_relaxed);
+}
+
 bool isPuffyDrawLoggingEnabled() {
 	return gPuffyDrawLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isWyrmDrawLoggingEnabled() {
+	return gWyrmDrawLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 bool isExtraGlValidationEnabled() {
@@ -145,7 +178,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 	}
 	const auto endedAt = std::chrono::steady_clock::now();
 	const double elapsedMs = std::chrono::duration_cast<std::chrono::microseconds>(endedAt - startedAt).count() * 1e-3;
-	const std::string dir = system::join(asset::user(), "Leviathan");
+	const std::string dir = leviathanPluginUserRootPath();
 	system::createDirectories(dir);
 	const std::string path = system::join(dir, "module_teardown.csv");
 
@@ -173,7 +206,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
-	visual_assets::loadSettings();
+	leviathan::theme::persistence::initializeFromUserStorage();
 
 	// Add modules here
 	// p->addModel(modelMyModule);
@@ -186,11 +219,16 @@ void init(Plugin* p) {
 	p->addModel(modelIris);
 	p->addModel(modelNautiloid);
     p->addModel(modelPuffy);
+	p->addModel(modelSil);
+	p->addModel(modelTheme);
+	p->addModel(modelVessel);
+	p->addModel(modelVTune);
+	p->addModel(modelStrand);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
-	visual_assets::saveSettings();
+	leviathan::theme::persistence::saveToUserStorage();
 }

@@ -1,0 +1,104 @@
+{
+  "scope": "Isolated calculations; no full Vessel callback or audio corpus was run.",
+  "versions": {
+    "python": "3.13.5",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0"
+  },
+  "filters": {
+    "original129": {
+      "taps": 129,
+      "symmetric_products_per_channel": 65,
+      "passband_span_db": 0.0024650555544221357,
+      "worst_stopband_db": -75.28777913674458,
+      "mean_stopband_power_db": -90.64946095750484,
+      "dc_gain": 1.0000000000000002,
+      "gain_at_20khz_for_96khz_input_db": -0.05537170117478735,
+      "tagged_host_latency_samples_at_2x": 31.5
+    },
+    "equiripple81": {
+      "taps": 81,
+      "symmetric_products_per_channel": 41,
+      "passband_span_db": 0.007300630314141182,
+      "worst_stopband_db": -72.73585518600571,
+      "mean_stopband_power_db": -75.75200164693977,
+      "dc_gain": 1.0000000000000002,
+      "gain_at_20khz_for_96khz_input_db": -0.36233081616136537,
+      "tagged_host_latency_samples_at_2x": 19.5
+    },
+    "equiripple93": {
+      "taps": 93,
+      "symmetric_products_per_channel": 47,
+      "passband_span_db": 0.002326833132255583,
+      "worst_stopband_db": -82.64778699051185,
+      "mean_stopband_power_db": -85.68406264583024,
+      "dc_gain": 1.0,
+      "gain_at_20khz_for_96khz_input_db": -0.2599610134250055,
+      "tagged_host_latency_samples_at_2x": 22.5
+    },
+    "equiripple101": {
+      "taps": 101,
+      "symmetric_products_per_channel": 51,
+      "passband_span_db": 0.0013201823342858681,
+      "worst_stopband_db": -87.61493334148427,
+      "mean_stopband_power_db": -90.63394455683706,
+      "dc_gain": 1.0000000000000002,
+      "gain_at_20khz_for_96khz_input_db": -0.21910589218188647,
+      "tagged_host_latency_samples_at_2x": 24.5
+    },
+    "equiripple105": {
+      "taps": 105,
+      "symmetric_products_per_channel": 53,
+      "passband_span_db": 0.0009782187688963278,
+      "worst_stopband_db": -90.18130141942927,
+      "mean_stopband_power_db": -93.21334833942845,
+      "dc_gain": 1.0000000000000002,
+      "gain_at_20khz_for_96khz_input_db": -0.20195958403265968,
+      "tagged_host_latency_samples_at_2x": 25.5
+    },
+    "equiripple109": {
+      "taps": 109,
+      "symmetric_products_per_channel": 55,
+      "passband_span_db": 0.002018105445166077,
+      "worst_stopband_db": -88.2322085471502,
+      "mean_stopband_power_db": -91.26249890355672,
+      "dc_gain": 0.9999999999999999,
+      "gain_at_20khz_for_96khz_input_db": -0.049328596519802766,
+      "tagged_host_latency_samples_at_2x": 26.5
+    }
+  },
+  "strike_gradient": {
+    "cases": 4804,
+    "reference_decimal_digits": 85,
+    "max_relative_gradient_error": 4.949256595503913e-16,
+    "max_relative_derivative_error": 5.826267950635851e-16
+  },
+  "max_center_frequency_hz_default_imperfection_single_bowl": {
+    "metal": {
+      "48000": 1058.8536254598218,
+      "96000": 2117.7072509196437
+    },
+    "crystal": {
+      "48000": 823.0793964958003,
+      "96000": 1646.1587929916006
+    }
+  },
+  "small_damping_static_compliance_ratio": {
+    "5000": {
+      "48000": 0.9293830673972151,
+      "96000": 0.9821993131901644
+    },
+    "10000": {
+      "48000": 0.7275390760417538,
+      "96000": 0.9293830673972151
+    },
+    "15000": {
+      "48000": 0.4303134913652257,
+      "96000": 0.8433857951046041
+    },
+    "18000": {
+      "48000": 0.23812824441270342,
+      "96000": 0.7771719469728178
+    }
+  }
+}

@@ -1,4 +1,4 @@
-#include "../src/UndertowShape.hpp"
+#include "../src/common/FoldShapes.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -23,10 +23,10 @@ ShapeStats measureShape(float knobShape, bool entryAsymmetry = false, bool hardE
                         bool entryAsymmetryOnRight = false, int samples = 4096) {
   ShapeStats stats;
   double sum = 0.0;
-  const float shape = undertow_shape::shapeControlTaper(knobShape);
+  const float shape = fold_shape::shapeControlTaper(knobShape);
   for (int i = 0; i < samples; ++i) {
     const float phase = float(i) / float(samples);
-    const float volts = 5.f * undertow_shape::thresholdFold(phase, shape, entryAsymmetry, hardEdges,
+    const float volts = 5.f * fold_shape::thresholdFold(phase, shape, entryAsymmetry, hardEdges,
                                                             entryAsymmetryOnRight);
     stats.min = std::min(stats.min, volts);
     stats.max = std::max(stats.max, volts);
@@ -93,8 +93,8 @@ TestResult testThresholdFoldIsContinuousAtWrap() {
       for (int hard = 0; hard <= 1; ++hard) {
         for (int side = 0; side <= 1; ++side) {
           const float beforeWrap =
-              undertow_shape::thresholdFold(1.f - 1e-6f, shape, asym != 0, hard != 0, side != 0);
-          const float atWrap = undertow_shape::thresholdFold(0.f, shape, asym != 0, hard != 0, side != 0);
+              fold_shape::thresholdFold(1.f - 1e-6f, shape, asym != 0, hard != 0, side != 0);
+          const float atWrap = fold_shape::thresholdFold(0.f, shape, asym != 0, hard != 0, side != 0);
           worst = std::max(worst, std::fabs(beforeWrap - atWrap));
         }
       }

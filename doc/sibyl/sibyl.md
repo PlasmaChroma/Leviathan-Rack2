@@ -1,0 +1,713 @@
+# Sibyl – Software Specification
+
+## 1. Overview & Philosophy
+
+**Sibyl** is a headless, machine-first polyphonic sequencer and arranger for VCV Rack. Designed to pair with the Octavia MCP bridge, Sibyl delegates step sequencing and arrangement to an AI agent while keeping sample-accurate clocks, gates, and CV generation inside Rack.
+
+**Core directives:**
+
+* **No manual note entry:** The panel has no controls for entering notes. Composition is stored as documented JSON. Octavia provides the reference first-class editor, while generic module-state access remains a supported interoperability path for other bridges and agents.
+* **Token-efficient composition:** Reusable sparse patterns are separate from the arrangement, so an agent can repeat and vary material without emitting redundant rests.
+* **Predictable behavior:** Scene duration, track/channel assignment, pitch, randomness, clock resolution, and update boundaries are explicit.
+* **Polyphonic density:** Four polyphonic cables carry up to 16 named tracks of V/Oct, Gate, Velocity, and Mod.
+* **Real-time safety:** JSON is parsed and compiled away from the audio thread. Playback never allocates, parses JSON, or waits on a mutex.
+
+---
+
+## 2. Hardware Interface
+
+Sibyl acts as the "Ghost in the Machine." Its austere panel provides sync, performance modulation, monitoring, and output rather than composition.
+
+### 2.1 Inputs
+
+* **CLOCK IN:** Selects external clock when patched. Each pulse represents the configured `externalPpqn` division. When unpatched, Sibyl uses `meta.bpm`.
+* **RUN IN:** When patched, high plays and low pauses. A falling edge closes gates but preserves all positions; a rising edge resumes rather than rewinds. When unpatched, Sibyl follows its stored transport state.
+* **RESET IN:** Requests an arrangement restart at the next external clock edge or internal beat boundary. It returns to the first scene and applies that scene's phase policy without clearing the external tempo estimator.
+* **SCENE TRIG IN:** Requests the next scene. It uses the composition's transition quantization: `immediate`, `nextStep`, `nextBeat`, or `nextScene`.
+* **SCENE CV IN:** Addresses scenes from 0–10 V using equal-width ranges across the arrangement. Selection is clamped and hysteretic, then uses the same transition quantization as SCENE TRIG.
+* **MACRO 1–4 IN:** Four 0–10 V performance inputs. Mapping, polarity, amount, and clamp range are declared in JSON.
+
+Clock, reset, and trigger inputs use Rack-compatible Schmitt-trigger thresholds: signals rise at 1.0 V and return low at 0.1 V. RUN is level-sensitive with high beginning at 1.0 V; voltages below 1.0 V are low.
+
+### 2.2 Outputs
+
+* **V/OCT OUT:** Polyphonic pitch with stable declared channel assignments.
+* **GATE OUT:** Polyphonic gates or triggers.
+* **VELOCITY OUT:** Polyphonic velocity, 0–10 V.
+* **MOD1 / MOD2 / MOD3 OUT:** Three independent polyphonic modulation lanes spanning -10 V to +10 V. Step fields `mod`, `mod2`, and `mod3` are literal output voltages; the original `mod` field remains the stable name for MOD1.
+* **CLOCK OUT:** Reconstructed clock at `outputPpqn` in either clock mode, not an unsmoothed external-clock thru.
+* **SCENE OUT:** Trigger on every scene transition.
+* **EOC OUT:** Trigger only when the arrangement wraps from the last scene to the first.
+
+All musical polyphonic outputs expose `max(channel) + 1` channels, up to 16. An inactive track has zero gate, velocity, and modulation; pitch holds its most recent value to avoid unnecessary oscillator jumps.
+
+### 2.3 Display
+
+A central non-editable OLED or LED matrix displays:
+
+* `meta.title` and the active scene's `description`, falling back to a shortened `meta.prompt`.
+* Active scene as `[current/total] name`, repeat count, and track playheads/gates.
+* Clock source, run state, pending update, accepted revision, and validation errors.
+
+---
+
+## 3. JSON State Model
+
+Sibyl uses **Meta → Tracks → Patterns → Arrangement**. Prompt and musical context make a saved composition understandable to a later agent.
+
+### 3.1 Rack Module-State Wire Shape
+
+Rack and generic bridge APIs return the complete module preset, not only Sibyl's custom data. An editor must preserve the Rack wrapper and edit Sibyl's object inside `data` before restoring the module state. Octavia exposes this baseline through `vcv_get_module_state` and `vcv_set_module_state`; another MCP bridge may expose equivalent operations under different names.
+
+Conceptual wire shape (Rack may add standard fields):
+
+```json
+{
+  "plugin": "Leviathan",
+  "model": "Sibyl",
+  "params": [],
+  "data": {
+    "schemaVersion": 2,
+    "revision": 12,
+    "composition": {},
+    "status": {
+      "acceptedRevision": 12,
+      "lastError": null,
+      "warnings": []
+    }
+  }
+}
+```
+
+Key semantics of the wire shape:
+
+* **`revision`:** Identifies the last composition accepted by the current Sibyl instance. It increases once for each accepted atomic edit or authoritative replacement.
+* **Request-only fields:** `expectedRevision`/`expected_revision` and `applyAt`/`apply_at` belong to semantic requests. `dataToJson()` never emits them and Rack patches never retain them.
+* **`status`:** Generated by Sibyl and ignored as input.
+* **Authoritative replacement:** A generic preset/patch load has no optimistic-concurrency precondition. On the first load after construction, Sibyl may initialize its generation from a valid saved revision. On every subsequent live replacement—including another AI module, generic MCP bridge, preset load, or undo—Sibyl assigns `currentRevision + 1` rather than trusting an incoming stale revision. The replacement still passes through normal validation, compilation, immutable-snapshot publication, and musical-boundary machinery.
+
+Generic state setters commonly report only that `fromJson()` was invoked, not that module-specific validation succeeded. A generic editor must read the state back and confirm the new `status.acceptedRevision`, `status.lastError`, and warnings. Revision conflict protection applies only to cooperative semantic editors; an authoritative writer is deliberately allowed to replace accepted work.
+
+### 3.2 Interoperability Contract
+
+The JSON composition schema in this section is Sibyl's universal compatibility surface. It is not private to Octavia. A third-party MCP server may support Sibyl in either of two ways:
+
+1. **Baseline:** read and authoritatively replace the complete Rack state while preserving its wrapper.
+2. **First class:** implement the transport-neutral semantic operations defined in Section 5, including focused reads, validation, revision-guarded transactions, status, and transport.
+
+Sibyl must not require an Octavia-specific marker in its saved state, reject an otherwise valid state because another editor produced it, or hide essential composition data behind Octavia. Optional provenance such as `meta.lastEditor` or `meta.editSummary` may help humans and agents, but it is informational and never used for authorization or synchronization.
+
+Octavia's C++ `SibylControl` adapter is an in-process reference integration, not a required ABI for other plugins. Cross-plugin C++ RTTI and symbol sharing are not assumed. Other bridges may reach the same behavior through their own host integration or use authoritative state replacement.
+
+### 3.3 Composition Schema
+
+```json
+{
+  "meta": {
+    "title": "Abyssal Techno",
+    "prompt": "Deep 130 BPM techno. Sparse sub bass and a polymetric FM lead in F Dorian.",
+    "bpm": 130.0,
+    "root": "F",
+    "rootOctave": 3,
+    "scale": "dorian",
+    "swing": 0.12,
+    "seed": 42731
+  },
+  "clock": {
+    "externalPpqn": 4,
+    "outputPpqn": 4,
+    "externalTimeoutMs": 2000,
+    "onExternalStop": "hold"
+  },
+  "transport": {
+    "running": true,
+    "loop": true,
+    "defaultApplyAt": "nextBeat"
+  },
+  "tracks": [
+    { "id": "bass", "channel": 0, "defaultGate": 0.5, "defaultVelocity": 0.8 },
+    { "id": "lead", "channel": 1, "defaultGate": 0.4, "defaultVelocity": 0.7 }
+  ],
+  "patterns": {
+    "bass_verse": {
+      "length": 16,
+      "resolution": "1/16",
+      "steps": [
+        { "step": 0, "degree": 0, "octave": -1, "gate": 0.8, "velocity": 1.0 },
+        { "step": 7, "degree": 0, "octave": -1, "gate": 0.2, "velocity": 0.6, "probability": 0.8 },
+        { "step": 14, "degree": 1, "octave": -1, "gate": 0.5, "velocity": 0.9, "glideMs": 100 }
+      ]
+    },
+    "lead_poly": {
+      "length": 7,
+      "resolution": "1/8",
+      "steps": [
+        { "step": 0, "pitchV": 0.0, "gate": 0.5, "velocity": 0.7, "ratchets": 3 },
+        { "step": 3, "note": "Eb4", "gate": 0.1, "velocity": 0.5, "microshift": -0.08 }
+      ]
+    }
+  },
+  "arrangement": [
+    {
+      "id": "intro", "name": "Intro",
+      "description": "A restrained opening that establishes the bass ritual.",
+      "lengthBeats": 16, "repeats": 1,
+      "phaseMode": "restart",
+      "tracks": { "bass": "bass_verse", "lead": null }
+    },
+    {
+      "id": "verse_a", "name": "Verse A",
+      "description": "Introduce the polymetric lead while preserving the grounded bass pulse.",
+      "lengthBeats": 16, "repeats": 2,
+      "phaseMode": "restart",
+      "tracks": {
+        "bass": "bass_verse",
+        "lead": { "pattern": "lead_poly", "phaseMode": "continue" }
+      }
+    }
+  ],
+  "macros": {
+    "1": { "target": "global.probability", "amount": 0.5, "polarity": "unipolar", "clamp": [0.0, 1.0] },
+    "2": { "target": "track.lead.swing", "amount": 0.25, "polarity": "bipolar", "clamp": [-0.49, 0.49] }
+  }
+}
+```
+
+Version 2 enum values used above:
+
+* `clock.onExternalStop`: `"hold"` (default), `"freeRun"`, or `"internal"`.
+* `transport.defaultApplyAt`: `"nextBeat"` (default), `"nextStep"`, `"nextScene"`, or `"immediate"`.
+
+### 3.4 Schema Semantics
+
+1. **Sparse events:** `steps` contains active events only; a missing step is a rest.
+2. **Stable tracks:** Human-readable track IDs reference fixed polyphonic `channel` values. IDs and channels are unique.
+3. **Explicit scene duration:** `lengthBeats` defines one scene cycle independently of pattern lengths. Every assigned pattern loops within it; `repeats` repeats that complete cycle.
+4. **Scene intent:** Optional `description` text records the scene's musical purpose. It is non-semantic metadata, has no DSP effect, and is shown in Sibyl's lower display while that scene is active; the composition prompt is the fallback when no scene description exists.
+5. **Polymeter and phase:** Patterns have independent lengths and resolutions. A scene's `phaseMode` is `restart` (default), `continue`, or `alignGlobal`. Track assignments may use the compact pattern-ID string form or an object with `pattern` and a per-track `phaseMode` override. Details are in Section 4.2.
+6. **Unambiguous pitch:** An event contains exactly one of `pitchV`, `degree`, or `note`. `pitchV` follows C4 = 0 V. `degree` is zero-based in `meta.scale`, relative to root/rootOctave, with a signed scale-octave offset. Degrees outside one scale octave wrap using Euclidean division, so degree 8 in a seven-note scale is degree 1 one octave higher. `note` uses the grammar defined below.
+7. **Timing:** `gate` is a duration measured in pattern steps: values below 1 provide short articulation, `1` fills one step, and values above 1 sustain across steps. `microshift` is a signed step fraction, clamped below half a step. `glideMs` is milliseconds. `ratchets` is the total evenly spaced attacks in the step.
+8. **Tie versus glide:** Long unchanged notes should use `gate` above 1. `tie: true` is reserved for legato continuation or pitch changes without a new gate attack. Glide moves pitch but does not imply a tie.
+9. **Velocity and mod:** Velocity uses normalized 0–1 values. MOD1, MOD2, and MOD3 values are literal modular voltages from -10 V to +10 V.
+10. **Swing:** `meta.swing` delays the second subdivision of each straight pair by that fraction of one subdivision. Range is 0–0.49. Macro offsets are additive and clamped.
+11. **Duplicate events:** Version 2 rejects multiple events on one step; ratchets represent repeated attacks.
+
+#### 3.4.1 Step Event Fields
+
+Version 2 patterns contain note events. Modulation-only or other event kinds are reserved for a later schema.
+
+| Field | Type | Required | Default | Range or constraint |
+|---|---|---:|---|---|
+| `step` | integer | yes | — | 0 to `length - 1`; unique in the pattern |
+| `pitchV` | number | exactly one¹ | — | -10 to 10 V; C4 = 0 V and 1 V/octave |
+| `degree` | integer | exactly one¹ | — | Zero-based scale degree; may extend across octaves |
+| `note` | string | exactly one¹ | — | Scientific-pitch grammar below |
+| `octave` | integer | no | 0 | Signed scale-octave offset; valid only with `degree` |
+| `gate` | number | no | Track `defaultGate` | 0–1024 step durations; with `ratchets > 1`, an explicit value must be 0–1 and applies to each ratchet slice |
+| `velocity` | number | no | Track `defaultVelocity` | Normalized 0–1 |
+| `mod` | number | no | 0 V | MOD1 voltage, -10 V to +10 V |
+| `mod2` | number | no | 0 V | Independent MOD2 voltage, -10 V to +10 V |
+| `mod3` | number | no | 0 V | Independent MOD3 voltage, -10 V to +10 V |
+| `probability` | number | no | 1 | 0–1 |
+| `tie` | boolean | no | `false` | Suppresses the new gate attack and holds the prior gate |
+| `glideMs` | number | no | 0 | Nonnegative milliseconds of linear V/Oct glide |
+| `microshift` | number | no | 0 | Signed step fraction, strictly greater than -0.5 and less than 0.5 |
+| `ratchets` | integer | no | 1 | 1–16 evenly spaced attacks within the step |
+
+¹ Exactly one of `pitchV`, `degree`, or `note` is required.
+
+#### 3.4.2 Pitch and Scale Grammar
+
+`note` uses `<Name><Accidental?><Octave>`:
+
+* `Name` is an uppercase ASCII letter `A`–`G`.
+* `Accidental` is an optional ASCII `b` or `#`. Double accidentals and Unicode accidentals are not accepted.
+* `Octave` is a signed integer from -1 through 9.
+
+Examples: `"C4"`, `"Eb5"`, `"F#3"`, and `"Bb-1"`. `meta.root` uses the same grammar without an octave, for example `"F"`, `"C#"`, or `"Eb"`. Enharmonic spellings compile to the same pitch class but retain the supplied spelling for display. A compiled pitch outside -10 to 10 V is a validation error.
+
+Accepted `meta.scale` values in version 2 are `chromatic`, `major`, `natural_minor`, `harmonic_minor`, `melodic_minor`, `dorian`, `phrygian`, `lydian`, `mixolydian`, `locrian`, `major_pentatonic`, and `minor_pentatonic`. `melodic_minor` means the ascending form in both directions. Unknown scale names are validation errors.
+
+#### 3.4.3 Macro Targets and Evaluation
+
+| Target | Applies to | Final range |
+|---|---|---|
+| `global.probability` | All event probabilities | 0–1 |
+| `global.swing` | Global swing | 0–0.49 |
+| `global.velocity` | All event velocities | 0–1 |
+| `track.<id>.probability` | One track's event probabilities | 0–1 |
+| `track.<id>.swing` | One track's swing | 0–0.49 |
+| `track.<id>.velocity` | One track's velocities | 0–1 |
+| `track.<id>.gate` | One track's gate duration in steps | 0–1024; capped at 1 for ratcheted events |
+| `track.<id>.mod` | One track's MOD1 output | -10 V to +10 V |
+| `track.<id>.mod2` | One track's MOD2 output | -10 V to +10 V |
+| `track.<id>.mod3` | One track's MOD3 output | -10 V to +10 V |
+
+An unknown target or unresolved track ID is a validation error. An unpatched macro contributes zero. For a patched input:
+
+```text
+normalizedInput = clamp(voltage / 10, 0, 1)
+unipolar contribution = normalizedInput * amount
+bipolar contribution = (normalizedInput * 2 - 1) * amount
+effectiveValue = clamp(storedValue + sum(global contributions) + sum(track contributions), targetRange)
+```
+
+Multiple macros addressing the same target add before the final clamp. The macro's explicit `clamp` may narrow, but never expand, the target's intrinsic range.
+For MOD1, MOD2, and MOD3 targets, `amount` and `clamp` values are expressed directly in volts.
+
+### 3.5 Validation and Limits
+
+Version 2 enforces conservative fixed limits:
+
+* 16 tracks, 256 patterns, and 256 scenes.
+* 1–1024 steps and at most 1024 sparse events per pattern.
+* 64-character IDs/names, 512-character scene descriptions, and 2048-character title/prompt fields.
+* BPM 20–400, positive scene length, probability 0–1, and ratchets 1–16.
+* `phaseMode`, `phase_policy`, restart targets, and apply boundaries must use the enumerated values in Sections 4 and 5. Fields supplied to an unrelated transport action are validation errors rather than silently ignored.
+
+Accepted `resolution` values in version 2 are:
+
+| Straight | Dotted | Triplet |
+|---|---|---|
+| `1/1` | `1/1d` | `1/1t` |
+| `1/2` | `1/2d` | `1/2t` |
+| `1/4` | `1/4d` | `1/4t` |
+| `1/8` | `1/8d` | `1/8t` |
+| `1/16` | `1/16d` | `1/16t` |
+| `1/32` | `1/32d` | `1/32t` |
+| `1/64` | `1/64d` | `1/64t` |
+
+`d` multiplies the straight duration by 3/2; `t` multiplies it by 2/3. The compiler represents these as rational tick durations to avoid cumulative triplet drift. Any other string is a validation error.
+
+Unknown fields produce warnings for forward compatibility. Invalid types, missing references, duplicate IDs/channels/steps, unsupported schema versions, and out-of-range structural values reject the entire update atomically. The last accepted composition continues playing.
+
+### 3.6 Schema-v2 Compatibility Freeze and Migration Policy
+
+Schema v2 is the frozen first-public-release vocabulary. Its event fields, macro targets,
+scale names, timing meanings, voltage units, and validation ranges will not be silently
+reinterpreted. New optional fields that an older v2 reader can safely ignore may be added
+only when they preserve those meanings and produce the existing unknown-field warning.
+A change that alters an existing meaning or requires new playback semantics requires a new
+composition schema version.
+
+Portable composition files use this frozen envelope:
+
+```json
+{
+  "format": "Leviathan.SibylComposition",
+  "schemaVersion": 2,
+  "composition": {}
+}
+```
+
+The `format` string and the meaning of `schemaVersion` are stable. A malformed envelope,
+foreign format, missing composition, unsupported version, truncated file, or file above
+the documented size limit is rejected atomically while the accepted composition continues
+playing. Portable files deliberately contain composition state, not runtime playhead,
+pending-command, gate, or clock-estimator state.
+
+When schema v3 is introduced, migration must run on the control thread and be explicit and
+deterministic. A future writer may emit v3, but it must retain a tested v2 reader or provide
+an explicit conversion workflow. It must never treat a v2 document as v3 by inference,
+silently overwrite the source file, or partially adopt a failed conversion. Schema-v1
+portable files remain rejected unless a separately specified migration is implemented.
+
+Rack-facing numeric parameter, input, output, and light IDs are also compatibility-frozen.
+Future controls and ports must be appended; existing numeric IDs must not be reordered or
+repurposed.
+
+---
+
+## 4. Playback and Sync Engine
+
+### 4.1 Clocking
+
+**Internal mode:** With CLOCK IN unpatched, a double-precision phase accumulator advances from `meta.bpm` using `ProcessArgs::sampleTime`. Events are sample accurate.
+
+**External mode:** With CLOCK IN patched, `externalPpqn` defines pulses per quarter note. Sibyl measures intervals and uses a bounded phase estimator for subdivisions. It never moves a detected edge away from its arrival sample; smoothing only affects predictions between edges.
+
+After `externalTimeoutMs` without an edge, `onExternalStop` selects:
+
+* `hold` (default): pause and preserve phase.
+* `freeRun`: continue at the last stable tempo.
+* `internal`: transition to `meta.bpm` at the next beat.
+
+CLOCK OUT emits the configured reconstructed clock in all modes. A musical restart realigns output-clock phase at its boundary but preserves the learned external-clock interval and jitter estimate.
+
+### 4.2 Scene Transitions and State Adoption
+
+A scene completes after `lengthBeats × repeats`. Sibyl sends SCENE OUT and enters the next scene. With looping enabled, wrapping to scene one also emits EOC. With looping disabled, the final scene closes all gates and stops.
+
+Scene requests, restarts, and accepted compositions use one of these boundaries:
+
+* `immediate`: adopt on the next sample and close incompatible active gates.
+* `nextStep`: adopt at the next event-grid boundary.
+* `nextBeat` (default): adopt at the next quarter-note boundary.
+* `nextScene`: adopt when the current scene completes.
+
+When a request supplies `apply_at`, it overrides `transport.defaultApplyAt` for that request. Otherwise the composition default applies. The response always reports the normalized boundary Sibyl selected. `nextBeat` is the compositional default: responsive without tearing a phrase at an arbitrary sample. Agents should prefer `nextScene` for structural rewrites and `immediate` only for emergency live changes.
+
+Scene entry resolves phase independently for every assigned track:
+
+* `restart` (default): Set the pattern anchor to scene entry, so it begins at step zero.
+* `continue`: Preserve the track's prior pattern phase. This is an explicit choice for evolving polymeters.
+* `alignGlobal`: Derive phase from the global musical tick timeline, allowing an early scene jump to retain globally aligned drums or harmonic rhythm.
+
+The scene-level `phaseMode` supplies the default. An object-form track assignment may override it. A string-form assignment uses the scene default. Entering a scene closes outgoing gates; version 2 does not tie gates across scenes.
+
+### 4.3 Phase-Preserving Composition Adoption
+
+Sibyl maintains separate clock phase, arrangement position, scene/repeat position, per-track pattern anchors, deterministic-randomness epoch, gate lifecycle, pending composition revision, and pending transport command. No command resets all domains implicitly.
+
+`vcv_sibyl_edit.phase_policy` controls how an accepted composition affects pattern anchors when it becomes active:
+
+* `preserve` (default): Retain transport and track phases. Replacing a pattern under the same ID preserves its elapsed phase; a changed length maps that phase modulo the new length. Newly added events before the current step wait for the next loop. Removing a sounding event closes its gate at adoption.
+* `restartChanged`: Close gates and restart only tracks whose pattern content or scene assignment changed.
+* `restartAll`: Close gates and restart every assigned track.
+
+Unchanged sounding events continue across a `preserve` adoption. A changed sounding pitch jumps or follows its new `glideMs`. Applying `restartChanged` or `restartAll` generates the destination step-zero events at the adoption boundary.
+
+Multiple accepted revisions awaiting the same or a later boundary may coalesce: Sibyl activates only the newest compiled revision, which was still built transactionally on the preceding accepted revision. An accepted edit is never discarded by a restart. When an edit and transport command share a boundary, Sibyl first adopts the newest composition, then applies the transport command against it, then generates boundary events.
+
+### 4.4 Glide
+
+`glideMs` applies linear V/Oct interpolation from the held pitch to the new pitch. This gives an exact arrival time and avoids a one-pole filter's indefinite tail. Version 2 changes MOD at event boundaries; later schemas may add MOD glide.
+
+### 4.5 Probability and Determinism
+
+Probability is evaluated at the event boundary after macro modulation:
+
+```text
+effectiveProbability = clamp(eventProbability + macroOffset, 0, 1)
+play = deterministicRandom(seed, sceneCycle, trackId, patternCycle, step) < effectiveProbability
+```
+
+Randomness uses `meta.seed` and stable event coordinates rather than mutable global call order. The same composition, reset point, and macro voltages produce the same result, and adding another track does not change existing tracks' choices. Version 2 makes one decision for an entire ratcheted event.
+
+### 4.6 Real-Time State Architecture
+
+```text
+Rack/Octavia JSON
+        ↓ parse, validate, resolve names, compile timing
+Immutable compiled composition snapshot
+        ↓ atomic publication and quantized adoption
+Allocation-free DSP playback state
+```
+
+`dataFromJson()` parses and validates into staging storage without mutating live playback. It resolves references, scale pitches, scene durations, event order, macro targets, and divisions before publication. The audio thread observes a ready snapshot atomically and adopts it at `applyAt`; it never parses JSON, allocates, destroys a large object, or locks a mutex.
+
+Snapshot reclamation also occurs off the audio thread. Prefer double/triple buffering or a generation scheme over allowing final `shared_ptr` destruction inside `process()`.
+
+Playhead position, pending triggers, clock-estimator history, and active gates are runtime state and are not serialized. Reload begins at the start using `transport.running`, making saved patches reproducible.
+
+---
+
+## 5. Semantic Interaction Protocol and Octavia Integration
+
+Because Octavia is Sibyl's reference editor, it exposes musical operations rather than requiring repeated whole-preset replacement. The operation and response shapes below are transport-neutral so another bridge can offer a comparably capable integration. Octavia's public MCP surface consists of:
+
+* `vcv_sibyl_get_composition`
+* `vcv_sibyl_get_capabilities`
+* `vcv_sibyl_validate`
+* `vcv_sibyl_edit`
+* `vcv_sibyl_get_status`
+* `vcv_sibyl_transport`
+
+Generic `vcv_get_module_state` and `vcv_set_module_state` remain supported for preset transfer, backup, recovery, and clients that do not understand the semantic protocol. They are an authoritative whole-composition workflow, not a degraded or forbidden one; they simply lack cooperative conflict protection and token-efficient edits.
+
+MCP inputs identify the Rack module with `module_id` and use snake-case field names. The
+Octavia adapter preserves the public snake-case request fields. Sibyl's opaque responses
+use camel case. Successful responses contain `ok: true` and `moduleId`. Failures contain
+`ok: false` and a structured `error`:
+
+```json
+{
+  "ok": false,
+  "moduleId": 42,
+  "error": {
+    "code": "revision_conflict",
+    "message": "Expected revision 12, but the current revision is 13.",
+    "path": null,
+    "details": { "expectedRevision": 12, "currentRevision": 13 }
+  }
+}
+```
+
+Stable error codes are intended for agent recovery; prose is intended for the user. Validation problems use JSON-style paths such as `patterns.bass_fill.steps[3].degree`. Octavia maps missing modules, unsupported modules, malformed requests, revision conflicts, validation failures, and internal failures to distinct MCP errors while preserving this structured payload.
+
+### 5.1 Capability Discovery
+
+`vcv_sibyl_get_capabilities` (and, where practical, Octavia's normal module inspection) advertises Sibyl support so an agent does not mistake its state for an opaque preset:
+
+```json
+{
+  "ok": true,
+  "moduleId": 42,
+  "capabilities": {
+    "sibyl": {
+      "apiVersion": 1,
+      "schemaVersion": 2,
+      "revision": 12,
+      "operations": ["get_composition", "validate", "edit", "get_status", "transport"]
+    }
+  }
+}
+```
+
+`apiVersion` versions the transport-neutral command contract; `schemaVersion` versions compositions. An Octavia-connected agent should prefer the Sibyl tools whenever this capability is present. Other bridges may advertise the same capability in their own discovery format.
+
+### 5.2 Composition Inspection
+
+`vcv_sibyl_get_composition` accepts:
+
+```json
+{ "module_id": 42, "view": "summary" }
+```
+
+`view` is one of `summary`, `full`, `pattern`, or `scene`. `pattern` and `scene` require an `id`. The default `summary` view is deliberately token-efficient and returns metadata, clock and transport settings, track declarations, scene summaries, pattern IDs, calculated durations, event counts, revision, and warnings. Focused views return one complete object; `full` returns the complete composition.
+
+```json
+{
+  "ok": true,
+  "moduleId": 42,
+  "revision": 12,
+  "schemaVersion": 2,
+  "view": "pattern",
+  "id": "bass_verse",
+  "pattern": {},
+  "derived": { "durationBeats": 4.0, "eventCount": 3 },
+  "warnings": []
+}
+```
+
+### 5.3 Side-Effect-Free Validation
+
+`vcv_sibyl_validate` accepts a candidate `composition`, `pattern`, `scene`, or `operations` payload. A focused candidate may include the identifiers/context needed to validate its references against the current composition. Validation never changes the composition, revision, undo history, pending snapshot, or transport.
+
+```json
+{
+  "module_id": 42,
+  "candidate": {
+    "kind": "pattern",
+    "id": "bass_fill",
+    "value": {}
+  }
+}
+```
+
+```json
+{
+  "ok": true,
+  "moduleId": 42,
+  "revision": 12,
+  "valid": false,
+  "errors": [
+    {
+      "code": "pitch_representation_conflict",
+      "path": "patterns.bass_fill.steps[3]",
+      "message": "Use exactly one of pitchV, degree, or note."
+    }
+  ],
+  "warnings": [],
+  "derived": { "durationBeats": 4.0, "eventCount": 9 }
+}
+```
+
+An invalid musical candidate is a successful validation request with `valid: false`, not a transport failure.
+
+### 5.4 Atomic Composition Transactions
+
+`vcv_sibyl_edit` is the sole primitive for persistent interactive edits. It accepts a required `expected_revision`, optional `apply_at` and `phase_policy`, and one or more ordered semantic operations:
+
+```json
+{
+  "module_id": 42,
+  "expected_revision": 12,
+  "apply_at": "nextScene",
+  "phase_policy": "preserve",
+  "operations": [
+    { "op": "upsert_pattern", "id": "bass_chorus", "pattern": {} },
+    { "op": "set_scene_track", "scene_id": "chorus", "track_id": "bass", "pattern_id": "bass_chorus" },
+    { "op": "set_meta", "path": "prompt", "value": "Chorus opens into a syncopated bass variation." }
+  ]
+}
+```
+
+Version 2 operations are:
+
+* `set_meta` and `set_clock`
+* `upsert_track` and `delete_track`
+* `upsert_pattern` and `delete_pattern`
+* `upsert_scene`, `delete_scene`, `reorder_scenes`, and `set_scene_track`
+* `upsert_macro` and `delete_macro`
+* `replace_composition` for deliberate bulk import
+
+The transaction applies operations in order to a private copy, then Sibyl validates and compiles the complete result. Any invalid operation rejects the entire transaction and leaves live and pending state unchanged. Deleting a referenced object fails with `object_in_use`; callers must remove/reassign its references in the same transaction. Unknown operation names fail rather than being ignored.
+
+`expected_revision` must equal Sibyl's currently accepted revision. It is required even while an earlier revision awaits DSP adoption, preventing edits from overwriting accepted-but-not-yet-audible work. On conflict, the agent rereads the relevant current state, reapplies its musical intention, and submits a new transaction. There is no ordinary `force` flag; authoritative import uses the generic preset path or an explicit bulk workflow.
+
+On acceptance, Sibyl increments the accepted revision exactly once, regardless of operation count. The returned `revision` means accepted/compiled state; `activeRevision` is the snapshot currently sounding and can temporarily lag it:
+
+```json
+{
+  "ok": true,
+  "moduleId": 42,
+  "revision": 13,
+  "activeRevision": 12,
+  "pendingRevision": 13,
+  "applyAt": "nextScene",
+  "phasePolicy": "preserve",
+  "undoAvailable": true,
+  "warnings": []
+}
+```
+
+Common rejected edit responses retain enough structure for an agent to recover. A stale editor must reread before retrying:
+
+```json
+{
+  "ok": false,
+  "moduleId": 42,
+  "error": {
+    "code": "revision_conflict",
+    "message": "Expected revision 12, but the current revision is 14.",
+    "path": null,
+    "details": { "expectedRevision": 12, "currentRevision": 14 }
+  }
+}
+```
+
+A referenced object must be reassigned or unreferenced within the same transaction before deletion:
+
+```json
+{
+  "ok": false,
+  "moduleId": 42,
+  "error": {
+    "code": "object_in_use",
+    "message": "Pattern 'bass_verse' is referenced by scene 'intro'.",
+    "path": "operations[1]",
+    "details": {
+      "objectKind": "pattern",
+      "objectId": "bass_verse",
+      "referencedBy": ["intro"]
+    }
+  }
+}
+```
+
+Octavia captures the complete pre-edit Rack module state before dispatch, creates exactly one history action after acceptance, and discards the capture on rejection. Thus one transaction produces one Rack undo entry. Sibyl remains the sole authority for operation semantics, schema validation, merging, revision assignment, and compilation; Octavia does not duplicate musical rules. Undo and redo restore complete states through Sibyl's safe snapshot path. Transport commands do not create history entries.
+
+Composition updates use the boundaries in Section 4.2. `nextBeat` is the default for local pattern edits; agents should choose `nextScene` for arrangement or other phrase-level changes. The response reports the actual normalized boundary selected by Sibyl.
+
+`phase_policy` is `preserve` (default), `restartChanged`, or `restartAll`, with the behavior defined in Section 4.3. A local note edit should normally preserve phase; restart policies are deliberate musical operations.
+
+### 5.5 Runtime Status
+
+`vcv_sibyl_get_status` is cheap and does not serialize the composition:
+
+```json
+{
+  "ok": true,
+  "moduleId": 42,
+  "revision": 13,
+  "activeRevision": 12,
+  "pendingRevision": 13,
+  "pendingApplyAt": "nextScene",
+  "pendingPhasePolicy": "preserve",
+  "pendingTransport": {
+    "action": "restart",
+    "target": "arrangement",
+    "applyAt": "nextScene"
+  },
+  "running": true,
+  "clockSource": "external",
+  "estimatedBpm": 129.97,
+  "sceneId": "verse_a",
+  "sceneRepeat": 2,
+  "beat": 11.25,
+  "lastError": null,
+  "warnings": []
+}
+```
+
+`beat` is zero-based within the current scene cycle. `pendingTransport` is null when no command awaits a boundary. Status is ephemeral and is not included in composition edits or undo history.
+
+### 5.6 Performance Transport
+
+`vcv_sibyl_transport` accepts `play`, `pause`, `stop`, `reset`, `restart`, `panic`, `next_scene`, `previous_scene`, `select_scene`, or `reseed`. Scene selection supplies `scene_id`; quantized actions may supply `apply_at`. `restart` requires a `target`: `scene`, `arrangement`, `patterns`, or `randomness`. Scene-changing requests may supply a one-request `phase_mode` override: `restart`, `continue`, or `alignGlobal`.
+
+```json
+{
+  "module_id": 42,
+  "action": "restart",
+  "target": "scene",
+  "apply_at": "nextBeat",
+  "phase_mode": "restart"
+}
+```
+
+Transport behavior is explicit by domain:
+
+| Command | Position | Gates | Pattern phase | Clock estimator |
+|---|---|---|---|---|
+| `play` | Resume preserved position | Generate future events | Preserve | Preserve |
+| `pause` | Preserve | Close | Preserve | Continue observing external clock |
+| `stop` | Return to arrangement start | Close immediately | Prepare first-scene policy | Preserve |
+| `restart`, target `scene` | Current scene beat zero | Retrigger at boundary | Apply scene/override policy | Preserve |
+| `restart`, target `arrangement` | First scene beat zero | Retrigger at boundary | Apply first-scene policy | Preserve |
+| `restart`, target `patterns` | Preserve scene position | Retrigger at boundary | Restart assigned patterns | Preserve |
+| `restart`, target `randomness` | Preserve | Preserve | Preserve; reset probability epoch to `meta.seed` | Preserve |
+| `panic` | Preserve | Close immediately and cancel generated pulses | Preserve | Preserve |
+
+`reset` is a compatibility alias for `restart` with target `arrangement`. `reseed` changes the runtime probability realization without changing `meta.seed`; a normal arrangement restart restores the deterministic realization from the composition seed. `next_scene`, `previous_scene`, and `select_scene` use the destination scene's phase policy unless `phase_mode` overrides it.
+
+Performance transport changes runtime state only: it does not increment composition revision, alter saved `transport.running`, or create undo history. Responses return the normalized action, target, boundary, phase mode, current/pending scene, and whether the command is pending. Accepted composition edits remain pending across every transport command, including stop, reset, and panic.
+
+### 5.7 Octavia Reference Adapter
+
+Octavia communicates with Sibyl through a small capability interface on Rack's UI/control thread. The preceding sections define the stable agent-facing MCP tools; Appendix A records the internal HTTP routes, C++ adapter, and thread-safety boundary.
+
+### 5.8 Compositional Workflow
+
+When asked to "write a bassline," an agent should:
+
+1. Discover the Sibyl capability and request `summary` plus any focused patterns/scenes it will touch.
+2. Optionally validate an unfamiliar pattern or multi-operation candidate.
+3. Submit one `vcv_sibyl_edit` transaction with the observed revision and a musically appropriate boundary.
+4. If a revision conflict occurs, reread and merge the intention into the current material rather than resending stale state.
+5. Confirm acceptance from the edit response; use status only when the user cares when the change becomes audible.
+
+This keeps routine turns compact while preserving atomicity, user edits, undo, and musical continuity.
+
+---
+
+## Appendix A: Octavia Adapter and Real-Time Boundary
+
+Octavia talks to a small Sibyl capability interface on Rack's safe control/UI thread:
+
+```cpp
+struct SibylControl {
+    enum class Operation {
+        CAPABILITIES, GET_COMPOSITION, VALIDATE, EDIT, GET_STATUS, TRANSPORT
+    };
+
+    virtual bool handleSibylRequest(Operation operation,
+                                    const std::string& requestJson,
+                                    std::string& responseJson,
+                                    std::string& error) = 0;
+};
+```
+
+JSON strings avoid ownership within the Leviathan plugin. Octavia resolves the module with `dynamic_cast<SibylControl*>`, verifies the capability/version, dispatches on the UI/control thread, and relays the structured result. Its internal routes are:
+
+* `GET /sibyl/:id/capabilities`
+* `GET /sibyl/:id/composition`
+* `POST /sibyl/:id/validate`
+* `POST /sibyl/:id/edit`
+* `GET /sibyl/:id/status`
+* `POST /sibyl/:id/transport`
+
+MCP tool names and input schemas are Octavia's stable agent-facing binding; the semantic JSON contract is reusable by other bridge authors.
+
+The adapter never directly mutates DSP playback structures. `edit` validates and compiles an immutable snapshot, assigns its accepted revision, and publishes it for quantized audio-thread adoption. `transport` publishes a bounded runtime command. `getStatus` reads an atomically published status snapshot. No adapter call causes the audio thread to allocate, parse JSON, acquire a mutex, or destroy the final reference to a snapshot.

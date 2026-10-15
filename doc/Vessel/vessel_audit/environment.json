@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-09",
+  "scope": "Isolated kernels only; no full module build, callback benchmark, or listening test.",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "machine": "x86_64",
+  "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+  "cpp_standard_tested": [
+    "C++11",
+    "C++17"
+  ],
+  "final_benchmark_flags": "-std=c++11 -O3 -march=nehalem -fno-fast-math -fno-unsafe-math-optimizations -ffp-contract=off -Wall -Wextra",
+  "timing_environment": "Shared container; timing noisy; no realtime scheduling or affinity control used.",
+  "source_scope": "expander branch source fetched 2026-10-09; not a commit-pinned checkout"
+}

@@ -1,4 +1,4 @@
-#include "../src/TemporalDeckPlatterInput.hpp"
+#include "../src/temporaldeck/TemporalDeckPlatterInput.hpp"
 
 #include <cmath>
 #include <iostream>

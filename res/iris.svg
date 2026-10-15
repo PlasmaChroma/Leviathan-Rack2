@@ -80,14 +80,14 @@
      inkscape:window-maximized="1"
      inkscape:current-layer="svg18"
      showgrid="false" />
-  <rect
+  <g id="theme_background"><rect
      width="6096"
      height="12850"
-     fill="#090b0f"
+     fill="#000000"
      id="rect1"
      x="0"
      y="0"
-     style="display:inline" />
+     style="display:inline" /></g>
   <g
      id="waves_layer"
      style="display:none;opacity:0.5"
@@ -132,19 +132,25 @@
      style="display:inline">
     <g
        id="glass">
-      <path
+      <g
+         id="glass_input">
+        <path
          d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z"
-         id="iris_input_field"
-         style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
-      <rect
+           id="iris_input_field"
+           style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+      </g>
+      <g
+         id="glass_output">
+        <rect
          x="3400"
          y="10630"
          width="2632"
          height="1510"
          rx="117.93464"
          ry="126"
-         id="iris_output_field"
-         style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+           id="iris_output_field"
+           style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+      </g>
     </g>
     <rect
        x="76"
@@ -155,7 +161,10 @@
        ry="126"
        id="iris_preview_field"
        style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
-    <path
+    <g
+       id="plasma_conduit_anchors"
+       inkscape:label="Plasma Conduit Anchors">
+      <path
        d="M 1126.72,7760.0522 H 3358.8802"
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
@@ -171,6 +180,7 @@
        d="m 4704,7793.5083 h 545.2969"
        id="iris_soft_sync_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    </g>
   </g>
   <g
      id="components"
@@ -326,98 +336,18 @@
      text-anchor="middle"
      id="labels"
      style="display:inline">
-    <text
-       x="870.79999"
-       y="8759.9277"
-       id="text6"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan5"
-         x="870.79999"
-         y="8759.9277">FREQ</tspan></text>
-    <text
-       x="2269.4792"
-       y="8479.7646"
-       id="text7"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
-    <text
-       x="3912.1372"
-       y="10414.978"
-       id="text10"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan10"
-         x="3912.1372"
-         y="10414.978">━━━━ SCAN ━━━━</tspan></text>
-    <text
-       x="1889.9816"
-       y="10144.939"
-       id="text12"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan4"
-         x="1889.9816"
-         y="10144.939">OCT</tspan></text>
-    <text
-       x="763.81018"
-       y="10504.98"
-       id="text12-9"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
-         sodipodi:role="line"
-         id="tspan9"
-         x="763.81018"
-         y="10504.98">COLOR</tspan></text>
-    <text
-       x="3418.0366"
-       y="8479.9766"
-       id="text13"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
-    <text
-       x="4463.6665"
-       y="8479.9766"
-       id="text15"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SOFT</text>
-    <text
-       x="1104.3594"
-       y="11848.603"
-       id="text14"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan8"
-         x="1104.3594"
-         y="11848.603">LIN FM</tspan></text>
-    <text
-       x="5509.2969"
-       y="8479.9766"
-       id="text16"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SYNC</text>
-    <text
-       x="4146.061"
-       y="11848.603"
-       id="text17"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
-         sodipodi:role="line"
-         id="tspan7"
-         x="4146.061"
-         y="11848.603">OUT</tspan></text>
-    <text
-       x="2798.949"
-       y="11848.603"
-       id="text17-7"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
-         sodipodi:role="line"
-         id="tspan1"
-         x="2798.949"
-         y="11848.603">LFO</tspan></text>
-    <text
-       x="5291"
-       y="11848.603"
-       id="text18"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan6"
-         x="5291"
-         y="11848.603">Q</tspan></text>
+
+
+
+
+
+
+
+
+
+
+
+
     <text
        id="reworked_module_title_text"
        x="3031.3313"
@@ -449,7 +379,105 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
-  </g>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="870.79999"
+       y="8759.9277"
+       id="text6"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan5"
+         x="870.79999"
+         y="8759.9277">FREQ</tspan></text>
+<text
+       x="2269.4792"
+       y="8479.7646"
+       id="text7"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
+<text
+       x="3912.1372"
+       y="10414.978"
+       id="text10"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan10"
+         x="3912.1372"
+         y="10414.978">━━━━ SCAN ━━━━</tspan></text>
+<text
+       x="1889.9816"
+       y="10144.939"
+       id="text12"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         x="1889.9816"
+         y="10144.939">OCT</tspan></text>
+<text
+       x="763.81018"
+       y="10504.98"
+       id="text12-9"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan9"
+         x="763.81018"
+         y="10504.98">COLOR</tspan></text>
+<text
+       x="3418.0366"
+       y="8479.9766"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
+<text
+       x="4463.6665"
+       y="8479.9766"
+       id="text15"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SOFT</text>
+<text
+       x="1104.3594"
+       y="11848.603"
+       id="text14"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="1104.3594"
+         y="11848.603">LIN FM</tspan></text>
+<text
+       x="5509.2969"
+       y="8479.9766"
+       id="text16"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SYNC</text>
+<text
+       x="2798.949"
+       y="11848.603"
+       id="text17-7"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="2798.949"
+         y="11848.603">LFO</tspan></text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+       x="4146.061"
+       y="11848.603"
+       id="text17"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="4146.061"
+         y="11848.603">OUT</tspan></text>
+<text
+       x="5291"
+       y="11848.603"
+       id="text18"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         x="5291"
+         y="11848.603">Q</tspan></text>
+    </g>
+</g>
   <g
      id="perfect_wave_raster_anchors"
      style="display:none">
@@ -468,7 +496,7 @@
     <rect
        id="BRANDING_LEVIATHAN_LOGO_RASTER"
        x="1412.0335"
-       y="11843.102"
+       y="11943.102"
        width="3271.933"
        height="1224.054" />
   </g>

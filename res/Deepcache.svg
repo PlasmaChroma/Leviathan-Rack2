@@ -139,13 +139,13 @@
      inkscape:label="panel"
      transform="scale(100)"
      id="g15">
-    <rect
+    <g id="theme_background"><rect
        width="20.32"
        height="128.5"
-       fill="url(#panel)"
+       fill="#000000"
        id="rect5"
        x="0"
-       y="0" />
+       y="0" /></g>
     <rect
        x="0.44999999"
        y="0.44999999"

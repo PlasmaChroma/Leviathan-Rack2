@@ -1,0 +1,997 @@
+#include "PuffyFishWidget.hpp"
+
+#include "PuffyBodyImageCache.hpp"
+#include "PuffyDrawDiagnostics.hpp"
+#include "PuffyVisualPalette.hpp"
+#include "../common/render/NvgGraphicsLifecycle.hpp"
+#include "../common/visual/VisualAssets.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <unordered_map>
+
+namespace {
+
+constexpr float kPi = 3.14159265358979323846f;
+
+float clamp01(float value) {
+	return std::max(0.f, std::min(value, 1.f));
+}
+
+void appendEllipseArc(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY,
+	float startAngle,
+	float endAngle) {
+	const float handle = (4.f / 3.f)
+		* std::tan(0.25f * (endAngle - startAngle));
+	const float startCos = std::cos(startAngle);
+	const float startSin = std::sin(startAngle);
+	const float endCos = std::cos(endAngle);
+	const float endSin = std::sin(endAngle);
+	nvgBezierTo(
+		vg,
+		center.x + radiusX * (startCos - handle * startSin),
+		center.y + radiusY * (startSin + handle * startCos),
+		center.x + radiusX * (endCos + handle * endSin),
+		center.y + radiusY * (endSin - handle * endCos),
+		center.x + radiusX * endCos,
+		center.y + radiusY * endSin);
+}
+
+NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
+	return nvgRGBAf(
+		color.r * tint.r,
+		color.g * tint.g,
+		color.b * tint.b,
+		color.a * tint.a);
+}
+
+NVGcolor mixColor(NVGcolor from, NVGcolor to, float amount) {
+	const float mix = clamp01(amount);
+	return nvgRGBAf(
+		from.r + (to.r - from.r) * mix,
+		from.g + (to.g - from.g) * mix,
+		from.b + (to.b - from.b) * mix,
+		from.a + (to.a - from.a) * mix);
+}
+
+std::uint32_t puffyPersonalitySeed(std::int64_t moduleId) {
+	std::uint64_t value = moduleId >= 0
+		? std::uint64_t(moduleId) : 0x6d2b79f5u;
+	value ^= value >> 33;
+	value *= 0xff51afd7ed558ccdu;
+	value ^= value >> 33;
+	value *= 0xc4ceb9fe1a85ec53u;
+	value ^= value >> 33;
+	const std::uint32_t folded =
+		std::uint32_t(value) ^ std::uint32_t(value >> 32);
+	return folded != 0u ? folded : 0x6d2b79f5u;
+}
+
+std::uint8_t colorByte(float value) {
+	return std::uint8_t(clamp(int(value * 255.f + 0.5f), 0, 255));
+}
+
+struct PuffyRasterAsset {
+	int handle = -1;
+	int width = 0;
+	int height = 0;
+
+	explicit operator bool() const {
+		return handle >= 0 && width > 0 && height > 0;
+	}
+};
+
+struct CachedPuffyRaster {
+	std::weak_ptr<window::Image> lifecycleImage;
+	PuffyRasterAsset raster;
+};
+
+struct PuffyRasterCache {
+	NVGcontext* activeVg = nullptr;
+	std::unordered_map<std::string, CachedPuffyRaster> entries;
+};
+
+PuffyRasterCache& puffyRasterCache() {
+	static PuffyRasterCache cache;
+	return cache;
+}
+
+void invalidatePuffyRasterCache(NVGcontext* vg) {
+	PuffyRasterCache& cache = puffyRasterCache();
+	if (cache.activeVg != vg) return;
+	cache.activeVg = nullptr;
+	cache.entries.clear();
+}
+
+void resetPuffyRasterCache(NVGcontext* vg) {
+	PuffyRasterCache& cache = puffyRasterCache();
+	cache.activeVg = vg;
+	cache.entries.clear();
+}
+
+PuffyRasterAsset resolveRasterAsset(
+	NVGcontext* vg,
+	const char* relativePath) {
+	PuffyRasterAsset raster;
+	if (!vg || !relativePath || !APP || !APP->window) {
+		return raster;
+	}
+	PuffyRasterCache& cache = puffyRasterCache();
+	if (cache.activeVg != vg) {
+		// Handles belong to their NanoVG context. Retaining only the source path
+		// across a switch lets Rack rebuild the lifecycle image safely on demand.
+		cache.activeVg = vg;
+		cache.entries.clear();
+	}
+	const auto cached = cache.entries.find(relativePath);
+	if (cached != cache.entries.end()) {
+		// A function-static cache must not own Rack window resources: its
+		// destructor runs from __cxa_finalize while the plugin is unloading,
+		// potentially after Rack has torn down the image's NanoVG context.
+		// Rack/widget owners keep the lifecycle image alive during normal use.
+		if (cached->second.lifecycleImage.lock() &&
+			nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+				vg, cached->second.raster.handle,
+				cached->second.raster.width, cached->second.raster.height)) {
+			return cached->second.raster;
+		}
+		cache.entries.erase(cached);
+	}
+	const std::string fullPath = asset::plugin(pluginInstance, relativePath);
+	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+	if (!image || image->handle < 0) {
+		return raster;
+	}
+	raster.handle =
+		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
+	if (raster.handle < 0) {
+		raster.handle = image->handle;
+	}
+	nvgImageSize(vg, raster.handle, &raster.width, &raster.height);
+	if (raster.width <= 0 || raster.height <= 0) {
+		raster = {};
+	}
+	if (raster) {
+		cache.entries.emplace(
+			relativePath, CachedPuffyRaster {image, raster});
+	}
+	return raster;
+}
+
+struct PuffyCompassRasterWidget final : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || box.size.x <= 1.f || box.size.y <= 1.f) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(
+			pluginInstance, "res/icon/Compass-33p-crop.png");
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int handle = visual_assets::loadRasterMipmapHandle(
+			args.vg, image, fullPath);
+		if (handle < 0) {
+			handle = image->handle;
+		}
+		constexpr float aspect = 317.f / 315.f;
+		const float minimum = std::min(box.size.x, box.size.y);
+		const float drawHeight = minimum * 0.68f;
+		const float drawWidth = drawHeight * aspect;
+		const float x = 0.5f * (box.size.x - drawWidth);
+		const float y = 0.5f * (box.size.y - drawHeight) + minimum * 0.06f;
+		const NVGpaint paint = nvgImagePattern(
+			args.vg, x, y, drawWidth, drawHeight, 0.f, handle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+};
+
+} // namespace
+
+PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
+	: module(module),
+	  controller(puffyPersonalitySeed(module ? module->id : -1)),
+	  roamingAvatar(roamingAvatar) {
+	visual.effectiveAmount = 0.25f;
+	visual.negativeCharacter = int(puffy::Character::Bloom);
+	visual.positiveCharacter = int(puffy::Character::Spine);
+	visual.charactersLinked = false;
+	if (module) {
+		PuffyVisualState snapshot;
+		if (module->readVisualState(&snapshot)) {
+			visual = snapshot;
+		}
+	}
+	configurePersonality(module ? module->id : -1);
+	controller.update(0.f, visual, &pose);
+	pointerNegativeCharacter = visual.negativeCharacter;
+	pointerPositiveCharacter = visual.positiveCharacter;
+	previousPointerNegativeCharacter = pointerNegativeCharacter;
+	previousPointerPositiveCharacter = pointerPositiveCharacter;
+	if (!roamingAvatar) {
+		compassFramebuffer = new widget::FramebufferWidget();
+		compassFramebuffer->dirtyOnSubpixelChange = false;
+		compassRasterWidget = new PuffyCompassRasterWidget();
+		compassFramebuffer->addChild(compassRasterWidget);
+		compassFramebuffer->hide();
+		addChild(compassFramebuffer);
+	}
+}
+
+void PuffyFishWidget::configurePersonality(std::int64_t moduleId) {
+	const std::uint32_t seed = puffyPersonalitySeed(moduleId);
+	controller.setPersonalitySeed(seed, visual);
+	const std::uint32_t irisChoice = seed ^ 0x49524953u;
+	const NVGcolor irisBase = puffy_visual::characterTint(
+		int(irisChoice % std::uint32_t(puffy::kCharacterCount)));
+	const NVGcolor irisCharcoal = nvgRGB(18, 18, 20);
+	irisInnerColor = mixColor(irisCharcoal, irisBase, 0.82f);
+	irisOuterColor = mixColor(irisCharcoal, irisBase, 0.13f);
+	personalityModuleId = moduleId;
+}
+
+void PuffyFishWidget::onContextDestroy(const ContextDestroyEvent& e) {
+	// Drop every shared handle while Rack still identifies the retiring context.
+	// No nvgDeleteImage() call is needed: context destruction owns that cleanup.
+	puffy_body_cache::onContextDestroy(e.vg);
+	invalidatePuffyRasterCache(e.vg);
+	TransparentWidget::onContextDestroy(e);
+}
+
+void PuffyFishWidget::onContextCreate(const ContextCreateEvent& e) {
+	// Widget state survives editor/context recreation in Rack's DAW host. Force
+	// every readiness decision and framebuffer-backed compass layer to rebuild.
+	bodyStableDraws = 0;
+	transitionAtlasReady = false;
+	puffy_body_cache::onContextCreate(e.vg);
+	resetPuffyRasterCache(e.vg);
+	if (compassFramebuffer) {
+		compassFramebuffer->setDirty();
+	}
+	TransparentWidget::onContextCreate(e);
+}
+
+void PuffyFishWidget::step() {
+	TransparentWidget::step();
+	if (compassFramebuffer && compassRasterWidget) {
+		const bool sizeChanged = compassFramebuffer->box.size != box.size;
+		if (sizeChanged) {
+			compassFramebuffer->box.size = box.size;
+			compassRasterWidget->box.size = box.size;
+			compassFramebuffer->setDirty();
+		}
+		const bool compassVisible = module
+			&& module->roamingAvatarActive.load(std::memory_order_acquire);
+		if (compassFramebuffer->visible != compassVisible) {
+			compassFramebuffer->setVisible(compassVisible);
+			if (compassVisible) {
+				compassFramebuffer->setDirty();
+			}
+		}
+	}
+	if (!module || !isVisible()) {
+		return;
+	}
+	PuffyVisualState snapshot;
+	if (module->readVisualState(&snapshot)) {
+		if (roamingAvatar) {
+			snapshot.movementAcceleration =
+				module->roamingMovementAcceleration.load(
+					std::memory_order_relaxed);
+		}
+		visual = snapshot;
+	}
+	// Rack may create every widget in a multi-module paste before assigning the
+	// pasted modules their final unique IDs. Refresh the fallback personality as
+	// soon as that identity becomes available.
+	if (module->id >= 0 && module->id != personalityModuleId) {
+		configurePersonality(module->id);
+		controller.update(0.f, visual, &pose);
+	}
+	const float frameTime = APP && APP->window
+		? clamp(float(APP->window->getLastFrameDuration()), 0.f, 0.1f)
+		: 1.f / 60.f;
+	if (!roamingAvatar) {
+		const int nextNegative = clamp(
+			visual.negativeCharacter, 0, puffy::kCharacterCount - 1);
+		const int nextPositive = clamp(
+			visual.positiveCharacter, 0, puffy::kCharacterCount - 1);
+		if (nextNegative != pointerNegativeCharacter
+			|| nextPositive != pointerPositiveCharacter) {
+			previousPointerNegativeCharacter = pointerNegativeCharacter;
+			previousPointerPositiveCharacter = pointerPositiveCharacter;
+			pointerNegativeCharacter = nextNegative;
+			pointerPositiveCharacter = nextPositive;
+			pointerTintTransition = 0.f;
+		}
+		pointerTintTransition = std::min(
+			1.f, pointerTintTransition + frameTime / 0.22f);
+	}
+	updateAccumulator += frameTime;
+	constexpr float updateInterval = 1.f / 30.f;
+	if (updateAccumulator >= updateInterval) {
+		const float dt = std::min(updateAccumulator, 1.f / 15.f);
+		updateAccumulator = 0.f;
+		controller.update(dt, visual, &pose);
+	}
+}
+
+Vec PuffyFishWidget::visibleBodyCenter() const {
+	const float canvasMinimum = std::min(box.size.x, box.size.y);
+	const float minimum = roamingAvatar
+		? canvasMinimum * (80.f / 96.f) : canvasMinimum;
+	return Vec(
+		box.size.x * 0.5f,
+		box.size.y * 0.5f + pose.verticalOffset * minimum);
+}
+
+Vec PuffyFishWidget::compassCenter() const {
+	const float minimum = std::min(box.size.x, box.size.y);
+	return Vec(
+		box.size.x * 0.5f,
+		box.size.y * 0.5f + minimum * 0.06f);
+}
+
+void PuffyFishWidget::drawFin(
+	NVGcontext* vg,
+	Vec center,
+	float bodyRadius,
+	bool left,
+	float angle,
+	float sizeScale,
+	int imageHandle,
+	int imageWidth,
+	int imageHeight,
+	NVGcolor tint) const {
+	if (!vg || bodyRadius <= 0.f
+		|| imageHandle < 0 || imageWidth <= 0 || imageHeight <= 0) {
+		return;
+	}
+
+	nvgSave(vg);
+	const float side = left ? -1.f : 1.f;
+	const Vec root(
+		center.x + side * bodyRadius * 0.84f,
+		center.y - bodyRadius * 0.03f);
+	nvgTranslate(vg, root.x, root.y);
+	nvgRotate(vg, angle);
+	// The source points right. Mirror its local X axis for the left fin.
+	nvgScale(vg, side, 1.f);
+	const float clampedSizeScale = clamp(sizeScale, 0.75f, 1.f);
+	const float drawWidth = bodyRadius * 0.78f * clampedSizeScale;
+	const float drawHeight =
+		drawWidth * float(imageHeight) / float(imageWidth);
+	const float x = 0.f;
+	const float y = -0.5f * drawHeight;
+	NVGpaint paint = nvgImagePattern(
+		vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f);
+	paint.innerColor = tint;
+	paint.outerColor = tint;
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
+	nvgFill(vg);
+	nvgRestore(vg);
+}
+
+bool PuffyFishWidget::bodyTintIsSettled(
+	NVGcolor negativeTint,
+	NVGcolor positiveTint) const {
+	const NVGcolor targetNegative = puffy_visual::characterTint(
+		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
+	const NVGcolor targetPositive = puffy_visual::characterTint(
+		clamp(visual.positiveCharacter, 0, puffy::kCharacterCount - 1));
+	return colorByte(negativeTint.r) == colorByte(targetNegative.r)
+		&& colorByte(negativeTint.g) == colorByte(targetNegative.g)
+		&& colorByte(negativeTint.b) == colorByte(targetNegative.b)
+		&& colorByte(positiveTint.r) == colorByte(targetPositive.r)
+		&& colorByte(positiveTint.g) == colorByte(targetPositive.g)
+		&& colorByte(positiveTint.b) == colorByte(targetPositive.b);
+}
+
+bool PuffyFishWidget::drawTransitionBodyRaster(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY,
+	NVGcolor negativeTint,
+	NVGcolor positiveTint) {
+	constexpr float rasterExtentScale = 1.25f;
+	const float drawWidth = 2.f * radiusX * rasterExtentScale;
+	const float drawHeight = 2.f * radiusY * rasterExtentScale;
+	const float x = center.x - 0.5f * drawWidth;
+	const float y = center.y - 0.5f * drawHeight;
+	const puffy_body_cache::ImageAccess atlas =
+		puffy_body_cache::ensureTransitionAtlas(vg);
+	if (!atlas) {
+		return false;
+	}
+	transitionAtlasReady = true;
+	if (isPuffyDrawMeasurementEnabled()) {
+		PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+		metrics.bodyTransitionAtlasCreates += atlas.created ? 1u : 0u;
+		metrics.bodyTransitionAtlasResets += atlas.contextReset ? 1u : 0u;
+	}
+	const auto drawAtlasPanel = [&](int panel, NVGcolor tint) {
+		NVGpaint paint = nvgImagePattern(
+			vg,
+			x - float(panel) * drawWidth,
+			y,
+			3.f * drawWidth,
+			drawHeight,
+			0.f,
+			atlas.handle,
+			1.f);
+		paint.innerColor = tint;
+		paint.outerColor = tint;
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(vg, paint);
+		nvgFill(vg);
+	};
+	nvgSave(vg);
+	drawAtlasPanel(0, nvgRGBA(255, 255, 255, 255));
+	nvgGlobalCompositeOperation(vg, NVG_LIGHTER);
+	drawAtlasPanel(1, negativeTint);
+	drawAtlasPanel(2, positiveTint);
+	nvgRestore(vg);
+	return true;
+}
+
+bool PuffyFishWidget::drawBodyShadowRaster(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY) {
+	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
+		return false;
+	}
+	const puffy_body_cache::ImageAccess atlas =
+		puffy_body_cache::ensureTransitionAtlas(vg);
+	if (!atlas) {
+		return false;
+	}
+	transitionAtlasReady = true;
+	if (isPuffyDrawMeasurementEnabled()) {
+		PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+		metrics.bodyTransitionAtlasCreates += atlas.created ? 1u : 0u;
+		metrics.bodyTransitionAtlasResets += atlas.contextReset ? 1u : 0u;
+	}
+
+	// Panel zero is the cached black alpha knockout. Drawing it directly gives
+	// the complete spiky silhouette in one pass; the two weighted character
+	// panels used for colored transitions are unnecessary for a shadow.
+	constexpr float rasterExtentScale = 1.25f;
+	const float drawWidth = 2.f * radiusX * rasterExtentScale;
+	const float drawHeight = 2.f * radiusY * rasterExtentScale;
+	const float x = center.x - 0.5f * drawWidth;
+	const float y = center.y - 0.5f * drawHeight;
+	const NVGpaint paint = nvgImagePattern(
+		vg,
+		x,
+		y,
+		3.f * drawWidth,
+		drawHeight,
+		0.f,
+		atlas.handle,
+		1.f);
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
+	nvgFill(vg);
+	return true;
+}
+
+bool PuffyFishWidget::drawBodyRaster(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY,
+	NVGcolor negativeTint,
+	NVGcolor positiveTint) {
+	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
+		return false;
+	}
+	if (!bodyTintIsSettled(negativeTint, positiveTint)) {
+		bodyStableDraws = 0;
+		PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+		const bool measureDraw = isPuffyDrawMeasurementEnabled();
+		PuffyScopedDrawTimer transitionTimer(
+			metrics.bodyTransitionDrawNs, measureDraw);
+		if (measureDraw) {
+			++metrics.bodyTransitionDraws;
+		}
+		return drawTransitionBodyRaster(
+			vg, center, radiusX, radiusY, negativeTint, positiveTint);
+	}
+	const bool measureDraw = isPuffyDrawMeasurementEnabled();
+	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+	puffy_body_cache::ImageAccess body;
+	{
+		PuffyScopedDrawTimer ensureTimer(metrics.bodyEnsureNs, measureDraw);
+		body = puffy_body_cache::ensureFinalBody(
+			vg, visual.negativeCharacter, visual.positiveCharacter);
+	}
+	if (measureDraw) {
+		metrics.bodyCacheHits += body.cacheHit ? 1u : 0u;
+		metrics.bodyRecolors += body.recolored ? 1u : 0u;
+		metrics.bodyImageCreates += body.created ? 1u : 0u;
+		metrics.bodyContextResets += body.contextReset ? 1u : 0u;
+		metrics.bodyRecolorNs += body.recolorNs;
+		metrics.bodyUploadNs += body.uploadNs;
+	}
+	if (body.contextReset) {
+		transitionAtlasReady = false;
+		bodyStableDraws = 0;
+	}
+	if (!body) {
+		return false;
+	}
+	bodyStableDraws = std::min(bodyStableDraws + 1, 12);
+	if (bodyStableDraws >= 12 && !transitionAtlasReady) {
+		PuffyScopedDrawTimer prewarmTimer(
+			metrics.bodyTransitionAtlasPrewarmNs, measureDraw);
+		const puffy_body_cache::ImageAccess atlas =
+			puffy_body_cache::ensureTransitionAtlas(vg);
+		transitionAtlasReady = bool(atlas);
+		if (measureDraw) {
+			metrics.bodyTransitionAtlasCreates += atlas.created ? 1u : 0u;
+			metrics.bodyTransitionAtlasResets += atlas.contextReset ? 1u : 0u;
+			metrics.bodyTransitionAtlasPrewarms += atlas.created ? 1u : 0u;
+		}
+	}
+
+	// The spherical body occupies about 80% of the transparent source canvas.
+	// This includes the baked spikes while matching the old procedural radius.
+	constexpr float rasterExtentScale = 1.25f;
+	const float drawWidth = 2.f * radiusX * rasterExtentScale;
+	const float drawHeight = 2.f * radiusY * rasterExtentScale;
+	const float x = center.x - 0.5f * drawWidth;
+	const float y = center.y - 0.5f * drawHeight;
+
+	PuffyScopedDrawTimer bodyDrawTimer(
+		metrics.bodyDrawNs, measureDraw);
+	const NVGpaint paint = nvgImagePattern(
+		vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
+	nvgFill(vg);
+	return true;
+}
+
+void PuffyFishWidget::drawEye(
+	NVGcontext* vg,
+	Vec center,
+	float radius,
+	int eyeballImageHandle,
+	float gazeX,
+	float gazeY,
+	float blink,
+	NVGcolor eyelidColor,
+	NVGcolor irisInnerColor,
+	NVGcolor irisOuterColor) const {
+	const float closed = clamp01(blink);
+	const float radiusX = radius * 0.86f;
+	nvgBeginPath(vg);
+	nvgEllipse(vg, center.x, center.y, radiusX, radius);
+	if (eyeballImageHandle >= 0) {
+		// The source is circular. Mapping its square canvas directly onto the
+		// current eye bounds supplies the intentional horizontal stretch.
+		const NVGpaint eyeball = nvgImagePattern(
+			vg,
+			center.x - radiusX,
+			center.y - radius,
+			2.f * radiusX,
+			2.f * radius,
+			0.f,
+			eyeballImageHandle,
+			1.f);
+		nvgFillPaint(vg, eyeball);
+		nvgFill(vg);
+	}
+	else {
+		const NVGpaint white = nvgRadialGradient(
+			vg, center.x - radius * 0.28f, center.y - radius * 0.34f,
+			radius * 0.08f, radius,
+			nvgRGB(255, 255, 239), nvgRGB(255, 226, 147));
+		nvgFillPaint(vg, white);
+		nvgFill(vg);
+		nvgStrokeColor(vg, nvgRGBA(121, 73, 8, 210));
+		nvgStrokeWidth(vg, 0.8f);
+		nvgStroke(vg);
+	}
+
+	const Vec pupil(
+		center.x + clamp(gazeX, -1.f, 1.f) * radius * 0.23f,
+		center.y + clamp(gazeY, -1.f, 1.f) * radius * 0.18f);
+	nvgBeginPath(vg);
+	nvgCircle(vg, pupil.x, pupil.y, radius * 0.49f);
+	const NVGpaint iris = nvgRadialGradient(
+		vg, pupil.x - radius * 0.12f, pupil.y - radius * 0.15f,
+		radius * 0.06f, radius * 0.50f,
+		irisInnerColor, irisOuterColor);
+	nvgFillPaint(vg, iris);
+	nvgFill(vg);
+	nvgBeginPath(vg);
+	nvgCircle(vg, pupil.x, pupil.y, radius * 0.25f);
+	nvgFillColor(vg, nvgRGB(22, 22, 22));
+	nvgFill(vg);
+	nvgBeginPath(vg);
+	nvgCircle(
+		vg, pupil.x - radius * 0.15f, pupil.y - radius * 0.19f,
+		radius * 0.10f);
+	nvgFillColor(vg, nvgRGBA(255, 255, 255, 245));
+	nvgFill(vg);
+
+	if (closed > 0.001f) {
+		const float edgeY = radius * (1.f - closed);
+		const float edgeX = radiusX
+			* std::sqrt(std::max(0.f, 1.f - edgeY * edgeY / (radius * radius)));
+		const float edgeBulge = radius * 0.055f * closed;
+		const float edgeAngle = std::asin(clamp(edgeY / radius, 0.f, 1.f));
+
+		// Two explicit cubic segments follow each outer ellipse arc accurately.
+		// Keeping every point in eye coordinates avoids transform-state seams
+		// between the outer arc and the inner lid edge.
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x - edgeX, center.y - edgeY);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			kPi + edgeAngle, 1.5f * kPi);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			1.5f * kPi, 2.f * kPi - edgeAngle);
+		nvgQuadTo(
+			vg, center.x, center.y - edgeY + edgeBulge,
+			center.x - edgeX, center.y - edgeY);
+		nvgClosePath(vg);
+		nvgFillColor(vg, eyelidColor);
+		nvgFill(vg);
+
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x + edgeX, center.y + edgeY);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			edgeAngle, 0.5f * kPi);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			0.5f * kPi, kPi - edgeAngle);
+		nvgQuadTo(
+			vg, center.x, center.y + edgeY - edgeBulge,
+			center.x + edgeX, center.y + edgeY);
+		nvgClosePath(vg);
+		nvgFillColor(vg, eyelidColor);
+		nvgFill(vg);
+
+		const NVGcolor creaseColor = nvgRGBA(141, 131, 110, 210);
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x - edgeX, center.y - edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y - edgeY + edgeBulge,
+			center.x + edgeX, center.y - edgeY);
+		nvgStrokeColor(vg, creaseColor);
+		nvgStrokeWidth(vg, 0.7f);
+		nvgStroke(vg);
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x - edgeX, center.y + edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y + edgeY - edgeBulge,
+			center.x + edgeX, center.y + edgeY);
+		nvgStrokeColor(vg, creaseColor);
+		nvgStrokeWidth(vg, 0.7f);
+		nvgStroke(vg);
+	}
+}
+
+void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
+	if (!vg || !roamingAvatar) {
+		return;
+	}
+	const float canvasMinimum = std::min(box.size.x, box.size.y);
+	const float minimum = canvasMinimum * (80.f / 96.f);
+	const float inflation = clamp01(pose.inflation);
+	const Vec center(
+		box.size.x * 0.5f + minimum * 0.0125f,
+		box.size.y * 0.5f + minimum * (0.055f + pose.verticalOffset));
+	const float radius = minimum * (0.235f + 0.150f * inflation);
+	const float radiusX = radius * (0.88f + 0.12f * inflation)
+		* (1.f + pose.squashX);
+	const float radiusY = radius * (0.93f + 0.07f * inflation)
+		* (1.f + pose.squashY);
+	const float finSizeScale = 1.f - 0.20f * inflation;
+	const PuffyRasterAsset fin = resolveRasterAsset(
+		vg, "res/icon/Puffy_Fin_NS.png");
+	const NVGcolor shadow = nvgRGBA(0, 0, 3, 215);
+
+	nvgSave(vg);
+	nvgGlobalAlpha(vg, 0.30f);
+	drawFin(
+		vg, center, radiusX, true, pose.leftFinAngle, finSizeScale,
+		fin.handle, fin.width, fin.height, shadow);
+	drawFin(
+		vg, center, radiusX, false, pose.rightFinAngle, finSizeScale,
+		fin.handle, fin.width, fin.height, shadow);
+	if (!drawBodyShadowRaster(vg, center, radiusX, radiusY)) {
+		nvgBeginPath(vg);
+		nvgEllipse(vg, center.x, center.y, radiusX, radiusY);
+		nvgFillColor(vg, shadow);
+		nvgFill(vg);
+	}
+	nvgRestore(vg);
+}
+
+void PuffyFishWidget::draw(const DrawArgs& args) {
+	if (module && !roamingAvatar
+		&& module->roamingAvatarActive.load(std::memory_order_acquire)) {
+		const Vec center = compassCenter();
+		
+		const float angle = module->roamingDirectionAngle.load(
+			std::memory_order_acquire);
+		const puffy_body_cache::ImageAccess pointer =
+			puffy_body_cache::ensureFinalPointer(
+				args.vg,
+				pointerNegativeCharacter,
+				pointerPositiveCharacter);
+		
+		TransparentWidget::draw(args);
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		if (pointer) {
+			// The raster points upward. Rotate its -Y axis onto the published
+			// +X compass direction and place its visual joint at the compass hub.
+			nvgRotate(args.vg, angle + 0.5f * kPi);
+			const float drawHeight = std::min(box.size.x, box.size.y) * 0.26f;
+			const float drawWidth = drawHeight
+				* float(pointer.width) / float(pointer.height);
+			const float x = -0.5f * drawWidth;
+			const float y = -0.60f * drawHeight;
+			const auto drawPointer = [&](int handle, float opacity) {
+				if (handle < 0 || opacity <= 0.001f) {
+					return;
+				}
+				const NVGpaint paint = nvgImagePattern(
+					args.vg, x, y, drawWidth, drawHeight,
+					0.f, handle, clamp01(opacity));
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, y, drawWidth, drawHeight);
+				nvgFillPaint(args.vg, paint);
+				nvgFill(args.vg);
+			};
+			if (pointerTintTransition < 1.f) {
+				const puffy_body_cache::ImageAccess previous =
+					puffy_body_cache::ensureFinalPointer(
+						args.vg,
+						previousPointerNegativeCharacter,
+						previousPointerPositiveCharacter);
+				drawPointer(previous.handle, 1.f - pointerTintTransition);
+			}
+			drawPointer(pointer.handle, pointerTintTransition);
+		}
+		else {
+			const PuffyRasterAsset fallback = resolveRasterAsset(
+				args.vg, "res/icon/arrow-33p-crop-32c.png");
+			if (fallback) {
+				nvgRotate(args.vg, angle + 0.5f * kPi);
+				const float drawHeight =
+					std::min(box.size.x, box.size.y) * 0.26f;
+				const float drawWidth = drawHeight
+					* float(fallback.width) / float(fallback.height);
+				const float x = -0.5f * drawWidth;
+				const float y = -0.60f * drawHeight;
+				const NVGpaint paint = nvgImagePattern(
+					args.vg, x, y, drawWidth, drawHeight,
+					0.f, fallback.handle, 1.f);
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, y, drawWidth, drawHeight);
+				nvgFillPaint(args.vg, paint);
+				nvgFill(args.vg);
+			}
+		}
+		
+		nvgRestore(args.vg);
+		return;
+	}
+
+	const bool measureDraw = isPuffyDrawMeasurementEnabled();
+	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+	PuffyScopedDrawTimer fishTimer(metrics.fishDrawNs, measureDraw);
+	TransparentWidget::draw(args);
+	const float width = box.size.x;
+	const float height = box.size.y;
+	const float canvasMinimum = std::min(width, height);
+	// The roaming canvas includes transparent safety padding for fully puffed
+	// fins and the silhouette shadow. Preserve the original 80px design scale.
+	const float minimum = roamingAvatar
+		? canvasMinimum * (80.f / 96.f) : canvasMinimum;
+	const Vec center(
+		width * 0.5f,
+		height * 0.5f + pose.verticalOffset * minimum);
+	const float inflation = clamp01(pose.inflation);
+	const float radius = minimum * (0.235f + 0.150f * inflation);
+	const float radiusX = radius * (0.88f + 0.12f * inflation)
+		* (1.f + pose.squashX);
+	const float radiusY = radius * (0.93f + 0.07f * inflation)
+		* (1.f + pose.squashY);
+	const float finSizeScale = 1.f - 0.20f * inflation;
+	const NVGcolor negativeBodyTint = puffy_visual::weightedCharacterTint(
+		pose.negativeCharacterTintWeights);
+	const NVGcolor positiveBodyTint = puffy_visual::weightedCharacterTint(
+		pose.positiveCharacterTintWeights);
+	// Keep the cast shadow grounded near the bottom of the scene. Inflation
+	// changes its footprint, but the fish's motion and radius do not move it.
+	const Vec shadowCenter(width * 0.5f, height * 0.93f);
+	const PuffyRasterAsset fin = resolveRasterAsset(
+		args.vg, "res/icon/Puffy_Fin_NS.png");
+
+	nvgSave(args.vg);
+	nvgScissor(args.vg, 0.f, 0.f, width, height);
+
+	if (!roamingAvatar) {
+		nvgBeginPath(args.vg);
+		nvgEllipse(
+			args.vg,
+			shadowCenter.x,
+			shadowCenter.y,
+			radiusX * (0.88f + 0.08f * inflation),
+			radiusY * (0.145f + 0.025f * inflation));
+		nvgFillColor(
+			args.vg,
+			nvgRGBA(2, 3, 9, int(104.f + 34.f * inflation)));
+		nvgFill(args.vg);
+	}
+
+	{
+		PuffyScopedDrawTimer finTimer(metrics.finDrawNs, measureDraw);
+		drawFin(
+			args.vg,
+			center,
+			radiusX,
+			true,
+			pose.leftFinAngle,
+			finSizeScale,
+			fin.handle,
+			fin.width,
+			fin.height,
+			negativeBodyTint);
+		drawFin(
+			args.vg,
+			center,
+			radiusX,
+			false,
+			pose.rightFinAngle,
+			finSizeScale,
+			fin.handle,
+			fin.width,
+			fin.height,
+			positiveBodyTint);
+	}
+
+	if (!drawBodyRaster(
+		args.vg,
+		center,
+		radiusX,
+		radiusY,
+		negativeBodyTint,
+		positiveBodyTint)) {
+		if (measureDraw) {
+			++metrics.bodyFallbackDraws;
+		}
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, center.x, center.y, radiusX, radiusY);
+		const NVGpaint body = nvgLinearGradient(
+			args.vg,
+			center.x - radiusX,
+			center.y,
+			center.x + radiusX,
+			center.y,
+			negativeBodyTint,
+			positiveBodyTint);
+		nvgFillPaint(args.vg, body);
+		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(145, 80, 1, 220));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStroke(args.vg);
+	}
+
+	const float blush = clamp01(pose.blush);
+	if (blush > 0.001f) {
+		const float cheekRadiusX = radiusX * 0.16f;
+		const float cheekRadiusY = radiusY * 0.09f;
+		const auto drawCheek = [&](float cheekX) {
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, cheekX, center.y + radiusY * 0.20f);
+			nvgScale(args.vg, cheekRadiusX, cheekRadiusY);
+			const NVGpaint cheekGlow = nvgRadialGradient(
+				args.vg,
+				0.f,
+				0.f,
+				0.f,
+				1.f,
+				nvgRGBA(255, 105, 101, int(150.f * blush)),
+				nvgRGBA(255, 72, 82, 0));
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, 0.f, 0.f, 1.f);
+			nvgFillPaint(args.vg, cheekGlow);
+			nvgFill(args.vg);
+			nvgRestore(args.vg);
+		};
+		drawCheek(center.x - radiusX * 0.57f);
+		drawCheek(center.x + radiusX * 0.57f);
+	}
+
+	const float eyeRadius = minimum * 0.105f;
+	const float eyeY = center.y - radiusY * 0.23f;
+	const float eyeSpacing = eyeRadius * 0.79f;
+	const PuffyRasterAsset eyeball = resolveRasterAsset(
+		args.vg, "res/icon/Puffy_Eyeball.png");
+	const NVGcolor eyelidMaterialTint = nvgRGB(232, 223, 202);
+	const NVGcolor leftEyelidColor = multiplyColor(
+		eyelidMaterialTint, negativeBodyTint);
+	const NVGcolor rightEyelidColor = multiplyColor(
+		eyelidMaterialTint, positiveBodyTint);
+	{
+		PuffyScopedDrawTimer eyeTimer(metrics.eyeDrawNs, measureDraw);
+		drawEye(
+			args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
+			eyeball.handle,
+			pose.gazeX, pose.gazeY,
+			std::max(pose.leftBlink, pose.leftSquint), leftEyelidColor,
+			irisInnerColor, irisOuterColor);
+		drawEye(
+			args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
+			eyeball.handle,
+			pose.gazeX, pose.gazeY,
+			std::max(pose.rightBlink, pose.rightSquint), rightEyelidColor,
+			irisInnerColor, irisOuterColor);
+	}
+
+	const float mouthY = center.y + radiusY * 0.30f;
+	const float mouthClosure = clamp01(pose.mouthClosure);
+	const float mouthWidth = minimum
+		* (0.057f + 0.018f * pose.mouthSmile)
+		* (1.f - 0.05f * mouthClosure);
+	const float openMouthHeight = minimum
+		* (0.030f + 0.015f * pose.mouthSmile
+			- 0.012f * pose.mouthTension);
+	const float mouthHeight = openMouthHeight
+		* (1.f - 0.92f * mouthClosure);
+	nvgBeginPath(args.vg);
+	nvgMoveTo(args.vg, center.x - mouthWidth, mouthY);
+	nvgBezierTo(
+		args.vg,
+		center.x - mouthWidth * 0.6f, mouthY + mouthHeight,
+		center.x + mouthWidth * 0.6f, mouthY + mouthHeight,
+		center.x + mouthWidth, mouthY);
+	nvgBezierTo(
+		args.vg,
+		center.x + mouthWidth * 0.52f, mouthY - mouthHeight * 0.32f,
+		center.x - mouthWidth * 0.52f, mouthY - mouthHeight * 0.32f,
+		center.x - mouthWidth, mouthY);
+	nvgClosePath(args.vg);
+	nvgFillColor(args.vg, nvgRGB(80, 29, 18));
+	nvgFill(args.vg);
+	nvgStrokeColor(args.vg, nvgRGBA(104, 46, 12, 230));
+	nvgStrokeWidth(args.vg, 0.7f);
+	nvgStroke(args.vg);
+	if (mouthClosure < 0.98f) {
+		nvgBeginPath(args.vg);
+		nvgEllipse(
+			args.vg, center.x, mouthY + mouthHeight * 0.45f,
+			mouthWidth * 0.48f, mouthHeight * 0.24f);
+		nvgFillColor(
+			args.vg,
+			nvgRGBA(255, 113, 96, int(255.f * (1.f - mouthClosure))));
+		nvgFill(args.vg);
+	}
+
+	nvgResetScissor(args.vg);
+	nvgRestore(args.vg);
+}

@@ -1,0 +1,23 @@
+{
+  "native_plugin_link": "passed",
+  "private_nanovg_symbols_in_plugin": "none found by nm",
+  "installed_new_package": false,
+  "old_local_flag": "IntegralFluxRoundStroke=false; applies on next plugin initialization",
+  "calibration_cpp_absent": true,
+  "focused_tests": {
+    "legacy_curve_preview_spec": "passed",
+    "integral_flux_runtime_spec": "passed (9 cases)",
+    "gl_surface_lifecycle_spec": "passed (549 checks)",
+    "analyzer_unittest": "passed (8 cases)"
+  },
+  "archived_probes": {
+    "bounded_polyline_spec": "passed",
+    "round_join_candidate_spec": "passed (2104893 cases)",
+    "round_stroke_surface_spec": "passed (30 composed images and lifecycle checks)",
+    "flux_shader_surface_spec": "known rejection preserved: 154/1140 image cases fail; lifecycle checks pass"
+  },
+  "full_test_fast": "Not rerun: previously documented unrelated theme compilation issue",
+  "normal_runtime_restored_to": "d9a524c for IntegralFluxWidget.cpp, plugin.cpp and plugin.hpp",
+  "staged_or_committed": false,
+  "plugin_dll_sha256": "fd28ec7a005f898b911872264fda567996acc70eaef2a24e64d0a2888931f625"
+}

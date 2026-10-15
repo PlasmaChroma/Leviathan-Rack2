@@ -1,5 +1,5 @@
-#include "../src/PanelSvgUtils.hpp"
-#include "../src/PanelAnchorAtlas.hpp"
+#include "../src/common/PanelSvgUtils.hpp"
+#include "../src/common/PanelAnchorAtlas.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -299,32 +299,71 @@ TestResult testDoorstopSoloBrandingFitsThreeHp() {
 TestResult testTemporalDeckBrandingRasterAnchors() {
   math::Rect left;
   math::Rect right;
-  std::vector<panel_svg::SvgPathMatch> labelPaths;
+  math::Rect logo;
   const bool leftOk = panel_svg::loadRectFromSvgMm(
     "res/deck.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &left);
   const bool rightOk = panel_svg::loadRectFromSvgMm(
     "res/deck.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &right);
-  const bool labelsOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
-    "res/deck.labels.svg", "labels", &labelPaths);
-  const auto branding = std::find_if(
-    labelPaths.begin(), labelPaths.end(), [](const panel_svg::SvgPathMatch& path) {
-      return path.id == "Leviathan_Branding";
-    });
-  const bool pass = leftOk && rightOk && labelsOk && branding != labelPaths.end()
+  const bool logoOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_LEVIATHAN_LOGO_RASTER", &logo);
+  const bool pass = leftOk && rightOk && logoOk
     && nearlyEqual(left.pos.x, 21.89610f, 1e-4f)
     && nearlyEqual(right.pos.x, 66.63674f, 1e-4f)
     && nearlyEqual(left.pos.y, right.pos.y, 1e-4f)
     && nearlyEqual(left.size.x, right.size.x, 1e-4f)
     && nearlyEqual(left.size.y, right.size.y, 1e-4f)
-    && nearlyEqual(left.size.y, branding->bounds.size.y, 1e-4f)
     && nearlyEqual(left.pos.y + left.size.y, 128.5f, 1e-4f)
-    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f);
-  return {"Temporal Deck branding raster anchors are paired", pass,
+    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(logo.pos.x, 34.44015f, 1e-4f)
+    && nearlyEqual(logo.pos.y, 119.43102f, 1e-4f)
+    && nearlyEqual(logo.size.x, 32.71933f, 1e-4f)
+    && nearlyEqual(logo.size.y, 12.24054f, 1e-4f)
+    && nearlyEqual(logo.pos.x + logo.size.x * 0.5f, 50.799815f, 1e-4f);
+  return {"Temporal Deck raster branding anchors match runtime layout", pass,
           "left=" + std::to_string(left.pos.x) + "," + std::to_string(left.pos.y) +
             " right=" + std::to_string(right.pos.x) + "," + std::to_string(right.pos.y) +
             " size=" + std::to_string(left.size.x) + "," + std::to_string(left.size.y) +
-            " logoHeight=" + (branding == labelPaths.end()
-              ? std::string("missing") : std::to_string(branding->bounds.size.y))};
+            " logo=" + std::to_string(logo.pos.x) + "," + std::to_string(logo.pos.y) +
+            " logo_sz=" + std::to_string(logo.size.x) + "," + std::to_string(logo.size.y)};
+}
+
+TestResult testCompactLeviathanLogoBaseline() {
+  const char* paths[] = {
+    "res/Puffy.svg",
+    "res/Puffy.panel.svg",
+    "res/bifurx.svg",
+    "res/bifurx.panel.svg",
+    "res/deck.svg",
+    "res/deck.panel.svg",
+    "res/Chimera.svg",
+    "res/Chimera.panel.svg",
+    "res/iris.svg",
+    "res/iris.panel.svg",
+    "res/mandelwake.svg",
+    "res/mandelwake.panel.svg",
+    "res/nautiloid.svg",
+    "res/nautiloid.panel.svg",
+    "res/wyrm.svg",
+    "res/wyrm.panel.svg",
+  };
+  bool pass = true;
+  std::string firstFailure;
+  for (const char* path : paths) {
+    math::Rect logo;
+    const bool pathPass = panel_svg::loadRectFromSvgMm(
+      path, "BRANDING_LEVIATHAN_LOGO_RASTER", &logo)
+      && nearlyEqual(logo.pos.y, 119.43102f, 1e-4f)
+      && nearlyEqual(logo.size.x, 32.71933f, 1e-4f)
+      && nearlyEqual(logo.size.y, 12.24054f, 1e-4f);
+    if (!pathPass && firstFailure.empty()) {
+      firstFailure = path;
+    }
+    pass = pass && pathPass;
+  }
+  return {"Compact Leviathan logos share the Bifurx baseline", pass,
+          "paths=" + std::to_string(sizeof(paths) / sizeof(paths[0]))
+            + (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
 }
 
 TestResult testPerfectWaveBrandingDeploymentContract() {
@@ -337,6 +376,8 @@ TestResult testPerfectWaveBrandingDeploymentContract() {
   const PanelContract panels[] = {
     {"res/deck.panel.svg", 101.6f, true, true},
     {"res/deck.svg", 101.6f, true, true},
+    {"res/Chimera.panel.svg", 142.24f, true, true},
+    {"res/Chimera.svg", 142.24f, true, true},
     {"res/bifurx.panel.svg", 71.12f, true, true},
     {"res/bifurx.svg", 71.12f, true, true},
     {"res/crownstep.panel.svg", 91.44f, true, true},
@@ -414,21 +455,202 @@ TestResult testPerfectWaveBrandingDeploymentContract() {
 
 TestResult testBifurxGlassPathParses() {
   std::vector<panel_svg::SvgPathMatch> matches;
-  bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
+  std::vector<panel_svg::SvgRectMatch> rects;
+  bool ok = panel_svg::findThemeGlassPathsMm("res/bifurx.panel.svg", &matches);
+  bool rectOk = panel_svg::findThemeGlassRectsMm("res/bifurx.panel.svg", &rects);
   const auto input = std::find_if(matches.begin(), matches.end(), [](const panel_svg::SvgPathMatch& match) {
     return match.id == "inputs";
+  });
+  const auto output = std::find_if(rects.begin(), rects.end(), [](const panel_svg::SvgRectMatch& match) {
+    return match.id == "outputs-3";
   });
   const bool hasRoundedCurve = input != matches.end() && std::any_of(
     input->commands.begin(), input->commands.end(), [](const panel_svg::SvgPathCommand& command) {
       return command.type == panel_svg::SvgPathCommand::QuadTo ||
              command.type == panel_svg::SvgPathCommand::BezierTo;
     });
-  const bool pass = ok && input != matches.end() && !input->commands.empty() && hasRoundedCurve;
+  const bool pass = ok && rectOk
+    && input != matches.end()
+    && input->themeRole == leviathan::theme::ThemeRole::Input
+    && !input->commands.empty() && hasRoundedCurve
+    && output != rects.end()
+    && output->themeRole == leviathan::theme::ThemeRole::Output;
   return {"Bifurx inputs path is available to the glass renderer", pass,
           "ok=" + std::to_string(ok ? 1 : 0) +
             " count=" + std::to_string(matches.size()) +
             " inputs=" + std::to_string(input != matches.end() ? 1 : 0) +
+            " output=" + std::to_string(output != rects.end() ? 1 : 0) +
             " rounded=" + std::to_string(hasRoundedCurve ? 1 : 0)};
+}
+
+TestResult testPlasmaConduitAnchorConvention() {
+  struct PanelContract {
+    const char* path;
+    size_t expectedPaths;
+  };
+  const PanelContract panels[] = {
+    {"res/bifurx.panel.svg", 5u},
+    {"res/flux.panel.svg", 8u},
+    {"res/undertow.panel.svg", 4u},
+    {"res/deck.panel.svg", 5u},
+    {"res/proc.panel.svg", 2u},
+    {"res/wyrm.panel.svg", 6u},
+    {"res/iris.panel.svg", 4u},
+    {"res/Vessel.panel.svg", 2u},
+  };
+
+  bool pass = true;
+  size_t totalPaths = 0u;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    std::vector<panel_svg::SvgPathMatch> paths;
+    std::string svgText;
+    const bool pathsOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
+      panel.path, "plasma_conduit_anchors", &paths);
+    const bool textOk = readTextFile(panel.path, &svgText);
+    const size_t idPos = svgText.find("id=\"plasma_conduit_anchors\"");
+    const size_t groupStart = idPos == std::string::npos
+      ? std::string::npos : svgText.rfind("<g", idPos);
+    const size_t groupEnd = idPos == std::string::npos
+      ? std::string::npos : svgText.find('>', idPos);
+    const size_t hiddenPos = idPos == std::string::npos
+      ? std::string::npos : svgText.find("display:none", idPos);
+    const bool runtimeHidden = textOk
+      && groupStart != std::string::npos
+      && groupEnd != std::string::npos
+      && hiddenPos != std::string::npos
+      && hiddenPos < groupEnd;
+    const bool straightPaths = std::all_of(
+      paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& path) {
+        return path.commands.size() == 2u
+          && path.commands[0].type == panel_svg::SvgPathCommand::MoveTo
+          && path.commands[1].type == panel_svg::SvgPathCommand::LineTo;
+      });
+    const bool bifurxConduitsVertical = std::string(panel.path) != "res/bifurx.panel.svg"
+      || std::all_of(paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& path) {
+        return path.commands.size() == 2u
+          && std::fabs(path.commands[0].p1.x - path.commands[1].p1.x) <= 1e-6f;
+      });
+    const bool panelPass = pathsOk
+      && paths.size() == panel.expectedPaths
+      && straightPaths
+      && bifurxConduitsVertical
+      && runtimeHidden;
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    totalPaths += paths.size();
+    pass = pass && panelPass;
+  }
+
+  return {"Plasma conduit anchor groups provide hidden straight centerlines", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
+            " paths=" + std::to_string(totalPaths) +
+            (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
+}
+
+TestResult testThemeGlassDeploymentContract() {
+  using leviathan::theme::ThemeRole;
+  struct PanelContract {
+    const char* path;
+    size_t expectedInputs;
+    size_t expectedOutputs;
+  };
+  const PanelContract panels[] = {
+    {"res/bifurx.panel.svg", 1u, 1u},
+    {"res/Sibyl.panel.svg", 1u, 1u},
+    {"res/Theme.svg", 1u, 1u},
+    {"res/Puffy.panel.svg", 1u, 1u},
+    {"res/crownstep.panel.svg", 1u, 1u},
+    {"res/deck.panel.svg", 1u, 1u},
+    {"res/doorstop.panel.svg", 1u, 1u},
+    {"res/flux.panel.svg", 4u, 1u},
+    {"res/iris.panel.svg", 1u, 1u},
+    {"res/nautiloid.panel.svg", 1u, 1u},
+    {"res/proc.panel.svg", 1u, 1u},
+    {"res/undertow.panel.svg", 1u, 1u},
+    {"res/wyrm.panel.svg", 1u, 1u},
+  };
+
+  bool pass = true;
+  size_t totalInputs = 0u;
+  size_t totalOutputs = 0u;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    std::vector<panel_svg::SvgRectMatch> rects;
+    std::vector<panel_svg::SvgPathMatch> paths;
+    panel_svg::findThemeGlassRectsMm(panel.path, &rects);
+    panel_svg::findThemeGlassPathsMm(panel.path, &paths);
+    const auto countRole = [&](ThemeRole role) {
+      return static_cast<size_t>(std::count_if(
+               rects.begin(), rects.end(), [role](const panel_svg::SvgRectMatch& match) {
+                 return match.themeRole == role;
+               }))
+        + static_cast<size_t>(std::count_if(
+               paths.begin(), paths.end(), [role](const panel_svg::SvgPathMatch& match) {
+                 return match.themeRole == role;
+               }));
+    };
+    const size_t inputs = countRole(ThemeRole::Input);
+    const size_t outputs = countRole(ThemeRole::Output);
+    const size_t textRegions = countRole(ThemeRole::TextInput) + countRole(ThemeRole::TextOutput);
+    const size_t generic = countRole(ThemeRole::None);
+    const bool panelPass = inputs == panel.expectedInputs
+      && outputs == panel.expectedOutputs
+      && textRegions == 0u
+      && generic == 0u;
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    totalInputs += inputs;
+    totalOutputs += outputs;
+    pass = pass && panelPass;
+  }
+
+  return {"Theme-aware panels expose semantic input/output glass roles", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0]))
+            + " inputs=" + std::to_string(totalInputs)
+            + " outputs=" + std::to_string(totalOutputs)
+            + (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
+}
+
+TestResult testExactThemeGlassRoles() {
+  using leviathan::theme::ThemeRole;
+  std::vector<panel_svg::SvgRectMatch> rects;
+  std::vector<panel_svg::SvgPathMatch> paths;
+  const bool rectOk = panel_svg::findThemeGlassRectsMm(
+    "tests/fixtures/theme_glass_roles.svg", &rects);
+  const bool pathOk = panel_svg::findThemeGlassPathsMm(
+    "tests/fixtures/theme_glass_roles.svg", &paths);
+  auto rectRole = [&](const char* id, ThemeRole role) {
+    const auto found = std::find_if(rects.begin(), rects.end(), [&](const panel_svg::SvgRectMatch& match) {
+      return match.id == id;
+    });
+    return found != rects.end() && found->themeRole == role;
+  };
+  const auto nearMiss = std::find_if(rects.begin(), rects.end(), [](const panel_svg::SvgRectMatch& match) {
+    return match.id == "near_miss";
+  });
+  const auto inputPath = std::find_if(paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& match) {
+    return match.id == "input";
+  });
+  const bool pass = rectOk && pathOk
+    && rectRole("generic", ThemeRole::None)
+    && rectRole("input_nested", ThemeRole::Input)
+    && rectRole("output", ThemeRole::Output)
+    && rectRole("nearest_wins", ThemeRole::TextInput)
+    && rectRole("input_text", ThemeRole::TextInput)
+    && rectRole("output_text", ThemeRole::TextOutput)
+    && rectRole("label_role", ThemeRole::Output)
+    && nearMiss == rects.end()
+    && inputPath != paths.end()
+    && inputPath->themeRole == ThemeRole::Input;
+  return {"Exact theme glass roles inherit from the nearest semantic ancestor", pass,
+          "rects=" + std::to_string(rects.size()) +
+            " paths=" + std::to_string(paths.size()) +
+            " nearMiss=" + std::to_string(nearMiss != rects.end() ? 1 : 0)};
 }
 
 } // namespace
@@ -445,8 +667,12 @@ int main() {
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
   tests.push_back(testDoorstopSoloBrandingFitsThreeHp());
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
+  tests.push_back(testCompactLeviathanLogoBaseline());
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
+  tests.push_back(testPlasmaConduitAnchorConvention());
+  tests.push_back(testThemeGlassDeploymentContract());
+  tests.push_back(testExactThemeGlassRoles());
 
   int failed = 0;
   std::cout << "Panel SVG Utils Spec\n";

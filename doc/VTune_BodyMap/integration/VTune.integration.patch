@@ -1,0 +1,79 @@
+--- a/src/VTune.hpp
++++ b/src/VTune.hpp
+@@ -1,5 +1,7 @@
+ #pragma once
+ #include "plugin.hpp"
++#include "vtune/BodyMapData.hpp"
++#include <atomic>
+ 
+ struct VTune final : Module {
+     enum ParamId {
+@@ -15,8 +17,19 @@
+     enum InputId { INPUTS_LEN };
+     enum OutputId { OUTPUTS_LEN };
+     enum LightId { VESSEL_LINK_LIGHT, VESSEL_READY_LIGHT, LIGHTS_LEN };
++    // 0 Hz means unavailable; never retain a neighbor pointer on the UI side.
++    std::atomic<float> bodyFrequencyHz {0.f};
++    std::atomic<int> bodyMapMode {0};
++    std::atomic<float> bodyMapOpacity {vtune_body::kDefaultOpacity};
++    float bodyMapPublishElapsed = 1.f; // Engine thread only.
+     VTune();
+     void process(const ProcessArgs& args) override;
++    void updateBodyMapFrequency(float sampleTime);
++    void processBypass(const ProcessArgs& args) override;
++    void onExpanderChange(const ExpanderChangeEvent& e) override;
++    void onReset(const ResetEvent& e) override;
++    json_t* dataToJson() override;
++    void dataFromJson(json_t* root) override;
+ };
+ 
+ extern Model* modelVTune;
+--- a/src/VTune.cpp
++++ b/src/VTune.cpp
+@@ -22,7 +22,8 @@
+     configParam(WIDTH_PARAM, 0.f, 1.f, .7f, "Stereo width", "%", 0.f, 100.f);
+     configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Output level", "%", 0.f, 100.f);
+ }
+-void VTune::process(const ProcessArgs&) {
++void VTune::process(const ProcessArgs& args) {
++    updateBodyMapFrequency(args.sampleTime);
+     Module* vessel = leftExpander.module;
+     const bool linked = isVessel(vessel) && vessel->rightExpander.module == this;
+     const bool ready = linked && vessel->rightExpander.producerMessage;
+--- a/src/VTuneWidget.cpp
++++ b/src/VTuneWidget.cpp
+@@ -1,12 +1,24 @@
+ #include "VTune.hpp"
+ #include "PanelSvgUtils.hpp"
+ #include "visual/VisualAssets.hpp"
++#include "vtune/BodyMapWidget.hpp"
+ struct VTuneWidget final : ModuleWidget {
+     explicit VTuneWidget(VTune* module) {
+         setModule(module);
+         visual_assets::SplitPanelRenderer panel(this, "res/VTune.panel.svg");
+         panel.addThemedLabels("res/VTune.labels.svg", "res/VTune.theme-text-input.svg", "res/VTune.theme-text-output.svg");
+         panel.addCompactLeviathanLogoBranding();
++        // NEW anchor: set this rectangle to the current body's exact image box.
++        // Do not retain another static/opaque body image above this widget.
++        math::Rect bodyRectMm;
++        if (panel_svg::loadRectFromSvgMm(panel.panelPath(), "VTUNE_BODY_IMAGE", &bodyRectMm)) {
++            auto* body = new vtune_body::BodyMapWidget(module);
++            body->box = math::Rect(mm2px(bodyRectMm.pos), mm2px(bodyRectMm.size));
++            addChild(body);
++        }
++        else if (module) {
++            WARN("V.Tune body map: add VTUNE_BODY_IMAGE at the existing body bounds; no position was guessed.");
++        }
+         auto point = [&](const char* id, float x, float y) {
+             Vec p;
+             return panel_svg::loadPointFromSvgMm(panel.panelPath(), id, &p) ? p : Vec(x, y);
+@@ -29,5 +41,9 @@
+             addParam(createParamCentered<Eclipse2Knob>(mm2px(point(anchors[i], fallback[i].x, fallback[i].y)), module, ids[i]));
+         }
+     }
++    void appendContextMenu(Menu* menu) override {
++        ModuleWidget::appendContextMenu(menu);
++        vtune_body::appendBodyMapMenu(menu, dynamic_cast<VTune*>(module));
++    }
+ };
+ Model* modelVTune = createModel<VTune, VTuneWidget>("VTune");

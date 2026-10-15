@@ -4,14 +4,27 @@ split_svg_labels.py
 
 Split an SVG into:
   - a panel/art SVG with labels removed
-  - a labels-only SVG containing only the chosen label group
+  - a static labels SVG containing the chosen label group
+  - separate theme-text-input/output SVGs for their semantic text groups
+  - a legacy theme-text SVG when the old theme_text group is present
+  - an optional background SVG preserving the authored theme_background group
 
 By default, the panel/art SVG strips SVG text elements and the labels-only SVG
 converts text to paths so runtime panels do not depend on locally installed
 fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
+Use --background-only for legacy panels whose labels and artwork must stay
+together. This mode extracts the background and explicitly marked theme text.
+Use named theme_text_input/theme_text_output groups for labels editable in
+Inkscape. Individual data-theme-text="input"/"output" attributes remain
+supported for compatibility with older masters.
+
 Expected source convention:
   <g id="labels"> ... </g>
+  <g id="labels">
+    <g id="theme_text_input"> ... </g>
+    <g id="theme_text_output"> ... </g>
+  </g>
 
 Example:
   python3 split_svg_labels.py res/IntegralFlux.svg
@@ -25,6 +38,7 @@ from __future__ import annotations
 import argparse
 import copy
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +52,10 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
+
+THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_text", "glass_text_input", "glass_text_output"}
+THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
+RUNTIME_ANCHOR_GROUP_IDS = {"component_anchors", "plasma_conduit_anchors"}
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)
@@ -141,6 +159,106 @@ def strip_font_text_elements(root: ET.Element) -> int:
     return removed
 
 
+def parse_solid_rgb(value: str) -> tuple[int, int, int] | None:
+    """Parse the solid SVG colors needed by the substrate transform."""
+    text = value.strip().lower()
+    if text.startswith("#"):
+        digits = text[1:]
+        if len(digits) in {3, 4}:
+            try:
+                return tuple(int(digits[i] * 2, 16) for i in range(3))
+            except ValueError:
+                return None
+        if len(digits) in {6, 8}:
+            try:
+                return tuple(int(digits[i:i + 2], 16) for i in (0, 2, 4))
+            except ValueError:
+                return None
+
+    match = re.fullmatch(
+        r"rgb\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*\)",
+        text,
+    )
+    if match:
+        rgb = tuple(int(channel) for channel in match.groups())
+        if all(0 <= channel <= 255 for channel in rgb):
+            return rgb
+    return None
+
+
+def neutralize_chromatic_fill(value: str) -> str:
+    rgb = parse_solid_rgb(value)
+    if rgb is None or max(rgb) - min(rgb) <= 2:
+        return value
+    return "#000000"
+
+
+def neutralize_style_fill(style: str) -> str:
+    declarations: list[str] = []
+    for declaration in style.split(";"):
+        if ":" not in declaration:
+            declarations.append(declaration)
+            continue
+        name, value = declaration.split(":", 1)
+        if name.strip().lower() == "fill":
+            value = neutralize_chromatic_fill(value)
+        declarations.append(f"{name}:{value}")
+    return ";".join(declarations)
+
+
+def neutralize_semantic_panel_pigment(root: ET.Element) -> int:
+    """Convert master-only preview pigment into a neutral runtime substrate."""
+    transformed = 0
+    for semantic_group in root.iter():
+        if get_id(semantic_group) not in THEME_GLASS_IDS:
+            continue
+        semantic_group.attrib[THEME_SUBSTRATE_ATTR] = "neutral"
+        for elem in semantic_group.iter():
+            fill = elem.attrib.get("fill")
+            if fill is not None:
+                neutral = neutralize_chromatic_fill(fill)
+                if neutral != fill:
+                    elem.attrib["fill"] = neutral
+                    transformed += 1
+            style = elem.attrib.get("style")
+            if style is not None:
+                neutral_style = neutralize_style_fill(style)
+                if neutral_style != style:
+                    elem.attrib["style"] = neutral_style
+                    transformed += 1
+    return transformed
+
+
+def set_style_property(style: str, name: str, value: str) -> str:
+    declarations: list[str] = []
+    replaced = False
+    for declaration in style.split(";"):
+        if ":" not in declaration:
+            if declaration:
+                declarations.append(declaration)
+            continue
+        property_name, property_value = declaration.split(":", 1)
+        if property_name.strip().lower() == name.lower():
+            property_value = value
+            replaced = True
+        declarations.append(f"{property_name}:{property_value}")
+    if not replaced:
+        declarations.append(f"{name}:{value}")
+    return ";".join(declarations)
+
+
+def hide_runtime_anchor_groups(root: ET.Element) -> int:
+    """Keep authored geometry available to parsers without drawing its guides."""
+    hidden = 0
+    for elem in root.iter():
+        if local_name(elem.tag) != "g" or get_id(elem) not in RUNTIME_ANCHOR_GROUP_IDS:
+            continue
+        elem.attrib["style"] = set_style_property(
+            elem.attrib.get("style", ""), "display", "none")
+        hidden += 1
+    return hidden
+
+
 def normalize_text_for_outline(root: ET.Element) -> None:
     """
     Avoid feeding pretty-printer indentation into Inkscape as real text.
@@ -197,6 +315,7 @@ def find_inkscape(override: str | None) -> str:
         shutil.which("inkscape"),
         shutil.which("inkscape.exe"),
         "/mnt/c/Program Files/Inkscape/bin/inkscape.com",
+        "C:/Program Files/Inkscape/bin/inkscape.exe",
         "/mnt/c/Program Files/Inkscape/bin/inkscape.exe",
         "/mnt/c/Program Files/Inkscape/inkscape.com",
         "/mnt/c/Program Files/Inkscape/inkscape.exe",
@@ -270,6 +389,8 @@ def outline_text_with_inkscape(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=inkscape_timeout_sec,
             )
         except subprocess.TimeoutExpired as exc:
@@ -295,7 +416,101 @@ def outline_text_with_inkscape(
             ET.indent(outlined_tree, space="  ")
             outlined_tree.write(tmp_output, encoding="utf-8", xml_declaration=True)
 
-        svg_path.write_bytes(tmp_output.read_bytes())
+        # The output lives beside the target, so replace it atomically instead
+        # of reopening a file Windows Inkscape has just read from a WSL mount.
+        # Reopening can fail with EINVAL even after the Inkscape process exits.
+        os.replace(tmp_output, svg_path)
+
+
+def extract_background(root: ET.Element, panel_root: ET.Element, background_path: Path, cleanup: bool):
+    """Extract the base layer with its complete transform/style ancestry."""
+    background_root = copy_svg_shell(root)
+    background_root.attrib["id"] = f"{background_path.stem.removesuffix('.background')}-background"
+    copy_defs_and_styles(root, background_root)
+
+    def background_branch(element):
+        if element.get("id") == "theme_background":
+            return copy.deepcopy(element)
+        branch = ET.Element(element.tag, dict(element.attrib))
+        for child in element:
+            selected = background_branch(child)
+            if selected is not None:
+                branch.append(selected)
+        return branch if len(branch) else None
+
+    for child in root:
+        branch = background_branch(child)
+        if branch is not None:
+            background_root.append(branch)
+    if cleanup:
+        remove_editor_junk(background_root)
+    background_tree = ET.ElementTree(background_root)
+    ET.indent(background_tree, space="  ")
+    background_tree.write(background_path, encoding="utf-8", xml_declaration=True)
+    background_parent, panel_background = find_parent_and_child_by_id(panel_root, "theme_background")
+    if background_parent is None or panel_background is None:
+        raise RuntimeError("theme_background must be in the panel artwork, outside labels")
+    background_parent.remove(panel_background)
+
+
+def select_theme_text_layer(element, wanted, theme_ids, inherited=None):
+    # Retain every ancestor's transform/style. The nearest recognized group
+    # determines a shape's role, including nested semantic groups.
+    role = element.get("data-theme-text", theme_ids.get(element.get("id"), inherited))
+    children = list(element)
+    if not children:
+        return copy.deepcopy(element) if role == wanted else None
+    result = ET.Element(element.tag, dict(element.attrib))
+    result.text = element.text
+    result.tail = element.tail
+    for child in children:
+        selected = select_theme_text_layer(child, wanted, theme_ids, role)
+        if selected is not None:
+            result.append(selected)
+    return result if len(result) or role == wanted else None
+
+
+def split_background_only(source_path: Path, overwrite: bool = False, cleanup: bool = True,
+                          outline_label_text: bool = True, inkscape_path: str | None = None,
+                          inkscape_timeout_sec: float = 60.0):
+    """Preserve legacy artwork/anchors; extract background and marked text."""
+    root = ET.parse(source_path).getroot()
+    if find_parent_and_child_by_id(root, "theme_background")[1] is None:
+        raise RuntimeError(f"{source_path}: missing theme_background group")
+    stem = source_path.with_suffix("")
+    panel_path = Path(f"{stem}.panel.svg")
+    background_path = Path(f"{stem}.background.svg")
+    if not overwrite and (panel_path.exists() or background_path.exists()):
+        raise RuntimeError(f"{source_path}: generated files exist; pass --overwrite")
+    theme_ids = {"theme_text_input": "input", "theme_text_output": "output"}
+    panel_root = copy.deepcopy(root)
+    extract_background(root, panel_root, background_path, cleanup)
+    # Legacy panels retain their static artwork and anchors. Explicit semantic
+    # labels are extracted with their complete transform/style ancestry.
+    for role in ("input", "output"):
+        selected = select_theme_text_layer(root, role, theme_ids)
+        if selected is None:
+            continue
+        text_path = Path(f"{stem}.theme-text-{role}.svg")
+        if text_path.exists() and not overwrite:
+            raise RuntimeError(f"{text_path} already exists; pass --overwrite")
+        text_root = copy_svg_shell(root)
+        copy_defs_and_styles(root, text_root)
+        text_root.extend(list(selected))
+        if cleanup:
+            remove_editor_junk(text_root)
+        ET.indent(text_root, space="  ")
+        if outline_label_text:
+            normalize_text_for_outline(text_root)
+        ET.ElementTree(text_root).write(text_path, encoding="utf-8", xml_declaration=True)
+        if outline_label_text:
+            outline_text_with_inkscape(text_path, inkscape_path, inkscape_timeout_sec)
+    panel_root = select_theme_text_layer(panel_root, None, theme_ids)
+    if cleanup:
+        remove_editor_junk(panel_root)
+    ET.indent(panel_root, space="  ")
+    ET.ElementTree(panel_root).write(panel_path, encoding="utf-8", xml_declaration=True)
+    return panel_path, background_path
 
 
 def split_svg(
@@ -303,13 +518,15 @@ def split_svg(
     label_id: str,
     panel_suffix: str,
     labels_suffix: str,
+    theme_text_id: str,
+    theme_text_suffix: str,
     overwrite: bool,
     cleanup: bool,
     strip_panel_text: bool,
     outline_label_text: bool,
     inkscape_path: str | None,
     inkscape_timeout_sec: float,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, dict[str, Path]]:
     tree = ET.parse(source_path)
     root = tree.getroot()
 
@@ -321,9 +538,24 @@ def split_svg(
     stem = source_path.with_suffix("")
     panel_path = Path(f"{stem}{panel_suffix}.svg")
     labels_path = Path(f"{stem}{labels_suffix}.svg")
+    theme_ids = {theme_text_id: "legacy", f"{theme_text_id}_input": "input",
+                 f"{theme_text_id}_output": "output"}
+    theme_paths = {
+        role: Path(f"{stem}{theme_text_suffix}{'' if role == 'legacy' else '-' + role}.svg")
+        for group_id, role in theme_ids.items()
+        if any(elem.get("id") == group_id or elem.get("data-theme-text") == role
+               for elem in label_group.iter())
+    }
+    background_path = Path(f"{stem}.background.svg")
+    _, background_group = find_parent_and_child_by_id(root, "theme_background")
+
 
     if not overwrite:
-        for out in [panel_path, labels_path]:
+        outputs = [panel_path, labels_path]
+        outputs.extend(theme_paths.values())
+        if background_group is not None:
+            outputs.append(background_path)
+        for out in outputs:
             if out.exists():
                 raise RuntimeError(f"{out} already exists; pass --overwrite")
 
@@ -333,9 +565,9 @@ def split_svg(
 
     copy_defs_and_styles(root, labels_root)
 
-    labels_layer = copy.deepcopy(label_group)
-    labels_layer.attrib["id"] = label_id
-    labels_root.append(labels_layer)
+    labels_layer = select_theme_text_layer(label_group, None, theme_ids)
+    if labels_layer is not None:
+        labels_root.append(labels_layer)
 
     if outline_label_text:
         normalize_text_for_outline(labels_root)
@@ -355,6 +587,31 @@ def split_svg(
     if outline_label_text:
         outline_text_with_inkscape(labels_path, inkscape_path, inkscape_timeout_sec)
 
+    for role, theme_text_path in theme_paths.items():
+        theme_text_root = copy_svg_shell(root)
+        theme_text_root.attrib["id"] = f"{source_path.stem}-theme-text-{role}"
+        copy_defs_and_styles(root, theme_text_root)
+
+        # Preserve transforms and inherited presentation attributes from the
+        # labels group while excluding every static sibling.
+        theme_labels_layer = select_theme_text_layer(label_group, role, theme_ids)
+        if theme_labels_layer is not None:
+            theme_text_root.append(theme_labels_layer)
+
+        if outline_label_text:
+            normalize_text_for_outline(theme_text_root)
+        if cleanup:
+            remove_editor_junk(theme_text_root)
+
+        theme_text_tree = ET.ElementTree(theme_text_root)
+        ET.indent(theme_text_tree, space="  ")
+        if outline_label_text:
+            normalize_text_for_outline(theme_text_root)
+        theme_text_tree.write(theme_text_path, encoding="utf-8", xml_declaration=True)
+        if outline_label_text:
+            outline_text_with_inkscape(
+                theme_text_path, inkscape_path, inkscape_timeout_sec)
+
     # panel-only SVG
     panel_root = copy.deepcopy(root)
     panel_parent, panel_label_group = find_parent_and_child_by_id(panel_root, label_id)
@@ -362,6 +619,13 @@ def split_svg(
         raise RuntimeError(f"{source_path}: internal error removing labels")
 
     panel_parent.remove(panel_label_group)
+
+    if background_group is not None:
+        extract_background(root, panel_root, background_path, cleanup)
+        theme_paths["background"] = background_path
+
+    neutralize_semantic_panel_pigment(panel_root)
+    hide_runtime_anchor_groups(panel_root)
 
     if strip_panel_text:
         strip_font_text_elements(panel_root)
@@ -373,7 +637,7 @@ def split_svg(
     ET.indent(panel_tree, space="  ")
     panel_tree.write(panel_path, encoding="utf-8", xml_declaration=True)
 
-    return panel_path, labels_path
+    return panel_path, labels_path, theme_paths
 
 
 def collect_svg_files(path: Path, recursive: bool) -> list[Path]:
@@ -412,6 +676,16 @@ def main() -> int:
         help="Suffix for the labels-only SVG",
     )
     parser.add_argument(
+        "--theme-text-id",
+        default="theme_text",
+        help="Optional subgroup within labels to extract as tintable text",
+    )
+    parser.add_argument(
+        "--theme-text-suffix",
+        default=".theme-text",
+        help="Suffix for the optional tintable text SVG",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="Process SVGs recursively when path is a directory",
@@ -448,6 +722,9 @@ def main() -> int:
         help="Seconds to wait for Inkscape text outlining before failing.",
     )
 
+    parser.add_argument("--background-only", action="store_true",
+                        help="Extract background and marked theme text, preserving other legacy artwork")
+
     args = parser.parse_args()
 
     try:
@@ -458,6 +735,9 @@ def main() -> int:
             p for p in svg_files
             if not p.name.endswith(f"{args.panel_suffix}.svg")
             and not p.name.endswith(f"{args.labels_suffix}.svg")
+            and not p.name.endswith(".background.svg")
+            and not any(p.name.endswith(f"{args.theme_text_suffix}{suffix}.svg")
+                        for suffix in ("", "-input", "-output"))
         ]
 
         if not svg_files:
@@ -465,11 +745,19 @@ def main() -> int:
             return 0
 
         for svg_path in svg_files:
-            panel_path, labels_path = split_svg(
+            if args.background_only:
+                panel, background = split_background_only(
+                    svg_path, args.overwrite, not args.no_cleanup, not args.keep_label_text,
+                    args.inkscape_path, args.inkscape_timeout)
+                print(f"{svg_path}\n  -> {panel}\n  -> {background}")
+                continue
+            panel_path, labels_path, theme_text_paths = split_svg(
                 source_path=svg_path,
                 label_id=args.label_id,
                 panel_suffix=args.panel_suffix,
                 labels_suffix=args.labels_suffix,
+                theme_text_id=args.theme_text_id,
+                theme_text_suffix=args.theme_text_suffix,
                 overwrite=args.overwrite,
                 cleanup=not args.no_cleanup,
                 strip_panel_text=not args.keep_panel_text,
@@ -480,6 +768,8 @@ def main() -> int:
             print(f"{svg_path}")
             print(f"  -> {panel_path}")
             print(f"  -> {labels_path}")
+            for theme_text_path in theme_text_paths.values():
+                print(f"  -> {theme_text_path}")
 
         return 0
 

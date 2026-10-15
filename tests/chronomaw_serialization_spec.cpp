@@ -1,4 +1,4 @@
-#include "../src/Chronomaw.hpp"
+#include "../src/chronomaw/Chronomaw.hpp"
 
 #include <cmath>
 #include <iostream>

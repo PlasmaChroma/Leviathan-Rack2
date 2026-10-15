@@ -22,7 +22,7 @@
     </linearGradient>
   </defs>
 
-  <rect width="13716" height="12850" fill="url(#panel)"/>
+  <g id="theme_background"><rect width="13716" height="12850" fill="#000000"/></g>
   <rect x="90" y="90" width="13536" height="12670" rx="230"
         fill="none" stroke="#cfefff" stroke-opacity="0.56" stroke-width="42"/>
   <rect x="145" y="145" width="13426" height="12560" rx="190"

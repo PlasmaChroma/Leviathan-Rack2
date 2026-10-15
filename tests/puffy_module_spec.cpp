@@ -1,4 +1,4 @@
-#include "../src/Puffy.hpp"
+#include "../src/puffy/Puffy.hpp"
 
 #include <cmath>
 #include <iostream>

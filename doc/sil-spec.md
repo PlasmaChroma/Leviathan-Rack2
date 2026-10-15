@@ -61,161 +61,127 @@ Rule:
 
 Historical analysis may steer slow controls. It must not be required for instantaneous safety.
 
-## Next Feature: Low-Band Mono Recovery
+## Low-Band Mono Recovery
 
-### Goal
+Implemented in `src/sil/SilLowBandRecovery.hpp`, before Impact Air and the rest of
+the mastering chain. The final stereo-linked limiter remains downstream.
 
-Restore bass punch and mono compatibility when left and right low-frequency content is weakly correlated or out of phase.
+### Goal and limits
 
-This should be more adaptive than a static "Bass Mono" switch, but simpler and safer than full phase alignment.
-
-### Concept
-
-Process only the low band below `120 Hz`.
-
-Use mid/side control:
-
-```text
-mid  = 0.5 * (lowL + lowR)
-side = 0.5 * (lowL - lowR)
-```
-
-If low-band correlation is healthy, preserve the low-band side signal.
-
-If correlation becomes poor, reduce low-band side gain smoothly.
-
-Then reconstruct:
-
-```text
-lowL = mid + side * sideGain
-lowR = mid - side * sideGain
-```
-
-High-frequency content should pass through unchanged.
-
-### Signal Flow
-
-```text
-input L/R
--> split low/high around 120 Hz
--> low-band correlation + side-energy analysis
--> adaptive low-band side attenuation
--> recombine low/high
--> final -1.0 dBFS limiter
--> output L/R
-```
+Preserve coherent bass stereo and restore a centered waveform when low-band
+cancellation would otherwise remove it from the mono sum. This is a phase-reference
+fold, not a delay estimator or full phase alignment of independent sources.
+A perfectly inverted pair has no uniquely correct original polarity: the initial
+reference is Left, with hysteretic channel selection as described below.
 
 ### Crossover
 
-Initial implementation should use a low-risk IIR crossover.
+- Matched fourth-order Linkwitz-Riley low-pass/high-pass at **120 Hz**.
+- Each branch is two cascaded Butterworth sections, implemented with TPT
+  state-variable filters for stability at high sample rates.
+- Coefficients are prewarped and computed only on sample-rate changes.
+- Low and high are phase matched. With recovery inactive, their sum has a flat
+  magnitude response and an all-pass phase response. It is not sample-identical
+  to the input and is not a linear-phase crossover.
+- The high branch retains its stereo signal. The transition is gradual: at full
+  recovery, a 60 Hz Side tone is about 24.6 dB down; at 120 Hz it is 6 dB down.
+  Frequencies just below 120 Hz are not completely mono.
 
-Recommended first version:
+### Detection and smoothing
 
-- 2-pole low-pass per channel for low-band extraction.
-- High band derived as `input - low`.
-- Cutoff: `120 Hz`.
-- Coefficients update on sample-rate change.
-
-This is not a perfect Linkwitz-Riley crossover, but it is simple and zero-latency. If the behavior is useful, later versions can upgrade to a 4th-order Linkwitz-Riley split.
-
-### Correlation Analysis
-
-Track low-band correlation using smoothed energy terms:
-
-```text
-sumLL += lowL * lowL
-sumRR += lowR * lowR
-sumLR += lowL * lowR
-correlation = sumLR / sqrt(sumLL * sumRR + epsilon)
-```
-
-Use one-pole smoothing rather than block processing for the first implementation.
-
-Suggested time constant:
-
-- Fast enough to react to bass phase problems.
-- Slow enough to avoid modulation artifacts.
-- Start around `100 ms`.
-
-### Side Gain Mapping
-
-Map correlation to a low-band side gain target.
-
-Initial conservative mapping:
+Track low-band L/R energy and cross energy with a 100 ms exponential average.
+Evaluate correlation and reference-gain targets every 16 samples. Audio filters,
+energy followers, and controller smoothing run every sample.
 
 ```text
-correlation >= 0.70 -> sideGain = 1.0
-correlation <= 0.00 -> sideGain = 0.0
-otherwise           -> linear interpolation
+correlation >= 0.70 -> no recovery
+correlation <= 0.00 -> full recovery
+otherwise           -> recovery = 1 - correlation / 0.70
 ```
 
-This preserves normal stereo bass when it is coherent and collapses only risky bass toward mono.
+Attack into recovery is 50 ms; release is 250 ms. Silence below `1e-10 V²`
+combined low-band energy releases recovery. A smooth confidence gate suppresses
+activation from negligible treble leakage: the low/full-band energy ratio fades
+from inactive at -40 dB to fully active at -30 dB.
 
-Optional refinement:
+### Recovering the waveform
 
-- Also reduce side when low-band side energy is much higher than mid energy.
-- This catches cases where correlation is not strongly negative but bass width is still excessive.
+Simply removing Side cannot recover canceled Mid. Instead:
 
-### Smoothing
+1. Keep a stable channel reference, initially Left. Change to the other channel
+   only when its smoothed low-band energy is more than four times the current
+   channel's (about 6 dB). This avoids chattering on equal-level stereo bass.
+2. When changing channels under negative correlation, invert the incoming
+   reference polarity to preserve the existing waveform's orientation.
+3. Smooth the reference weights and gain over 50 ms. Normalize the reference
+   toward the per-channel average low-band energy, with a maximum gain of
+   `sqrt(2)` to avoid amplifying a vanishing reference without bound.
+4. Crossfade Mid toward this reference while attenuating Side:
 
-Smooth `sideGain` before applying it.
+```text
+recoveredMid  = mid + recovery * (reference - mid)
+recoveredSide = side * (1 - recovery)
+outL = highL + recoveredMid + recoveredSide
+outR = highR + recoveredMid - recoveredSide
+```
 
-Suggested starting values:
+Equal-level inverted bass therefore becomes a centered low-band waveform at the
+original per-channel level. Single-channel bass is centered at equal-power level.
+Unrelated L/R bass is reduced to the selected reference as recovery approaches
+full; this necessarily changes the low-band mix and its mono sum. Channel handoff
+and rapid program changes can cause temporary level variation. This stage does
+not promise recovery of every independent source in a complex canceled mixture.
 
-- Attack toward mono: `50 ms`.
-- Release back to stereo: `250 ms`.
+Impact Air receives the **recovered** low-band Mid, so restored bass can drive its
+transient detector.
 
-Reasoning:
+### Feedback amount
 
-- Bad low-band phase should be corrected quickly.
-- Returning stereo width can be slower to avoid pumping.
+The panel percentage, indicator, and history show **low-band Side power removed
+as a percentage of full-band input power**, rather than the fold control. The
+fold control can reach 100% for any nonpositive correlation, even when bass is
+only a small part of the mix; displaying it directly looks like an on/off switch.
 
-### UI
+```text
+sidePower = (LL + RR - 2*LR) / 4
+removedSidePower = sidePower * (1 - sideGain*sideGain)
+feedback = clamp(removedSidePower / ((inputLL + inputRR)/2), 0, 1)
+```
 
-First version can be automatic and always enabled.
+The input and low-band energy estimates use the same 100 ms average. The meter
+measures full-band input after the crossover's neutral all-pass response so a
+steady bass tone does not create a phase-lag-induced ratio fluctuation. Feedback
+updates every 16 samples, with 50 ms attack and 250 ms release smoothing, and
+releases to zero on silence. It does not affect the audio controller.
 
-Possible later UI:
+Examples: fully corrected uncorrelated deep bass reads about 50%; inverted deep
+bass approaches 100%. Inverted 40 Hz bass mixed with an equal-power coherent
+3 kHz tone reads about 49%; reducing bass amplitude to one tenth reads about 1%.
+The percentage is independent of overall level above the silence floor. It
+measures removed stereo power, not recovered Mid power or output correlation,
+and does not guarantee mono at the crossover.
 
-- Status LED: `BASS MONO` or `LOW SAFE`.
-- Small gain-reduction style meter for low-band side attenuation.
-- Context menu item to disable low-band mono recovery if needed.
+### Lifecycle, bypass, and performance
 
-Initial implementation should avoid adding panel controls unless the behavior needs user tuning.
-
-Initial status UI requirement:
-
-- Add a `LOW_RECOVERY_LIGHT` anchor in the SVG near the limiter status area.
-- Add a short SVG label next to it, preferably `LOW SAFE`.
-- LED brightness should indicate how much low-band recovery is being applied.
-- Use `brightness = 1.0 - smoothedLowBandSideGain`.
-- LED off means low-band stereo is being preserved.
-- Partial brightness means low-band side is being reduced.
-- Full brightness means the low band is effectively collapsed to mono.
-
-### Safety
-
-Guardrails:
-
-- Keep high band untouched.
-- Keep processing stereo-linked and deterministic.
-- Avoid allocations in `process()`.
-- Avoid worker thread dependencies for this feature.
-- Recompute filter coefficients only on sample-rate change or cutoff changes.
-- Keep final limiter after this stage.
+- Construction/sample-rate changes configure and reset the crossover/controller.
+- Warm mastering bypass keeps the recovery state running and passes delayed dry
+  L/R through the established mastering crossfade. Bypass does not apply the
+  crossover to the dry signal.
+- No allocation, worker dependency, lookahead, or per-sample transcendental
+  functions are introduced. Square roots run at the 16-sample control rate.
 
 ### Verification
 
-Basic tests by patch:
+`make test-sil-low-band-recovery test-sil-boost test-sil-perf` checks:
 
-- Mono bass: output should remain essentially unchanged.
-- Hard-panned high-frequency content: should remain stereo.
-- Low-frequency L/R inverted sine below 120 Hz: side should reduce and mono punch should recover.
-- Stereo bass above 120 Hz: should be mostly unaffected.
-- Silence: no NaNs, no gain jumps.
-
-Manual Rack checks:
-
-- Patch a low sine into L and inverted low sine into R.
-- Confirm low-band recovery audibly restores centered bass.
-- Confirm limiter still catches output peaks.
-- Confirm high-frequency stereo material does not collapse.
+- Mono/coherent stereo magnitude and balance, 10 Hz through 10 kHz.
+- Matched crossover response and cancellation recovery at 44.1/48/96/192 kHz.
+- Inverted, quarter-cycle, unequal-level, and single-channel bass.
+- Simultaneous canceled bass and high-frequency stereo content.
+- Feedback scaling with phase, crossover frequency, bass share, and overall
+  level, plus silence/reset release.
+- Smoothed, polarity-preserving reference handoffs; recovery release; silence;
+  reset and sample-rate reconfiguration.
+- Restored mono fundamental through the complete Sil chain, warm bypass, and
+  limiter containment with loud recovered bass.
+- Updated full-chain regression references and idle wake equivalence.
