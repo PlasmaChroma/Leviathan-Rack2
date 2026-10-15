@@ -19,9 +19,10 @@ public:
 		nextSampleIndex = 0;
 	}
 
-	// Sil clears the window whenever its lookahead changes.
+	// Sil clears the window whenever its lookahead changes. Its N-sample audio
+	// delay needs N+1 detector samples, including the sample about to be emitted.
 	float push(float peak, int lookaheadSamples) {
-		assert(lookaheadSamples >= 1 && lookaheadSamples <= kMaximumLookaheadSamples);
+		assert(lookaheadSamples >= 1 && lookaheadSamples <= kMaximumLookaheadSamples + 1);
 		const uint64_t sampleIndex = nextSampleIndex++;
 		while (count && entries[slot(count - 1)].peak <= peak) {
 			--count;
@@ -43,7 +44,7 @@ public:
 private:
 	// Preserve insertion-before-expiry order, including one transient entry
 	// beyond the full lookahead on a strictly decreasing peak stream.
-	static constexpr std::size_t kCapacity = kMaximumLookaheadSamples + 1;
+	static constexpr std::size_t kCapacity = kMaximumLookaheadSamples + 2;
 	struct Entry {
 		uint64_t sampleIndex;
 		float peak;

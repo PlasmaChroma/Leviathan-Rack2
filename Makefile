@@ -211,6 +211,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/sil_low_band_recovery_spec \
+	build/tests/sil_stage_behavior_spec \
 	build/tests/sil_boost_spec \
 	build/tests/sil_perf_regression_spec \
 	build/tests/sil_limiter_peak_window_spec \
@@ -885,6 +886,7 @@ test-fast: test-build-fast test-raster-mipmap-cache test-debug-terminal test-str
 	$(call run_rack_test_bin,build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,))
 	$(call run_test_bin,build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,))
 	$(call run_test_bin,build/tests/sil_low_band_recovery_spec)
+	$(call run_rack_test_bin,build/tests/sil_stage_behavior_spec)
 	$(call run_rack_test_bin,build/tests/sil_boost_spec)
 	$(call run_rack_test_bin,build/tests/sil_perf_regression_spec)
 	$(call run_test_bin,build/tests/sil_limiter_peak_window_spec)
@@ -1543,14 +1545,14 @@ build/tests/strand_module_spec: tests/strand_module_spec.cpp src/strand/Strand.h
 test-sil-boost: build/tests/sil_boost_spec
 	$(call run_rack_test_bin,build/tests/sil_boost_spec)
 
-build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
+build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/sil/SilTruePeakDetector.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_boost_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 .PHONY: test-sil-perf
 test-sil-perf: build/tests/sil_perf_regression_spec
 	$(call run_rack_test_bin,build/tests/sil_perf_regression_spec)
 
-build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
+build/tests/sil_perf_regression_spec: tests/sil_perf_regression_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/sil/SilTruePeakDetector.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_perf_regression_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 .PHONY: test-sil-low-band-recovery
@@ -1559,3 +1561,10 @@ test-sil-low-band-recovery: build/tests/sil_low_band_recovery_spec
 
 build/tests/sil_low_band_recovery_spec: tests/sil_low_band_recovery_spec.cpp src/sil/SilLowBandRecovery.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+.PHONY: test-sil-stages
+test-sil-stages: build/tests/sil_stage_behavior_spec
+	$(call run_rack_test_bin,build/tests/sil_stage_behavior_spec)
+
+build/tests/sil_stage_behavior_spec: tests/sil_stage_behavior_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/sil/SilTruePeakDetector.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp src/common/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

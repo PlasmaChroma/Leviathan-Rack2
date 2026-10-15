@@ -76,13 +76,15 @@ static void setup(Sil& m, float sr) {
 
 struct Golden { const char* name; float sr; float level; float secs; float rmsMidDb; float rmsSideDb; float peakDb; };
 
-// Reference captured after the 120 Hz LR4/phase-aware bass recovery repair.
-// The crossover intentionally changes phase and therefore downstream transient
-// responses; dedicated low-band tests independently check its transfer function.
+// Reference captured after the isolated-stage detector/dynamics/limiter audit.
+// Named detector bands and dynamics now match the intended processing; the
+// stage behavior suite independently checks them before these chain references.
+// Recaptured for the 1 ms limiter attack ramp (loud rows) and the saturator
+// wet fade-in (quiet row).
 static const Golden kGolden[] = {
-    {"loud48",  48000.f, 12.f, 6.f, 2.309f, -5.149f, 12.979f},
-    {"quiet48", 48000.f, 0.6f, 6.f, -12.605f, -19.924f, 2.829f},
-    {"loud96",  96000.f, 12.f, 5.f, 3.578f, -3.946f, 12.979f},
+    {"loud48",  48000.f, 12.f, 6.f, 1.542f, -5.863f, 12.479f},
+    {"quiet48", 48000.f, 0.6f, 6.f, -12.431f, -19.663f, 3.103f},
+    {"loud96",  96000.f, 12.f, 5.f, 2.654f, -4.783f, 12.479f},
 };
 
 static void measure(const Golden& g, float& rmsMidDb, float& rmsSideDb, float& peakDb) {

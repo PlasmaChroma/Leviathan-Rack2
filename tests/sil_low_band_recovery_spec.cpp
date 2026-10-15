@@ -130,8 +130,7 @@ void feedbackTests() {
 		100 * readings[0], 100 * readings[1], 100 * readings[2]);
 }
 
-void mixedAndTransitionTests() {
-	constexpr float sr = 48000;
+void mixedAndTransitionTests(float sr) {
 	sil::LowBandRecovery recovery;
 	recovery.configure(sr);
 	double bassMid = 0, trebleSideSin = 0, trebleSideCos = 0;
@@ -156,15 +155,30 @@ void mixedAndTransitionTests() {
 	recovery.configure(sr);
 	float previous = 0, maxStep = 0;
 	double energy = 0;
-	for (int i = 0; i < int(8 * sr); ++i) {
-		const float balance = float(i) / (8 * sr);
+	double windowEnergy = 0, windowInputEnergy = 0, worstWindowDb = 0;
+	const int windowSamples = int(std::round(sr / 40.f));
+	for (int i = 0; i < int(16 * sr); ++i) {
+		// Sweep in both directions so both reference channels hand off.
+		const float progress = float(i) / (8 * sr);
+		const float balance = progress <= 1.f ? progress : 2.f - progress;
 		const float l = (1.f - 0.95f * balance) * std::sin(2 * pi * 40 * i / sr);
 		const float r = -(0.05f + 0.95f * balance) * std::sin(2 * pi * 40 * i / sr);
 		const auto out = recovery.process(l, r);
 		require(std::fabs(out.lowMid) < 1.5f, "Reference handoff creates excessive gain");
 		maxStep = std::max(maxStep, std::fabs(out.lowMid - previous)); previous = out.lowMid;
-		if (i >= int(7 * sr)) energy += double(out.lowMid) * out.lowMid;
+		if (i >= int(15 * sr)) energy += double(out.lowMid) * out.lowMid;
+		windowEnergy += double(out.lowMid) * out.lowMid;
+		windowInputEnergy += 0.5 * (double(l) * l + double(r) * r);
+		if ((i + 1) % windowSamples == 0) {
+			if (i >= int(sr)) {
+				const double windowDb = 10 * std::log10(windowEnergy / windowInputEnergy);
+				worstWindowDb = std::min(worstWindowDb, windowDb);
+				require(windowDb > -3.0, "Reference handoff drops bass within a single cycle");
+			}
+			windowEnergy = windowInputEnergy = 0;
+		}
 	}
+	std::printf("  %.0f Hz: worst handoff cycle %.2f dB relative to input mean channel power\n", sr, worstWindowDb);
 	require(maxStep < 0.02f, "Reference handoff creates a discontinuity");
 	require(std::sqrt(energy / sr) > 0.4, "Reference handoff cancels bass");
 	// Release after an inverted segment, then reset/sample-rate reconfiguration.
@@ -173,6 +187,30 @@ void mixedAndTransitionTests() {
 		recovery.process(input, input);
 	}
 	require(recovery.recoveryAmount() < 0.001f, "Recovery does not release on healthy bass");
+
+	// A handoff during inverted bass must not leave the reference inverted
+	// against Mid. Partially correlated, left-dominant bass afterwards must
+	// receive the same recovered Mid as on a fresh instance.
+	const auto partialProgram = [&](sil::LowBandRecovery& target, int start) {
+		double power = 0;
+		for (int i = start; i < start + int(2 * sr); ++i) {
+			const float s1 = std::sin(2 * pi * 60 * i / sr), s2 = std::sin(2 * pi * 83 * i / sr);
+			const auto out = target.process(2.5f * s1, 0.5f * s1 + s2);
+			if (i >= start + int(sr)) power += double(out.lowMid) * out.lowMid;
+		}
+		return power / sr;
+	};
+	sil::LowBandRecovery fresh, history;
+	fresh.configure(sr);
+	history.configure(sr);
+	for (int i = 0; i < int(2 * sr); ++i) {
+		const float s1 = std::sin(2 * pi * 60 * i / sr);
+		history.process(s1, -2.5f * s1);
+	}
+	const double freshPower = partialProgram(fresh, int(2 * sr));
+	const double historyPower = partialProgram(history, int(2 * sr));
+	require(std::fabs(10 * std::log10(historyPower / freshPower)) < 0.1,
+		"Earlier inverted handoff leaves the reference out of phase with Mid");
 	for (float rate : {44100.f, 192000.f, 48000.f}) {
 		recovery.configure(rate);
 		for (int i = 0; i < 10000; ++i) {
@@ -185,8 +223,10 @@ void mixedAndTransitionTests() {
 }
 
 int main() {
-	for (float sr : {44100.f, 48000.f, 96000.f, 192000.f}) frequencyTests(sr);
-	mixedAndTransitionTests();
+	for (float sr : {44100.f, 48000.f, 96000.f, 192000.f}) {
+		frequencyTests(sr);
+		mixedAndTransitionTests(sr);
+	}
 	feedbackTests();
 	std::puts("Sil low-band recovery tests passed");
 }

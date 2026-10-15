@@ -60,10 +60,10 @@ float signal(int pattern, int i, uint32_t& random) {
 int main() {
 	sil::LimiterPeakWindow window;
 	LegacyWindow legacy;
-	std::array<float, 512> raw;
+	std::array<float, 513> raw;
 	std::size_t checks = 0;
 	// Every supported lookahead, many ring wraps, and reset with queued peaks.
-	for (int lookahead = 1; lookahead <= 512; ++lookahead) {
+	for (int lookahead = 1; lookahead <= 513; ++lookahead) {
 		for (int pattern = 0; pattern < 6; ++pattern) {
 			window.clear();
 			legacy.clear();

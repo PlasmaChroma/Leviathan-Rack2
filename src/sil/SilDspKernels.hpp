@@ -2,8 +2,17 @@
 
 #include <simd/Vector.hpp>
 #include <simd/functions.hpp>
+#include <algorithm>
+#include <cmath>
 
 namespace sil {
+
+// RC recursions use bilinear radians/sample, not cycles/sample. Prewarp here,
+// only when configuring a detector, so named Hz edges stay correct near Nyquist.
+inline float rcCutoffForHz(float hz, float sampleRate) {
+	const float cycles = std::max(1e-5f, std::min(0.49f, hz / std::max(1.f, sampleRate)));
+	return 2.f * std::tan(3.14159265358979323846f * cycles);
+}
 
 // Same filter and same setCutoff() contract as rack::dsp::RCFilter (r is in radians/sample),
 // with the recursion rewritten as y = k * (x + x1) - m * y1 so no divide sits in the
@@ -83,6 +92,33 @@ private:
 		const float c = 2.f / r;
 		k = 1.f / (1.f + c);
 		m = (1.f - c) / (1.f + c);
+	}
+};
+
+// Resonant analysis bands for the mud broadness guard. Unit peak gain and
+// per-band noise calibration distinguish distributed buildup from one note.
+struct NarrowDetectorBank4 {
+	using f4 = rack::simd::float_4;
+	f4 a1 = 1.f, a2 = 0.f, a3 = 0.f, damping = 1.f, scale = 1.f;
+	f4 ic1 = 0.f, ic2 = 0.f, env = 1e-6f;
+	void setLane(int lane, float centerHz, float q, float sampleRate, float gain) {
+		const float g = 0.5f * rcCutoffForHz(centerHz, sampleRate);
+		damping[lane] = 1.f / q;
+		a1[lane] = 1.f / (1.f + g * (g + damping[lane]));
+		a2[lane] = g * a1[lane];
+		a3[lane] = g * a2[lane];
+		scale[lane] = gain;
+	}
+	void reset() { ic1 = ic2 = 0.f; env = 1e-6f; }
+	void process(f4 in, float attack, float release) {
+		const f4 v3 = in - ic2;
+		const f4 v1 = a1 * ic1 + a2 * v3;
+		const f4 v2 = ic2 + a2 * ic1 + a3 * v3;
+		ic1 = 2.f * v1 - ic1;
+		ic2 = 2.f * v2 - ic2;
+		const f4 x = rack::simd::fabs(damping * v1 * scale);
+		const f4 c = rack::simd::ifelse(x > env, f4(attack), f4(release));
+		env = x + c * (env - x);
 	}
 };
 

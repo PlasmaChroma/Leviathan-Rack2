@@ -143,6 +143,20 @@ private:
 			if (corr < 0.f) referencePolarity = -referencePolarity;
 			referenceRight = nextRight;
 		}
+		// Handoff alignment is relative to the previous reference, so on its own
+		// it could leave the reference inverted against Mid for good, cancelling
+		// the Mid it should restore. Realign only for positive correlation, when
+		// the fold starts blending the reference with Mid. During an inverted
+		// fold, retain continuity even when unequal levels give Mid a clear sign:
+		// flipping the smoothed weights there would drive the recovered bass
+		// through zero as channel dominance changes.
+		const float referenceEnergy0 = referenceRight ? rr : ll;
+		const float referenceDotMid = 0.5f * (referenceEnergy0 + lr);
+		const float midEnergy = 0.25f * (energy + 2.f * lr);
+		if (corr > 0.f && midEnergy > 0.005f * energy
+			&& referencePolarity * referenceDotMid < -0.5f * std::sqrt(referenceEnergy0 * midEnergy)) {
+			referencePolarity = -referencePolarity;
+		}
 		targetWeightL = referenceRight ? 0.f : referencePolarity;
 		targetWeightR = referenceRight ? referencePolarity : 0.f;
 		const float referenceEnergy = weightL * weightL * ll + weightR * weightR * rr

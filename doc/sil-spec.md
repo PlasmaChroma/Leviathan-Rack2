@@ -2,64 +2,127 @@
 
 ## Current State
 
-Sil is currently implemented as a stereo mastering shell with realtime visual feedback and a fixed output safety limiter.
+Sil is a bounded adaptive stereo mastering chain. The current signal path is:
 
-Implemented:
+```text
+Input -> Low-band mono recovery -> Impact Air -> Remove Mud -> Midrange Enhance
+      -> pre-glue program analysis -> Glue -> Stereo Enhance -> Saturator
+      -> stereo-linked oversampled peak limiter -> Mastering crossfade -> Output
+```
 
-- Stereo L/R inputs and L/R outputs.
-- SVG component anchors for jack placement.
-- Histogram display from recent output samples.
-- Dual FFT spectrum displays for left and right output.
-- Context menu color schemes for visualizers.
-- Fixed stereo-linked output limiter.
-- Limiter ceiling: `-1.0 dBFS`.
-- Yellow limiter activity LED driven by limiter gain reduction.
+This file describes the current implementation. Files in `doc/Sil/` and
+`doc/sil.md` also contain historical design proposals, research, and superseded
+tuning. They do not establish that every proposed feature was implemented.
+In particular, there is no separate Repair/micropeak stage, LUFS targeting,
+genre classifier, full phase alignment, or spectral restoration engine in the
+current live chain.
 
-Current design direction:
+Stereo inputs normalize an unconnected channel to the connected one. The Boost
+control adds 0–6 dB to mastered audio and the limiter detector together, after
+adaptive analysis, so adaptation cannot cancel it. Mastering bypass is delayed
+dry L/R with a 10 ms crossfade; the analysis chain stays warm. Displays analyze
+audible output, with spectrum panes showing Mid and Side.
 
-- Realtime operation.
-- Zero added latency by default.
-- Slow adaptive decisions may use rolling history.
-- Peak safety remains handled by the final limiter.
+## Stage behavior audit (2026-10-15)
 
-## Product Goal
+Each live stage has an isolated entry point used by both `process()` and
+`tests/sil_stage_behavior_spec.cpp`. This tests behavior at each stage rather
+than inferring it from the final limiter-constrained output.
 
-Sil should behave like a conservative automatic mastering module for VCV Rack.
+| Stage | Intended action and bounds | Corrections and verification |
+| --- | --- | --- |
+| Impact Air | Brief bass-transient-driven high shelf above 1 kHz, up to +0.75 dB | Uses recovered low-band Mid. A bass burst opens the shelf, a sustained tone settles, and sub-floor input stays inactive. Shelf transfer gain and stereo linking checked. |
+| Remove Mud | Broad low-mid decongestion, 315 Hz bell/Q 0.75, at most −2.5 dB | Corrected detector frequency units. Stereo-linked L/R analysis avoids phase cancellation. Three calibrated narrow analysis bands reject isolated tones; a level gate ignores sub-floor material. Distributed 230/320/450 Hz buildup produces about 2.07 dB of cut, while the tested single tones stay below 0.16 dB. |
+| Midrange Enhance | Conditional 1.45 kHz presence lift/Q 0.72, up to +0.85 dB | Corrected body/core/presence detector bands. The recessed-mid fixture receives about +0.79 dB; a supported core or strong upper presence suppresses it. Detector remains intentionally based on post-mud mono, as specified for this stage. |
+| Glue | Gentle stereo-linked RMS compression; 1.5:1 ratio, 8 dB knee, ≤3 dB reduction and ≤2 dB partial makeup | Corrected 90 Hz sidechain cutoff; independent L/R filter energy and stereo program history prevent opposing channels from vanishing. Quadratic knee now starts below threshold and joins the ratio continuously. Threshold still follows pre-glue program level. |
+| Stereo Enhance | Mid-only 350 Hz bell/Q 7.3, down to −2 dB; Side-only 6 kHz bell/Q 0.71, up to +2 dB | Corrected broad reference edges and added focused 350 Hz/6 kHz detectors. Bass no longer falsely drives the 350 Hz correction. Already-bright 6 kHz Side suppresses its own boost; duller Side can receive air. M/S isolation verified. |
+| Saturator | Slow percentile-driven makeup ≤3.25 dB and drive 1–1.6, with limiter backoff | Empty history requests neutral settings instead of maximum activity. The shaper's small-signal gain exceeds unity even at drive 1, so the wet amount fades in with a smoothstep over the first 0.5 dB of makeup and ramps per sample between 512-sample updates. Previously a neutral/active switch stepped quiet material by about 1.9 dB. A 1 Hz tracker removes DC from the nonlinear contribution only, preserving the original bass/DC path. Feedback releases on silence. Slow controls keep advancing during idle for consistent wake-up. |
+| Limiter | Stereo-linked sample ceiling −1 dBFS, with guarded intersample estimation | The detector window now includes the sample being emitted. The held demand passes through a 1 ms moving average, so attack is a linear ramp that completes by the first affected output sample instead of a one-sample gain step. An 8-phase, 64-tap/source-frame SIMD sinc detector replaces the short low-passing FIR. A 0.5 dB reconstruction margin covers finite interpolation and gain changes in the tested fixtures. |
 
-The module should improve output reliability and translation without requiring the user to tune a full mastering chain manually. It should favor transparent, low-risk processing over aggressive loudness maximization.
+### Detector frequency units
 
-Primary defaults:
+`OnePoleRC` and `DetectorBank4` take bilinear radians/sample. Named detector
+edges use `rcCutoffForHz(hz, sampleRate) = 2*tan(pi*hz/sampleRate)`, calculated
+only when configuring filters. Passing `hz/sampleRate` directly had placed
+poles roughly 6.28 times too low. Independent tone checks now verify the −3 dB
+single-filter edges and −6 dB paired HP/LP edges through 12 kHz at
+44.1/48/96/192 kHz.
 
-- Streaming-safe ceiling.
-- Mono-compatible bass.
-- Stable stereo image.
-- Low CPU cost suitable for realtime Rack use.
-- No latency unless a future optional mode explicitly adds it.
+The mud guard uses analysis centers near 216/306/433 Hz, Q 6, normalized for
+noise bandwidth. Spread fades broadness between 3 and 7 dB. These are analysis
+filters; the correction remains a single gentle 315 Hz bell. Focused Stereo
+Enhance detectors use Q 3 at 350 Hz and Q 1.5 at 6 kHz. Their Q values need not
+match the correction EQ: they distinguish target concentration from broad
+reference content.
 
-## Analysis Model
+### Feedback percentages
 
-Sil can keep a rolling analysis history, but this history is not lookahead.
+The percentages describe different stage actions and are not interchangeable
+measures of perceived loudness or the share of the mix changed.
 
-Good uses for a rolling 10-second baseline:
+| Readout | Meaning before display smoothing |
+| --- | --- |
+| Low-frequency mono | Fraction of full-band input power removed from low-band Side; detailed below |
+| Impact Air | Applied shelf gain / 0.75 dB |
+| Remove Mud | Applied cut magnitude / 2.5 dB |
+| Midrange Enhance | Applied lift / 0.85 dB; linear, without the previous square-root display mapping |
+| Glue | Actual gain reduction / 3 dB, before partial makeup |
+| Stereo Enhance | Mean of normalized Mid-cut and Side-lift controls; one move at maximum reads 50%, both read 100% |
+| Saturator | 55% normalized makeup plus 45% normalized drive, gated by recent audible signal; no artificial 1.45x display multiplier |
+| Limiter | Fraction of output amplitude removed by the applied linked gain, including the sample guard |
 
-- RMS and loudness trend.
-- Crest factor.
-- Low-band correlation.
-- Low-band side energy.
-- Average limiter gain reduction.
-- Spectral tilt.
-- Slow adaptive threshold or amount decisions.
+### Limiter lookahead and limits
 
-Bad uses:
+The reconstruction detector has 32 samples of group delay. Detector lookahead
+is `max(34, round(sampleRate*0.0005))`. The attack ramp adds `round(sampleRate*0.001)`
+samples. Audio and bypass delay is their sum, capped at 512 samples:
 
-- Catching future transients.
-- Replacing limiter attack.
-- True-peak prediction.
-- Fast EQ movement.
+| Sample rate | Lookahead + ramp | Delay | Time |
+| --- | --- | --- | --- |
+| 44.1 kHz | 34 + 44 | 78 samples | 1.77 ms |
+| 48 kHz | 34 + 48 | 82 samples | 1.71 ms |
+| 96 kHz | 48 + 96 | 144 samples | 1.50 ms |
+| 192 kHz | 96 + 192 | 288 samples | 1.50 ms |
 
-Rule:
+The peak window holds each demand for D+1 samples, for an audio delay of D. The
+applied gain is the L-sample moving average of the held, released gain. A demand
+pushed at time p protects outputs from p+L through p+D. Every average ending in
+that span therefore contains only held values, which keeps the ramp at or below
+the demanded gain. The detector
+always records history. Two block maxima and the reconstruction kernel's L1
+norm allow convolution to be skipped only when every reconstructed phase is
+provably below the limiting threshold; an always-convolving reference tests
+that shortcut across abrupt level/Boost changes.
 
-Historical analysis may steer slow controls. It must not be required for instantaneous safety.
+Independent 16x, 129-tap windowed-sinc output reconstruction checks starts,
+stops, near-Nyquist tones, an impulse, bursts, noise, and multitone input at
+44.1/48/96/192 kHz. The worst tested reconstructed output peaks range from
+−1.15 to −1.35 dBFS. The sample guard remains at −1 dBFS. This is a finite,
+conservative intersample estimator, not a certified true-peak or codec guarantee.
+Mastering bypass remains dry and does not promise the mastered ceiling.
+
+The saturator operates at base sample rate and can alias; it is not an
+oversampled analog model. The spectral stages are bounded heuristics, not
+semantic judgments about which instruments or harmonics a mix should retain.
+The program reference is an audible-sample stereo RMS estimate, not LUFS.
+Listening checks with representative music remain useful alongside these
+repeatable signal tests.
+
+Local release-flag throughput checks on a deterministic bass/treble signal
+measured about 110 ns/sample for quiet material versus 100 ns before the audit,
+and about 180 ns/sample during active processing versus 100 ns. These are
+machine-specific measurements with debug timing disabled, not realtime CPU
+budgets. The stronger detector costs more when its conservative bound cannot
+skip reconstruction; SIMD pairing, mirrored history, and independent FIR
+accumulators reduce that cost.
+
+Validation entry points:
+
+```sh
+make test-sil-stages test-sil-low-band-recovery test-sil-boost test-sil-perf
+make build/tests/sil_limiter_peak_window_spec
+build/tests/sil_limiter_peak_window_spec
+```
 
 ## Low-Band Mono Recovery
 
@@ -113,6 +176,15 @@ Simply removing Side cannot recover canceled Mid. Instead:
    channel's (about 6 dB). This avoids chattering on equal-level stereo bass.
 2. When changing channels under negative correlation, invert the incoming
    reference polarity to preserve the existing waveform's orientation.
+   Once channel correlation becomes positive, if low-band Mid is significant
+   (above 1% of the mean channel energy) and the reference correlates with it
+   below −0.5, flip the reference polarity to follow Mid. Handoff continuity
+   alone could otherwise leave an inverted reference that later cancels
+   partially correlated bass (measured −10 dB). Retain continuity throughout
+   negatively correlated folds, including unequal channel levels: realigning
+   there made the smoothed reference cross zero and caused a 12.7 dB bass dip.
+   Bidirectional dominance sweeps now stay within 1.4 dB per 40 Hz cycle at
+   44.1–192 kHz.
 3. Smooth the reference weights and gain over 50 ms. Normalize the reference
    toward the per-channel average low-band energy, with a maximum gain of
    `sqrt(2)` to avoid amplifying a vanishing reference without bound.
