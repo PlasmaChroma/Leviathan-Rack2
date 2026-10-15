@@ -9,8 +9,10 @@ bool DualBowlAdapter::configure(const BowlDescriptor& bowl, const MalletDescript
         || !std::isfinite(settings.frequency) || settings.frequency < 20 || settings.frequency > 2000) return false;
     const double center = std::max(20+.5*separation, std::min(2000-.5*separation, settings.frequency));
     auto leftSettings = settings, rightSettings = settings;
-    leftSettings.frequency = center-.5*separation;
-    rightSettings.frequency = center+.5*separation;
+    // Fractional offsets can round past a boundary after the center clamp.
+    // Clamp the final candidates too so valid knob motion cannot reject setup.
+    leftSettings.frequency = std::max(20.0, std::min(2000.0, center-.5*separation));
+    rightSettings.frequency = std::max(20.0, std::min(2000.0, center+.5*separation));
     const bool wantsDual = !allowSingle_ || separation > 0;
     const bool wakeRight = wantsDual && !rightActive_;
     const bool initial = hostRate_ == 0;

@@ -33,6 +33,19 @@ void referenceEquivalence() {
 }
 void transactionalTuning() {
     EngineSettings s; DualBowlAdapter d;
+    // Fractional separations mirror the smoothed binaural knob at the limits.
+    for (double boundary : {20., 2000.}) {
+        s.frequency = boundary;
+        for (int i = 0; i <= 1000; ++i) {
+            const double delta = 33.0 * i / 1000.0;
+            require(d.configure(seedBowls[0], seedMallets[1], s, delta, 48000),
+                "fractional binaural boundary setup");
+            require(d.engine().settings().frequency >= 20
+                && d.rightEngine().settings().frequency <= 2000,
+                "fractional binaural tuning exceeds range");
+            require(!d.process(HostControls{}).fault, "fractional binaural boundary fault");
+        }
+    }
     for (double center : {20., 36.5, 261.625565, 1983.5, 2000.}) {
         s.frequency=center;
         require(d.configure(seedBowls[0], seedMallets[1], s, 33, 48000), "boundary setup");
