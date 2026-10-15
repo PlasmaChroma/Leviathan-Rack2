@@ -83,7 +83,7 @@ FileStamp fileStamp(const std::string& path) {
 	return stamp;
 }
 
-void initializeDocument(LoadStatus status, ThemeDocument document) {
+void initializeDocument(LoadStatus status, const ThemeDocument& document) {
 	gDocument = status == LoadStatus::Loaded ? document : defaultDocument();
 	gMayOverwriteDocument = status != LoadStatus::FutureSchema;
 	// Factory preset IDs describe the current built-in preset, not a frozen copy

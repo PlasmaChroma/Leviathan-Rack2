@@ -541,7 +541,7 @@ private:
     RecordState state_;
     bool play_, retrigger_, inop_;
     std::uint16_t currentRegion_;
-    Region recordRegion_;
+    Region recordRegion_{0, 0};
     std::uint32_t writer_, appendStart_;
     std::uint32_t recordSegmentStart_ = 0;
     bool recordSeekPending_ = false;

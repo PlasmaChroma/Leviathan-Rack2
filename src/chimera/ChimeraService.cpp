@@ -102,7 +102,7 @@ private:
                     else {
                         RateBridge* empty = nullptr;
                         if (slot.prepared->compare_exchange_strong(empty, next.get(),
-                                std::memory_order_acq_rel)) next.release();
+                                std::memory_order_acq_rel)) (void) next.release();
                     }
                     break;
                 }

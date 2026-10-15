@@ -1013,7 +1013,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         static_cast<NautiloidGlPreview*>(user)->renderGlContent(activeSize, viewportY);
       },
       this);
-    if (rendered && module) {
+    if (rendered) {
       const float renderUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - renderStart).count()) * 1e-3f;
       module->gpuSurfaceRenderUs.store(renderUs, std::memory_order_relaxed);

@@ -76,8 +76,8 @@ public:
         const unsigned physical = pages_ + reservePages_ + maximum;
         std::unique_ptr<std::uint32_t[]> free(new std::uint32_t[physical]);
         std::unique_ptr<std::uint8_t[]> refs(new std::uint8_t[physical]{});
-        std::copy(free_.get(), free_.get() + freeCount_, free.get());
-        std::copy(references_.get(), references_.get() + pages_ + reservePages_, refs.get());
+        std::copy_n(free_.get(), freeCount_, free.get());
+        std::copy_n(references_.get(), pages_ + reservePages_, refs.get());
         for (unsigned i = 1; i < kSnapshotSlots; ++i) snapshots_[i].prepare(pages_);
         auto scratch = std::make_shared<ScratchPages>(maximum);
         if (background) ScratchPageService::instance().add(scratch);
@@ -448,7 +448,7 @@ private:
     unsigned adoptedScratch_ = 0, nextScanSlot_ = 0;
     unsigned activeSnapshotMask_ = 0, snapshotWorkMask_ = 0;
     std::uint32_t freeCount_, validFrames_;
-    Marker markers_[kMaxSplices];
+    Marker markers_[kMaxSplices]{};
     std::uint16_t markerCount_;
     std::uint32_t nextMarkerId_;
     std::uint64_t documentRevision_, audioRevision_, capturedThroughFrame_;
