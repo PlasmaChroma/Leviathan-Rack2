@@ -1,8 +1,0 @@
-// ARBHAR V2 DEFAULT SETTING FILE
-
-// PARAMETER_1 does something
-// PARAMETER_2 does something else
-
-PARAMETER_1 = 20
-PARAMETER_2 = 2
-PARAMETER_3 = FOLLOW

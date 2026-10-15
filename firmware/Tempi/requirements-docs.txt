@@ -1,2 +1,0 @@
-# Optional: only for rebuilding index.html from the Markdown files.
-mistune>=3.0

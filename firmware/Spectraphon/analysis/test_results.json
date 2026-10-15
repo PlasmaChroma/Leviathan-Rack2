@@ -1,8 +1,0 @@
-{
-  "tests_run": 31,
-  "failures": 0,
-  "errors": 0,
-  "seconds": 0.044571876525878906,
-  "passed": true,
-  "scope": "Host-side helper tests only. No hardware recording, ARM execution, or audio null comparison."
-}
