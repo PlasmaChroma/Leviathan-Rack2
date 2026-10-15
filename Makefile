@@ -49,7 +49,6 @@ SOURCES += $(wildcard src/theme/*.cpp)
 SOURCES += $(wildcard src/vessel/*.cpp)
 SOURCES += $(wildcard src/hydra/*.cpp)
 SOURCES += $(wildcard src/hydra/beads/dsp/*.cc)
-SOURCES += src/hydra/beads/resources.cc
 SOURCES += $(wildcard src/hydra/stmlib/dsp/*.cc)
 SOURCES += $(wildcard src/hydra/stmlib/utils/*.cc)
 FLAGS += -Isrc/hydra

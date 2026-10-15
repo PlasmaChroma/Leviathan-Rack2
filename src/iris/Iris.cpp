@@ -26,14 +26,14 @@ bool hasLeftNautiloid(const Iris* module) {
   if (!left || !left->model) return false;
   const std::string& slug = left->model->slug;
   return (left->model == modelNautiloid || slug == "Nautiloid" ||
-          left->model == modelChromatide || slug == "Chromatide");
+          slug == "Chromatide");
 }
 
 bool hasLeftSourceForUi(const Iris* module) {
   const auto* left = ui_expander::neighbor(module, false);
   return left && left->model &&
     (left->model == modelNautiloid || left->model->slug == "Nautiloid" ||
-     left->model == modelChromatide || left->model->slug == "Chromatide");
+     left->model->slug == "Chromatide");
 }
 
 float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {

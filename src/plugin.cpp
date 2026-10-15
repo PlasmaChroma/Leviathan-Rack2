@@ -1,6 +1,4 @@
 #include "plugin.hpp"
-#include "bifurx/BifurxWorker.hpp"
-#include "chimera/ChimeraService.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "common/visual/VisualAssets.hpp"
 
@@ -221,25 +219,8 @@ void init(Plugin* p) {
 	p->addModel(modelIris);
 	p->addModel(modelNautiloid);
     p->addModel(modelPuffy);
-	p->addModel(modelCrownstep);
-	p->addModel(modelBifurx);
-	p->addModel(modelWyrm);
 	p->addModel(modelSil);
-	p->addModel(modelChronomaw);
-	p->addModel(modelBulkhead);
-	p->addModel(modelHydra);
-	p->addModel(modelUmi);
-	p->addModel(modelDoorstop);
-	p->addModel(modelChromatide);
-	p->addModel(modelMandelwake);
-	p->addModel(modelCantor);
 	p->addModel(modelTheme);
-	p->addModel(modelOctavia);
-	p->addModel(modelOctaviaConsole);
-	p->addModel(modelSibyl);
-	p->addModel(modelMoirai);
-	p->addModel(modelPhonex);
-	p->addModel(modelChimera);
 	p->addModel(modelVessel);
 	p->addModel(modelVTune);
 	p->addModel(modelStrand);
@@ -249,7 +230,5 @@ void init(Plugin* p) {
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
-	chimera::shutdownChimeraIoService();
-	bifurx::shutdownBifurxRenderService();
 	leviathan::theme::persistence::saveToUserStorage();
 }
