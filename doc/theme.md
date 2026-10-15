@@ -18,6 +18,13 @@ split assets and panel anchor atlas after changing the master.
 
 ## Implemented revision: factory backgrounds and simplified editor
 
+Factory selections are saved with `activePreset: "modified"` and their full
+`active` snapshot so existing Pro builds apply the raw colors and texture,
+including All Hallows and Saturnalia. An optional `factoryPreset` field
+retains the named selection for Theme; older Pro builds ignore it. Schema 3
+is unchanged. Loading also accepts the original `activePreset: "factory:…"`
+format. This compatibility change requires only a main-plugin update.
+
 The ORIGINAL button has been removed. Each factory field now enables and
 applies an explicit background: Leviathan `#000000`, Abyssal `#050A18`, Mono
 `#080808`, and Ultraviolet `#10051C`. BACKGROUND still edits or pastes a custom

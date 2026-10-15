@@ -166,8 +166,7 @@ json_t* snapshotToJson(const ThemeSnapshot& snapshot) {
 }
 
 bool isKnownActivePreset(const std::string& value) {
-	if (value == "modified" || value == "factory:leviathan" || value == "factory:abyssal"
-		|| value == "factory:monochrome" || value == "factory:ultraviolet") return true;
+	if (value == "modified" || findFactoryPreset(value.c_str())) return true;
 	if (value.size() == 6u && value.compare(0u, 5u, "user:") == 0)
 		return value[5] >= '1' && value[5] <= '8';
 	return false;
@@ -203,6 +202,13 @@ LoadStatus loadDocument(const std::string& path, ThemeDocument* document) {
 		const std::string value = json_string_value(activePreset);
 		if (isKnownActivePreset(value)) candidate.activePreset = value;
 	}
+	// Older family plugins consume factory selections as raw values. This optional
+	// identity field lets Theme retain its selection without requiring a Pro update.
+	json_t* factoryPreset = json_object_get(root, "factoryPreset");
+	if (candidate.activePreset == "modified" && json_is_string(factoryPreset)) {
+		const char* value = json_string_value(factoryPreset);
+		if (findFactoryPreset(value)) candidate.activePreset = value;
+	}
 	readSnapshot(json_object_get(root, "active"), &candidate.active);
 
 	json_t* presets = json_object_get(root, "userPresets");
@@ -231,7 +237,12 @@ bool saveDocumentAtomic(const std::string& path, const ThemeDocument& document) 
 	const std::string temporary = path + ".tmp";
 	json_t* root = json_object();
 	json_object_set_new(root, "schemaVersion", json_integer(kThemeSchemaVersion));
-	json_object_set_new(root, "activePreset", json_string(document.activePreset.c_str()));
+	// Publish the snapshot directly so older Pro builds never replace an unknown
+	// factory ID (for example All Hallows) with their default factory palette.
+	const bool factory = findFactoryPreset(document.activePreset.c_str()) != nullptr;
+	json_object_set_new(root, "activePreset", json_string(factory ? "modified" : document.activePreset.c_str()));
+	if (factory)
+		json_object_set_new(root, "factoryPreset", json_string(document.activePreset.c_str()));
 	json_object_set_new(root, "active", snapshotToJson(document.active));
 	json_t* presets = json_array();
 	for (const UserPresetSlot& slot : document.userPresets) {
