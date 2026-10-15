@@ -76,11 +76,13 @@ static void setup(Sil& m, float sr) {
 
 struct Golden { const char* name; float sr; float level; float secs; float rmsMidDb; float rmsSideDb; float peakDb; };
 
-// Values measured from the pre-optimisation Sil. The optimised build must agree within the tolerances below.
+// Reference captured after the 120 Hz LR4/phase-aware bass recovery repair.
+// The crossover intentionally changes phase and therefore downstream transient
+// responses; dedicated low-band tests independently check its transfer function.
 static const Golden kGolden[] = {
-    {"loud48",  48000.f, 12.f, 6.f, 2.329f, -5.170f, 12.979f},
-    {"quiet48", 48000.f, 0.6f, 6.f, -12.580f, -20.098f, 2.608f},
-    {"loud96",  96000.f, 12.f, 5.f, 3.585f, -3.976f, 12.979f},
+    {"loud48",  48000.f, 12.f, 6.f, 2.309f, -5.149f, 12.979f},
+    {"quiet48", 48000.f, 0.6f, 6.f, -12.605f, -19.924f, 2.829f},
+    {"loud96",  96000.f, 12.f, 5.f, 3.578f, -3.946f, 12.979f},
 };
 
 static void measure(const Golden& g, float& rmsMidDb, float& rmsSideDb, float& peakDb) {

@@ -5,6 +5,7 @@
 #include "SilLimiterPeakWindow.hpp"
 #include "SilLevelMeter.hpp"
 #include "SilDspKernels.hpp"
+#include "SilLowBandRecovery.hpp"
 #include "../common/MathHelpers.hpp"
 #include "SilSpectrumSnapshot.hpp"
 #include "../common/SpscLatestSnapshot.hpp"
@@ -294,17 +295,7 @@ struct Sil : Module {
 	int rollingAccumCount = 0;
 	int rollingAudibleCount = 0;
 	double rollingMonoSqSum = 0.0;
-	sil::OnePoleRC lowpassL1;
-	sil::OnePoleRC lowpassL2;
-	sil::OnePoleRC lowpassR1;
-	sil::OnePoleRC lowpassR2;
-	float lowBandCorrLL = 1e-6f;
-	float lowBandCorrRR = 1e-6f;
-	float lowBandCorrLR = 0.f;
-	float lowBandSideGain = 1.f;
-	float lowBandCorrCoeff = 0.f;
-	float lowBandSideAttackCoeff = 0.f;
-	float lowBandSideReleaseCoeff = 0.f;
+	sil::LowBandRecovery lowBandRecovery;
 	float impactAirEnvAttackCoeff = 0.f;
 	float impactAirEnvReleaseCoeff = 0.f;
 	float impactAirSlowAttackCoeff = 0.f;
@@ -338,7 +329,6 @@ struct Sil : Module {
 	// Every envelope follower, gain smoother and audio-path filter still runs per sample.
 	static constexpr int kDecisionDivision = 16;
 	int decisionCounter = kDecisionDivision - 1;   // first sample is a tick, so targets exist from sample 0
-	float lowBandTargetSideGain = 1.f;
 	float limiterMetricAttackCoeff = 0.f;
 	float limiterMetricReleaseCoeff = 0.f;
 	float limiterMetricGrCoeff = 0.f;
@@ -471,10 +461,6 @@ struct Sil : Module {
 		}
 	} saturator;
 
-	static constexpr float kLowBandCutoffHz = 120.f;
-	static constexpr float kLowBandCorrTauSec = 0.100f;
-	static constexpr float kLowBandSideAttackSec = 0.050f;
-	static constexpr float kLowBandSideReleaseSec = 0.250f;
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
 	static constexpr float kAdaptiveSilenceVolts = 0.0012559432f;
@@ -735,11 +721,7 @@ struct Sil : Module {
 	}
 
 	void updateLowBandCutoff(float sampleRate) {
-		const float cutoffNorm = clamp(kLowBandCutoffHz / sampleRate, 1e-5f, 0.49f);
-		lowpassL1.setCutoff(cutoffNorm);
-		lowpassL2.setCutoff(cutoffNorm);
-		lowpassR1.setCutoff(cutoffNorm);
-		lowpassR2.setCutoff(cutoffNorm);
+		lowBandRecovery.configure(sampleRate);
 	}
 
 	void updateSpectrumUpdateDivider(float sampleRate) {
@@ -823,9 +805,6 @@ struct Sil : Module {
 	void updateDynamicsCoefficients(float sampleRate) {
 		const float sr = std::max(sampleRate, 1.f);
 		boostSmoothingCoeff = std::exp(-1.f / (0.010f * sr));
-		lowBandCorrCoeff = std::exp(-1.f / (kLowBandCorrTauSec * sr));
-		lowBandSideAttackCoeff = std::exp(-1.f / (kLowBandSideAttackSec * sr));
-		lowBandSideReleaseCoeff = std::exp(-1.f / (kLowBandSideReleaseSec * sr));
 		impactAirEnvAttackCoeff = std::exp(-1.f / (kImpactAirEnvAttackSec * sr));
 		impactAirEnvReleaseCoeff = std::exp(-1.f / (kImpactAirEnvReleaseSec * sr));
 		impactAirSlowAttackCoeff = std::exp(-1.f / (kImpactAirSlowAttackSec * sr));
@@ -1273,42 +1252,12 @@ struct Sil : Module {
 		const bool decisionTick = (++decisionCounter >= kDecisionDivision);
 		if (decisionTick) decisionCounter = 0;
 
-		// Low-band mono recovery below 120 Hz:
-		// preserve coherent bass stereo, progressively collapse risky low side content.
-		lowpassL1.process(inL);
-		float lowL = lowpassL1.lowpass();
-		lowpassL2.process(lowL);
-		lowL = lowpassL2.lowpass();
-
-		lowpassR1.process(inR);
-		float lowR = lowpassR1.lowpass();
-		lowpassR2.process(lowR);
-		lowR = lowpassR2.lowpass();
-
-		const float highL = inL - lowL;
-		const float highR = inR - lowR;
-		const float lowMid = 0.5f * (lowL + lowR);
-		const float lowSide = 0.5f * (lowL - lowR);
-
-		const float corrCoeff = lowBandCorrCoeff;
-		const float corrMix = 1.f - corrCoeff;
-		lowBandCorrLL = corrCoeff * lowBandCorrLL + corrMix * (lowL * lowL);
-		lowBandCorrRR = corrCoeff * lowBandCorrRR + corrMix * (lowR * lowR);
-		lowBandCorrLR = corrCoeff * lowBandCorrLR + corrMix * (lowL * lowR);
-		if (decisionTick) {
-			const float denom = std::sqrt(std::max(lowBandCorrLL * lowBandCorrRR, 1e-12f));
-			const float lowCorr = clampf(lowBandCorrLR / denom, -1.f, 1.f);
-			lowBandTargetSideGain = (lowCorr >= 0.70f) ? 1.f : ((lowCorr <= 0.f) ? 0.f : (lowCorr / 0.70f));
-		}
-		const float targetLowSideGain = lowBandTargetSideGain;
-		const float sideCoeff = (targetLowSideGain < lowBandSideGain) ? lowBandSideAttackCoeff : lowBandSideReleaseCoeff;
-		lowBandSideGain = targetLowSideGain + sideCoeff * (lowBandSideGain - targetLowSideGain);
-		const float lowRecoveryAmount = clampf(1.f - lowBandSideGain, 0.f, 1.f);
-
-		const float recoveredLowL = lowMid + lowSide * lowBandSideGain;
-		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
-		const float recoveredL = highL + recoveredLowL;
-		const float recoveredR = highR + recoveredLowR;
+		// Recover a centered low-band waveform before the mastering chain.
+		const auto recovered = lowBandRecovery.process(inL, inR);
+		const float recoveredL = recovered.left;
+		const float recoveredR = recovered.right;
+		const float lowMid = recovered.lowMid;
+		const float lowRecoveryAmount = lowBandRecovery.feedbackAmount();
 		float impactAirL;
 		float impactAirR;
 		float impactAirLed = 0.f;
