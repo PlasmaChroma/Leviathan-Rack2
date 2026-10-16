@@ -1546,7 +1546,7 @@ test-sil-boost: build/tests/sil_boost_spec
 	$(call run_rack_test_bin,build/tests/sil_boost_spec)
 
 build/tests/sil_boost_spec: tests/sil_boost_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/sil/SilTruePeakDetector.hpp src/common/MathHelpers.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_boost_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sil_boost_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 .PHONY: test-sil-perf
 test-sil-perf: build/tests/sil_perf_regression_spec

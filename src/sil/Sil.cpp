@@ -1803,6 +1803,9 @@ struct Sil : Module {
 	}
 };
 
+// std::max binds this constant by reference, requiring storage in C++11.
+constexpr float Sil::kImpactAirSlowFloorVolts;
+
 #ifndef SIL_HEADLESS_TEST
 struct SilColors {
 	NVGcolor low;
