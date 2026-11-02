@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.14.1]
+
+- Adding manuals to all modules in plugin
+- Resolved some quality issues with Sil
+
+## [v2.14.0]
+
+- 5 New modules: Theme, Sil, Vessel, V.Tune, Strand
+- Performance tuning
+- Visual refinements
+- Deep Cache now supports storing dark & light variants in same database
+- Undertow is now polyphonic
+- Add blending to help Temporal Deck transitions be smoother
+
 ## [v2.9.1]
 
 - Static analysis cleanup
