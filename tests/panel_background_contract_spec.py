@@ -48,7 +48,7 @@ class PanelBackgroundContract(unittest.TestCase):
                 self.assertEqual(ancestry(background), ancestry(master))
 
     def test_runtime_panels_use_theme_entry_points(self):
-        for path in (ROOT / 'src').glob('*.cpp'):
+        for path in (ROOT / 'src').rglob('*.cpp'):
             with self.subTest(source=path.name):
                 self.assertIsNone(re.search(r'setPanel\s*\(\s*createPanel\s*\(', path.read_text(encoding='utf-8')))
 

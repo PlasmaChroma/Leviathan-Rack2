@@ -260,6 +260,8 @@ struct Sil : Module {
 	struct SpectrumBinMapEntry {
 		int idx = 0;
 		float frac = 0.f;
+		int first = 1, last = 0;
+		bool active = false;
 	};
 	SpectrumBinMapEntry specBinMap[SPEC_FREQ_BINS];
 
@@ -276,11 +278,14 @@ struct Sil : Module {
 	int limiterDelayWrite = 0;
 	// Audio delay = detector lookahead + attack ramp, so the ramp completes
 	// before the earliest sample the detector says must be attenuated.
-	int limiterLatencySamples = 1;
+	int limiterLatencySamples = 2;
+	float configuredSampleRate = 44100.f;
+	std::atomic<uint32_t> displayResetRevision {0};
+	uint32_t specUiResetRevision = 0;
 	int limiterLookaheadSamples = 1;
 	int limiterRampSamples = 1;
 	float limiterRampInv = 1.f;
-	std::array<float, sil::LimiterPeakWindow::kMaximumLookaheadSamples> limiterRampRing {};
+	std::array<float, sil::LimiterPeakWindow::kMaximumDelaySamples> limiterRampRing {};
 	int limiterRampWrite = 0;
 	double limiterRampSum = 1.0;
 	std::vector<float> bypassDelayL;
@@ -444,7 +449,10 @@ struct Sil : Module {
 		float activityRelease = 0.f;
 		float drive = 1.f;
 		float makeupDb = 0.f;
-		float makeupLinear = 1.f;
+		// Double accumulation avoids a small endpoint snap from 512 float additions.
+		double makeupLinear = 1.0;
+		float makeupTarget = 1.f;
+		double makeupStep = 0.0;
 		float driveNormInv = 1.f;
 		float tubeBiasOffset = 0.f;
 		// Wet amount ramps per sample from the previous update's target to the next.
@@ -474,7 +482,8 @@ struct Sil : Module {
 			currentBinPeak = 0.f;
 			drive = 1.f;
 			makeupDb = 0.f;
-			makeupLinear = 1.f;
+			makeupLinear = makeupTarget = 1.f;
+			makeupStep = 0.f;
 			driveNormInv = 1.f;
 			tubeBiasOffset = 0.f;
 			wet = 0.f;
@@ -589,7 +598,7 @@ struct Sil : Module {
 	static constexpr float kLimiterLookaheadSeconds = 0.0005f;
 	static constexpr float kLimiterAttackRampSeconds = 0.001f;
 	static constexpr float kMasteringCrossfadeSeconds = 0.010f;
-	static constexpr int kMaxLimiterLookaheadSamples = sil::LimiterPeakWindow::kMaximumLookaheadSamples;
+	static constexpr int kMaxLimiterDelaySamples = sil::LimiterPeakWindow::kMaximumDelaySamples;
 	static constexpr float kLimiterMetricAttackSec = 0.020f;
 	static constexpr float kLimiterMetricReleaseSec = 0.750f;
 	static constexpr float kLimiterMetricGrSec = 0.120f;
@@ -738,16 +747,36 @@ struct Sil : Module {
 	}
 
 	void updateSpectrumBinMap(float sampleRate) {
-		const float sr = std::max(sampleRate, 1.f);
-		const float binHz = sr / float(FFT_SIZE);
+		const float binHz = std::max(sampleRate, 1.f) / float(FFT_SIZE);
+		const float halfRatio = std::pow(1000.f, .5f / float(SPEC_FREQ_BINS - 1));
 		for (int i = 0; i < SPEC_FREQ_BINS; ++i) {
-			const float f01 = float(i) / float(SPEC_FREQ_BINS - 1);
-			const float hz = 20.f * std::pow(1000.f, f01);
-			const float bin = hz / binHz;
-			const int idx = clamp(int(bin), 0, FFT_SIZE / 2);
-			specBinMap[i].idx = idx;
-			specBinMap[i].frac = clamp(bin - float(idx), 0.f, 1.f);
+			const float hz = 20.f * std::pow(1000.f, float(i) / float(SPEC_FREQ_BINS - 1));
+			auto& entry = specBinMap[i];
+			entry.active = hz <= sampleRate * .5f;
+			const float bin = clamp(hz / binHz, 1.f, float(FFT_SIZE / 2));
+			entry.idx = int(bin);
+			entry.frac = bin - float(entry.idx);
+			const float low = (i == 0 ? 20.f : hz / halfRatio) / binHz;
+			const float high = (i == SPEC_FREQ_BINS - 1 ? 20000.f : hz * halfRatio) / binHz;
+			entry.first = std::max(1, int(std::ceil(low)));
+			entry.last = std::min(FFT_SIZE / 2, int(std::floor(high)));
+			if (high - low < 1.f) entry.last = 0; // narrow bars interpolate
 		}
+	}
+
+	static float spectrumPower(const float* fftOut, int bin) {
+		if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
+		const float re = fftOut[2 * bin], im = fftOut[2 * bin + 1];
+		return re * re + im * im;
+	}
+
+	static float spectrumBarPower(const float* fftOut, const SpectrumBinMapEntry& entry) {
+		if (!entry.active) return 0.f;
+		float power = (1.f - entry.frac) * spectrumPower(fftOut, entry.idx)
+			+ entry.frac * spectrumPower(fftOut, std::min(entry.idx + 1, FFT_SIZE / 2));
+		for (int bin = entry.first; bin <= entry.last; ++bin)
+			power = std::max(power, spectrumPower(fftOut, bin));
+		return power;
 	}
 
 	void updateLowBandCutoff(float sampleRate) {
@@ -771,38 +800,31 @@ struct Sil : Module {
 		// owned slot remains stable throughout windowing and FFT processing.
 		const SpectrumSnapshot& snapshot = specSnapshots.readLatest();
 		if (snapshot.sequence == specUiLastSeq) return;
+		if (snapshot.resetRevision != specUiResetRevision) {
+			std::fill(std::begin(spec.magnitudesL), std::end(spec.magnitudesL), 0.f);
+			std::fill(std::begin(spec.magnitudesR), std::end(spec.magnitudesR), 0.f);
+			spec.smoothedPeakDb = 0.f;
+			updateSpectrumBinMap(snapshot.sampleRate);
+			specUiResetRevision = snapshot.resetRevision;
+		}
 
+		double meanL = 0., meanR = 0.;
+		for (int i = 0; i < FFT_SIZE; ++i) { meanL += snapshot.mid[i]; meanR += snapshot.side[i]; }
+		meanL /= FFT_SIZE; meanR /= FFT_SIZE;
 		for (int i = 0; i < FFT_SIZE; ++i) {
-			spec.fftInL[i] = snapshot.mid[i] * spec.window[i];
-			spec.fftInR[i] = snapshot.side[i] * spec.window[i];
+			spec.fftInL[i] = (snapshot.mid[i] - float(meanL)) * spec.window[i];
+			spec.fftInR[i] = (snapshot.side[i] - float(meanR)) * spec.window[i];
 		}
 
 		spec.fft->rfft(spec.fftInL, spec.fftOutL);
 		spec.fft->rfft(spec.fftInR, spec.fftOutR);
 
-		auto getMagnitudePow = [&](const float* fftOut, int bin) {
-			if (bin <= 0) return fftOut[0] * fftOut[0];
-			if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
-			const float re = fftOut[2 * bin];
-			const float im = fftOut[2 * bin + 1];
-			return re * re + im * im;
-		};
 
 		float maxPow = 0.f;
 		static constexpr float kSpecNormPowInv = 1.f / (10240.f * 10240.f);
 		for (int i = 0; i < SPEC_FREQ_BINS; i++) {
-			const int binIdx = specBinMap[i].idx;
-			const float frac = specBinMap[i].frac;
-			float powL = 0.f;
-			float powR = 0.f;
-			if (binIdx < FFT_SIZE / 2) {
-				powL = (1.f - frac) * getMagnitudePow(spec.fftOutL, binIdx) + frac * getMagnitudePow(spec.fftOutL, binIdx + 1);
-				powR = (1.f - frac) * getMagnitudePow(spec.fftOutR, binIdx) + frac * getMagnitudePow(spec.fftOutR, binIdx + 1);
-			}
-			else {
-				powL = getMagnitudePow(spec.fftOutL, FFT_SIZE / 2);
-				powR = getMagnitudePow(spec.fftOutR, FFT_SIZE / 2);
-			}
+			float powL = spectrumBarPower(spec.fftOutL, specBinMap[i]);
+			float powR = spectrumBarPower(spec.fftOutR, specBinMap[i]);
 
 			powL *= kSpecNormPowInv;
 			powR *= kSpecNormPowInv;
@@ -866,15 +888,22 @@ struct Sil : Module {
 		limiterMetricGrCoeff = std::exp(-1.f / (kLimiterMetricGrSec * sr));
 	}
 
+	static float validTimingRate(float sampleRate) {
+		return std::isfinite(sampleRate) && sampleRate > 0.f ? sampleRate : 44100.f;
+	}
+
 	int limiterLookaheadSamplesForRate(float sampleRate) const {
-		int lookahead = std::max(sil::TruePeakDetector::kLatencySamples + 2,
-			int(std::round(std::max(sampleRate, 1.f) * kLimiterLookaheadSeconds)));
-		return clamp(lookahead, 1, kMaxLimiterLookaheadSamples);
+		// Clamp in floating point before conversion, including extreme finite rates.
+		const float samples = std::min(validTimingRate(sampleRate) * kLimiterLookaheadSeconds,
+			float(kMaxLimiterDelaySamples - 1));
+		return std::max(sil::TruePeakDetector::kLatencySamples + 2, int(std::round(samples)));
 	}
 
 	int limiterRampSamplesForRate(float sampleRate, int lookahead) const {
-		const int ramp = int(std::round(std::max(sampleRate, 1.f) * kLimiterAttackRampSeconds));
-		return clamp(ramp, 1, std::max(1, kMaxLimiterLookaheadSamples - lookahead));
+		const int remaining = std::max(1, kMaxLimiterDelaySamples - lookahead);
+		const float samples = std::min(validTimingRate(sampleRate) * kLimiterAttackRampSeconds,
+			float(remaining));
+		return std::max(1, int(std::round(samples)));
 	}
 
 	void resetLimiterRamp() {
@@ -893,6 +922,10 @@ struct Sil : Module {
 		limiterLookaheadSamples = requestedLimiterLookahead;
 		limiterRampSamples = requestedRamp;
 		limiterLatencySamples = limiterLookaheadSamples + limiterRampSamples;
+		resetLimiterState();
+	}
+
+	void resetLimiterState() {
 		resetLimiterRamp();
 		std::fill(bypassDelayL.begin(), bypassDelayL.end(), 0.f);
 		std::fill(bypassDelayR.begin(), bypassDelayR.end(), 0.f);
@@ -909,26 +942,13 @@ struct Sil : Module {
 		limiterPeakWindow.clear();
 	}
 
-		void initializeLimiterFastPathStorage() {
-			const int delayBufferLength = kMaxLimiterLookaheadSamples;
-			limiterLookaheadSamples = 1;
-			limiterRampSamples = 1;
-			limiterLatencySamples = limiterLookaheadSamples;
-			resetLimiterRamp();
-			limiterDelayL.assign(size_t(delayBufferLength), 0.f);
-			limiterDelayR.assign(size_t(delayBufferLength), 0.f);
-		bypassDelayL.assign(size_t(delayBufferLength), 0.f);
-		bypassDelayR.assign(size_t(delayBufferLength), 0.f);
-		bypassDelayWrite = 0;
-		limiterDelayWrite = 0;
-		limiterGain = 1.f;
-		limiterPrevSatL1 = 0.f;
-		limiterPrevSatL2 = 0.f;
-		limiterPrevSatR1 = 0.f;
-			limiterPrevSatR2 = 0.f;
-			limiterTruePeakDetector.reset();
-			limiterPeakWindow.clear();
-		}
+	void initializeLimiterFastPathStorage() {
+		limiterDelayL.resize(kMaxLimiterDelaySamples);
+		limiterDelayR.resize(kMaxLimiterDelaySamples);
+		bypassDelayL.resize(kMaxLimiterDelaySamples);
+		bypassDelayR.resize(kMaxLimiterDelaySamples);
+		resetLimiterState();
+	}
 
 	int saturatorPeakToHistIndex(float peak) const {
 		const float normalized = clampf(peak / kAudioFullScaleV, 0.f, 2.f);
@@ -1105,30 +1125,17 @@ struct Sil : Module {
 			spec.window[i] = 0.5f - 0.5f * std::cos(2.f * M_PI * i / (FFT_SIZE - 1));
 		}
 
-		// Keep spectrum visually responsive at a stable update rate across sample rates.
-		updateSpectrumUpdateDivider(initialSampleRate);
 		lightDivider.setDivision(kLightDivision);
 		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
 		impactAir.coeffDivider.setDivision(kImpactAirCoeffDivision);
 		removeMud.coeffDivider.setDivision(32);
 		midEnhance.coeffDivider.setDivision(kMidEnhanceCoeffDivision);
 		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
-		saturator.updateDivider.setDivision(kSatUpdateDivision);
-		updateLowBandCutoff(initialSampleRate);
-		updateRemoveMudCutoffs(initialSampleRate);
-		updateGlueCutoff(initialSampleRate);
-		updateMidEnhanceCutoffs(initialSampleRate);
-		updateStereoEnhanceCutoffs(initialSampleRate);
-		updateDynamicsCoefficients(initialSampleRate);
-		updateSpectrumBinMap(initialSampleRate);
-		glueAdaptiveThresholdDb = kGlueThresholdDb;
-		configureRollingBuffer(initialSampleRate);
-		configureIdle(initialSampleRate);
-		saturator.reset(initialSampleRate);
-		configureBiquadDesigns(initialSampleRate);
 		initializeLimiterFastPathStorage();
-		updateLimiterLatencyNoAlloc(initialSampleRate);
-		levelMeter.configure(initialSampleRate);
+		SampleRateChangeEvent e;
+		e.sampleRate = initialSampleRate;
+		e.sampleTime = 1.f / initialSampleRate;
+		onSampleRateChange(e);
 	}
 
 	~Sil() {
@@ -1141,6 +1148,7 @@ struct Sil : Module {
 	}
 
 	void onSampleRateChange(const SampleRateChangeEvent& e) override {
+		configuredSampleRate = e.sampleRate;
 		hist.samplesPerBin = (int)(e.sampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		updateLowBandCutoff(e.sampleRate);
@@ -1149,22 +1157,68 @@ struct Sil : Module {
 		updateMidEnhanceCutoffs(e.sampleRate);
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
-		updateSpectrumBinMap(e.sampleRate);
 		updateSpectrumUpdateDivider(e.sampleRate);
-		glueAdaptiveThresholdDb = kGlueThresholdDb;
-		configureRollingBuffer(e.sampleRate);
-		configureIdle(e.sampleRate);
+		updateLimiterLatencyNoAlloc(e.sampleRate);
+		resetDspState();
+	}
+
+	void onReset(const ResetEvent& e) override {
+		Module::onReset(e);
+		resetDspState();
+	}
+
+	void resetDspState() {
+		const float sr = configuredSampleRate;
+		configureRollingBuffer(sr);
+		configureIdle(sr);
+		lowBandRecovery.reset();
 		resetRemoveMudState();
 		resetImpactAirState();
 		resetMidEnhanceState();
 		resetStereoEnhanceState();
-		configureBiquadDesigns(e.sampleRate);
+		configureBiquadDesigns(sr);
 		glue.reset();
+		glueAdaptiveThresholdDb = kGlueThresholdDb;
+		saturator.reset(sr);
+		resetLimiterState();
+		limiterTriggerEma = limiterRecentGrDb = 0.f;
 		decisionCounter = kDecisionDivision - 1;
-		saturator.reset(e.sampleRate);
-		initializeLimiterFastPathStorage();
-		updateLimiterLatencyNoAlloc(e.sampleRate);
-		levelMeter.configure(e.sampleRate);
+		for (auto* divider : {&specDivider, &lightDivider, &glueThresholdUpdateDivider,
+			&impactAir.coeffDivider, &removeMud.coeffDivider, &midEnhance.coeffDivider,
+			&stereoEnhance.coeffDivider, &saturator.updateDivider}) divider->reset();
+		boostLastDb = clampf(params[BOOST_PARAM].getValue(), 0.f, 6.f);
+		boostGain = boostTargetGain = dsp::exp2_taylor5(boostLastDb / 6.020599913f);
+		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > .5f;
+		masteringMix = masteringEnabled ? 1.f : 0.f;
+		idleLightTargets.fill(0.f);
+		for (auto& light : lights) light.setBrightness(0.f);
+		levelMeter.configure(sr);
+		hist.writePtr = hist.samplesInCurrentBin = 0;
+		hist.currentMinL = hist.currentMinR = 1e10f;
+		hist.currentMaxL = hist.currentMaxR = -1e10f;
+		hist.smoothedPeak = 5.f;
+		for (int i = 0; i < HISTOGRAM_BINS; ++i) {
+			hist.displayMinL[i].store(0.f, std::memory_order_relaxed);
+			hist.displayMaxL[i].store(0.f, std::memory_order_relaxed);
+			hist.displayMinR[i].store(0.f, std::memory_order_relaxed);
+			hist.displayMaxR[i].store(0.f, std::memory_order_relaxed);
+		}
+		hist.displayWritePtr.store(0, std::memory_order_release);
+		std::fill(std::begin(spec.bufferL), std::end(spec.bufferL), 0.f);
+		std::fill(std::begin(spec.bufferR), std::end(spec.bufferR), 0.f);
+		spec.writePtr = 0;
+		displayResetRevision.fetch_add(1, std::memory_order_release);
+		publishSpectrumSnapshot();
+	}
+
+	void publishSpectrumSnapshot() {
+		const uint32_t sequence = specSnapshotSeq.load(std::memory_order_relaxed) + 1u;
+		specSnapshots.publishWith([&](SpectrumSnapshot& snapshot) {
+			snapshot.capture(spec.bufferL, spec.bufferR, spec.writePtr, sequence);
+			snapshot.sampleRate = configuredSampleRate;
+			snapshot.resetRevision = displayResetRevision.load(std::memory_order_relaxed);
+		});
+		specSnapshotSeq.store(sequence, std::memory_order_release);
 	}
 
 	// Histogram, spectrum ring and snapshot publication for one output sample.
@@ -1206,14 +1260,7 @@ struct Sil : Module {
 		spec.bufferR[spec.writePtr] = 0.5f * (audibleL - audibleR);
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
-		if (specDivider.process()) {
-			const uint32_t sequence = specSnapshotSeq.load(std::memory_order_relaxed) + 1u;
-			specSnapshots.publishWith([&](SpectrumSnapshot& snapshot) {
-				snapshot.capture(spec.bufferL, spec.bufferR, spec.writePtr, sequence);
-			});
-			// Keep the existing framebuffer invalidation and logging signal.
-			specSnapshotSeq.store(sequence, std::memory_order_release);
-		}
+		if (specDivider.process()) publishSpectrumSnapshot();
 	}
 
 	// Stage entry points are shared by the live chain and isolated behavior tests.
@@ -1506,7 +1553,9 @@ struct Sil : Module {
 			const float driveTau = (desiredDrive > saturator.drive) ? kSatDriveAttackSec : kSatDriveReleaseSec;
 			const float driveCoeff = std::exp(-updateSeconds / std::max(1e-3f, driveTau));
 			saturator.drive = desiredDrive + driveCoeff * (saturator.drive - desiredDrive);
-			saturator.makeupLinear = std::pow(10.f, saturator.makeupDb / 20.f);
+			saturator.makeupLinear = saturator.makeupTarget;
+			saturator.makeupTarget = std::pow(10.f, saturator.makeupDb / 20.f);
+			saturator.makeupStep = (saturator.makeupTarget - saturator.makeupLinear) / float(kSatUpdateDivision);
 			const float clampedDrive = clampf(saturator.drive, kSatMinDrive, kSatMaxDrive);
 			saturator.driveNormInv = 1.f / std::max(fastAtanApprox(clampedDrive), 1e-6f);
 			saturator.tubeBiasOffset = fastAtanApprox(clampedDrive * kSatTubeBias);
@@ -1516,7 +1565,8 @@ struct Sil : Module {
 			saturator.wetStep = (saturator.wetTarget - saturator.wet) * (1.f / float(kSatUpdateDivision));
 		}
 
-		const float makeup = saturator.makeupLinear;
+		const float makeup = float(saturator.makeupLinear);
+		saturator.makeupLinear += saturator.makeupStep;
 		const float drive = clampf(saturator.drive, kSatMinDrive, kSatMaxDrive);
 		const float driveNormInv = saturator.driveNormInv;
 		const float wet = saturator.wet;
@@ -1666,6 +1716,10 @@ struct Sil : Module {
 		publishDisplays(0.f, 0.f);
 	}
 
+	static float finiteInput(float value) {
+		return std::isfinite(value) ? value : 0.f;
+	}
+
 	void process(const ProcessArgs& args) override {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
@@ -1681,8 +1735,8 @@ struct Sil : Module {
 
 		const bool hasL = inputs[INPUT_L_INPUT].isConnected();
 		const bool hasR = inputs[INPUT_R_INPUT].isConnected();
-		const float rawL = inputs[INPUT_L_INPUT].getVoltage();
-		const float rawR = inputs[INPUT_R_INPUT].getVoltage();
+		const float rawL = finiteInput(inputs[INPUT_L_INPUT].getVoltage());
+		const float rawR = finiteInput(inputs[INPUT_R_INPUT].getVoltage());
 		const float inL = hasL ? rawL : rawR;
 		const float inR = hasR ? rawR : rawL;
 
@@ -1934,6 +1988,10 @@ struct HistogramWidget : TransparentWidget {
 	int rasterHeight = 0;
 	int rasterWritePtr = -1;
 	int rasterColorScheme = -1;
+	uint32_t lastResetRevision = 0;
+	using Pixel = std::array<unsigned char, 4>;
+	std::array<Pixel, 16> palettePixels {};
+	Pixel dividerPixel {};
 	std::vector<unsigned char> rasterPixels;
 
 	~HistogramWidget() override {
@@ -1944,6 +2002,12 @@ struct HistogramWidget : TransparentWidget {
 	void step() override {
 		TransparentWidget::step();
 		if (!module || !framebuffer) return;
+		const uint32_t revision = module->displayResetRevision.load(std::memory_order_acquire);
+		if (revision != lastResetRevision) {
+			lastResetRevision = revision;
+			rasterWritePtr = lastWritePtr = -1;
+			lastRefreshSec = -1.;
+		}
 		const int writePtr = module->hist.displayWritePtr.load(std::memory_order_acquire);
 		const int colorScheme = int(module->colorScheme);
 		const double nowSec = system::getTime();
@@ -2018,21 +2082,27 @@ struct HistogramWidget : TransparentWidget {
 					}
 				}
 
-				auto writePixel = [&](int x, int y, NVGcolor color) {
+				auto encodePixel = [](NVGcolor color) -> Pixel {
+					return {{uint8_t(clamp(color.r * color.a, 0.f, 1.f) * 255.f),
+						uint8_t(clamp(color.g * color.a, 0.f, 1.f) * 255.f),
+						uint8_t(clamp(color.b * color.a, 0.f, 1.f) * 255.f), 255u}};
+				};
+				if (paletteChanged) {
+					for (int i = 0; i < 16; ++i)
+						palettePixels[i] = encodePixel(nvgLerpRGBA(colors.low, colors.high, (float(i) + .5f) / 16.f));
+					dividerPixel = encodePixel(colors.divider);
+				}
+				auto writePixel = [&](int x, int y, const Pixel& color) {
 					if (x < 0 || x >= rasterWidth || y < 0 || y >= rasterHeight) return;
 					unsigned char* pixel = rasterPixels.data() + (size_t(y) * size_t(rasterWidth) + size_t(x)) * 4u;
-					pixel[0] = uint8_t(clamp(color.r * color.a, 0.f, 1.f) * 255.f);
-					pixel[1] = uint8_t(clamp(color.g * color.a, 0.f, 1.f) * 255.f);
-					pixel[2] = uint8_t(clamp(color.b * color.a, 0.f, 1.f) * 255.f);
-					pixel[3] = 255u;
+					std::copy(color.begin(), color.end(), pixel);
 				};
 				auto drawSpan = [&](int x, const float* minBuf, const float* maxBuf, float centerY, int index) {
 					const float valMin = clamp(minBuf[index] / Sil::kAudioFullScaleV, -1.f, 1.f);
 					const float valMax = clamp(maxBuf[index] / Sil::kAudioFullScaleV, -1.f, 1.f);
 					const float amp = std::max(std::abs(valMin), std::abs(valMax));
 					const int bucket = clamp(int(amp * 16.f), 0, 15);
-					const float tint = (float(bucket) + 0.5f) / 16.f;
-					const NVGcolor color = nvgLerpRGBA(colors.low, colors.high, tint);
+					const Pixel& color = palettePixels[bucket];
 					const float halfH = float(rasterHeight) * 0.25f;
 					int y0 = int(std::round(centerY - valMin * halfH));
 					int y1 = int(std::round(centerY - valMax * halfH));
@@ -2042,12 +2112,12 @@ struct HistogramWidget : TransparentWidget {
 				const int firstX = rasterWidth - advance;
 				for (int x = firstX; x < rasterWidth; ++x) {
 					for (int y = 0; y < rasterHeight; ++y) {
-						writePixel(x, y, nvgRGBA(0, 0, 0, 255));
+						writePixel(x, y, Pixel{{0, 0, 0, 255}});
 					}
 					const int index = (lastWritePtr + x) % rasterWidth;
 					drawSpan(x, minL.data(), maxL.data(), float(rasterHeight) * 0.25f, index);
 					drawSpan(x, minR.data(), maxR.data(), float(rasterHeight) * 0.75f, index);
-					writePixel(x, rasterHeight / 2, colors.divider);
+					writePixel(x, rasterHeight / 2, dividerPixel);
 				}
 				nvgUpdateImage(args.vg, rasterImage, rasterPixels.data());
 				nvgBeginPath(args.vg);
@@ -2103,19 +2173,35 @@ struct HistogramWidget : TransparentWidget {
 			drawChannel(minR.data(), maxR.data(), midY * 1.5f);
 		}
 		else {
-			for (float centerY : {midY * 0.5f, midY * 1.5f}) {
-				nvgBeginPath(args.vg);
-				for (int i = 0; i < 48; ++i) {
-					const float t = float(i) / 47.f;
-					const float envelope = std::sin(float(M_PI) * t);
-					const float y = centerY - std::sin(10.f * float(M_PI) * t) * envelope * halfH * 0.34f;
-					const float x = t * box.size.x;
-					if (i == 0) nvgMoveTo(args.vg, x, y);
-					else nvgLineTo(args.vg, x, y);
+			// Compute the illustrative stereo transients once, then reuse at any zoom.
+			static const auto preview = [] {
+				std::array<std::array<float, 192>, 2> data {};
+				for (int channel = 0; channel < 2; ++channel) {
+					for (int i = 0; i < 192; ++i) {
+						const float t = float(i) / 191.f;
+						const float beat = std::fmod(t * 5.f + channel * 0.08f, 1.f);
+						const float decay = (1.f - beat) * (1.f - beat);
+						const float detail = std::abs(std::sin(t * 173.f + channel * 0.7f));
+						data[channel][i] = (0.12f + 0.74f * decay) * (0.45f + 0.55f * detail);
+					}
 				}
-				nvgStrokeColor(args.vg, nvgLerpRGBA(colors.low, colors.high, 0.45f));
-				nvgStrokeWidth(args.vg, 1.f);
-				nvgStroke(args.vg);
+				return data;
+			}();
+			for (int channel = 0; channel < 2; ++channel) {
+				const float centerY = midY * (channel ? 1.5f : 0.5f);
+				for (int bucket = 0; bucket < 8; ++bucket) {
+					nvgBeginPath(args.vg);
+					for (int i = 0; i < 192; ++i) {
+						const float amplitude = preview[channel][i];
+						if (int(amplitude * 8.f) != bucket) continue;
+						const float x = float(i) / 191.f * box.size.x;
+						nvgMoveTo(args.vg, x, centerY - amplitude * halfH);
+						nvgLineTo(args.vg, x, centerY + amplitude * halfH * 0.85f);
+					}
+					nvgStrokeColor(args.vg, nvgLerpRGBA(colors.low, colors.high, (bucket + 0.5f) / 8.f));
+					nvgStrokeWidth(args.vg, std::max(0.7f, box.size.x / 192.f * 0.8f));
+					nvgStroke(args.vg);
+				}
 			}
 		}
 
@@ -2218,7 +2304,7 @@ struct SpectrumWidget : TransparentWidget {
 		const NVGcolor channelLow = colors.low;
 		const NVGcolor channelHigh = colors.high;
 
-		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
+		const float barSpacing = box.size.x / float(Sil::SPEC_FREQ_BINS - 1);
 
 		static constexpr int kColorBuckets = 16;
 		for (int bucket = 0; bucket < kColorBuckets; ++bucket) {
@@ -2229,18 +2315,32 @@ struct SpectrumWidget : TransparentWidget {
 					norm = isRightChannel ? module->spec.displayNormR[i] : module->spec.displayNormL[i];
 				}
 				else {
-					const float previewX = float(i) / float(Sil::SPEC_FREQ_BINS - 1);
-					const float previewShape = std::sin(float(M_PI) * previewX);
-					const float previewRipple = 0.08f * std::sin(
-						(isRightChannel ? 13.f : 11.f) * float(M_PI) * previewX);
-					norm = clamp(0.08f + 0.48f * previewShape + previewRipple, 0.f, 1.f);
+					static const auto preview = [] {
+						std::array<std::array<float, Sil::SPEC_FREQ_BINS>, 2> data {};
+						for (int channel = 0; channel < 2; ++channel) {
+							for (int bin = 0; bin < Sil::SPEC_FREQ_BINS; ++bin) {
+								const float x = float(bin) / float(Sil::SPEC_FREQ_BINS - 1);
+								float level = 0.10f + 0.22f * (1.f - x);
+								for (int peak = 0; peak < 6; ++peak) {
+									const float center = 0.17f + peak * 0.123f + channel * 0.012f;
+									const float distance = (x - center) / (0.025f + peak * 0.004f);
+									level += (0.65f - peak * 0.075f) / (1.f + distance * distance);
+								}
+								level += 0.035f * std::sin(x * 193.f + channel);
+								data[channel][bin] = clamp(level * std::min(1.f, (1.f - x) * 9.f), 0.f, 0.95f);
+							}
+						}
+						return data;
+					}();
+					norm = preview[isRightChannel ? 1 : 0][i];
 				}
 				if (norm <= 0.01f) continue;
 				const int normBucket = clamp(int(norm * float(kColorBuckets)), 0, kColorBuckets - 1);
 				if (normBucket != bucket) continue;
 				const float barH = norm * box.size.y;
-				const float x = float(i) * barW;
-				nvgRect(args.vg, x, box.size.y - barH, barW - 0.5f, barH);
+				const float x = std::max(0.f, (float(i) - .5f) * barSpacing);
+				const float end = std::min(box.size.x, (float(i) + .5f) * barSpacing);
+				nvgRect(args.vg, x, box.size.y - barH, std::max(0.f, end - x - .5f), barH);
 			}
 			const float tint = (float(bucket) + 0.5f) / float(kColorBuckets);
 			nvgFillColor(args.vg, nvgLerpRGBA(channelLow, channelHigh, tint));
@@ -2285,14 +2385,46 @@ struct SilStageHistoryWidget : TransparentWidget {
 	int rasterWriteIndex = -1;
 	std::vector<unsigned char> rasterPixels;
 
+	// Seed only browser previews; writeIndex == 0 displays oldest to newest.
+	// Shared rhythmic transients tie the stages to the main waveform, while
+	// different envelopes suggest each processor responding to the material.
+	void seedPreview() {
+		if (module) return;
+		for (int stage = 0; stage < kCount; ++stage) {
+			for (int bin = 0; bin < kHistBins; ++bin) {
+				const float t = float(bin) / float(kHistBins - 1);
+				const float beat = std::fmod(t * 5.f + 0.08f, 1.f);
+				const float transient = (1.f - beat) * (1.f - beat);
+				const float swell = 0.5f + 0.5f * std::sin(t * (13.f + stage * 2.f) + stage);
+				const float detail = 0.5f + 0.5f * std::sin(t * 97.f + stage * 1.7f);
+				const float base = stage == 0 ? 0.04f : 0.16f + 0.025f * stage;
+				const float pulse = stage == 0 ? 0.78f : 0.30f;
+				histories[stage][bin] = clamp(base + pulse * transient
+					+ 0.22f * swell + 0.08f * detail, 0.f, 0.95f);
+			}
+			current[stage] = histories[stage].back();
+		}
+	}
+
 	~SilStageHistoryWidget() override {
 		nvg_gfx_lifecycle::resetOwnedNvgImage(
 			rasterImageVg, rasterImage, rasterWidth, rasterHeight, nullptr, false);
 	}
 
+	uint32_t lastResetRevision = 0;
+
 	void step() override {
 		TransparentWidget::step();
 		if (!module || !framebuffer) return;
+		const uint32_t revision = module->displayResetRevision.load(std::memory_order_acquire);
+		if (revision != lastResetRevision) {
+			lastResetRevision = revision;
+			for (auto& history : histories) history.fill(0.f);
+			current.fill(0.f);
+			writeIndex = 0;
+			rasterWriteIndex = -1;
+			lastSampleSec = -1.;
+		}
 		const double nowSec = system::getTime();
 		if (lastSampleSec >= 0.0 && nowSec - lastSampleSec < (1.0 / 30.0)) return;
 		// Histogram and stage history are the two expensive steady-state caches.
@@ -2321,7 +2453,7 @@ struct SilStageHistoryWidget : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
 		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
-		if (!module || !APP || !APP->window || !APP->window->uiFont) {
+		if (!APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
 
@@ -2456,6 +2588,10 @@ struct SilHorizontalMeter : TransparentWidget {
     }
     void draw(const DrawArgs& args) override {
         const SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
+        // Draw-time fallbacks also work for thumbnail renders without a step().
+        const float previewLevels[2] = {dbfs ? 0.9833f : 0.77f, dbfs ? 0.975f : 0.755f};
+        const float* shownLevels = module ? levels : previewLevels;
+        const char* shownText = module ? text : (dbfs ? "-1.0" : "-13.8");
         const float labelWidth=mm2px(18.f);
         const float x=labelWidth, w=box.size.x-x, h=box.size.y;
         nvgBeginPath(args.vg); nvgRect(args.vg,x,0.f,w,h);
@@ -2464,7 +2600,7 @@ struct SilHorizontalMeter : TransparentWidget {
         const float inset=1.25f, gap=1.f, lane=(h-2.f*inset-gap)*.5f;
         for(int j=0;j<2;++j) {
             const float y=inset+j*(lane+gap);
-            nvgBeginPath(args.vg); nvgRect(args.vg,x+inset,y,(w-2.f*inset)*levels[j],lane);
+            nvgBeginPath(args.vg); nvgRect(args.vg,x+inset,y,(w-2.f*inset)*shownLevels[j],lane);
             nvgFillPaint(args.vg,nvgLinearGradient(args.vg,x+inset,y,x+w-inset,y,
                 colors.low,colors.high)); nvgFill(args.vg);
         }
@@ -2475,7 +2611,7 @@ struct SilHorizontalMeter : TransparentWidget {
             nvgTextAlign(args.vg,NVG_ALIGN_RIGHT|NVG_ALIGN_MIDDLE);
             const float textX=labelWidth-mm2px(2.f), textY=h*.5f;
             nvgFillColor(args.vg,nvgRGBA(255,255,255,255));
-            nvgText(args.vg,textX,textY,text,nullptr);
+            nvgText(args.vg,textX,textY,shownText,nullptr);
         }
     }
 };
@@ -2801,18 +2937,23 @@ struct SilWidget : ModuleWidget {
 		auto* masteringButton = createLightParamCentered<SmallGoldApertureButton>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT);
 		static_cast<SmallGoldApertureLight*>(masteringButton->getLight())->setBaseColor(nvgRGB(255, 118, 24));
+		static_cast<SmallGoldApertureLight*>(masteringButton->getLight())->previewBrightness = 1.f;
 		addParam(masteringButton);
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(midEnhanceLightPos), module, Sil::MID_ENHANCE_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
-		addChild(createLightCentered<TinyAperture<AmberApertureLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
+
 
 		SilStageHistoryWidget* chainLedReadout = new SilStageHistoryWidget;
 		chainLedReadout->module = module;
+		if (!module) chainLedReadout->seedPreview();
+		const std::array<Vec, SilStageHistoryWidget::kCount> stageLightPositions = {{
+			limiterLightPos, lowRecoveryLightPos, impactAirLightPos, removeMudLightPos,
+			midEnhanceLightPos, glueCompLightPos, stereoEnhanceLightPos, saturatorLightPos
+		}};
+		for (int i = 0; i < SilStageHistoryWidget::kCount; ++i) {
+			auto* light = createLightCentered<TinyAperture<AmberApertureLight>>(
+				mm2px(stageLightPositions[i]), module, chainLedReadout->lightIds[i]);
+			light->previewBrightness = chainLedReadout->current[i];
+			addChild(light);
+		}
 		chainLedReadout->renderDebugMetrics = &renderDebugMetrics;
 		chainLedReadout->refreshCoordinator = &refreshCoordinator;
 		const float histLeftExtension = 0.125f * box.size.x;

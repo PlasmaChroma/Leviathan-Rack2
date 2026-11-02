@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="sil.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -247,13 +247,13 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="182.88619"
-   inkscape:cy="242.90962"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:zoom="2.385554"
+   inkscape:cx="177.73649"
+   inkscape:cy="373.70774"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="1978"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
    inkscape:current-layer="panel_graphics"
    showgrid="false"
@@ -345,9 +345,9 @@
    inkscape:label="Input Box">
       <rect
    id="frame_inputs"
-   x="648.55597"
+   x="675"
    y="10538.557"
-   width="3001.9146"
+   width="3000"
    height="1662.8877"
    rx="185.11812"
    ry="161.91278"
@@ -363,18 +363,18 @@
    inkscape:label="Output Box">
       <rect
    id="frame_outputs"
-   x="6409.5127"
+   x="6485"
    y="10538.557"
-   width="3101.9329"
-   height="1662.8882"
-   rx="185.11531"
-   ry="161.9128"
+   width="3000"
+   height="1662.8877"
+   rx="185.11812"
+   ry="161.91278"
    fill="#1cccd9"
    fill-opacity="0.5"
    opacity="0.33"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="42.1116" />
+   stroke-width="42.1121" />
     </g>
   </g>
 <g
@@ -387,15 +387,15 @@
    inkscape:label="Input Text">
     <text
    id="INPUT_L_LABEL"
-   x="1400"
-   y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
+   x="1425"
+   y="11890"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">L</text>
     <text
    id="INPUT_R_LABEL"
-   x="3000"
-   y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
+   x="2925"
+   y="11890"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">R</text>
     <text
    id="LUFS_LABEL"
@@ -528,15 +528,15 @@
    inkscape:label="Output Text">
     <text
    id="OUTPUT_L_LABEL"
-   x="7160"
-   y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
+   x="7235"
+   y="11890"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">L</text>
     <text
    id="OUTPUT_R_LABEL"
-   x="8760"
-   y="12060"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22198137px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
+   x="8735"
+   y="11890"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">R</text>
   </g>
   <text
@@ -579,23 +579,23 @@
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_L_INPUT"
-     cx="1400"
-     cy="11240"
+     cx="1425"
+     cy="11070"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_R_INPUT"
-     cx="3000"
-     cy="11240"
+     cx="2925"
+     cy="11070"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_L_OUTPUT"
-     cx="7160"
-     cy="11240"
+     cx="7235"
+     cy="11070"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_R_OUTPUT"
-     cx="8760"
-     cy="11240"
+     cx="8735"
+     cy="11070"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="LIMITER_ACTIVE_LIGHT"

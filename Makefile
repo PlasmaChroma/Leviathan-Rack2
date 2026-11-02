@@ -1568,3 +1568,12 @@ test-sil-stages: build/tests/sil_stage_behavior_spec
 
 build/tests/sil_stage_behavior_spec: tests/sil_stage_behavior_spec.cpp src/sil/Sil.cpp src/sil/SilDspKernels.hpp src/sil/SilLowBandRecovery.hpp src/sil/SilTruePeakDetector.hpp src/sil/SilLimiterPeakWindow.hpp src/sil/SilLevelMeter.hpp src/common/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+# Strict IEEE contracts for opt-in checked math helpers.
+.PHONY: test-math-helpers
+test-math-helpers: build/tests/math_helpers_spec build/tests/math_helpers_contract_spec
+	$(call run_test_bin,build/tests/math_helpers_spec)
+	$(call run_test_bin,build/tests/math_helpers_contract_spec)
+
+build/tests/math_helpers_contract_spec: tests/math_helpers_contract_spec.cpp src/common/MathHelpers.hpp src/common/MathHelpers.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -fno-fast-math -ffp-contract=off $< src/common/MathHelpers.cpp -o $@

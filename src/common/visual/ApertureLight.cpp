@@ -339,7 +339,7 @@ void LeviathanApertureLight::drawBloomCache(NVGcontext* vg) {
 void LeviathanApertureLight::refreshLightState() {
 	if (baseColors.size() == 1) {
 		engine::Light* light = getLight(0);
-		lightBrightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		lightBrightness = clamp(light ? light->getBrightness() : (module ? 0.f : previewBrightness), 0.f, 1.f);
 		activeColor = lightBrightness > 1e-6f
 			? nvgRGBAf(baseColors[0].r, baseColors[0].g, baseColors[0].b, 1.f)
 			: baseColor;
@@ -354,7 +354,7 @@ void LeviathanApertureLight::refreshLightState() {
 	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
 	for (size_t i = 0; i < baseColors.size(); ++i) {
 		engine::Light* light = getLight(int(i));
-		const float brightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		const float brightness = clamp(light ? light->getBrightness() : (module ? 0.f : previewBrightness), 0.f, 1.f);
 		lightBrightness = std::max(lightBrightness, brightness);
 		colorWeight += brightness;
 		mixedColor.r += baseColors[i].r * brightness;

@@ -60,17 +60,18 @@ float signal(int pattern, int i, uint32_t& random) {
 int main() {
 	sil::LimiterPeakWindow window;
 	LegacyWindow legacy;
-	std::array<float, 513> raw;
+	std::array<float, sil::LimiterPeakWindow::kMaximumDelaySamples + 1> raw;
 	std::size_t checks = 0;
-	// Every supported lookahead, many ring wraps, and reset with queued peaks.
-	for (int lookahead = 1; lookahead <= 513; ++lookahead) {
+	// Every legacy window plus representative larger windows and the capacity
+	// boundary, many ring wraps, and reset with queued peaks.
+	for (int lookahead = 1; lookahead <= sil::LimiterPeakWindow::kMaximumDelaySamples + 1; lookahead += lookahead < 513 ? 1 : (lookahead < 2048 ? std::min(127, 2048 - lookahead) : 1)) {
 		for (int pattern = 0; pattern < 6; ++pattern) {
 			window.clear();
 			legacy.clear();
 			int sinceReset = 0;
 			uint32_t random = 0x12345678u;
-			for (int i = 0; i < 4096; ++i) {
-				if (i == 2301) {
+			for (int i = 0; i < 8192; ++i) {
+				if (i == 5001) {
 					window.clear();
 					legacy.clear();
 					sinceReset = 0;
@@ -98,7 +99,7 @@ int main() {
 		sil::LimiterPeakWindow measured;
 		for (int i = 0; i < 100000; ++i) {
 			if (i % 25000 == 0) measured.clear();
-			sink = measured.push(float(200000 - i), 512);
+			sink = measured.push(float(200000 - i), sil::LimiterPeakWindow::kMaximumDelaySamples + 1);
 		}
 	}
 	trackHeap = false;

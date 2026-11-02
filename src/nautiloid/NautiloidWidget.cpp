@@ -1034,6 +1034,43 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 };
 
+// Browser thumbnails share immutable pixels; no module, worker, or GL shader is needed.
+std::shared_ptr<const fractal::SourceField> nautiloidBrowserFractal() {
+  static const auto source = [] {
+    auto field = std::make_shared<fractal::SourceField>();
+    field->width = 384;
+    field->height = 256;
+    field->rgb8.resize(size_t(field->width * field->height * 3));
+    for (int y = 0; y < field->height; ++y) {
+      for (int x = 0; x < field->width; ++x) {
+        float zx = (float(x) + 0.5f) / float(field->width) * 3.2f - 1.6f;
+        float zy = (float(y) + 0.5f) / float(field->height) * 2.13f - 1.065f;
+        int iteration = 0;
+        constexpr int limit = 96;
+        while (zx * zx + zy * zy < 64.f && iteration < limit) {
+          const float nextX = zx * zx - zy * zy - 0.745f;
+          zy = 2.f * zx * zy + 0.186f;
+          zx = nextX;
+          ++iteration;
+        }
+        const size_t pixel = size_t(y * field->width + x) * 3u;
+        // Smooth escape bands in deep blue, cyan, and warm pearl.
+        float t = 0.f;
+        if (iteration < limit) {
+          const float smooth = float(iteration) + 1.f
+            - std::log2(std::log2(zx * zx + zy * zy) * 0.5f);
+          t = clamp(smooth / 36.f, 0.f, 1.f);
+        }
+        field->rgb8[pixel] = uint8_t(4.f + 242.f * t * t * t);
+        field->rgb8[pixel + 1u] = uint8_t(8.f + 228.f * t);
+        field->rgb8[pixel + 2u] = uint8_t(16.f + 230.f * (2.f * t - t * t));
+      }
+    }
+    return field;
+  }();
+  return source;
+}
+
 struct NautiloidDisplay final : OpaqueWidget {
   Nautiloid* module = nullptr;
   uint64_t generation = uint64_t(-1);
@@ -1250,10 +1287,12 @@ struct NautiloidDisplay final : OpaqueWidget {
       int height = 0;
       if (module) {
         source = module->previewSourceSnapshot();
-        if (source) {
-          width = source->width;
-          height = source->height;
-        }
+      } else {
+        source = nautiloidBrowserFractal();
+      }
+      if (source) {
+        width = source->width;
+        height = source->height;
       }
       const std::vector<uint8_t>* rgb = source ? &source->rgb8 : nullptr;
       rgba.resize(rgb ? rgb->size() / 3u * 4u : 0u);

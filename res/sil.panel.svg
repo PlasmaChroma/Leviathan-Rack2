@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="sil.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)" inkscape:label="Wave Art">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="sil.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)" inkscape:label="Wave Art">
   <defs id="defs1">
     <linearGradient id="linearGradient22" inkscape:collect="always">
       <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
@@ -66,18 +66,18 @@
   </g>
   <g id="panel_graphics" inkscape:label="Input and Output Fields">
     <g id="glass_input" inkscape:label="Input Box" data-theme-runtime-substrate="neutral">
-      <rect id="frame_inputs" x="648.55597" y="10538.557" width="3001.9146" height="1662.8877" rx="185.11812" ry="161.91278" fill="#000000" fill-opacity="1" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="42.1121" />
+      <rect id="frame_inputs" x="675" y="10538.557" width="3000" height="1662.8877" rx="185.11812" ry="161.91278" fill="#000000" fill-opacity="1" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="42.1121" />
     </g>
     <g id="glass_output" inkscape:label="Output Box" data-theme-runtime-substrate="neutral">
-      <rect id="frame_outputs" x="6409.5127" y="10538.557" width="3101.9329" height="1662.8882" rx="185.11531" ry="161.9128" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="42.1116" />
+      <rect id="frame_outputs" x="6485" y="10538.557" width="3000" height="1662.8877" rx="185.11812" ry="161.91278" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="#ffffff" stroke-opacity="0.06" stroke-width="42.1121" />
     </g>
   </g>
   <g id="components" style="display:inline">
     <circle id="BOOST_PARAM" cx="5080" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="INPUT_L_INPUT" cx="1400" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="INPUT_R_INPUT" cx="3000" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="OUTPUT_L_OUTPUT" cx="7160" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
-    <circle id="OUTPUT_R_OUTPUT" cx="8760" cy="11240" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="INPUT_L_INPUT" cx="1425" cy="11070" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="INPUT_R_INPUT" cx="2925" cy="11070" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="OUTPUT_L_OUTPUT" cx="7235" cy="11070" r="140" style="fill:#44ff00;fill-opacity:1" />
+    <circle id="OUTPUT_R_OUTPUT" cx="8735" cy="11070" r="140" style="fill:#44ff00;fill-opacity:1" />
     <circle id="LIMITER_ACTIVE_LIGHT" cx="1170" cy="8070" r="70" style="fill:#44ff00;fill-opacity:1" />
     <circle id="LOW_RECOVERY_LIGHT" cx="1170" cy="5004.7998" r="70" style="fill:#44ff00;fill-opacity:1" />
     <circle id="IMPACT_AIR_LIGHT" cx="1170" cy="5442.6855" r="70" style="fill:#44ff00;fill-opacity:1" />

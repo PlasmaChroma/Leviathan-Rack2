@@ -1,3 +1,11 @@
+#ifndef _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
+#endif
+#include <cmath>
+// Test harness needs Rack engine construction, which is not a plugin API.
+#include <context.hpp>
+#include <engine/Engine.hpp>
+#undef PRIVATE
 #include "../src/plugin.hpp"
 
 #include <atomic>
@@ -8,6 +16,9 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+// Stack-owned Rack fixture; application teardown is outside this test.
+namespace rack { Context::~Context() {} }
 
 Plugin* pluginInstance = nullptr;
 
@@ -334,6 +345,131 @@ void limiterTests(float sr) {
     }
 }
 
+void spectrumAndMakeupTests() {
+    Sil m;
+    alignas(16) float fft[Sil::FFT_SIZE] = {};
+    for (float sr : {22050.f, 44100.f, 48000.f, 96000.f, 192000.f}) {
+        m.updateSpectrumBinMap(sr);
+        for (int bin = int(3000.f * Sil::FFT_SIZE / sr) + 1;
+                bin < std::min(Sil::FFT_SIZE / 2, int(19500.f * Sil::FFT_SIZE / sr)); ++bin) {
+            fft[2*bin] = 1.f;
+            float peak=0.f;
+            for (const auto& entry : m.specBinMap) peak=std::max(peak,Sil::spectrumBarPower(fft,entry));
+            require(peak > .2f, "Spectrum mapping loses a high-frequency bin");
+            fft[2*bin]=0.f;
+        }
+        for (const auto& entry : m.specBinMap) if (!entry.active)
+            require(Sil::spectrumBarPower(fft,entry)==0.f,"Above-Nyquist bars must be empty");
+        setup(m,sr);
+        std::fill(std::begin(m.spec.bufferL),std::end(m.spec.bufferL),3.f);
+        std::fill(std::begin(m.spec.bufferR),std::end(m.spec.bufferR),-2.f);
+        m.publishSpectrumSnapshot();m.updateSpectrumDisplayFromLatestSnapshot();
+        for(int i=0;i<Sil::SPEC_FREQ_BINS;++i)
+            require(m.spec.magnitudesL[i]==0.f && m.spec.magnitudesR[i]==0.f,"DC leaks into spectrum");
+        for(int i=0;i<Sil::FFT_SIZE;++i)m.spec.bufferL[i]=sine(i,sr,6000);
+        m.publishSpectrumSnapshot();m.updateSpectrumDisplayFromLatestSnapshot();
+        float reference[Sil::SPEC_FREQ_BINS];std::copy(std::begin(m.spec.magnitudesL),std::end(m.spec.magnitudesL),reference);
+        for(int i=0;i<Sil::FFT_SIZE;++i)m.spec.bufferL[i]+=3.f;
+        std::fill(std::begin(m.spec.magnitudesL),std::end(m.spec.magnitudesL),0.f);
+        m.publishSpectrumSnapshot();m.updateSpectrumDisplayFromLatestSnapshot();
+        for(int i=0;i<Sil::SPEC_FREQ_BINS;++i)
+            require(std::fabs(m.spec.magnitudesL[i]-reference[i])<1e-7f,"DC changes tone display");
+    }
+    for (float sr : {44100.f,48000.f,96000.f,192000.f}) {
+        setup(m,sr);
+        rack::engine::Module::ProcessArgs args={};args.sampleRate=sr;args.sampleTime=1.f/sr;
+        float largestBoundaryStep=0.f, largestStep=0.f;
+        for(int i=0;i<int(sr*2);++i) {
+            const float before=m.saturator.makeupLinear;
+            const bool boundary=m.saturator.updateDivider.getClock()+1==m.saturator.updateDivider.getDivision();
+            float l,r;m.processSaturator(.5f*sine(i,sr,997),.5f*sine(i,sr,997),args,l,r);
+            const float delta=std::fabs(m.saturator.makeupLinear-before);
+            largestStep=std::max(largestStep,delta);
+            if(boundary)largestBoundaryStep=std::max(largestBoundaryStep,delta);
+            require(delta<=std::fabs(m.saturator.makeupStep)+3e-7f,"Makeup jumps at a control boundary");
+            require(std::isfinite(l)&&m.saturator.makeupLinear>=.999f,"Makeup ramp invalid");
+        }
+        require(m.saturator.makeupLinear>1.05f,"Makeup ramp fixture failed to engage");
+        std::printf("  %.0f Hz makeup: max gain increment %.8f, boundary %.8f\n",sr,largestStep,largestBoundaryStep);
+    }
+}
+
+void revisionSafetyTests() {
+    Sil m;
+    for (float sr : {0.f, -1.f, std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::infinity(), std::numeric_limits<float>::max(),
+            384000.f, 768000.f, 1024000.f, 1365000.f, 1366000.f, 4096000.f}) {
+        const int look = m.limiterLookaheadSamplesForRate(sr);
+        const int ramp = m.limiterRampSamplesForRate(sr, look);
+        require(look >= sil::TruePeakDetector::kLatencySamples + 2 && ramp >= 1
+            && look + ramp <= sil::LimiterPeakWindow::kMaximumDelaySamples, "Limiter capacity invariant");
+    }
+    for (float sr : {384000.f, 768000.f, 1024000.f}) {
+        setup(m, sr);
+        require(m.limiterLatencySamples == int(sr * .0015f + .5f), "High-rate full limiter duration");
+    }
+    setup(m, 48000.f);
+    m.params[Sil::BOOST_PARAM].setValue(4.f);
+    m.params[Sil::MASTERING_ENABLED_PARAM].setValue(0.f);
+    setup(m, 96000.f);
+    require(m.masteringMix == 0.f && std::fabs(m.boostGain - std::pow(10.f, .2f)) < .001f,
+        "Rate change must preserve current control values");
+    m.inputs[Sil::INPUT_L_INPUT].setChannels(1);
+    m.inputs[Sil::INPUT_R_INPUT].setChannels(1);
+    rack::engine::Module::ProcessArgs args = {}; args.sampleRate=96000.f;args.sampleTime=1.f/96000.f;
+    for (int i=0;i<20000;++i) {
+        m.inputs[Sil::INPUT_L_INPUT].setVoltage(20*sine(i,96000,315));
+        m.inputs[Sil::INPUT_R_INPUT].setVoltage(15*sine(i,96000,500)); m.process(args);
+    }
+    m.colorScheme=Sil::SCHEME_FIRE;
+    {
+        rack::Context context;
+        rack::engine::Engine engine;
+        context.engine = &engine;
+        rack::contextSet(&context);
+        m.onReset({});
+        context.engine = nullptr;
+        rack::contextSet(nullptr);
+    }
+    require(m.colorScheme==Sil::SCHEME_FIRE && m.params[Sil::BOOST_PARAM].getValue()==0.f
+        && m.params[Sil::MASTERING_ENABLED_PARAM].getValue()==1.f, "Reset control/theme policy");
+    Sil fresh;setup(fresh,96000.f);
+    fresh.inputs[Sil::INPUT_L_INPUT].setChannels(1);fresh.inputs[Sil::INPUT_R_INPUT].setChannels(1);
+    for (int i=0;i<12000;++i) {
+        const float x=i<3000?0.f:2*sine(i,96000,350);
+        for (Sil* module : {&m,&fresh}) {
+            module->inputs[Sil::INPUT_L_INPUT].setVoltage(x);
+            module->inputs[Sil::INPUT_R_INPUT].setVoltage(-.7f*x);module->process(args);
+        }
+        require(m.outputs[Sil::OUTPUT_L_OUTPUT].getVoltage()==fresh.outputs[Sil::OUTPUT_L_OUTPUT].getVoltage()
+            && m.outputs[Sil::OUTPUT_R_OUTPUT].getVoltage()==fresh.outputs[Sil::OUTPUT_R_OUTPUT].getVoltage(),
+            "Initialize must match a fresh module including tails and adaptation");
+    }
+    for (bool bypass : {false,true}) for (int mono : {0,1,2}) {
+        Sil guarded, reference;setup(guarded,48000);setup(reference,48000);
+        args.sampleRate=48000;args.sampleTime=1.f/48000;
+        for (Sil* module : {&guarded,&reference}) {
+            module->params[Sil::MASTERING_ENABLED_PARAM].setValue(bypass?0.f:1.f);
+            module->inputs[Sil::INPUT_L_INPUT].setChannels(mono==2?0:1);
+            module->inputs[Sil::INPUT_R_INPUT].setChannels(mono==1?0:1);
+        }
+        const float bad[]={std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()};
+        for(int i=0;i<8000;++i) {
+            for(int ch=0;ch<2;++ch) {
+                const bool inject=(i==123+ch || (i>=1000+ch*100 && i<1100+ch*100));
+                float x=2*sine(i,48000,ch?777:315);
+                guarded.inputs[ch].setVoltage(inject?bad[i%3]:x);
+                reference.inputs[ch].setVoltage(inject?0.f:x);
+            }
+            guarded.process(args);reference.process(args);
+            for(int ch=0;ch<2;++ch) require(std::isfinite(guarded.outputs[ch].getVoltage())
+                && guarded.outputs[ch].getVoltage()==reference.outputs[ch].getVoltage(),
+                "Nonfinite samples must behave exactly like zero, with recovery");
+        }
+    }
+}
+
 void detectorBoundTests() {
     sil::TruePeakDetector bounded, full;
     uint32_t rng=456;
@@ -353,12 +489,14 @@ void detectorBoundTests() {
 }
 
 int main(int argc, char**) {
-    if (argc>1) {for(float sr:{44100.f,48000.f,96000.f,192000.f})limiterTests(sr);return 0;}
+    if (argc>1) {for(float sr:{44100.f,48000.f,96000.f,192000.f,384000.f,768000.f})limiterTests(sr);return 0;}
     for(float sr:{44100.f,48000.f,96000.f,192000.f}) {detectorEdges(sr);eqDesign(sr);}
+    spectrumAndMakeupTests();
+    revisionSafetyTests();
     detectorBoundTests();
     for(float sr:{48000.f,96000.f}) {
         mudTests(sr);airTests(sr);midrangeTests(sr);glueTests(sr);stereoTests(sr);saturatorTests(sr);
     }
-    for(float sr:{44100.f,48000.f,96000.f,192000.f})limiterTests(sr);
+    for(float sr:{44100.f,48000.f,96000.f,192000.f,384000.f,768000.f})limiterTests(sr);
     std::puts("Sil isolated stage behavior tests passed");
 }

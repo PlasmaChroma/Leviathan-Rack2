@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 
 namespace levi_math {
 
@@ -12,12 +13,9 @@ inline float clamp01(float x) {
 	return std::max(0.f, std::min(x, 1.f));
 }
 
-// Float clamp for audio-rate code, a drop-in for rack::clamp() on float arguments.
-// rack::clamp() is std::fmax(std::fmin(x, hi), lo); without -ffinite-math-only (Rack's build does
-// not set it) GCC lowers each of those to a libm call. std::min/std::max lower to minss/maxss.
-// The operand order below reproduces fmax(fmin(x, hi), lo) exactly, including NaN (returns hi)
-// and lo > hi (returns lo), so it can replace clamp() anywhere the arguments are all float.
-// Integer, double and simd arguments must keep using clamp().
+// Fast float clamp with legacy operand ordering. For finite ordered bounds,
+// NaN x returns hi. Equal values select the bound's signed zero. NaN bounds
+// are not supported; this is not a general fmin/fmax semantic replacement.
 inline float clampf(float x, float lo, float hi) {
 	return std::max(lo, std::min(hi, x));
 }
@@ -122,6 +120,7 @@ inline float wrap01(float x) {
 	return x - std::floor(x);
 }
 
+// Single-cycle correction; callers guarantee finite x in [-1, 2).
 inline float wrap01Fast(float x) {
 	if (x >= 1.f) {
 		x -= 1.f;
@@ -181,8 +180,53 @@ inline double exp2Pitch(double x) {
 	return scale*(1.0 + f*(0.69315169353961 + f*(0.2401595990753 +
 		f*(0.055817908652 + f*(0.008991698010 + f*0.001879100722)))));
 }
+// Legacy policy: nonpositive x returns zero (including 0^0). For positive x,
+// require a normal finite double and log2Audio(x)*exponent in [-1022, 1022].
 inline double powUnitAudio(double x, double exponent) {
 	return x <= 0 ? 0.0 : exp2Pitch(log2Audio(x)*exponent);
+}
+
+// Checked entry points are opt-in. Existing bounded functions keep their exact
+// arithmetic and cost. Use strict floating-point flags when NaN/Inf handling
+// is required; finite-math-only invalidates these contracts.
+inline double exp2AudioChecked(double x) {
+	return x >= -1022.0 && x <= 1022.0 ? exp2Audio(x) : std::exp2(x);
+}
+
+inline double exp2PitchChecked(double x) {
+	return x >= -1022.0 && x <= 1022.0 ? exp2Pitch(x) : std::exp2(x);
+}
+
+inline double log2AudioChecked(double x) {
+	return x >= std::numeric_limits<double>::min()
+		&& x <= std::numeric_limits<double>::max() ? log2Audio(x) : std::log2(x);
+}
+
+// Retains powUnitAudio's nonpositive-input policy. Exceptional positive
+// inputs or transformed exponents outside the fast domain use libm pow.
+inline double powUnitAudioChecked(double x, double exponent) {
+	if (x <= 0.0) return 0.0;
+	if (x >= std::numeric_limits<double>::min()
+		&& x <= std::numeric_limits<double>::max()) {
+		const double power = log2Audio(x) * exponent;
+		if (power >= -1022.0 && power <= 1022.0) return exp2Pitch(power);
+	}
+	return std::pow(x, exponent);
+}
+
+// Arbitrary finite cycle phases. Nonfinite input produces NaN without a
+// float-to-integer conversion. Large float inputs already have lost fraction
+// bits; wrapping cannot recover that precision.
+inline float sinCyclesAudioChecked(float cycles) {
+	if (!std::isfinite(cycles)) return std::numeric_limits<float>::quiet_NaN();
+	return sinCyclesAudioBounded(cycles >= -2.f && cycles <= 2.f
+		? cycles : wrap01(cycles));
+}
+
+inline float triangleCyclesAudioChecked(float cycles) {
+	if (!std::isfinite(cycles)) return std::numeric_limits<float>::quiet_NaN();
+	return triangleCyclesAudioBounded(cycles >= -2.f && cycles <= 2.f
+		? cycles : wrap01(cycles));
 }
 
 } // namespace levi_math

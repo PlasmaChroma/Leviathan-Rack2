@@ -3036,7 +3036,7 @@ void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
 	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
 	for (size_t i = 0; i < baseColors.size(); ++i) {
 		engine::Light* light = getLight(int(i));
-		const float b = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		const float b = clamp(light ? light->getBrightness() : (module ? 0.f : previewBrightness), 0.f, 1.f);
 		brightness = std::max(brightness, b);
 		colorWeight += b;
 		mixedColor.r += baseColors[i].r * b;

@@ -71,7 +71,7 @@ struct StrandWidget : ModuleWidget {
     explicit StrandWidget(Strand* module) {
         setModule(module);
         const std::string panelPath = asset::plugin(pluginInstance, "res/Strand.panel.svg");
-        setPanel(createPanel(asset::plugin(pluginInstance, "res/Strand.background.svg")));
+        setPanel(visual_assets::createThemedPanel(panelPath, this));
         math::Rect artworkRectMm(Vec(0.f, 0.f), Vec(15.24f, 128.5f));
         panel_svg::loadRectFromSvgMm(panelPath, "FULL_PANEL_RASTER", &artworkRectMm);
         addChild(visual_assets::createAspectFitRasterImageWidget(

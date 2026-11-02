@@ -317,6 +317,8 @@ struct LeviathanResetButton : LeviathanIconButton {
 };
 
 struct SmallGoldApertureLight : app::ModuleLightWidget {
+	// Opt-in brightness for module-browser previews; live modules ignore this.
+	float previewBrightness = 0.f;
 	NVGcolor baseColor = nvgRGB(255, 235, 120);
 	NVGcolor activeColor = nvgRGB(255, 235, 120);
 

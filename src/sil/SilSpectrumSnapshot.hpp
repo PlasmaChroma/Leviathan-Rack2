@@ -9,6 +9,8 @@ struct SpectrumSnapshot {
   alignas(16) float mid[kFftSize] = {};
   alignas(16) float side[kFftSize] = {};
   uint32_t sequence = 0;
+  float sampleRate = 44100.f;
+  uint32_t resetRevision = 0;
 
   // Audio-owned rings; writePosition is the next write, hence the oldest
   // sample. Publish samples and their revision together in chronological order.

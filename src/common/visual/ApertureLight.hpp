@@ -22,6 +22,8 @@ void setApertureBloomMasksEnabled(bool enabled);
 std::string apertureBloomStatus();
 
 struct LeviathanApertureLight : app::ModuleLightWidget {
+	// Opt-in brightness for module-browser previews; live modules ignore this.
+	float previewBrightness = 0.f;
 	NVGcolor baseColor = nvgRGB(42, 246, 255);
 	NVGcolor activeColor = nvgRGB(42, 246, 255);
 	float socketRadius = 4.8f;
