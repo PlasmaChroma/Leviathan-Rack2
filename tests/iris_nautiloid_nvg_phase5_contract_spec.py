@@ -5,11 +5,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HELPER = (ROOT / "src" / "NvgGraphicsLifecycle.cpp").read_text(encoding="utf-8")
-IRIS_WIDGET = (ROOT / "src" / "IrisWidget.cpp").read_text(encoding="utf-8")
-NAUT_WIDGET = (ROOT / "src" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
-IRIS_HEADER = (ROOT / "src" / "Iris.hpp").read_text(encoding="utf-8")
-NAUT_HEADER = (ROOT / "src" / "Nautiloid.hpp").read_text(encoding="utf-8")
+HELPER = (ROOT / "src" / "common" / "render" / "NvgGraphicsLifecycle.cpp").read_text(encoding="utf-8")
+IRIS_WIDGET = (ROOT / "src" / "iris" / "IrisWidget.cpp").read_text(encoding="utf-8")
+NAUT_WIDGET = (ROOT / "src" / "nautiloid" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
+IRIS_HEADER = (ROOT / "src" / "iris" / "Iris.hpp").read_text(encoding="utf-8")
+NAUT_HEADER = (ROOT / "src" / "nautiloid" / "Nautiloid.hpp").read_text(encoding="utf-8")
 
 
 def section(text: str, start: str, end: str) -> str:

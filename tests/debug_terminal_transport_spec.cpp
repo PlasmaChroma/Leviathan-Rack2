@@ -45,5 +45,9 @@ int main() {
     submitSibylMetrics(1, 42, process, 1.5f, 1, step, draw, layer, component, component, 0);
     checkRows(latestMetricsJson(-1), 11);
     checkRows(latestMetricsJson(42), 1);
+    shutdownTransport();
+    submitBaselineMetrics("AfterShutdown", 2, process, step, draw, layer);
+    checkRows(latestMetricsJson(-1), 11);
+    shutdownTransport();
     std::puts("PASS: separate Draw and DrawLayer ranges/means survive every telemetry serializer");
 }

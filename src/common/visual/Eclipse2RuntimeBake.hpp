@@ -10,6 +10,7 @@ struct Raster {
 	bool attempted = false;
 	unsigned builds = 0;
 	bool prepare(Draw draw, void* user);
+	bool prepareSized(Draw draw, void* user, Vec logicalSize, float density);
 	void retryAfterContextCreate() { if (rgba.empty()) attempted = false; }
 };
 }

@@ -13,15 +13,15 @@ for start, end in [
     if start.startswith("void Eclipse2Knob"):
         # Keep all candidates offline: inject only the experimental cache seams
         # into the source-extracted baseline, leaving the plugin renderer intact.
-        a = section.index("\teclipse2_track::draw(")
+        a = section.index("\tif (!dotsOnly) eclipse2_track::draw(")
         b = section.index("\t// Active track background glow", a)
-        track = section[a:b]
+        track = section[a:b].replace("if (!dotsOnly) ", "")
         prelude = '''void drawTrackReference(const Widget::DrawArgs& args) {
  const Vec center(17,17); const float radiusPx=12.75f,largeRadiusPx=.51f;
  const float minAngle=-.83f*M_PI,maxAngle=.83f*M_PI;
  nvgSave(args.vg);
 ''' + track + '\n nvgRestore(args.vg);\n}\n'
-        section = section[:a] + '\tif (!eclipse2_ring::drawTrack(args)) {\n' + track + '\t}\n' + section[b:]
+        section = section[:a] + '\tif (!dotsOnly && !eclipse2_ring::drawTrack(args)) {\n' + track + '\t}\n' + section[b:]
         section = section.replace('const float x = center.x + radiusPx * std::sin(angle);\n\t\tconst float y = center.y - radiusPx * std::cos(angle);', '''const Vec direction = eclipse2_ring::cachedGeometry() && numLeds == 25
             ? eclipse2_ring::ledPosition(i,minAngle,maxAngle) : Vec(std::sin(angle),-std::cos(angle));
         const float x = center.x + radiusPx * direction.x;

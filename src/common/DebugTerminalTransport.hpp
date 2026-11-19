@@ -261,6 +261,7 @@ void submitSibylMetrics(uint32_t instanceId,
 // Read-only bridge for Octavia. This intentionally exposes only the latest
 // compact terminal metric row; detailed profiling belongs in a separate,
 // explicitly armed capture path.
+void shutdownTransport();
 std::string latestMetricsJson(int64_t rackModuleId);
 
 } // namespace debug_terminal

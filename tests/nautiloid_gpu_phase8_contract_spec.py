@@ -5,10 +5,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WIDGET = (ROOT / "src" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
-HEADER = (ROOT / "src" / "Nautiloid.hpp").read_text(encoding="utf-8")
-MODULE = (ROOT / "src" / "Nautiloid.cpp").read_text(encoding="utf-8")
-POLICY = (ROOT / "src" / "NautiloidGpuPrecision.hpp").read_text(encoding="utf-8")
+WIDGET = (ROOT / "src" / "nautiloid" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
+HEADER = (ROOT / "src" / "nautiloid" / "Nautiloid.hpp").read_text(encoding="utf-8")
+MODULE = (ROOT / "src" / "nautiloid" / "Nautiloid.cpp").read_text(encoding="utf-8")
+POLICY = (ROOT / "src" / "nautiloid" / "NautiloidGpuPrecision.hpp").read_text(encoding="utf-8")
 
 
 class NautiloidGpuPhase8ContractTest(unittest.TestCase):

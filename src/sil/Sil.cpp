@@ -322,7 +322,7 @@ struct Sil : Module {
 	float glueRmsCoeff = 0.f;
 	float glueAttackCoeff = 0.f;
 	float glueReleaseCoeff = 0.f;
-	float glueAdaptiveThresholdDb = -14.f;
+	float glueAdaptiveThresholdDb = -16.f;
 	dsp::ClockDivider glueThresholdUpdateDivider;
 	float midEnhanceEnvAttackCoeff = 0.f;
 	float midEnhanceEnvReleaseCoeff = 0.f;
@@ -503,38 +503,38 @@ struct Sil : Module {
 	static constexpr float kMudHighHz = 520.f;
 	static constexpr float kMudCenterHz = 315.f;
 	static constexpr float kMudQ = 0.75f;
-	static constexpr float kMudAllowedWarmthDb = 1.5f;
-	static constexpr float kMudThresholdDb = 2.0f;
+	static constexpr float kMudAllowedWarmthDb = 1.0f;
+	static constexpr float kMudThresholdDb = 1.6f;
 	static constexpr float kMudKneeDb = 4.0f;
-	static constexpr float kMudMaxCutDb = 2.5f;
+	static constexpr float kMudMaxCutDb = 4.0f;
 	static constexpr float kMudAttackSec = 0.120f;
 	static constexpr float kMudReleaseSec = 0.850f;
 	static constexpr float kMudEnvAttackSec = 0.030f;
 	static constexpr float kMudEnvReleaseSec = 0.220f;
-	static constexpr float kImpactAirMaxLiftDb = 0.75f;
+	static constexpr float kImpactAirMaxLiftDb = 2.25f;
 	static constexpr float kImpactAirShelfHz = 1000.f;
 	static constexpr float kImpactAirShelfQ = 0.707f;
 	static constexpr float kImpactAirEnvAttackSec = 0.004f;
 	static constexpr float kImpactAirEnvReleaseSec = 0.070f;
 	static constexpr float kImpactAirSlowAttackSec = 0.120f;
 	static constexpr float kImpactAirSlowReleaseSec = 0.450f;
-	static constexpr float kImpactAirGainAttackSec = 0.010f;
-	static constexpr float kImpactAirGainReleaseSec = 0.090f;
+	static constexpr float kImpactAirGainAttackSec = 0.008f;
+	static constexpr float kImpactAirGainReleaseSec = 0.110f;
 	static constexpr float kImpactAirSlowFloorVolts = 0.015f;
-	static constexpr float kImpactAirTransientThresholdDb = 3.5f;
-	static constexpr float kImpactAirTransientKneeDb = 3.0f;
+	static constexpr float kImpactAirTransientThresholdDb = 3.2f;
+	static constexpr float kImpactAirTransientKneeDb = 2.4f;
 	static constexpr int kImpactAirCoeffDivision = 32;
-	static constexpr float kGlueRatio = 1.5f;
-	static constexpr float kGlueAttackSec = 0.030f;
-	static constexpr float kGlueReleaseSec = 0.250f;
+	static constexpr float kGlueRatio = 2.25f;
+	static constexpr float kGlueAttackSec = 0.025f;
+	static constexpr float kGlueReleaseSec = 0.220f;
 	static constexpr float kGlueKneeDb = 8.f;
-	static constexpr float kGlueThresholdDb = -14.f;
-	static constexpr float kGlueAdaptiveOffsetDb = 6.f;
-	static constexpr float kGlueAdaptiveMinThresholdDb = -24.f;
+	static constexpr float kGlueThresholdDb = -16.f;
+	static constexpr float kGlueAdaptiveOffsetDb = 8.f;
+	static constexpr float kGlueAdaptiveMinThresholdDb = -26.f;
 	static constexpr float kGlueAdaptiveMaxThresholdDb = -8.f;
 	static constexpr int kGlueThresholdUpdateDivision = 1024;
-	static constexpr float kGlueMaxGainReductionDb = 3.f;
-	static constexpr float kGlueMaxMakeupDb = 2.0f;
+	static constexpr float kGlueMaxGainReductionDb = 6.f;
+	static constexpr float kGlueMaxMakeupDb = 4.5f;
 	static constexpr float kGlueMakeupFraction = 0.75f;
 	static constexpr float kGlueSidechainHpHz = 90.f;
 	static constexpr float kMidEnhanceLowRefLowHz = 140.f;
@@ -545,13 +545,13 @@ struct Sil : Module {
 	static constexpr float kMidEnhancePresenceHighHz = 6500.f;
 	static constexpr float kMidEnhanceCenterHz = 1450.f;
 	static constexpr float kMidEnhanceQ = 0.72f;
-	static constexpr float kMidEnhanceMaxLiftDb = 0.85f;
+	static constexpr float kMidEnhanceMaxLiftDb = 2.0f;
 	static constexpr float kMidEnhanceGateDbFs = -50.f;
 	static constexpr float kMidEnhanceGateKneeDb = 12.f;
-	static constexpr float kMidEnhanceDeficitThresholdDb = 1.15f;
+	static constexpr float kMidEnhanceDeficitThresholdDb = 0.90f;
 	static constexpr float kMidEnhanceDeficitKneeDb = 4.50f;
-	static constexpr float kMidEnhanceRefBiasDb = 0.75f;
-	static constexpr float kMidEnhanceRemoveMudAssistDb = 0.35f;
+	static constexpr float kMidEnhanceRefBiasDb = 0.55f;
+	static constexpr float kMidEnhanceRemoveMudAssistDb = 0.50f;
 	static constexpr float kMidEnhancePresenceNormDb = 1.75f;
 	static constexpr float kMidEnhancePresenceGuardThresholdDb = 2.50f;
 	static constexpr float kMidEnhancePresenceGuardKneeDb = 5.00f;
@@ -567,7 +567,7 @@ struct Sil : Module {
 	static constexpr float kStereoMidMaxCutDb = 2.0f;
 	static constexpr float kStereoSideCenterHz = 6000.f;
 	static constexpr float kStereoSideQ = 0.71f;
-	static constexpr float kStereoSideMaxLiftDb = 2.0f;
+	static constexpr float kStereoSideMaxLiftDb = 3.75f;
 	static constexpr float kStereoMid350LowHz = 270.f;
 	static constexpr float kStereoMid350HighHz = 470.f;
 	static constexpr float kStereoMidBroadLowHz = 120.f;
@@ -584,7 +584,7 @@ struct Sil : Module {
 	static constexpr float kStereoMidExcessKneeDb = 5.0f;
 	static constexpr float kStereoSideGateDbFs = -56.f;
 	static constexpr float kStereoSideGateKneeDb = 10.f;
-	static constexpr float kStereoSideAlreadyBrightDb = 1.5f;
+	static constexpr float kStereoSideAlreadyBrightDb = 1.8f;
 	static constexpr float kStereoSideBrightKneeDb = 4.0f;
 	static constexpr float kStereoEnvAttackSec = 0.040f;
 	static constexpr float kStereoEnvReleaseSec = 0.300f;
@@ -594,7 +594,7 @@ struct Sil : Module {
 	static constexpr float kStereoSideGainReleaseSec = 1.200f;
 	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
-	static constexpr float kLimiterReconstructionMarginGain = 1.059253725f; // +0.5 dB detector headroom
+	static constexpr float kLimiterReconstructionMarginGain = 1.011579454f; // +0.1 dB: residual 128-tap detector error on broadband near-Nyquist content
 	static constexpr float kLimiterLookaheadSeconds = 0.0005f;
 	static constexpr float kLimiterAttackRampSeconds = 0.001f;
 	static constexpr float kMasteringCrossfadeSeconds = 0.010f;
@@ -603,15 +603,15 @@ struct Sil : Module {
 	static constexpr float kLimiterMetricReleaseSec = 0.750f;
 	static constexpr float kLimiterMetricGrSec = 0.120f;
 	static constexpr float kLimiterTriggerDb = 0.10f;
-	static constexpr float kSaturatorTargetPreLimiterDb = -0.50f;
-	static constexpr float kSatMaxMakeupDb = 3.25f;
-	static constexpr float kSatMaxDrive = 1.60f;
+	static constexpr float kSaturatorTargetPreLimiterDb = -0.25f;
+	static constexpr float kSatMaxMakeupDb = 4.50f;
+	static constexpr float kSatMaxDrive = 2.10f;
 	static constexpr float kSatMinDrive = 1.0f;
-	static constexpr float kSatLimiterSeekBoostDb = 0.75f;
-	static constexpr float kSatLimiterTargetEngagement = 0.25f;
-	static constexpr float kSatLimiterGrBackoffStartDb = 1.25f;
+	static constexpr float kSatLimiterSeekBoostDb = 1.15f;
+	static constexpr float kSatLimiterTargetEngagement = 0.30f;
+	static constexpr float kSatLimiterGrBackoffStartDb = 1.50f;
 	static constexpr float kSatLimiterGrBackoffKneeDb = 1.5f;
-	static constexpr float kSatLimiterGrBackoffDb = 1.5f;
+	static constexpr float kSatLimiterGrBackoffDb = 2.0f;
 	static constexpr float kSatMakeupAttackSec = 0.90f;
 	static constexpr float kSatMakeupReleaseSec = 2.80f;
 	static constexpr float kSatDriveAttackSec = 1.20f;
@@ -619,11 +619,11 @@ struct Sil : Module {
 	static constexpr float kSatHistoryPercentile = 0.990f;
 	static constexpr float kSatHistorySeconds = 8.f;
 	static constexpr int kSatUpdateDivision = 512;
-	static constexpr float kSatTubeBias = 0.055f;
-	static constexpr float kSatTubeWet = 0.72f;
+	static constexpr float kSatTubeBias = 0.075f;
+	static constexpr float kSatTubeWet = 0.85f;
 	// The shaper's small-signal gain exceeds unity even at drive 1, so the wet
 	// path fades in over the first part of the makeup range instead of switching.
-	static constexpr float kSatWetFadeDb = 0.5f;
+	static constexpr float kSatWetFadeDb = 0.65f;
 	static constexpr int kLightDivision = 32;
 
 	static float toDbSafe(float v) {
@@ -1308,7 +1308,7 @@ struct Sil : Module {
 			const float minBand = std::max(1e-7f, std::min(narrow[0], std::min(narrow[1], narrow[2])));
 			const float maxBand = std::max(narrow[0], std::max(narrow[1], narrow[2]));
 			const float spreadDb = toDbSafe(maxBand / minBand);
-			const float broadness = inverseSoftKnee01(spreadDb, 5.f, 4.f);
+			const float broadness = inverseSoftKnee01(spreadDb, 4.5f, 3.5f);
 			const float levelGate = softKnee01(toDbFsSafe(env[0]), -60.f, 12.f);
 			const float activation = softKnee01(mudDeltaDb, kMudThresholdDb, kMudKneeDb) * broadness * levelGate;
 			removeMud.targetCutDb = -kMudMaxCutDb * activation;
@@ -1541,7 +1541,7 @@ struct Sil : Module {
 			// Empty history is silence, not a request for maximum makeup/drive.
 			if (saturator.validBinCount == 0) desiredMakeupDb = 0.f;
 			const float desiredDrive = clampf(
-				1.f + desiredMakeupDb * 0.18f,
+				1.f + desiredMakeupDb * 0.24f,
 				kSatMinDrive,
 				kSatMaxDrive
 			);
@@ -1625,7 +1625,7 @@ struct Sil : Module {
 		limiterDelayWrite = (limiterDelayWrite + 1) % delayLen;
 
 		// Apply the same boost to the lookahead envelope and delayed audio.
-		// 0.5 dB margin covers finite-grid/window error and gain modulation; this is an
+		// 0.1 dB margin covers residual window error on near-Nyquist content; this is an
 		// oversampled peak estimate, not a certified reconstruction guarantee.
 		const float boostedDetectorPeak = detectorPeak * boostGain * kLimiterReconstructionMarginGain;
 		const float desiredGain = (boostedDetectorPeak > limiterCeiling)

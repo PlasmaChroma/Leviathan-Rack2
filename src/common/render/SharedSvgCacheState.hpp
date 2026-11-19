@@ -15,6 +15,11 @@ struct CacheEntry {
 	NVGcontext* renderVg = nullptr;
 	NVGcontext* lifetimeVg = nullptr;
 	NVGcontext* ownerVg = nullptr;
+	// Logical target size in 1/8 px. The same SVG drawn at two sizes needs two
+	// images: sharing one would re-rasterize it in place every frame and leave
+	// the first draw's deferred NanoVG fill pointing at a replaced image.
+	int sizeKeyW = 0;
+	int sizeKeyH = 0;
 	int imageHandle = -1;
 	int cachedWidth = 0;
 	int cachedHeight = 0;
@@ -27,9 +32,11 @@ class CacheState {
 	std::vector<CacheEntry> entries;
 
 public:
-	CacheEntry& findOrCreate(const rack::window::Svg* svg, NVGcontext* vg, NVGcontext* lifetimeVg) {
+	CacheEntry& findOrCreate(const rack::window::Svg* svg, NVGcontext* vg, NVGcontext* lifetimeVg,
+		int sizeKeyW = 0, int sizeKeyH = 0) {
 		for (auto& entry : entries) {
-			if (entry.svgKey == svg && entry.renderVg == vg && entry.lifetimeVg == lifetimeVg)
+			if (entry.svgKey == svg && entry.renderVg == vg && entry.lifetimeVg == lifetimeVg
+				&& entry.sizeKeyW == sizeKeyW && entry.sizeKeyH == sizeKeyH)
 				return entry;
 		}
 		entries.emplace_back();
@@ -37,6 +44,8 @@ public:
 		entry.svgKey = svg;
 		entry.renderVg = vg;
 		entry.lifetimeVg = lifetimeVg;
+		entry.sizeKeyW = sizeKeyW;
+		entry.sizeKeyH = sizeKeyH;
 		return entry;
 	}
 

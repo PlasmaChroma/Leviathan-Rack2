@@ -42,22 +42,28 @@ inline void drawNvgGrid(NVGcontext* vg, Vec size) {
 	nvgStroke(vg);
 }
 
-inline void drawNvgOpaqueGrid(NVGcontext* vg, Vec size) {
+inline void drawNvgOpaqueGrid(NVGcontext* vg, Vec size, unsigned char alpha = 255) {
 	nvgBeginPath(vg);
 	nvgRect(vg, 0.f, 0.f, size.x, size.y);
-	nvgFillColor(vg, nvgRGB(0, 0, 0));
+	nvgFillColor(vg, nvgRGBA(0, 0, 0, alpha));
 	nvgFill(vg);
 	drawNvgGrid(vg, size);
 }
 
 struct CachedOpaqueGridWidget final : TransparentWidget {
+	unsigned char alpha = 255;
 	void draw(const DrawArgs& args) override {
-		drawNvgOpaqueGrid(args.vg, box.size);
+		drawNvgOpaqueGrid(args.vg, box.size, alpha);
 	}
 };
 
 struct CachedOpaqueGridFramebuffer final : widget::FramebufferWidget {
+	bool opaqueBarrier = true;
 	void draw(const DrawArgs& args) override {
+		if (!opaqueBarrier) {
+			widget::FramebufferWidget::draw(args);
+			return;
+		}
 		// Framebuffer textures remain alpha-bearing even when their cached child
 		// fills every pixel. Establish a direct opaque barrier first so animated
 		// panel layers can never leak through transparent edge texels or a cache
@@ -70,11 +76,15 @@ struct CachedOpaqueGridFramebuffer final : widget::FramebufferWidget {
 	}
 };
 
-inline widget::FramebufferWidget* createCachedOpaqueGrid(Vec size) {
+// alpha < 255 makes the interior translucent so panel art shows through;
+// the opaque barrier is skipped in that case.
+inline widget::FramebufferWidget* createCachedOpaqueGrid(Vec size, unsigned char alpha = 255) {
 	auto* framebuffer = new CachedOpaqueGridFramebuffer();
+	framebuffer->opaqueBarrier = alpha == 255;
 	framebuffer->box.size = size;
 	framebuffer->dirtyOnSubpixelChange = false;
 	auto* surface = new CachedOpaqueGridWidget();
+	surface->alpha = alpha;
 	surface->box.size = size;
 	framebuffer->addChild(surface);
 	return framebuffer;

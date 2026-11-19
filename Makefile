@@ -1140,7 +1140,7 @@ build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp
 build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/nautiloid/Nautiloid.cpp src/nautiloid/Nautiloid.hpp src/nautiloid/NautiloidLocationCode.cpp src/iris/Iris.cpp src/iris/Iris.hpp src/iris/IrisIO.cpp src/common/fractal/SourceField.cpp src/chromatide/Chromatide.cpp src/chromatide/ChromatideCanvas.cpp src/common/UiExpanderUtils.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
-build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp src/integralflux/IntegralFlux.hpp src/common/MathHelpers.hpp | build/tests
+build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp src/integralflux/IntegralFlux.hpp src/common/MathHelpers.hpp src/common/MathsFunction.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp src/integralflux/IntegralFlux.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/legacy_curve_preview_spec: tests/legacy_curve_preview_spec.cpp src/common/render/LegacyCurvePreview.hpp src/common/render/SettledContourFramebuffer.hpp src/common/render/SnapshotHistory.hpp src/common/wavepreview/WavePreviewTracer.hpp | build/tests
@@ -1394,13 +1394,13 @@ build/tests/aperture_light_layers_spec: tests/aperture_light_layers_spec.cpp src
 
 # Explicit offline aperture candidates; not part of plugin or test-fast.
 build/tools/eclipse2/ring: tools/experiments/eclipse2/ring.cpp tools/experiments/eclipse2/fixture.hpp tools/experiments/eclipse2/main.inc build/tools/eclipse2/reference.inc tools/experiments/eclipse2/Eclipse2RingShader.hpp tools/experiments/eclipse2/Eclipse2RingExperiment.hpp src/common/visual/Eclipse2RingCache.hpp
-	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/ring.cpp src/common/render/AdaptiveGlSurface.cpp src/common/render/GlResourceRetirement.cpp src/common/render/GlLifecycleUtils.cpp src/common/render/NvgGraphicsLifecycle.cpp src/common/visual/Eclipse2RuntimeBake.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/ring.cpp src/common/render/SharedSvgCache.cpp src/common/render/NanoSvgRasterizer.cpp src/common/render/AdaptiveGlSurface.cpp src/common/render/GlResourceRetirement.cpp src/common/render/GlLifecycleUtils.cpp src/common/render/NvgGraphicsLifecycle.cpp src/common/visual/Eclipse2RuntimeBake.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 build/tools/eclipse2/reference.inc: tools/experiments/eclipse2/generate_reference.py src/common/visual/VisualAssets.cpp src/common/visual/Eclipse2Track.hpp
 	python3 tools/experiments/eclipse2/generate_reference.py
 
 build/tools/eclipse2/components: tools/experiments/eclipse2/components.cpp tools/experiments/eclipse2/fixture.hpp tools/experiments/eclipse2/main.inc build/tools/eclipse2/reference.inc src/common/visual/VisualAssets.hpp src/common/render/SharedSvgCache.hpp src/common/render/SharedSvgCache.cpp src/common/visual/Eclipse2RetainedCap.hpp src/common/render/NvgGraphicsLifecycle.cpp res/icon/Eclipse2Knob.svg res/icon/Eclipse2KnobShadow.svg
-	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/components.cpp src/common/render/SharedSvgCache.cpp src/common/render/NvgGraphicsLifecycle.cpp src/common/visual/Eclipse2RuntimeBake.cpp src/common/render/AdaptiveGlSurface.cpp src/common/render/GlResourceRetirement.cpp src/common/render/GlLifecycleUtils.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/components.cpp src/common/render/NanoSvgRasterizer.cpp src/common/render/SharedSvgCache.cpp src/common/render/NvgGraphicsLifecycle.cpp src/common/visual/Eclipse2RuntimeBake.cpp src/common/render/AdaptiveGlSurface.cpp src/common/render/GlResourceRetirement.cpp src/common/render/GlLifecycleUtils.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 build/tests/aperture_light_settling_spec build/tests/aperture_light_layers_spec build/tests/aperture_candidates: src/common/visual/ApertureBloomMasks.hpp
 
@@ -1577,3 +1577,24 @@ test-math-helpers: build/tests/math_helpers_spec build/tests/math_helpers_contra
 
 build/tests/math_helpers_contract_spec: tests/math_helpers_contract_spec.cpp src/common/MathHelpers.hpp src/common/MathHelpers.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -fno-fast-math -ffp-contract=off $< src/common/MathHelpers.cpp -o $@
+
+# Shared BOTH CV calibration used by both released function generators.
+build/tests/proc_runtime_spec build/tests/integral_flux_runtime_spec: src/common/BothTimeCv.hpp
+
+.PHONY: test-plasma-conduit
+test-plasma-conduit: build/tests/plasma-conduit$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,./$<)
+build/tests/plasma-conduit$(if $(ARCH_WIN),.exe,): tests/plasma_conduit_spec.cpp src/common/visual/PlasmaConduit.cpp src/common/visual/PlasmaConduit.hpp $(TARGET)
+	@mkdir -p $(@D)
+	$(CXX) -std=c++17 -O2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L. -l:$(TARGET) -L$(RACK_DIR) -lRack -o $@
+
+# Hidden-GL regression for the shared illuminated-button overlay.
+.PHONY: test-gold-aperture-cache
+test-gold-aperture-cache: build/tests/gold_aperture_cache_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,./$<)
+build/tests/gold_aperture_cache_spec$(if $(ARCH_WIN),.exe,): tests/gold_aperture_cache_spec.cpp tools/preview_benchmark_utils.hpp src/common/visual/VisualAssets.hpp src/common/visual/GoldApertureCache.hpp $(TARGET)
+	@mkdir -p $(@D)
+	$(CXX) -std=c++17 -D_USE_MATH_DEFINES -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< -L. -l:$(TARGET) -L$(RACK_DIR) -lRack $(if $(ARCH_WIN),-lopengl32,-lGL) -o $@
+
+# Standalone Eclipse2 probes need the shared SVG rasterizer implementation.
+build/tools/eclipse2/components build/tools/eclipse2/ring: src/common/render/NanoSvgRasterizer.cpp src/common/render/SharedSvgCache.cpp src/common/visual/Eclipse2DotAtlas.hpp

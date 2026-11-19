@@ -834,7 +834,7 @@ struct VesselWidget final : ModuleWidget {
             menu->addChild(createMenuLabel(string::f("Double-click to reset to %.1f mm.", defaultWidthMm)));
         }
         menu->addChild(new MenuSeparator);
-        menu->addChild(createSubmenuItem("Processing quality (performance test)", "", [m](Menu* sub) {
+        menu->addChild(createSubmenuItem("Processing quality", "", [m](Menu* sub) {
             const char* labels[] = {"48 kHz — Economy", "96 kHz — Balanced", "192 kHz — Reference"};
             for (int i = 0; i < 3; ++i) sub->addChild(createCheckMenuItem(labels[i], "",
                 [m, i]() { return m->requestedQuality.load(std::memory_order_relaxed) == i; },

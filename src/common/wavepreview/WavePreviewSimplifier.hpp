@@ -19,11 +19,12 @@ inline void simplifyPath(const PointType* points, size_t count, size_t stride, f
 
 	// Use stack memory for typical point counts (<= 512) to avoid heap allocation
 	// during draw calls. Fall back to std::vector for arbitrarily large counts.
-	size_t stackIndices[512];
+	// The index list holds at most count entries plus the appended final index.
+	size_t stackIndices[513];
 	size_t* indices = stackIndices;
 	std::vector<size_t> heapIndices;
 	if (count > 512) {
-		heapIndices.resize(count);
+		heapIndices.resize(count + 1);
 		indices = heapIndices.data();
 	}
 

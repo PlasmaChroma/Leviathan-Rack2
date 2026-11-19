@@ -6,11 +6,18 @@
 #include "ApertureLight.hpp"
 #include "PlasmaSwitch.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <vector>
 
 namespace visual_assets {
+
+// Effective dark-panel state: Rack's global setting, optionally flipped per
+// module (for example a module's "opposite theme" context-menu override).
+inline bool panelThemeDark(const std::atomic<bool>* invert) {
+	return settings::preferDarkPanels != (invert && invert->load(std::memory_order_relaxed));
+}
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
 // Loads a mipmapped raster texture and works around Rack's low-bit indexed
@@ -118,6 +125,8 @@ class SplitPanelRenderer final {
 	std::string themeTextOutputAssetPath_;
 	float leviathanLogoOpacity_ = 1.f;
 	bool addLeviathanLogo_ = false;
+	bool rasterBackgrounds_ = false; // labels follow the light/dark raster panel
+	const std::atomic<bool>* themeInvert_ = nullptr;
 
 public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath,
@@ -125,6 +134,17 @@ public:
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
+	// Replace the SVG panel background with per-theme raster art (light/dark
+	// follows Rack's "prefer dark panels"). Either path may be null to reuse the other.
+	void setRasterBackgrounds(const char* lightAssetPath, const char* darkAssetPath);
+	// Per-theme transparent overlay drawn over the raster background at rectPx
+	// (panel pixels). Only shown while a raster background is active.
+	void setRasterOverlay(const char* lightAssetPath, const char* darkAssetPath, math::Rect rectPx);
+	// Black shade (0-1 alpha) per theme over the raster background, under the overlay.
+	void setRasterShade(float lightAlpha, float darkAlpha = 0.f);
+	// Optional per-module flag that flips light/dark for the raster panel and
+	// theme-following labels. Must outlive the widget (module-owned); may be null.
+	void setThemeInvert(const std::atomic<bool>* invert);
 	int addPerfectWaveBranding(float opacity = 1.f);
 	int addPerfectWaveSoloBranding(float opacity = 1.f);
 	void addCompactLeviathanLogoBranding(float opacity = 1.f);
@@ -365,6 +385,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 	};
 
 	struct ShadowWidget : TransparentWidget {
+		bool retainedRenderer = false;
 		std::shared_ptr<window::Svg> svg;
 		widget::FramebufferWidget* cachedSvgFb = nullptr;
 		widget::SvgWidget* cachedSvgSw = nullptr;
@@ -384,6 +405,9 @@ struct GearKnobInvertSized : app::SvgKnob {
 	int dragMoveFrame = 0;
 	uint64_t dragLogGestureId = 0;
 	float lastBloomAmount = -1.f;
+	bool retainedRenderer = false;
+	unsigned stableVisualSteps = 0;
+	float lastVisualValue = -1.f;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
@@ -482,6 +506,7 @@ struct Eclipse2Knob : app::SvgKnob {
 	};
 
 	struct ProgressLedRingWidget : TransparentWidget {
+		bool dotsOnly = false; // Internal atlas bake; normal rendering includes track/glow.
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
@@ -498,10 +523,20 @@ struct Eclipse2Knob : app::SvgKnob {
 	float lastBloomAmount = -1.f;
 	bool lastRetainedCapEnabled = false;
 	bool lastRingCacheEnabled = false;
+	// Optional normalized live ring value. The owner must outlive this widget;
+	// nullptr restores parameter following. The cap always follows the parameter.
+	const std::atomic<float>* ringSource = nullptr;
+	bool retainedRenderer = true;
+	unsigned stableVisualSteps = 0;
+	float lastCapValue = -1.f;
+	float lastRingValue = -1.f;
 
 	Eclipse2Knob();
 	void step() override;
+	void draw(const DrawArgs& args) override;
 	void onChange(const ChangeEvent& e) override;
+	void setRingSource(const std::atomic<float>* source);
+	void setRetainedRenderer(bool enabled);
 
 	void setBackSvg(std::shared_ptr<window::Svg> svg);
 	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
@@ -583,6 +618,12 @@ struct LeviathanHaloKnob2 : app::Knob {
 		LedArcConfig ledArc;
 		BloomConfig bloom;
 		bool bipolar = false;
+		// Opt-in for modules with live arcs: pause GL updates after leaving the
+		// viewport, retaining the last surface until an actual draw resumes it.
+		bool suspendWhenUndrawn = false;
+		// Widget diameter in Rack px. Every layer, the shader and the cap scale
+		// from it; 46 is the standard size.
+		float diameter = 46.f;
 		// UI-only mapping for controls whose semantic zero spans a raw-value plateau.
 		float (*visualValue)(engine::ParamQuantity*, float) = nullptr;
 	};
@@ -628,6 +669,16 @@ struct LeviathanHaloKnob2 : app::Knob {
 	Config config;
 	float lastBloomAmount = -1.f;
 	float lastVisualValue = -1.f;
+	// Optional live source for the LED arc fill, normalized 0..1 (for example
+	// a module's effective level). The cap keeps following the knob. Null: the arc follows the knob as before. Written by the
+	// audio thread, read once per UI step with relaxed ordering.
+	const std::atomic<float>* arcSource = nullptr;
+	// Live arc redraw limits: changes smaller than arcQuantum are ignored and
+	// live updates are spaced at least arcInterval seconds apart.
+	float arcQuantum = 1.f / 512.f;
+	float arcInterval = 1.f / 30.f;
+	float lastArcValue = -1.f;
+	double lastArcTime = 0.0;
 	bool hovered = false;
 	bool dragging = false;
 	bool centerLit = false;
@@ -645,6 +696,8 @@ struct LeviathanHaloKnob2 : app::Knob {
 	bool isVisualDirty() const;
 	float normalizedParamValue();
 	void setForceNanoVgLedRenderer(bool force);
+	// Rendering audit/reference override; the shared texture path is the default.
+	void setTextureArcRenderer(bool enabled);
 	void updateCenterSvg();
 };
 

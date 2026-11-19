@@ -5,8 +5,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WIDGET = (ROOT / "src" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
-HELPER_HEADER = (ROOT / "src" / "GlLifecycleUtils.hpp").read_text(encoding="utf-8")
+WIDGET = (ROOT / "src" / "nautiloid" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
+HELPER_HEADER = (ROOT / "src" / "common" / "render" / "GlLifecycleUtils.hpp").read_text(encoding="utf-8")
 
 
 class NautiloidGlLifecycleContractTest(unittest.TestCase):

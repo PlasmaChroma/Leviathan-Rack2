@@ -79,6 +79,8 @@ bool isPuffyDrawLoggingEnabled();
 bool isWyrmDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 bool isDragonKingUserFractalParamsEnabled();
+// Debug-only Brand-menu stress rows, bounded to 0..10000.
+int getDeepcacheFakeBrandCount();
 void refreshDragonKingDebugEnabled();
 
 struct ModuleTeardownTimer {

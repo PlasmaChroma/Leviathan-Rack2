@@ -468,6 +468,8 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	ModuleWidgetContainer* moduleContainer = nullptr;
 	DeepcacheRasterWidget* rasterWidget = nullptr;
 	bool preservingRasterDuringRefresh = false;
+	// Bumped whenever the preview is torn down, so in-flight readbacks can detect staleness.
+	std::uint64_t previewSerial = 0;
 	bool captureDarkTheme = false;
 	std::uint64_t captureLeviathanTheme = 0;
 	double captureThemeReadyFrameTime = NAN;
@@ -827,6 +829,7 @@ public:
 		framebufferTarget_ = 0;
 		framebufferCompleted_ = 0;
 		framebufferWarmQueue_.clear();
+		discardReadbacks(true);
 		warmQueuedIndices_.clear();
 		warmTrackedGeneration_.clear();
 		onDemandBuildQueue_.clear();
@@ -855,6 +858,7 @@ public:
 		archive_.shutdown();
 		activeGeneration_ = 0;
 		browser_ = nullptr;
+		discardReadbacks(false);
 		lifetimeToken_.reset();
 	}
 
@@ -1031,6 +1035,7 @@ public:
             themeRefreshPendingIndices_.insert(index);
         }
         auto affected = [this](std::size_t index) { return modelUsesLeviathanTheme(index); };
+        discardReadbacksWhere(affected);
         framebufferWarmQueue_.erase(std::remove_if(framebufferWarmQueue_.begin(), framebufferWarmQueue_.end(),
             [&](const std::pair<std::size_t, int>& item) { return affected(item.first); }), framebufferWarmQueue_.end());
         persistentUploadQueue_.erase(std::remove_if(persistentUploadQueue_.begin(), persistentUploadQueue_.end(),
@@ -1058,6 +1063,7 @@ public:
 			worker_.cancel(activeGeneration_);
 		activeGeneration_ = 0;
 		framebufferWarmQueue_.clear();
+		discardReadbacks(true);
 		warmQueuedIndices_.clear();
 		warmTrackedGeneration_.clear();
 		onDemandBuildQueue_.clear();
@@ -1215,6 +1221,7 @@ public:
 		if (!browser_)
 			return;
 		graphicsContextLost_ = true;
+		discardReadbacks(false);
 		++graphicsGeneration_;
 		archive_.discardPendingDecodes();
 		browser_->invalidateFramebufferReadiness();
@@ -1302,11 +1309,9 @@ public:
 				setState(deepcache::CacheState::WARMING);
 		}
 
-		const double frameStart = system::getTime();
-		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4) {
-			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
+			if (processedThisFrame > 0 && uiBudgetExhausted())
 				break;
 			deepcache::PreviewBuildRequest request;
 			bool tracked = false;
@@ -1424,105 +1429,282 @@ public:
 		drainArchiveWriteRetries();
 		scheduleGraphicsRestore();
 		uploadPersistentImages();
-		if (stopped_ || !browser_ || !archiveWriteRetryQueue_.empty() ||
-		    framebufferWarmQueue_.empty()) {
+		if (stopped_ || !browser_) {
 			finishIfComplete();
 			return;
 		}
-		const double frameStart = system::getTime();
-		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
+		// Readbacks issued on an earlier frame have had a full frame for their
+		// DMA to finish, so mapping them now rarely stalls.
+		collectReadbacks(false);
+		if (!archiveWriteRetryQueue_.empty() || framebufferWarmQueue_.empty()) {
+			finishIfComplete();
+			return;
+		}
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
 			if (!archiveWriteRetryQueue_.empty() || !archive_.canAcceptWrite())
 				break;
-			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
+			if (processedThisFrame > 0 && uiBudgetExhausted())
 				break;
 			auto request = framebufferWarmQueue_.front();
 			framebufferWarmQueue_.pop_front();
 			DeepcacheModelBox* box = browser_->getModelBox(request.first);
 			const double startedAt = system::getTime();
 			FramebufferWarmResult result = box ? box->warmFramebuffer() : FramebufferWarmResult::FAILED;
+			processedThisFrame++;
 			if (result == FramebufferWarmResult::READY && box && box->framebuffer) {
+				if (pendingReadbacks_.size() >= kMaxPendingReadbacks)
+					collectReadbacks(true, 1);
+				if (issueReadback(box, request, startedAt))
+					continue;
+				// Asynchronous readback unavailable: fall back to a blocking capture.
 				std::vector<std::uint8_t> captured;
 				int width = 0;
 				int height = 0;
-				if (!box->captureFramebuffer(captured, width, height)) {
-					result = FramebufferWarmResult::RETRY;
-				}
-				else {
-					const bool themeRefresh = themeRefreshPendingIndices_.count(request.first) != 0;
-					const bool hadThemeComparison = themeRefresh && box->hasThemeComparison;
-					const bool unchangedAcrossThemes = hadThemeComparison &&
-						box->themeComparisonMatches(captured, width, height);
-					if (hadThemeComparison) {
-						const auto key = cacheKeyByModelIndex_.find(request.first);
-						const auto base = baseFingerprintByModelIndex_.find(request.first);
-						if (key != cacheKeyByModelIndex_.end() && base != baseFingerprintByModelIndex_.end() &&
-						    themeClassifier_.set(
-							key->second, base->second,
-							unchangedAcrossThemes ? deepcache::ThemeClassification::INVARIANT
-							                      : deepcache::ThemeClassification::SENSITIVE))
-							themeClassifierDirty_ = true;
-					}
-					auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(captured));
-					box->clearThemeComparison();
-					if (!box->installRasterPreview(pixels, width, height)) {
-						result = FramebufferWarmResult::FAILED;
-					}
-					else {
-						themeRefreshPendingIndices_.erase(request.first);
-						persistentModelIndices_.insert(request.first);
-						submitArchivePixels(request.first, pixels, width, height);
-						if (isDisplayEligible(request.first)) {
-							result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
-							       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
-						}
-						else {
-							// The temporary framebuffer was needed to create the QOI, but an
-							// unavailable model must not retain a persistent GPU image.
-							box->releasePersistentImage();
-							result = FramebufferWarmResult::READY;
-						}
-					}
-				}
+				result = box->captureFramebuffer(captured, width, height)
+				       ? completeCapture(request.first, box, std::move(captured), width, height)
+				       : FramebufferWarmResult::RETRY;
 			}
-			const double durationMs = (system::getTime() - startedAt) * 1000.0;
-			processedThisFrame++;
-			const int retryLimit =
-				result == FramebufferWarmResult::PENDING_ASSET ? 120 : 3;
-			if ((result == FramebufferWarmResult::RETRY ||
-					result == FramebufferWarmResult::PENDING_ASSET) &&
-				request.second < retryLimit) {
-				request.second++;
-				framebufferWarmQueue_.push_back(request);
-			}
-			else {
-				warmQueuedIndices_.erase(request.first);
-				const auto tracked = warmTrackedGeneration_.find(request.first);
-				const bool countsForActiveGeneration = tracked != warmTrackedGeneration_.end() &&
-				                                      tracked->second == activeGeneration_ && activeGeneration_ != 0;
-				warmTrackedGeneration_.erase(request.first);
-				if (countsForActiveGeneration) {
-					completed_++;
-					if (result != FramebufferWarmResult::READY)
-						failed_++;
-				}
-				if (result == FramebufferWarmResult::READY)
-					markFramebufferModelComplete(request.first);
-				else if (box && box->framebuffer) {
-					if (themeRefreshPendingIndices_.erase(request.first) != 0 && box->hasRasterPreview())
-						box->finishThemeRefreshKeepingRaster();
-					else
-						box->clearPreview();
-				}
-				if (isDragonKingDebugEnabled() && durationMs >= 16.0) {
-					WARN("Leviathan Deepcache: slow framebuffer warm %.2f ms: %s", durationMs,
-					     box && box->model ? box->model->getFullName().c_str() : "unknown");
-				}
-			}
-			publish();
+			finalizeWarmRequest(request, box, result, (system::getTime() - startedAt) * 1000.0);
 		}
 		finishIfComplete();
+	}
+
+	// Post-capture processing shared by the asynchronous and blocking readback
+	// paths. `captured` is top-down RGBA.
+	FramebufferWarmResult completeCapture(std::size_t modelIndex, DeepcacheModelBox* box,
+	                                      std::vector<std::uint8_t>&& captured, int width, int height) {
+		const bool themeRefresh = themeRefreshPendingIndices_.count(modelIndex) != 0;
+		const bool hadThemeComparison = themeRefresh && box->hasThemeComparison;
+		const bool unchangedAcrossThemes = hadThemeComparison &&
+			box->themeComparisonMatches(captured, width, height);
+		if (hadThemeComparison) {
+			const auto key = cacheKeyByModelIndex_.find(modelIndex);
+			const auto base = baseFingerprintByModelIndex_.find(modelIndex);
+			if (key != cacheKeyByModelIndex_.end() && base != baseFingerprintByModelIndex_.end() &&
+			    themeClassifier_.set(
+				key->second, base->second,
+				unchangedAcrossThemes ? deepcache::ThemeClassification::INVARIANT
+				                      : deepcache::ThemeClassification::SENSITIVE))
+				themeClassifierDirty_ = true;
+		}
+		auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(captured));
+		box->clearThemeComparison();
+		if (!box->installRasterPreview(pixels, width, height))
+			return FramebufferWarmResult::FAILED;
+		themeRefreshPendingIndices_.erase(modelIndex);
+		persistentModelIndices_.insert(modelIndex);
+		submitArchivePixels(modelIndex, pixels, width, height);
+		if (isDisplayEligible(modelIndex)) {
+			return box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
+			       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
+		}
+		// The temporary framebuffer was needed to create the QOI, but an
+		// unavailable model must not retain a persistent GPU image.
+		box->releasePersistentImage();
+		return FramebufferWarmResult::READY;
+	}
+
+	void finalizeWarmRequest(std::pair<std::size_t, int> request, DeepcacheModelBox* box,
+	                         FramebufferWarmResult result, double durationMs) {
+		const int retryLimit =
+			result == FramebufferWarmResult::PENDING_ASSET ? 120 : 3;
+		if ((result == FramebufferWarmResult::RETRY ||
+				result == FramebufferWarmResult::PENDING_ASSET) &&
+			request.second < retryLimit) {
+			request.second++;
+			framebufferWarmQueue_.push_back(request);
+		}
+		else {
+			warmQueuedIndices_.erase(request.first);
+			const auto tracked = warmTrackedGeneration_.find(request.first);
+			const bool countsForActiveGeneration = tracked != warmTrackedGeneration_.end() &&
+			                                      tracked->second == activeGeneration_ && activeGeneration_ != 0;
+			warmTrackedGeneration_.erase(request.first);
+			if (countsForActiveGeneration) {
+				completed_++;
+				if (result != FramebufferWarmResult::READY)
+					failed_++;
+			}
+			if (result == FramebufferWarmResult::READY)
+				markFramebufferModelComplete(request.first);
+			else if (box && box->framebuffer) {
+				if (themeRefreshPendingIndices_.erase(request.first) != 0 && box->hasRasterPreview())
+					box->finishThemeRefreshKeepingRaster();
+				else
+					box->clearPreview();
+			}
+			if (isDragonKingDebugEnabled() && durationMs >= 16.0) {
+				WARN("Leviathan Deepcache: slow framebuffer warm %.2f ms: %s", durationMs,
+				     box && box->model ? box->model->getFullName().c_str() : "unknown");
+			}
+		}
+		publish();
+	}
+
+	// Asynchronous framebuffer readback. glReadPixels into a pixel-pack buffer
+	// queues the transfer on the GPU instead of stalling until the render that
+	// produced it completes; the result is collected on a later frame.
+	struct PendingReadback {
+		std::pair<std::size_t, int> request;
+		GLuint pbo = 0;
+		int width = 0;
+		int height = 0;
+		std::uint64_t previewSerial = 0;
+		double startedAt = 0.0;
+		double issuedFrameTime = 0.0;
+	};
+	static constexpr std::size_t kMaxPendingReadbacks = 4;
+
+	bool issueReadback(DeepcacheModelBox* box, const std::pair<std::size_t, int>& request, double startedAt) {
+		if (!box->framebuffer || !box->hasValidFramebufferImage())
+			return false;
+		NVGLUframebuffer* fb = box->framebuffer->getFramebuffer();
+		if (!fb || fb->fbo == 0)
+			return false;
+		const math::Vec size = box->framebuffer->getFramebufferSize();
+		const int width = static_cast<int>(std::round(size.x));
+		const int height = static_cast<int>(std::round(size.y));
+		if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
+		    static_cast<std::uint64_t>(width) * height * 4ull > 128ull * 1024ull * 1024ull)
+			return false;
+		while (glGetError() != GL_NO_ERROR) {}
+		GLuint pbo = 0;
+		while (!freeReadbackBuffers_.empty() && pbo == 0) {
+			pbo = freeReadbackBuffers_.back();
+			freeReadbackBuffers_.pop_back();
+			if (!glIsBuffer(pbo))
+				pbo = 0;
+		}
+		if (pbo == 0)
+			glGenBuffers(1, &pbo);
+		if (pbo == 0)
+			return false;
+		GLint previousPack = 0;
+		GLint previousFbo = 0;
+		GLint previousAlignment = 4;
+		glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previousPack);
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+		glGetIntegerv(GL_PACK_ALIGNMENT, &previousAlignment);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
+		glBufferData(GL_PIXEL_PACK_BUFFER, static_cast<GLsizeiptr>(width) * height * 4, nullptr, GL_STREAM_READ);
+		glBindFramebuffer(GL_FRAMEBUFFER, fb->fbo);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glPixelStorei(GL_PACK_ALIGNMENT, previousAlignment);
+		glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFbo));
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(previousPack));
+		if (glGetError() != GL_NO_ERROR) {
+			glDeleteBuffers(1, &pbo);
+			return false;
+		}
+		PendingReadback pending;
+		pending.request = request;
+		pending.pbo = pbo;
+		pending.width = width;
+		pending.height = height;
+		pending.previewSerial = box->previewSerial;
+		pending.startedAt = startedAt;
+		pending.issuedFrameTime = APP->window->getFrameTime();
+		pendingReadbacks_.push_back(pending);
+		return true;
+	}
+
+	// Maps the buffer and copies rows out in reverse, which yields top-down
+	// rows within the copy the readback needs anyway (no separate flip pass).
+	bool mapReadback(const PendingReadback& pending, std::vector<std::uint8_t>& rgba) {
+		while (glGetError() != GL_NO_ERROR) {}
+		GLint previousPack = 0;
+		glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previousPack);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, pending.pbo);
+		const std::uint8_t* src = static_cast<const std::uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+		bool ok = false;
+		if (src) {
+			const std::size_t stride = static_cast<std::size_t>(pending.width) * 4u;
+			rgba.resize(stride * static_cast<std::size_t>(pending.height));
+			for (int y = 0; y < pending.height; ++y) {
+				std::memcpy(rgba.data() + static_cast<std::size_t>(y) * stride,
+				            src + static_cast<std::size_t>(pending.height - 1 - y) * stride, stride);
+			}
+			ok = glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
+		}
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(previousPack));
+		if (glGetError() != GL_NO_ERROR)
+			ok = false;
+		if (!ok)
+			rgba.clear();
+		return ok;
+	}
+
+	// Collects pending readbacks oldest first. Unless `force`, only reads issued
+	// on an earlier frame are collected; `limit` bounds how many are taken.
+	void collectReadbacks(bool force, std::size_t limit = kMaxPendingReadbacks) {
+		const double frameTime = APP && APP->window ? APP->window->getFrameTime() : 0.0;
+		std::size_t collected = 0;
+		while (!pendingReadbacks_.empty() && collected < limit) {
+			const PendingReadback pending = pendingReadbacks_.front();
+			if (!force && pending.issuedFrameTime == frameTime)
+				break;
+			pendingReadbacks_.pop_front();
+			collected++;
+			std::vector<std::uint8_t> captured;
+			const bool mapped = mapReadback(pending, captured);
+			freeReadbackBuffers_.push_back(pending.pbo);
+			DeepcacheModelBox* box = browser_ ? browser_->getModelBox(pending.request.first) : nullptr;
+			FramebufferWarmResult result = FramebufferWarmResult::RETRY;
+			if (box && box->framebuffer && box->previewSerial == pending.previewSerial &&
+			    box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY) {
+				if (mapped)
+					result = completeCapture(pending.request.first, box, std::move(captured),
+					                         pending.width, pending.height);
+			}
+			else if (warmQueuedIndices_.count(pending.request.first) == 0) {
+				// The request was withdrawn while in flight.
+				continue;
+			}
+			finalizeWarmRequest(pending.request, box, result,
+			                    (system::getTime() - pending.startedAt) * 1000.0);
+		}
+	}
+
+	// Drops in-flight readbacks. Buffers are deleted only while the owning GL
+	// context is still alive; otherwise the handles are simply forgotten.
+	void discardReadbacks(bool deleteBuffers) {
+		if (deleteBuffers) {
+			for (const PendingReadback& pending : pendingReadbacks_)
+				glDeleteBuffers(1, &pending.pbo);
+			for (GLuint pbo : freeReadbackBuffers_)
+				glDeleteBuffers(1, &pbo);
+		}
+		pendingReadbacks_.clear();
+		freeReadbackBuffers_.clear();
+	}
+
+	// Drops in-flight readbacks for models matching `affected`.
+	template <typename Pred>
+	void discardReadbacksWhere(Pred affected) {
+		for (auto it = pendingReadbacks_.begin(); it != pendingReadbacks_.end();) {
+			if (affected(it->request.first)) {
+				freeReadbackBuffers_.push_back(it->pbo);
+				it = pendingReadbacks_.erase(it);
+			}
+			else
+				++it;
+		}
+	}
+
+	// One UI work budget per frame, shared by construction, archive restore,
+	// persistent upload, and framebuffer warming, so the stages together stay
+	// within uiBudgetMicros instead of each spending it independently.
+	bool uiBudgetExhausted() {
+		const double now = system::getTime();
+		const double frameTime = APP && APP->window ? APP->window->getFrameTime() : now;
+		if (frameTime != uiBudgetFrameTime_) {
+			uiBudgetFrameTime_ = frameTime;
+			const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
+			uiBudgetDeadline_ = now + budgetMs / 1000.0;
+		}
+		return now >= uiBudgetDeadline_;
 	}
 
 	int completedCount() const { return completed_; }
@@ -1892,8 +2074,6 @@ private:
 	}
 
 	void drainArchiveDecoded() {
-		const double startedAt = system::getTime();
-		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int drained = 0;
 		deepcache::DecodedPreview preview;
 		while (drained < 16 && restoreUploadQueuedIndices_.size() < 16 &&
@@ -1948,7 +2128,7 @@ private:
 			}
 			preview = deepcache::DecodedPreview();
 			drained++;
-			if ((system::getTime() - startedAt) * 1000.0 >= budgetMs)
+			if (uiBudgetExhausted())
 				break;
 		}
 	}
@@ -1956,13 +2136,11 @@ private:
 	void uploadPersistentImages() {
 		if (!APP || !APP->window || !APP->window->vg || persistentUploadQueue_.empty())
 			return;
-		const double startedAt = system::getTime();
-		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int uploaded = 0;
 		const std::size_t queuedAtStart = persistentUploadQueue_.size();
 		while (!persistentUploadQueue_.empty() && uploaded < 16 &&
 		       static_cast<std::size_t>(uploaded) < queuedAtStart) {
-			if (uploaded > 0 && (system::getTime() - startedAt) * 1000.0 >= budgetMs)
+			if (uploaded > 0 && uiBudgetExhausted())
 				break;
 			const auto request = persistentUploadQueue_.front();
 			persistentUploadQueue_.pop_front();
@@ -2073,6 +2251,7 @@ private:
 	int framebufferTarget_ = 0;
 	int framebufferCompleted_ = 0;
 	std::deque<std::pair<std::size_t, int>> framebufferWarmQueue_;
+std::deque<PendingReadback> pendingReadbacks_;	std::vector<GLuint> freeReadbackBuffers_;	double uiBudgetFrameTime_ = -1.0;	double uiBudgetDeadline_ = 0.0;
 	std::unordered_set<std::size_t> warmQueuedIndices_;
 	std::unordered_map<std::size_t, std::uint64_t> warmTrackedGeneration_;
 	std::deque<std::size_t> onDemandBuildQueue_;
@@ -2697,6 +2876,7 @@ void DeepcacheModelBox::invalidateFramebufferReadiness() {
 void DeepcacheModelBox::clearPreview(bool deleteGraphicsResources) {
 	if (state == deepcache::PreviewEntryState::CONSTRUCTING)
 		return;
+	previewSerial++;
 	if (previewRoot) {
 		releaseFramebuffers(previewRoot, deleteGraphicsResources);
 		if (previewRoot->parent == this)
@@ -3563,6 +3743,9 @@ void DeepcacheBrandItem::step() {
 }
 
 void DeepcacheBrandButton::onAction(const ActionEvent& e) {
+	// Reopening the menu picks up stress-test count edits without restarting Rack.
+	if (isDragonKingDebugEnabled())
+		refreshDragonKingDebugEnabled();
 	auto* menu = createMenu<DeepcacheMulticolumnMenu>();
 	menu->anchorPos = getAbsoluteOffset(math::Vec(0, box.size.y));
 	menu->box.pos = menu->anchorPos;
@@ -3593,6 +3776,13 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 		item->registeredModelCount = brandEntry.second.second;
 		item->browser = browser;
 		item->browserLifetime = browser->lifetimeToken;
+		menu->addChild(item);
+	}
+	const int fakeBrandCount = getDeepcacheFakeBrandCount();
+	for (int i = 1; i <= fakeBrandCount; ++i) {
+		auto* item = new ui::MenuItem;
+		item->text = "Fake " + std::to_string(i);
+		item->disabled = true;
 		menu->addChild(item);
 	}
 }

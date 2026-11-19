@@ -12,8 +12,11 @@ const char* const kPlasmaConduitAnchorGroupId = "plasma_conduit_anchors";
 namespace {
 
 struct PlasmaConduitSegment {
+	panel_svg::SvgPathCommand::Type type = panel_svg::SvgPathCommand::LineTo;
 	Vec start;
 	Vec end;
+	Vec control1;
+	Vec control2;
 };
 
 struct PlasmaConduitWidget final : Widget {
@@ -23,7 +26,18 @@ struct PlasmaConduitWidget final : Widget {
 		auto stroke = [&](float widthMm, NVGcolor color) {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, segment.start.x, segment.start.y);
-			nvgLineTo(args.vg, segment.end.x, segment.end.y);
+			switch (segment.type) {
+			case panel_svg::SvgPathCommand::QuadTo:
+				nvgQuadTo(args.vg, segment.control1.x, segment.control1.y, segment.end.x, segment.end.y);
+				break;
+			case panel_svg::SvgPathCommand::BezierTo:
+				nvgBezierTo(args.vg, segment.control1.x, segment.control1.y,
+					segment.control2.x, segment.control2.y, segment.end.x, segment.end.y);
+				break;
+			default:
+				nvgLineTo(args.vg, segment.end.x, segment.end.y);
+				break;
+			}
 			nvgStrokeWidth(args.vg, mm2px(widthMm));
 			nvgLineCap(args.vg, NVG_ROUND);
 			nvgStrokeColor(args.vg, color);
@@ -76,12 +90,13 @@ struct VisiblePlasmaConduitFramebuffer final : widget::FramebufferWidget {
 	}
 };
 
-bool appendStraightSegments(
+bool appendConduitSegments(
 	const panel_svg::SvgPathMatch& path,
 	std::vector<PlasmaConduitSegment>* segments) {
 	if (!segments) {
 		return false;
 	}
+	const size_t originalSize = segments->size();
 	Vec current;
 	bool hasCurrent = false;
 	bool appended = false;
@@ -91,15 +106,32 @@ bool appendStraightSegments(
 			hasCurrent = true;
 			continue;
 		}
-		if (command.type != panel_svg::SvgPathCommand::LineTo || !hasCurrent) {
+		const bool line = command.type == panel_svg::SvgPathCommand::LineTo;
+		const bool quad = command.type == panel_svg::SvgPathCommand::QuadTo;
+		const bool cubic = command.type == panel_svg::SvgPathCommand::BezierTo;
+		if (!hasCurrent || (!line && !quad && !cubic)) {
+			// Centerlines are open paths. Reject an unsupported path atomically,
+			// rather than leaving an accidentally truncated conduit on the panel.
+			segments->resize(originalSize);
 			return false;
 		}
-		const Vec delta = command.p1.minus(current);
-		if (delta.x * delta.x + delta.y * delta.y > 1e-8f) {
-			segments->push_back({mm2px(current), mm2px(command.p1)});
+		const Vec end = line ? command.p1 : quad ? command.p2 : command.p3;
+		auto distinct = [&](Vec point) {
+			const Vec delta = point.minus(current);
+			return delta.x * delta.x + delta.y * delta.y > 1e-8f;
+		};
+		// A curve can return to its starting point and still have visible length.
+		if (distinct(end) || (!line && distinct(command.p1)) || (cubic && distinct(command.p2))) {
+			PlasmaConduitSegment segment;
+			segment.type = command.type;
+			segment.start = mm2px(current);
+			segment.end = mm2px(end);
+			if (!line) segment.control1 = mm2px(command.p1);
+			if (cubic) segment.control2 = mm2px(command.p2);
+			segments->push_back(segment);
 			appended = true;
 		}
-		current = command.p1;
+		current = end;
 	}
 	return appended;
 }
@@ -118,7 +150,7 @@ widget::FramebufferWidget* createPlasmaConduitLayer(
 
 	PlasmaConduitWidget* conduits = new PlasmaConduitWidget();
 	for (const panel_svg::SvgPathMatch& path : paths) {
-		appendStraightSegments(path, &conduits->segments);
+		appendConduitSegments(path, &conduits->segments);
 	}
 	if (conduits->segments.empty()) {
 		delete conduits;

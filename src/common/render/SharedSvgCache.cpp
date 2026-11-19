@@ -49,7 +49,8 @@ int getSharedSvgImage(NVGcontext* vg,
 	if (APP && APP->window && (vg == APP->window->vg || vg == APP->window->fbVg)) {
 		lifetimeVg = APP->window->vg;
 	}
-	CacheEntry& entry = getCache().findOrCreate(svg.get(), vg, lifetimeVg);
+	CacheEntry& entry = getCache().findOrCreate(svg.get(), vg, lifetimeVg,
+		int(std::lround(targetWidth * 8.f)), int(std::lround(targetHeight * 8.f)));
 
 	int rasterW = std::max(1, int(std::ceil(targetWidth * float(renderScale))));
 	int rasterH = std::max(1, int(std::ceil(targetHeight * float(renderScale))));

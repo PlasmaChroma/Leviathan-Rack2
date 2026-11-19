@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -20,6 +21,9 @@
 #endif
 #else
 #include <arpa/inet.h>
+#include <cerrno>
+#include <fcntl.h>
+#include <poll.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -74,18 +78,20 @@ static std::string jsonEscape(const std::string &input) {
 
 class Transport {
 public:
-  Transport() { startWorker(); }
-  ~Transport() {
-    stop_.store(true, std::memory_order_relaxed);
-    closeSocket();
-    if (worker_.joinable()) {
-      worker_.join();
+  Transport() {
+    const char *host = std::getenv("LEVIATHAN_DEBUG_HOST");
+    const char *port = std::getenv("LEVIATHAN_DEBUG_PORT");
+    host_ = host && *host ? host : "127.0.0.1";
+    port_ = port && *port ? std::atoi(port) : kDefaultPort;
+  }
+
+  void stop() {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stop_.store(true);
     }
-#ifdef _WIN32
-    if (wsaStarted_) {
-      WSACleanup();
-    }
-#endif
+    wake_.notify_all();
+    if (worker_.joinable()) worker_.join();
   }
 
   void submit(const char *module,
@@ -111,6 +117,8 @@ public:
     snap.ts = ts;
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (stop_.load()) return;
+    if (!worker_.joinable()) worker_ = std::thread(&Transport::workerLoop, this);
     snapshots_[makeKey(snap.module, snap.instance, snap.stream, snap.kind)] = snap;
   }
 
@@ -146,14 +154,13 @@ public:
 private:
   std::unordered_map<std::string, Snapshot> snapshots_;
   std::mutex mutex_;
+  std::condition_variable wake_;
   std::thread worker_;
   std::atomic<bool> stop_ {false};
   std::string host_;
   int port_ = 0;
-  bool configLoaded_ = false;
 #ifdef _WIN32
   SOCKET sock_ = INVALID_SOCKET;
-  bool wsaStarted_ = false;
 #else
   int sock_ = -1;
 #endif
@@ -166,34 +173,14 @@ private:
     return module + "|" + instance + "|" + stream + "|" + kind;
   }
 
-  void startWorker() { worker_ = std::thread([this]() { workerLoop(); }); }
-
-  bool isEnabled() {
-    refreshConfig();
-    return isDragonKingDebugEnabled() && !host_.empty() && port_ > 0;
-  }
-
-  void refreshConfig() {
-    if (configLoaded_) {
-      return;
-    }
-    const char *hostEnv = std::getenv("LEVIATHAN_DEBUG_HOST");
-    const char *portEnv = std::getenv("LEVIATHAN_DEBUG_PORT");
-    host_ = (hostEnv && hostEnv[0]) ? hostEnv : "127.0.0.1";
-    port_ = (portEnv && portEnv[0]) ? std::atoi(portEnv) : kDefaultPort;
-    if (port_ <= 0) {
-      host_.clear();
-      port_ = 0;
-    }
-    configLoaded_ = true;
+  bool isEnabled() const {
+    return isDragonKingDebugEnabled() && !host_.empty() && port_ > 0 && port_ <= 65535;
   }
 
   void workerLoop() {
 #ifdef _WIN32
     WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
-      wsaStarted_ = true;
-    }
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return;
 #endif
     lastConnectAttempt_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(kReconnectIntervalMs);
 
@@ -217,6 +204,10 @@ private:
       }
       sleepMs(kPublishIntervalMs);
     }
+    closeSocket();
+#ifdef _WIN32
+    WSACleanup();
+#endif
   }
 
   std::vector<Snapshot> collectFreshSnapshots(double nowSec) {
@@ -254,31 +245,69 @@ private:
       return false;
     }
 
-    int sock = int(::socket(AF_INET, SOCK_STREAM, 0));
+    sock_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (!socketValid()) return false;
 #ifdef _WIN32
-    if (sock == int(INVALID_SOCKET)) {
-      return false;
-    }
+    u_long nonblocking = 1;
+    if (ioctlsocket(sock_, FIONBIO, &nonblocking) != 0) {
 #else
-    if (sock < 0) {
+    if (fcntl(sock_, F_SETFL, O_NONBLOCK) != 0) {
+#endif
+      closeSocket();
       return false;
     }
+#ifdef SO_NOSIGPIPE
+    int noSigPipe = 1;
+    setsockopt(sock_, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, sizeof(noSigPipe));
 #endif
-
     sockaddr_in addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(uint16_t(port_));
     if (::inet_pton(AF_INET, host_.c_str(), &addr.sin_addr) != 1) {
-      closeNativeSocket(sock);
+      closeSocket();
       return false;
     }
-    if (::connect(sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-      closeNativeSocket(sock);
-      return false;
+    if (::connect(sock_, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+      if (!wouldBlock() || !waitWritable()) {
+        closeSocket();
+        return false;
+      }
+      int error = 0;
+#ifdef _WIN32
+      int size = sizeof(error);
+#else
+      socklen_t size = sizeof(error);
+#endif
+      if (getsockopt(sock_, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &size) != 0 || error) {
+        closeSocket();
+        return false;
+      }
     }
-    assignSocket(sock);
     return true;
+  }
+
+  static bool wouldBlock() {
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    return errno == EINPROGRESS || errno == EWOULDBLOCK || errno == EAGAIN;
+#endif
+  }
+
+  bool waitWritable() {
+    // A slow peer cannot keep the plugin alive during unload.
+    for (int i = 0; i < 20 && !stop_.load(); ++i) {
+#ifdef _WIN32
+      WSAPOLLFD fd = {sock_, POLLWRNORM, 0};
+      const int ready = WSAPoll(&fd, 1, 50);
+#else
+      pollfd fd = {sock_, POLLOUT, 0};
+      const int ready = poll(&fd, 1, 50);
+#endif
+      if (ready != 0) return ready > 0 && !(fd.revents & (POLLERR | POLLHUP | POLLNVAL));
+    }
+    return false;
   }
 
   bool sendSnapshot(const Snapshot &snap) {
@@ -303,11 +332,15 @@ private:
 
   bool sendAll(const char *data, size_t size) {
     while (size > 0u) {
+      if (stop_.load()) return false;
 #ifdef _WIN32
       int sent = ::send(sock_, data, int(size), 0);
+#elif defined(MSG_NOSIGNAL)
+      ssize_t sent = ::send(sock_, data, size, MSG_NOSIGNAL);
 #else
       ssize_t sent = ::send(sock_, data, size, 0);
 #endif
+      if (sent < 0 && wouldBlock() && waitWritable()) continue;
       if (sent <= 0) {
         return false;
       }
@@ -317,7 +350,10 @@ private:
     return true;
   }
 
-  void sleepMs(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+  void sleepMs(int ms) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    wake_.wait_for(lock, std::chrono::milliseconds(ms), [this] { return stop_.load(); });
+  }
 
   bool socketValid() const {
 #ifdef _WIN32
@@ -342,29 +378,11 @@ private:
 #endif
   }
 
-  void closeNativeSocket(int sock) {
-#ifdef _WIN32
-    ::closesocket(SOCKET(sock));
-#else
-    ::close(sock);
-#endif
-  }
-
-  void assignSocket(int sock) {
-#ifdef _WIN32
-    sock_ = SOCKET(sock);
-#else
-    sock_ = sock;
-#endif
-  }
 };
 
 static Transport &transport() {
-  // Debug-only transport: avoid process-shutdown stalls by intentionally
-  // keeping the singleton alive until OS teardown instead of running a static
-  // destructor that may block on socket/thread cleanup during Rack exit.
-  static Transport *gTransport = new Transport();
-  return *gTransport;
+  static Transport instance;
+  return instance;
 }
 
 static bool shouldSubmitSchema(const char *module, const char *stream) {
@@ -414,6 +432,8 @@ static void appendRange(char *buf, size_t size, const char *key, TimingRangeUs r
 }
 
 } // namespace
+
+void shutdownTransport() { transport().stop(); }
 
 void submitTDScopeUiMetrics(uint32_t instanceId,
                             TimingRangeUs processUs,

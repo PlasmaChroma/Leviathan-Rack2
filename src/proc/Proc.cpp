@@ -1,3 +1,4 @@
+#include "../common/BothTimeCv.hpp"
 #include "../plugin.hpp"
 #include "../common/DebugTerminalMetrics.hpp"
 #include "../common/MathHelpers.hpp"
@@ -260,19 +261,11 @@ struct Proc : Module {
 	}
 
 	static float bothHzFromCv(float v) {
-		float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
-		float r = rack::dsp::exp2_taylor5(x);
-		return BOTH_F_OFF_HZ + BOTH_F_MAX_HZ * (r / (1.f + r));
-	}
-
+        return maths_function::bothHzFromCv(v, [](float x){return rack::dsp::exp2_taylor5(x);});
+    }
 	static float bothTimeScaleFromCv(float v) {
-		float vs = levi_math::softLimit(v, 8.f);
-		float f = bothHzFromCv(vs);
-		// Neutral reference is constant for the life of the module, compute once.
-		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
-		float scale = neutralHz / std::max(f, 1e-6f);
-		return levi_math::clampf(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
-	}
+        return maths_function::bothTimeScaleFromCv(v, [](float x){return rack::dsp::exp2_taylor5(x);});
+    }
 
 	static void enforceSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
 		riseTime = std::max(riseTime, 1e-6f);

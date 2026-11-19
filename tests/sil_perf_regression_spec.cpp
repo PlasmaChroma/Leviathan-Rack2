@@ -80,11 +80,12 @@ struct Golden { const char* name; float sr; float level; float secs; float rmsMi
 // Named detector bands and dynamics now match the intended processing; the
 // stage behavior suite independently checks them before these chain references.
 // Recaptured for the 1 ms limiter attack ramp (loud rows) and the saturator
-// wet fade-in (quiet row).
+// wet fade-in (quiet row). Loud rows recaptured again for the 128-tap,
+// parabola-refined true-peak detector (limiter margin 0.5 -> 0.1 dB).
 static const Golden kGolden[] = {
-    {"loud48",  48000.f, 12.f, 6.f, 1.542f, -5.863f, 12.479f},
-    {"quiet48", 48000.f, 0.6f, 6.f, -12.431f, -19.663f, 3.103f},
-    {"loud96",  96000.f, 12.f, 5.f, 2.654f, -4.783f, 12.479f},
+    {"loud48",  48000.f, 12.f, 6.f, 1.310f, -4.577f, 12.879f},
+    {"quiet48", 48000.f, 0.6f, 6.f, -9.346f, -14.580f, 6.967f},
+    {"loud96",  96000.f, 12.f, 5.f, 2.505f, -3.361f, 12.879f},
 };
 
 static void measure(const Golden& g, float& rmsMidDb, float& rmsSideDb, float& peakDb) {

@@ -1,4 +1,6 @@
+#include "../common/BothTimeCv.hpp"
 #include "IntegralFlux.hpp"
+#include "../common/MathsFunction.hpp"
 #include "../common/DebugTerminalTransport.hpp"
 #include "../common/MathHelpers.hpp"
 #include <dsp/minblep.hpp>
@@ -22,29 +24,10 @@ float IntegralFlux::shapeSignedForMode(float shapeSigned, bool rising, FunctionS
 }
 
 float IntegralFlux::slopeWarp(float x, float s) {
-	x = clampf(x, 0.f, 1.f);
-	float u = std::fabs(s);
-	if (u < 1e-6f) {
-		return 1.f;
-	}
-	float k = WARP_K_MAX * u;
-	float x2 = x * x;
-	if (s < 0.f) {
-		return 1.f / (1.f + k * x2);
-	}
-	return 1.f + k * x2;
+    return maths_function::slopeWarp(x, s);
 }
-
 float IntegralFlux::slopeWarpScale(float s) {
-	if (std::fabs(s) < 1e-6f) {
-		return 1.f;
-	}
-	float sum = 0.f;
-	for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
-		float xi = (i + 0.5f) / float(WARP_SCALE_SAMPLES);
-		sum += 1.f / slopeWarp(xi, s);
-	}
-	return sum / float(WARP_SCALE_SAMPLES);
+    return maths_function::slopeWarpScale(s);
 }
 
 float IntegralFlux::slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
@@ -152,19 +135,11 @@ float IntegralFlux::injectAlphaBaseForSampleTime(float sampleTime) {
 }
 
 float IntegralFlux::bothHzFromCv(float v) {
-	float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
-	float r = rack::dsp::exp2_taylor5(x);
-	return BOTH_F_OFF_HZ + BOTH_F_MAX_HZ * (r / (1.f + r));
-}
-
+        return maths_function::bothHzFromCv(v, [](float x){return rack::dsp::exp2_taylor5(x);});
+    }
 float IntegralFlux::bothTimeScaleFromCv(float v) {
-	float vs = levi_math::softLimit(v, 8.f);
-	float f = bothHzFromCv(vs);
-	// Neutral reference is constant for the life of the module, compute once.
-	static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
-	float scale = neutralHz / std::max(f, 1e-6f);
-	return clampf(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
-}
+        return maths_function::bothTimeScaleFromCv(v, [](float x){return rack::dsp::exp2_taylor5(x);});
+    }
 
 void IntegralFlux::enforceOuterSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
 	riseTime = std::max(riseTime, 1e-6f);
@@ -178,15 +153,7 @@ void IntegralFlux::enforceOuterSpeedLimit(float& riseTime, float& fallTime, floa
 }
 
 float IntegralFlux::shapeSignedFromKnob(float shape01, float linearShape) {
-	shape01 = clampf(shape01, 0.f, 1.f);
-	linearShape = clampf(linearShape, 1e-4f, 1.f - 1e-4f);
-	if (shape01 < linearShape) {
-		return (shape01 - linearShape) / linearShape;
-	}
-	if (shape01 > linearShape) {
-		return (shape01 - linearShape) / (1.f - linearShape);
-	}
-	return 0.f;
+    return maths_function::shapeSignedFromKnob(shape01, linearShape);
 }
 
 float IntegralFlux::shapeSignedFromKnobForMode(float shape01, FunctionShapeMode mode) {

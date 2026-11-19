@@ -5,8 +5,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / "src" / "Nautiloid.cpp").read_text(encoding="utf-8")
-HEADER = (ROOT / "src" / "Nautiloid.hpp").read_text(encoding="utf-8")
+SOURCE = (ROOT / "src" / "nautiloid" / "Nautiloid.cpp").read_text(encoding="utf-8")
+HEADER = (ROOT / "src" / "nautiloid" / "Nautiloid.hpp").read_text(encoding="utf-8")
 
 
 def section(text: str, start: str, end: str) -> str:

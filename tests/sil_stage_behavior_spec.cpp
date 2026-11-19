@@ -119,7 +119,7 @@ float mudRun(float sr, int kind) {
         if (kind==3) x=.1f*x+3*sine(i,sr,100)+3*sine(i,sr,1500);
         m.processRemoveMud(x,kind==1?-x:x,i%16==0,l,r);
         require(std::isfinite(l)&&std::isfinite(r), "Mud output is nonfinite");
-        require(m.removeMud.smoothedCutDb >= -2.501f && m.removeMud.smoothedCutDb <= .001f,"Mud exceeds its cut bound");
+        require(m.removeMud.smoothedCutDb >= -Sil::kMudMaxCutDb - .001f && m.removeMud.smoothedCutDb <= .001f,"Mud exceeds its cut bound");
     }
     return -m.removeMud.smoothedCutDb;
 }
@@ -130,8 +130,8 @@ void mudTests(float sr) {
     }
     const float broad=mudRun(sr,0), opposite=mudRun(sr,1);
     std::printf("  %.0f Hz: broad mud %.2f dB; opposite-polarity %.2f dB\n",sr,broad,opposite);
-    require(broad>.4f,"Distributed low-mid buildup does not trigger cleanup");
-    require(std::fabs(broad-opposite)<.02f,"Mud detector loses opposing stereo content");
+    require(broad>.9f,"Distributed low-mid buildup does not trigger cleanup");
+    require(std::fabs(broad-opposite)<.03f,"Mud detector loses opposing stereo content");
     require(mudRun(sr,2)<.001f,"Mud reacts to sub-floor material");
     require(mudRun(sr,3)<broad*.5f,"Mud ignores bass/presence reference balance");
 }
@@ -145,8 +145,8 @@ void airTests(float sr) {
             peak=std::max(peak,m.impactAir.smoothedLiftDb);
             require(std::fabs(l-r)<1e-7f,"Impact Air changes stereo balance");
         }
-        require(peak<=.751f,"Air shelf exceeds its gain cap");
-        require(level<.01f?peak<.001f:peak>.2f,"Impact Air trigger/floor is wrong");
+        require(peak<=Sil::kImpactAirMaxLiftDb + .001f,"Air shelf exceeds its gain cap");
+        require(level<.01f?peak<.001f:peak>.8f,"Impact Air trigger/floor is wrong");
         require(m.impactAir.smoothedLiftDb<.001f,"Impact Air does not release");
     }
     Sil m;setup(m,sr);float l,r;
@@ -162,16 +162,16 @@ float midrangeRun(float sr,int kind) {
         if(kind==3)x*=1e-6f;
         m.processMidrange(x,x,i%16==0,l,r);
         require(std::fabs(l-r)<1e-6f,"Midrange Enhance changes stereo balance");
-        require(m.midEnhance.smoothedLiftDb>=0&&m.midEnhance.smoothedLiftDb<=.851f,"Midrange boost exceeds its cap");
+        require(m.midEnhance.smoothedLiftDb>=0&&m.midEnhance.smoothedLiftDb<=Sil::kMidEnhanceMaxLiftDb + .001f,"Midrange boost exceeds its cap");
     }
-    require(std::fabs(m.midEnhance.ledAmount-m.midEnhance.smoothedLiftDb/.85f)<.001f,
+    require(std::fabs(m.midEnhance.ledAmount-m.midEnhance.smoothedLiftDb/Sil::kMidEnhanceMaxLiftDb)<.001f,
         "Midrange feedback is not proportional to applied EQ gain");
     return m.midEnhance.smoothedLiftDb;
 }
 void midrangeTests(float sr) {
     const float recessed=midrangeRun(sr,0),full=midrangeRun(sr,1),bright=midrangeRun(sr,2);
     std::printf("  midrange recessed %.3f dB, supported %.3f dB, bright %.3f dB\n",recessed,full,bright);
-    require(recessed>.08f,"Midrange deficit does not receive a lift");
+    require(recessed>.25f,"Midrange deficit does not receive a lift");
     require(full<recessed*.5f,"Supported midrange receives the same lift as recessed mids");
     require(bright<recessed*.5f,"Presence guard does not back off bright material");
     require(midrangeRun(sr,3)<.001f,"Midrange Enhance boosts sub-floor material");
@@ -187,14 +187,15 @@ float glueRun(float sr,float over,bool opposite) {
         float x=amplitude*sine(i,sr,997);
         m.processGlue(x,opposite?-x:x,i%16==0,l,r);
         require(std::fabs(std::fabs(l)-std::fabs(r))<1e-6,"Glue is not stereo linked");
-        require(m.glue.gainReductionDb<=3.001f&&m.glue.makeupDb<=2.001f,"Glue exceeds reduction/makeup bounds");
+        require(m.glue.gainReductionDb<=Sil::kGlueMaxGainReductionDb + .001f&&m.glue.makeupDb<=Sil::kGlueMaxMakeupDb + .001f,"Glue exceeds reduction/makeup bounds");
     }
     return m.glue.gainReductionDb;
 }
 void glueTests(float sr) {
     const float below=glueRun(sr,-2,false),high=glueRun(sr,8,false),anti=glueRun(sr,8,true);
-    require(below>.06f&&below<.11f,"Glue soft knee does not start below threshold");
-    require(std::fabs(high-8.f/3.f)<.025f,"Glue ratio is wrong above knee");
+    const float slope = 1.f - 1.f / Sil::kGlueRatio;
+    require(below>.10f&&below<.18f,"Glue soft knee does not start below threshold");
+    require(std::fabs(high-8.f*slope)<.035f,"Glue ratio is wrong above knee");
     require(std::fabs(high-anti)<.001f,"Glue detector cancels opposing stereo");
     Sil a,b;setup(a,sr);setup(b,sr);
     for(int i=0;i<int(sr);++i){float x=sine(i,sr,997);a.pushRollingSample(x,x);b.pushRollingSample(x,-x);}
@@ -212,13 +213,15 @@ void stereoTests(float sr) {
             require(kind>=2?std::fabs(l+r)<1e-6f:std::fabs(l-r)<1e-6f,"M/S EQ leaks between legs");
             if(i>=int(4*sr)){inE+=x*x;outE+=l*l;}
         }
-        require(std::fabs(m.stereoEnhance.ledAmount-.25f*(-m.stereoEnhance.smoothedMidCutDb+m.stereoEnhance.smoothedSideLiftDb))<.001f,
+        const float expectedLed = 0.5f * (-m.stereoEnhance.smoothedMidCutDb / Sil::kStereoMidMaxCutDb
+            + m.stereoEnhance.smoothedSideLiftDb / Sil::kStereoSideMaxLiftDb);
+        require(std::fabs(m.stereoEnhance.ledAmount - expectedLed)<.001f,
             "Stereo feedback does not reflect the combined EQ controls");
         if(kind==0) require(m.stereoEnhance.smoothedMidCutDb < -1.8f&&db(std::sqrt(outE/inE)) < -1.8,
             "Stereo Enhance does not cut congested 350 Hz Mid");
         if(kind==1) require(m.stereoEnhance.smoothedMidCutDb > -.05f,"Bass drives the 350 Hz focus detector");
         if(kind==2) require(m.stereoEnhance.smoothedSideLiftDb < .05f,"Already-bright 6 kHz Side is boosted");
-        if(kind==3) require(m.stereoEnhance.smoothedSideLiftDb > 1.f,"Duller Side never receives air");
+        if(kind==3) require(m.stereoEnhance.smoothedSideLiftDb > 2.2f,"Duller Side never receives air");
     }
 }
 
@@ -228,7 +231,7 @@ void saturatorTests(float sr) {
     for(int i=0;i<int(4*sr);++i) m.processSaturator(0,0,a,l,r);
     require(l==0&&r==0&&m.saturator.makeupDb==0&&m.saturator.ledAmount==0,"Silence requests saturation/makeup");
     for(int i=0;i<int(5*sr);++i){float x=.3f*sine(i,sr,997);m.processSaturator(x,x,a,l,r);}
-    require(m.saturator.makeupDb>2.f,"Quiet material never receives bounded makeup");
+    require(m.saturator.makeupDb>3.f,"Quiet material never receives bounded makeup");
     // The asymmetric tube contribution must not leave a DC offset on an AC tone.
     double mean=0;
     for(int i=0;i<int(10*sr);++i) {
@@ -236,8 +239,8 @@ void saturatorTests(float sr) {
         if(i>=int(9*sr)) mean+=l;
     }
     require(std::fabs(mean/sr)<.002,"Asymmetric saturation adds a DC offset");
-    require(m.saturator.makeupDb<=3.251f,"Saturator makeup exceeds its cap");
-    require(m.saturator.drive<=1.601f,"Saturator drive exceeds its cap");
+    require(m.saturator.makeupDb<=Sil::kSatMaxMakeupDb + .001f,"Saturator makeup exceeds its cap");
+    require(m.saturator.drive<=Sil::kSatMaxDrive + .001f,"Saturator drive exceeds its cap");
     for(int i=0;i<int(10*sr);++i){
         m.limiterTriggerEma=1;m.limiterRecentGrDb=4;
         float x=8*sine(i,sr,997);m.processSaturator(x,x,a,l,r);

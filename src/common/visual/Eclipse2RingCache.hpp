@@ -6,8 +6,10 @@
 #include "Eclipse2RuntimeBake.hpp"
 #include "Eclipse2Track.hpp"
 #include "ApertureBloomMasks.hpp"
+#include "Eclipse2DotAtlas.hpp"
 
-// Session-only, opt-in experiment. Shared by all Eclipse2 controls on the UI thread.
+// Session-only debug switches for the standalone probes. Production widgets
+// opt in per instance; artwork is shared by Eclipse2 controls on the UI thread.
 namespace eclipse2_ring_cache {
 inline bool& requested() { static bool value = false; return value; }
 inline bool enabled() { return isDragonKingDebugEnabled() && requested(); }
@@ -73,8 +75,16 @@ inline bool drawGlow(const Widget::DrawArgs& args,float x,float y,float r,float 
  aperture_bloom::draw(args.vg,*mask,x,y,color);return true;
 }
 struct Ring : Eclipse2Knob::ProgressLedRingWidget {
+ bool productionEnabled = false;
+ float observedBloom = -1.f;
+ unsigned bloomStableSteps = 0;
+ void step() override {
+  if (observedBloom != settings::haloBrightness) { observedBloom=settings::haloBrightness; bloomStableSteps=0; }
+  else if(bloomStableSteps<6)++bloomStableSteps;
+  ProgressLedRingWidget::step();
+ }
  void clearImages(NVGcontext* vg,bool destroy) {
-  forgetWindow(vg);
+  forgetWindow(vg); eclipse2_dots::forget(vg);
   if(auto* cache=aperture_bloom::findCache(vg,false))cache->clear(vg,destroy);
   if(APP&&APP->window&&APP->window->vg==vg) {
    auto* nested=APP->window->fbVg;
@@ -84,7 +94,7 @@ struct Ring : Eclipse2Knob::ProgressLedRingWidget {
  void onContextCreate(const ContextCreateEvent& e) override { raster().retryAfterContextCreate(); clearImages(e.vg,false);ProgressLedRingWidget::onContextCreate(e); }
  void onContextDestroy(const ContextDestroyEvent& e) override { clearImages(e.vg,true);ProgressLedRingWidget::onContextDestroy(e); }
 void draw(const DrawArgs& args) override {
- if(!enabled() || box.size.x!=34.f || box.size.y!=34.f || numLeds!=25 || std::fabs(minAngle-float(-.83f*M_PI))>1e-6f || std::fabs(maxAngle-float(.83f*M_PI))>1e-6f) {
+ if(!(productionEnabled || enabled()) || box.size.x!=34.f || box.size.y!=34.f || numLeds!=25 || std::fabs(minAngle-float(-.83f*M_PI))>1e-6f || std::fabs(maxAngle-float(.83f*M_PI))>1e-6f) {
   ProgressLedRingWidget::draw(args);return;
  }
 	const float diameterPx = std::min(box.size.x, box.size.y);
@@ -135,6 +145,7 @@ void draw(const DrawArgs& args) override {
 		nvgStroke(args.vg);
 	}
 
+ if(productionEnabled && bloomStableSteps>=6 && eclipse2_dots::draw(args,*this)) { nvgRestore(args.vg);return; }
 	for (int i = 0; i < numLeds; ++i) {
 		const float ledNorm = float(i) / float(numLeds - 1);
 

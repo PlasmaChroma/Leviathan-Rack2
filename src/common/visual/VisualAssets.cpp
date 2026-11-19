@@ -3,14 +3,17 @@
 #include "Eclipse2RetainedCap.hpp"
 #include "Eclipse2RingCache.hpp"
 #include "Eclipse2Track.hpp"
+#include "GearSvgCache.hpp"
 
 #include "../../theme/ThemeUiPoller.hpp"
 #include "ApertureLightTransfer.hpp"
+#include "GoldApertureCache.hpp"
 #include "../MathHelpers.hpp"
 #include "../render/NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
 #include "../../theme/ThemeService.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cmath>
@@ -1270,17 +1273,58 @@ void setPanelSurfaceColorPreview(
 	}
 }
 
+// Light-panel ink: near-white label text becomes deep navy, and coloured
+// accents keep their hue but drop to about half brightness for contrast.
+unsigned int lightPanelLabelInk(unsigned int abgr) {
+	const unsigned int a = abgr & 0xff000000u;
+	const unsigned int r = abgr & 0xffu, g = (abgr >> 8u) & 0xffu, b = (abgr >> 16u) & 0xffu;
+	const unsigned int lo = std::min(r, std::min(g, b));
+	if (lo >= 0xc0u) return a | 0x2a1c14u; // rgb(20,28,42)
+	return a | ((r * 9u / 20u)) | ((g * 9u / 20u) << 8u) | ((b * 9u / 20u) << 16u);
+}
+
+std::shared_ptr<window::Svg> loadLightPanelLabelsSvg(const std::string& fullPath) {
+	// A private copy: the shared cached Svg must keep its dark-panel colours.
+	auto svg = std::make_shared<window::Svg>();
+	try {
+		svg->loadFile(fullPath);
+	}
+	catch (Exception& e) {
+		WARN("Leviathan: light labels unavailable for %s: %s", fullPath.c_str(), e.what());
+		return nullptr;
+	}
+	if (!svg->handle) return nullptr;
+	for (NSVGshape* shape = svg->handle->shapes; shape; shape = shape->next) {
+		if (shape->fill.type == NSVG_PAINT_COLOR)
+			shape->fill.color = lightPanelLabelInk(shape->fill.color);
+		if (shape->stroke.type == NSVG_PAINT_COLOR)
+			shape->stroke.color = lightPanelLabelInk(shape->stroke.color);
+	}
+	return svg;
+}
+
 struct CachedPanelLabelsWidget final : Widget {
 	widget::FramebufferWidget* fb = nullptr;
+	widget::SvgWidget* labels = nullptr;
+	std::shared_ptr<window::Svg> darkSvg;
+	std::shared_ptr<window::Svg> lightSvg;
+	bool showingDark = true;
+	const std::atomic<bool>* themeInvert = nullptr;
 
-	CachedPanelLabelsWidget(const char* svgPath, Vec panelSizePx) {
+	CachedPanelLabelsWidget(const char* svgPath, Vec panelSizePx, bool followPanelTheme = false,
+		const std::atomic<bool>* invert = nullptr) {
+		themeInvert = invert;
 		box.size = panelSizePx;
 		fb = new widget::FramebufferWidget();
 		fb->oversample = targetOversample();
 		fb->dirtyOnSubpixelChange = false;
 
-		widget::SvgWidget* labels = new widget::SvgWidget();
-		labels->setSvg(loadPluginSvgCached(svgPath));
+		labels = new widget::SvgWidget();
+		darkSvg = loadPluginSvgCached(svgPath);
+		if (followPanelTheme)
+			lightSvg = loadLightPanelLabelsSvg(asset::plugin(pluginInstance, svgPath));
+		showingDark = !lightSvg || panelThemeDark(themeInvert);
+		labels->setSvg(showingDark ? darkSvg : lightSvg);
 		labels->box.size = panelSizePx;
 		fb->box.size = panelSizePx;
 		fb->addChild(labels);
@@ -1296,6 +1340,12 @@ struct CachedPanelLabelsWidget final : Widget {
 		if (!isVisible()) return;
 		if (fb) {
 			fb->oversample = targetOversample();
+		}
+		if (lightSvg && showingDark != panelThemeDark(themeInvert)) {
+			showingDark = !showingDark;
+			labels->setSvg(showingDark ? darkSvg : lightSvg);
+			labels->box.size = box.size;
+			fb->setDirty();
 		}
 		Widget::step();
 	}
@@ -1394,8 +1444,71 @@ Widget* createThemedPanelLabelsWidget(
 // framebuffer. Hiding a legacy panel also hides its entire background treatment.
 struct ThemeBackgroundWidget final : widget::SvgWidget {
 	leviathan::theme::ThemeColors colors;
+	// Optional raster backgrounds, chosen by Rack's dark-panel preference.
+	// Module raster art takes priority over the theme background colour, which
+	// only replaces the flat SVG background.
+	std::string rasterLightPath;
+	std::string rasterDarkPath;
+	// Optional per-theme transparent overlay (e.g. a raster wordmark) drawn
+	// over the raster background inside the same cached framebuffer.
+	std::string overlayLightPath;
+	std::string overlayDarkPath;
+	math::Rect overlayRect;
+	// Optional black shade drawn over the raster background (below the overlay).
+	float shadeLight = 0.f;
+	float shadeDark = 0.f;
+	bool dark = true;
+	const std::atomic<bool>* themeInvert = nullptr;
+
+	bool hasRaster() const {
+		return !rasterLightPath.empty() || !rasterDarkPath.empty();
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		onRasterContextCreate(e.vg);
+		SvgWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		onRasterContextDestroy(e.vg);
+		SvgWidget::onContextDestroy(e);
+	}
+
+	static const std::string& pick(bool dark, const std::string& light, const std::string& darkPath) {
+		return dark ? (darkPath.empty() ? light : darkPath) : (light.empty() ? darkPath : light);
+	}
+
+	static bool drawImage(const DrawArgs& args, const std::string& path, math::Rect rect) {
+		if (path.empty() || !APP || !APP->window) return false;
+		std::shared_ptr<window::Image> image = APP->window->loadImage(path);
+		if (!image || image->handle < 0) return false;
+		int handle = loadRasterMipmapHandle(args.vg, image, path);
+		if (handle < 0) handle = image->handle;
+		NVGpaint paint = nvgImagePattern(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, 0.f, handle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+		return true;
+	}
+
+	bool drawRaster(const DrawArgs& args) {
+		if (!drawImage(args, pick(dark, rasterLightPath, rasterDarkPath), math::Rect(Vec(), box.size)))
+			return false;
+		const float shade = dark ? shadeDark : shadeLight;
+		if (shade > 0.f) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			nvgFillColor(args.vg, nvgRGBAf(0.f, 0.f, 0.f, shade));
+			nvgFill(args.vg);
+		}
+		if (overlayRect.size.x > 0.f && overlayRect.size.y > 0.f)
+			drawImage(args, pick(dark, overlayLightPath, overlayDarkPath), overlayRect);
+		return true;
+	}
 
 	void draw(const DrawArgs& args) override {
+		if (hasRaster() && drawRaster(args)) return;
 		if (!colors.backgroundEnabled) {
 			SvgWidget::draw(args);
 			return;
@@ -1425,6 +1538,32 @@ struct ThemeBackgroundPanel final : app::SvgPanel {
 		fb->setDirty();
 	}
 
+	void setRasterOverlay(const std::string& lightPath, const std::string& darkPath, math::Rect rectPx) {
+		background->overlayLightPath = lightPath;
+		background->overlayDarkPath = darkPath;
+		background->overlayRect = rectPx;
+		fb->setDirty();
+	}
+
+	void setRasterShade(float lightAlpha, float darkAlpha) {
+		background->shadeLight = lightAlpha;
+		background->shadeDark = darkAlpha;
+		fb->setDirty();
+	}
+
+	void setRasterBackgrounds(const std::string& lightPath, const std::string& darkPath) {
+		background->rasterLightPath = lightPath;
+		background->rasterDarkPath = darkPath;
+		background->dark = panelThemeDark(background->themeInvert);
+		fb->setDirty();
+	}
+
+	void setThemeInvert(const std::atomic<bool>* invert) {
+		background->themeInvert = invert;
+		background->dark = panelThemeDark(invert);
+		fb->setDirty();
+	}
+
 	void step() override {
 		if (!isVisible()) return;
 		if (poller.shouldPoll() && observedColorGeneration != leviathan::theme::colorGeneration()) {
@@ -1435,6 +1574,10 @@ struct ThemeBackgroundPanel final : app::SvgPanel {
 				fb->setDirty();
 			background->colors = colors;
 			observedColorGeneration = state.colorGeneration;
+		}
+		if (background->hasRaster() && background->dark != panelThemeDark(background->themeInvert)) {
+			background->dark = !background->dark;
+			fb->setDirty();
 		}
 		SvgPanel::step();
 	}
@@ -1472,6 +1615,41 @@ Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
 	return panelSurfaceEffect_;
 }
 
+void SplitPanelRenderer::setRasterBackgrounds(const char* lightAssetPath, const char* darkAssetPath) {
+	if (!parent_) return;
+	auto* panel = dynamic_cast<ThemeBackgroundPanel*>(parent_->getPanel());
+	if (!panel) return;
+	auto resolve = [](const char* p) {
+		return p && p[0] ? asset::plugin(pluginInstance, p) : std::string();
+	};
+	panel->setRasterBackgrounds(resolve(lightAssetPath), resolve(darkAssetPath));
+	rasterBackgrounds_ = true;
+}
+
+void SplitPanelRenderer::setThemeInvert(const std::atomic<bool>* invert) {
+	themeInvert_ = invert;
+	if (!parent_) return;
+	if (auto* panel = dynamic_cast<ThemeBackgroundPanel*>(parent_->getPanel()))
+		panel->setThemeInvert(invert);
+}
+
+void SplitPanelRenderer::setRasterOverlay(const char* lightAssetPath, const char* darkAssetPath, math::Rect rectPx) {
+	if (!parent_) return;
+	auto* panel = dynamic_cast<ThemeBackgroundPanel*>(parent_->getPanel());
+	if (!panel) return;
+	auto resolve = [](const char* p) {
+		return p && p[0] ? asset::plugin(pluginInstance, p) : std::string();
+	};
+	panel->setRasterOverlay(resolve(lightAssetPath), resolve(darkAssetPath), rectPx);
+}
+
+void SplitPanelRenderer::setRasterShade(float lightAlpha, float darkAlpha) {
+	if (!parent_) return;
+	auto* panel = dynamic_cast<ThemeBackgroundPanel*>(parent_->getPanel());
+	if (!panel) return;
+	panel->setRasterShade(lightAlpha, darkAlpha);
+}
+
 int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {
 	return visual_assets::addPerfectWavePanelBranding(parent_, panelPath_, opacity);
 }
@@ -1497,8 +1675,8 @@ SplitPanelRenderer::~SplitPanelRenderer() {
 	}
 	if (!labelsAssetPath_.empty()) {
 		if (themeTextInputAssetPath_.empty() && themeTextOutputAssetPath_.empty()) {
-			parent_->addChild(createPanelLabelsWidget(
-				labelsAssetPath_.c_str(), parent_->box.size));
+			parent_->addChild(new CachedPanelLabelsWidget(
+				labelsAssetPath_.c_str(), parent_->box.size, rasterBackgrounds_, themeInvert_));
 		}
 		else {
 			parent_->addChild(createThemedPanelLabelsWidget(
@@ -1740,33 +1918,74 @@ struct Magitek2JackShadow : TransparentWidget {
 struct MagitekRasterImage : TransparentWidget {
 	std::string path;
 	const float* rotationRad = nullptr;
+	// Per-draw-context resolved handle. Drawing is per frame for every jack, so
+	// the path join and the three string-keyed cache lookups run only on a miss.
+	// Two slots cover the main and framebuffer contexts; both reset on any
+	// context lifecycle event, and the image's own handle is rechecked each draw.
+	struct ResolvedHandle {
+		NVGcontext* vg = nullptr;
+		std::shared_ptr<window::Image> image;
+		int imageHandle = -1;
+		int handle = -1;
+	};
+	std::string fullPath;
+	std::array<ResolvedHandle, 2> resolved {};
+	unsigned nextSlot = 0;
 
 	explicit MagitekRasterImage(std::string path)
 		: path(std::move(path)) {
 	}
 
+	void resetResolved() {
+		resolved = {};
+		nextSlot = 0;
+	}
+
 	void onContextCreate(const ContextCreateEvent& e) override {
+		resetResolved();
 		visual_assets::onRasterContextCreate(e.vg);
 		TransparentWidget::onContextCreate(e);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
+		resetResolved();
 		visual_assets::onRasterContextDestroy(e.vg);
 		TransparentWidget::onContextDestroy(e);
+	}
+
+	int resolveHandle(NVGcontext* vg) {
+		for (const ResolvedHandle& slot : resolved) {
+			if (slot.vg == vg && slot.image && slot.image->handle == slot.imageHandle) {
+				return slot.handle;
+			}
+		}
+		if (fullPath.empty()) {
+			fullPath = asset::plugin(pluginInstance, path);
+		}
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return -1;
+		}
+		int handle = visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
+		if (handle < 0) {
+			handle = image->handle;
+		}
+		ResolvedHandle& slot = resolved[nextSlot];
+		nextSlot = (nextSlot + 1) % resolved.size();
+		slot.vg = vg;
+		slot.imageHandle = image->handle;
+		slot.image = std::move(image);
+		slot.handle = handle;
+		return handle;
 	}
 
 	void draw(const DrawArgs& args) override {
 		if (path.empty()) {
 			return;
 		}
-		const std::string fullPath = asset::plugin(pluginInstance, path);
-		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-		if (!image || image->handle < 0) {
-			return;
-		}
-		int imageHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, fullPath);
+		const int imageHandle = resolveHandle(args.vg);
 		if (imageHandle < 0) {
-			imageHandle = image->handle;
+			return;
 		}
 		const float rotation = rotationRad ? *rotationRad : 0.f;
 		const Vec center = box.size.div(2.f);
@@ -2948,9 +3167,79 @@ void SmallGoldButton::draw(const DrawArgs& args) {
 	app::Switch::draw(args);
 }
 
+// Keep the button's original material drawing separate from cache policy.
+struct GoldApertureCache::CachedLayer : widget::Widget {
+	GoldApertureCache* owner;
+	bool illuminated;
+	CachedLayer(GoldApertureCache* owner, bool illuminated)
+		: owner(owner), illuminated(illuminated) {}
+	void draw(const DrawArgs& args) override {
+		nvgSave(args.vg);
+		if (illuminated) {
+			nvgTranslate(args.vg, owner->cacheBleed, owner->cacheBleed);
+			nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
+			owner->paintIllumination(args);
+		} else owner->paintBackground(args);
+		nvgRestore(args.vg);
+	}
+};
+
+namespace {
+bool sameGoldLightColor(NVGcolor a, NVGcolor b) {
+	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+// Inherited tint/alpha changes how overlapping primitives composite. Keep
+// the original direct path there, and during nested framebuffer rendering.
+void drawGoldLightCache(widget::FramebufferWidget* fb, const widget::Widget::DrawArgs& args,
+                       bool changing) {
+	float transform[6]; nvgCurrentTransform(args.vg, transform);
+	const NVGcolor tint = nvgGetGlobalTint(args.vg);
+	fb->bypassed = changing || args.fb || tint.r != 1.f || tint.g != 1.f
+		|| tint.b != 1.f || tint.a != 1.f || transform[1] != 0.f || transform[2] != 0.f
+		|| transform[0] <= 0.f || transform[3] <= 0.f;
+	if (!fb->bypassed) {
+		if (auto* image = fb->getFramebuffer()) {
+			if (image->ctx != args.vg) fb->bypassed = true;
+			else {
+				const Vec size = fb->getFramebufferSize();
+				if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, image->image, int(size.x), int(size.y))) {
+					fb->deleteFramebuffer(); fb->setDirty();
+				}
+			}
+		}
+	}
+	if (!fb->bypassed && fb->dirty) {
+		// Update immediately on settling; never show an old brightness because
+		// Rack's framebuffer budget deferred a rebuild.
+		const Vec offset(transform[4], transform[5]);
+		fb->render(Vec(transform[0], transform[3]), offset.minus(offset.floor()), args.clipBox);
+	}
+	if (!fb->bypassed && !fb->getFramebuffer()) fb->bypassed = true;
+	fb->draw(args);
+}
+}
+
 SmallGoldApertureLight::SmallGoldApertureLight() {
 	box.size = Vec(13.f, 13.f);
 	addBaseColor(baseColor);
+	auto* cache = new GoldApertureCache(this);
+	cache->hide();
+	addChild(cache);
+}
+
+GoldApertureCache::GoldApertureCache(SmallGoldApertureLight* owner) : owner(owner) {
+	backgroundFb = new widget::FramebufferWidget();
+	illuminationFb = new widget::FramebufferWidget();
+	backgroundLayer = new CachedLayer(this, false);
+	illuminationLayer = new CachedLayer(this, true);
+	backgroundFb->addChild(backgroundLayer);
+	illuminationFb->addChild(illuminationLayer);
+	for (auto* fb : {backgroundFb, illuminationFb}) {
+		fb->dirtyOnSubpixelChange = false;
+		fb->hide(); // Manually drawn in the corresponding light pass only.
+		addChild(fb);
+	}
+	syncCaches();
 }
 
 void SmallGoldApertureLight::setBaseColor(NVGcolor color) {
@@ -2974,7 +3263,35 @@ void SmallGoldApertureLight::onLeave(const LeaveEvent& e) {
 	(void) e;
 }
 
+void GoldApertureCache::syncCaches() {
+	const auto& box = owner->box;
+	const auto baseColor = owner->baseColor;
+	if (cachedSize != box.size) {
+		cachedSize = box.size;
+		// The outer bloom radius is .78 * min(size), outside the widget box.
+		cacheBleed = std::ceil(.28f * std::min(box.size.x, box.size.y)) + 2.f;
+		backgroundFb->box.size = backgroundLayer->box.size = box.size;
+		illuminationFb->box.size = illuminationLayer->box.size = box.size.plus(Vec(2.f * cacheBleed));
+		backgroundFb->setDirty(); illuminationFb->setDirty();
+	}
+	if (!sameGoldLightColor(cachedBaseColor, baseColor)) {
+		cachedBaseColor = baseColor;
+		backgroundFb->setDirty();
+	}
+}
+
 void SmallGoldApertureLight::drawBackground(const DrawArgs& args) {
+	static_cast<GoldApertureCache*>(children.front())->drawBackground(args);
+}
+
+void GoldApertureCache::drawBackground(const DrawArgs& args) {
+	syncCaches();
+	drawGoldLightCache(backgroundFb, args, false);
+}
+
+void GoldApertureCache::paintBackground(const DrawArgs& args) {
+	const auto& box = owner->box;
+	const auto baseColor = owner->baseColor;
 	const float s = std::min(box.size.x, box.size.y);
 	if (s <= 1.f) {
 		return;
@@ -3031,12 +3348,20 @@ void SmallGoldApertureLight::drawBackground(const DrawArgs& args) {
 }
 
 void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
-	float brightness = 0.f;
+	static_cast<GoldApertureCache*>(children.front())->drawIllumination(args);
+}
+
+void GoldApertureCache::drawIllumination(const DrawArgs& args) {
+	const auto& baseColors = owner->baseColors;
+	auto& activeColor = owner->activeColor;
+	const auto baseColor = owner->baseColor;
+	syncCaches();
+	brightness = 0.f;
 	float colorWeight = 0.f;
 	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
 	for (size_t i = 0; i < baseColors.size(); ++i) {
-		engine::Light* light = getLight(int(i));
-		const float b = clamp(light ? light->getBrightness() : (module ? 0.f : previewBrightness), 0.f, 1.f);
+		engine::Light* light = owner->getLight(int(i));
+		const float b = clamp(light ? light->getBrightness() : (owner->module ? 0.f : owner->previewBrightness), 0.f, 1.f);
 		brightness = std::max(brightness, b);
 		colorWeight += b;
 		mixedColor.r += baseColors[i].r * b;
@@ -3047,6 +3372,24 @@ void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
 		? nvgRGBAf(mixedColor.r / colorWeight, mixedColor.g / colorWeight, mixedColor.b / colorWeight, 1.f)
 		: baseColor;
 
+	const double now = system::getTime();
+	const float bloom = rackHaloBloomAmount();
+	if (brightness != cachedBrightness || bloom != cachedBloom || !sameGoldLightColor(activeColor, cachedActiveColor)) {
+		cachedBrightness = brightness; cachedBloom = bloom; cachedActiveColor = activeColor;
+		illuminationChangedAt = now;
+		illuminationFb->setDirty();
+	}
+	// Do not allocate or rebuild an empty illumination texture.
+	if (brightness <= 0.001f) return;
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, -cacheBleed, -cacheBleed);
+	drawGoldLightCache(illuminationFb, args, now < illuminationChangedAt || now - illuminationChangedAt < .1);
+	nvgRestore(args.vg);
+}
+
+void GoldApertureCache::paintIllumination(const DrawArgs& args) {
+	const auto& box = owner->box;
+	const auto activeColor = owner->activeColor;
 	if (brightness <= 0.001f) {
 		return;
 	}
@@ -3124,6 +3467,18 @@ void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
 			nvgRGBAf(1.f, 1.f, 1.f, 0.f)));
 		nvgFill(args.vg);
 	}
+}
+
+void GoldApertureCache::onContextCreate(const ContextCreateEvent& e) {
+	cachedBrightness = -1.f;
+	backgroundFb->setDirty(); illuminationFb->setDirty();
+	widget::Widget::onContextCreate(e);
+}
+
+void GoldApertureCache::onContextDestroy(const ContextDestroyEvent& e) {
+	cachedBrightness = -1.f;
+	backgroundFb->setDirty(); illuminationFb->setDirty();
+	widget::Widget::onContextDestroy(e);
 }
 
 void SmallGoldApertureLight::drawHalo(const DrawArgs& args) {
@@ -3330,7 +3685,8 @@ void GearKnobInvertSized::ShadowWidget::draw(const DrawArgs& args) {
 		nvgRotate(args.vg, angle);
 		nvgScale(args.vg, scale * pass.scaleMul, scale * pass.scaleMul);
 		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		Widget::draw(args);
+		if (!retainedRenderer || !visual_assets::shared_svg_cache::drawSharedSvg(args.vg, svg, 0.f, 0.f, svgSize.x, svgSize.y))
+			Widget::draw(args);
 		nvgRestore(args.vg);
 	}
 }
@@ -3359,12 +3715,23 @@ GearKnobInvertSized::GearKnobInvertSized() {
 }
 
 void GearKnobInvertSized::draw(const DrawArgs& args) {
+	if (shadowLayer) shadowLayer->retainedRenderer = retainedRenderer;
+	// tw rotates this child. Rack rejects a rotating FramebufferWidget when
+	// the outer cache is bypassed, so present the shared gear image directly.
+	if (cachedSvgFb) cachedSvgFb->bypassed = retainedRenderer;
+	if (fb && retainedRenderer) fb->bypassed = stableVisualSteps < 6 && nvgGetGlobalTint(args.vg).a == 1.f;
 	app::SvgKnob::draw(args);
 }
 
 void GearKnobInvertSized::step() {
 	app::SvgKnob::step();
 	const float bloomAmount = settings::haloBrightness;
+	const float value = normalizedParamValue();
+	if (value != lastVisualValue || std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastVisualValue = value;
+		stableVisualSteps = 0;
+	}
+	else if (stableVisualSteps < 6) ++stableVisualSteps;
 	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
 		lastBloomAmount = bloomAmount;
 		if (fb) {
@@ -3433,6 +3800,17 @@ void GearKnobInvertSized::onDragMove(const DragMoveEvent& e) {
 	}
 }
 
+namespace {
+// Context events also invalidate the shared gear shadow artwork.
+struct RetainedGearSvg : gear_svg_cache::Layer {
+	explicit RetainedGearSvg(bool* enabled):Layer(enabled) {}
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::shared_svg_cache::onContextDestroy(e.vg);
+		Layer::onContextDestroy(e);
+	}
+};
+}
+
 void GearKnobInvertSized::setCachedSvg(std::shared_ptr<window::Svg> svg) {
 	app::SvgKnob::setSvg(svg);
 	if (sw) {
@@ -3444,7 +3822,8 @@ void GearKnobInvertSized::setCachedSvg(std::shared_ptr<window::Svg> svg) {
 	if (!cachedSvgFb) {
 		cachedSvgFb = new widget::FramebufferWidget();
 		cachedSvgFb->dirtyOnSubpixelChange = false;
-		cachedSvgSw = new widget::SvgWidget();
+		auto* retained = new RetainedGearSvg(&retainedRenderer);
+		cachedSvgSw = retained;
 		cachedSvgFb->addChild(cachedSvgSw);
 		tw->addChild(cachedSvgFb);
 	}
@@ -3508,6 +3887,7 @@ BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
 }
 
 DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
+	retainedRenderer = true;
 	minAngle = -0.8 * M_PI;
 	maxAngle = 0.8 * M_PI;
 	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny_dark.svg"));
@@ -3879,13 +4259,13 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 
-	eclipse2_track::draw(args, center, radiusPx, largeRadiusPx, minAngle, maxAngle);
+	if (!dotsOnly) eclipse2_track::draw(args, center, radiusPx, largeRadiusPx, minAngle, maxAngle);
 
 	// Active track background glow (linking the active LEDs together)
 	const float activeStartAngle = (minAngle + minLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
 	const float activeEndAngle = (minAngle + maxLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
 	const float activeSweep = activeEndAngle - activeStartAngle;
-	if (activeSweep > 0.008f && bloom > 0.001f) {
+	if (!dotsOnly && activeSweep > 0.008f && bloom > 0.001f) {
 		// Wide soft glow bloom
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
@@ -4067,6 +4447,7 @@ Eclipse2Knob::Eclipse2Knob() {
 	fb->addChild(shadowLayer);
 
 	progressRing = new eclipse2_ring_cache::Ring();
+	static_cast<eclipse2_ring_cache::Ring*>(progressRing)->productionEnabled = retainedRenderer;
 	progressRing->box.size = box.size;
 	progressRing->minAngle = minAngle;
 	progressRing->maxAngle = maxAngle;
@@ -4088,13 +4469,49 @@ void Eclipse2Knob::step() {
 		if (fb) fb->setDirty();
 	}
 	app::SvgKnob::step();
+	const float cap = normalizedParamValue();
+	float ring = ringSource ? ringSource->load(std::memory_order_relaxed) : cap;
+	if (!std::isfinite(ring)) ring = 0.f;
+	ring = clamp(ring, 0.f, 1.f);
 	const float bloomAmount = settings::haloBrightness;
+	if (cap != lastCapValue || ring != lastRingValue || std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastCapValue = cap;
+		lastRingValue = ring;
+		stableVisualSteps = 0;
+		if (progressRing) progressRing->valueNorm = ring;
+		if (fb) fb->setDirty();
+	}
+	else if (stableVisualSteps < 6) ++stableVisualSteps;
 	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
 		lastBloomAmount = bloomAmount;
 		if (fb) {
 			fb->setDirty();
 		}
 	}
+}
+
+void Eclipse2Knob::draw(const DrawArgs& args) {
+	// Moving controls sample retained artwork directly. Preserve grouped opacity
+	// and the ordinary single-image idle path through Rack's framebuffer.
+	if (fb) fb->bypassed = retainedRenderer && stableVisualSteps < 6
+		&& nvgGetGlobalTint(args.vg).a == 1.f;
+	app::SvgKnob::draw(args);
+}
+
+void Eclipse2Knob::setRingSource(const std::atomic<float>* source) {
+	if (ringSource == source) return;
+	ringSource = source;
+	lastRingValue = -1.f;
+	stableVisualSteps = 0;
+	if (fb) fb->setDirty();
+}
+
+void Eclipse2Knob::setRetainedRenderer(bool enabled) {
+	retainedRenderer = enabled;
+	if (auto* ring = dynamic_cast<eclipse2_ring_cache::Ring*>(progressRing)) ring->productionEnabled = enabled;
+	if (auto* cap = dynamic_cast<eclipse2_cap::Layer*>(backLayer)) cap->productionEnabled = enabled;
+	stableVisualSteps = 0;
+	if (fb) { fb->bypassed = false; fb->setDirty(); }
 }
 
 void Eclipse2Knob::onChange(const ChangeEvent& e) {
@@ -4106,7 +4523,7 @@ void Eclipse2Knob::onChange(const ChangeEvent& e) {
 	if (backLayer) {
 		backLayer->valueNorm = valueNorm;
 	}
-	if (progressRing) {
+	if (progressRing && !ringSource) {
 		progressRing->valueNorm = valueNorm;
 	}
 	if (fb) {
@@ -4118,6 +4535,7 @@ void Eclipse2Knob::setBackSvg(std::shared_ptr<window::Svg> svg) {
 	if (!svg || !fb) return;
 	if (!backLayer) {
 		auto* retainedLayer = new eclipse2_cap::Layer();
+		retainedLayer->productionEnabled = retainedRenderer;
 		retainedLayer->bakedSvg = visual_assets::loadPluginSvgCached("res/icon/Eclipse2Knob.svg");
 		backLayer = retainedLayer;
 		backLayer->minAngle = minAngle;
@@ -4144,6 +4562,8 @@ float Eclipse2Knob::normalizedParamValue() {
 
 void Eclipse2Knob::setProgressRingBipolar(bool bipolar, float centerNorm) {
 	if (!progressRing) return;
+	centerNorm = clamp(centerNorm, 0.f, 1.f);
+	if (progressRing->bipolar == bipolar && progressRing->centerNorm == centerNorm) return;
 	progressRing->bipolar = bipolar;
 	progressRing->centerNorm = clamp(centerNorm, 0.f, 1.f);
 	if (fb) {

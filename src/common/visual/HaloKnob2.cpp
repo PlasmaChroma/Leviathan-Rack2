@@ -2,6 +2,8 @@
 
 #include "../render/GlLifecycleUtils.hpp"
 #include "../render/AdaptiveGlSurface.hpp"
+#include "../render/NvgGraphicsLifecycle.hpp"
+#include "../render/DrawVisibilityLease.hpp"
 
 #include <nanovg_gl.h>
 #include <nanosvgrast.h>
@@ -13,11 +15,18 @@
 #include <utility>
 #include <vector>
 
+#include <map>
+
 namespace {
 
 
 
+// Standard 46 px knobs use the original 4x atlas; larger knobs get a
+// proportionally finer one. One shared, mipmapped atlas per scale.
 constexpr int kHaloCapRasterScale = 4;
+int haloCapRasterScale(float diameter) {
+	return std::max(kHaloCapRasterScale, int(std::ceil(kHaloCapRasterScale * diameter / 46.f - 1e-4f)));
+}
 
 struct HaloCapRasterAtlas {
 	int width = 0;
@@ -27,8 +36,9 @@ struct HaloCapRasterAtlas {
 
 std::shared_ptr<HaloCapRasterAtlas> getHaloCapRasterAtlas(
 	const std::shared_ptr<window::Svg>& normalSvg,
-	const std::shared_ptr<window::Svg>& litSvg) {
-	static std::weak_ptr<HaloCapRasterAtlas> cachedAtlas;
+	const std::shared_ptr<window::Svg>& litSvg, int rasterScale = kHaloCapRasterScale) {
+	static std::map<int, std::weak_ptr<HaloCapRasterAtlas>> cachedAtlases;
+	std::weak_ptr<HaloCapRasterAtlas>& cachedAtlas = cachedAtlases[rasterScale];
 	if (std::shared_ptr<HaloCapRasterAtlas> atlas = cachedAtlas.lock()) {
 		return atlas;
 	}
@@ -36,9 +46,9 @@ std::shared_ptr<HaloCapRasterAtlas> getHaloCapRasterAtlas(
 		return nullptr;
 	}
 	const int imageWidth = std::max(1, int(std::ceil(std::max(
-		normalSvg->handle->width, litSvg->handle->width) * kHaloCapRasterScale)));
+		normalSvg->handle->width, litSvg->handle->width) * rasterScale)));
 	const int imageHeight = std::max(1, int(std::ceil(std::max(
-		normalSvg->handle->height, litSvg->handle->height) * kHaloCapRasterScale)));
+		normalSvg->handle->height, litSvg->handle->height) * rasterScale)));
 	std::shared_ptr<HaloCapRasterAtlas> atlas = std::make_shared<HaloCapRasterAtlas>();
 	atlas->width = imageWidth * 2;
 	atlas->height = imageHeight;
@@ -47,9 +57,9 @@ std::shared_ptr<HaloCapRasterAtlas> getHaloCapRasterAtlas(
 	NSVGrasterizer* rasterizer = nsvgCreateRasterizer();
 	if (!rasterizer) return nullptr;
 	const int stride = atlas->width * 4;
-	nsvgRasterize(rasterizer, normalSvg->handle, 0.f, 0.f, float(kHaloCapRasterScale),
+	nsvgRasterize(rasterizer, normalSvg->handle, 0.f, 0.f, float(rasterScale),
 		atlas->rgba.data(), imageWidth, imageHeight, stride);
-	nsvgRasterize(rasterizer, litSvg->handle, 0.f, 0.f, float(kHaloCapRasterScale),
+	nsvgRasterize(rasterizer, litSvg->handle, 0.f, 0.f, float(rasterScale),
 		atlas->rgba.data() + size_t(imageWidth) * 4u, imageWidth, imageHeight, stride);
 	nsvgDeleteRasterizer(rasterizer);
 	// Premultiply before filtering/mipmap generation so transparent SVG edges do
@@ -63,6 +73,30 @@ std::shared_ptr<HaloCapRasterAtlas> getHaloCapRasterAtlas(
 	cachedAtlas = atlas;
 	return atlas;
 }
+
+// Five by seven padded tiles: 17 cumulative ring states, 16 boundary
+// overlays, and two cap states. Matching knobs share this context-owned image.
+// Animation draws sprites directly; a settled knob uses one cached composite.
+struct HaloArcImageSet {
+	gl_lifecycle::ContextLease context;
+	NVGcontext* vg = nullptr;
+	int image = -1, width = 0, height = 0;
+	int side = 0, stride = 0;
+	~HaloArcImageSet() {
+		gl_lifecycle::retireObject(context, gl_lifecycle::ObjectKind::NvgImage, image > 0 ? image : 0);
+	}
+	bool valid(NVGcontext* current) const {
+		return current == vg && gl_lifecycle::resourceContextMatches(context, current)
+			&& nvg_gfx_lifecycle::ownedNvgImageSizeMatches(current, image, width, height);
+	}
+	void tile(NVGcontext* current, int index, float diameter, float alpha = 1.f) const {
+		const float scale = diameter / side;
+		const float x = (index % 5) * stride + 4, y = (index / 5) * stride + 4;
+		nvgBeginPath(current); nvgRect(current, 0, 0, diameter, diameter);
+		nvgFillPaint(current, nvgImagePattern(current, -x*scale, -y*scale,
+			width*scale, height*scale, 0, image, alpha)); nvgFill(current);
+	}
+};
 
 uint64_t haloElapsedNs(std::chrono::steady_clock::time_point start) {
 	return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -323,12 +357,26 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 
 struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	Config config;
+	bool textureArc = true;
+	bool bakingArc = false;
+	bool compositeAtlas = false;
+	bool atlasPrepared = false;
+	bool needsGroupedAlpha = false;
+	unsigned stableAtlasSteps = 0;
+	float atlasBloom = -1.f, atlasDiameter = -1.f;
+	float pendingAtlasBloom = -1.f;
+	unsigned pendingAtlasSteps = 0;
+	GLint uniformTextureMode = -1, uniformTextureArc = -1, uniformTextureState = -1;
+	GLint uniformBakeArc = -1;
+	std::shared_ptr<HaloArcImageSet> arcImages;
+	std::string arcImageKey;
 	std::shared_ptr<HaloCapRasterAtlas> capAtlas;
 	GlowArcWidget* fallbackBackgroundGlow = nullptr;
 	LightArcWidget* fallbackLightArc = nullptr;
 	GlowArcWidget* fallbackForegroundGlow = nullptr;
 	CapReflectionWidget* fallbackCapReflection = nullptr;
 	float valueNorm = 0.5f;
+	float arcNorm = 0.5f;
 	float bloomAmount = 0.f;
 	bool centerLit = false;
 	GLuint program = 0;
@@ -337,8 +385,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	GLuint vbo = 0;
 	GLuint capTexture = 0;
 	bool initAttempted = false;
+	// This surface owns its program: immutable colors survive arc refreshes.
+	bool uniformsInitialized = false;
+	Vec uploadedSize = Vec(-1.f, -1.f);
+	float uploadedCapValue = -1.f;
 	GLint uniformLogicalSize = -1;
-	GLint uniformValue = -1;
+	GLint uniformArc = -1;
 	GLint uniformBipolar = -1;
 	GLint uniformBloomAmount = -1;
 	GLint uniformLed = -1;
@@ -350,8 +402,10 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	bool shaderFailed = false;
 	bool forceNanoVg = false;
 	visual_assets::AdaptiveGlSurface fixedSurface;
+	visual_assets::DrawVisibilityLease visibilityLease;
 
 	void invalidateSurface() {
+		stableAtlasSteps = 0;
 		fixedSurface.markDirty();
 		setDirty();
 	}
@@ -365,26 +419,27 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		const std::shared_ptr<window::Svg>& centerNormalSvg,
 		const std::shared_ptr<window::Svg>& centerLitSvg,
 		EclipseKnob::SvgLayer* fallbackCenterLayer)
-		: config(config), capAtlas(getHaloCapRasterAtlas(centerNormalSvg, centerLitSvg)) {
+		: config(config), capAtlas(getHaloCapRasterAtlas(centerNormalSvg, centerLitSvg, haloCapRasterScale(config.diameter))) {
+		const Vec size(config.diameter, config.diameter);
 		HaloNanoVgFallbackWidget* fallbackRoot = new HaloNanoVgFallbackWidget();
-		fallbackRoot->box.size = Vec(46.f, 46.f);
+		fallbackRoot->box.size = size;
 		addChild(fallbackRoot);
 
 		fallbackBackgroundGlow = new GlowArcWidget();
-		fallbackBackgroundGlow->box.size = Vec(46.f, 46.f);
+		fallbackBackgroundGlow->box.size = size;
 		fallbackBackgroundGlow->config = config.bloom;
 		fallbackBackgroundGlow->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackBackgroundGlow);
 
 		fallbackLightArc = new LightArcWidget();
-		fallbackLightArc->box.size = Vec(46.f, 46.f);
+		fallbackLightArc->box.size = size;
 		fallbackLightArc->config = config.ledArc;
 		fallbackLightArc->bloomConfig = config.bloom;
 		fallbackLightArc->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackLightArc);
 
 		fallbackForegroundGlow = new GlowArcWidget();
-		fallbackForegroundGlow->box.size = Vec(46.f, 46.f);
+		fallbackForegroundGlow->box.size = size;
 		fallbackForegroundGlow->foreground = true;
 		fallbackForegroundGlow->config = config.bloom;
 		fallbackForegroundGlow->bipolar = config.bipolar;
@@ -395,7 +450,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		fallbackRoot->addChild(fallbackCenterLayer);
 
 		fallbackCapReflection = new CapReflectionWidget();
-		fallbackCapReflection->box.size = Vec(46.f, 46.f);
+		fallbackCapReflection->box.size = size;
 		fallbackCapReflection->config = config.bloom;
 		fallbackCapReflection->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackCapReflection);
@@ -416,6 +471,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
+		arcImages.reset(); arcImageKey.clear(); atlasPrepared=false;
 		fixedSurface.reset(true);
 		OpenGlWidget::onContextDestroy(e);
 		releaseGlResources(gl_lifecycle::resourceContextIsCurrent(resourceContext));
@@ -424,6 +480,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
+		arcImages.reset(); arcImageKey.clear(); atlasPrepared=false;
 		resourceContext.reset();
 		OpenGlWidget::onContextCreate(e);
 		fixedSurface.reset(false);
@@ -447,8 +504,13 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			if (fragmentShader) glDeleteShader(fragmentShader);
 		}
 		program = vertexShader = fragmentShader = vbo = capTexture = 0;
+		uniformsInitialized = false;
+		uploadedSize = Vec(-1.f, -1.f);
+		uploadedCapValue = -1.f;
 		initAttempted = false;
-		uniformLogicalSize = uniformValue = uniformBipolar = uniformBloomAmount = uniformLed = uniformBloom = -1;
+		uniformLogicalSize = uniformArc = uniformBipolar = uniformBloomAmount = uniformLed = uniformBloom = -1;
+		uniformTextureMode = uniformTextureArc = uniformTextureState = -1;
+		uniformBakeArc = -1;
 		uniformCapReflection = -1;
 		uniformCapAtlas = uniformCenterLit = uniformCapRotation = -1;
 	}
@@ -456,14 +518,21 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	void step() override {
 		// OpenGlWidget::step() dirties every frame. Halo surfaces are explicitly
 		// invalidated so their framebuffer remains a single idle composite.
+		if (config.suspendWhenUndrawn && !visibilityLease.active(system::getTime())) return;
 		bypassed = forceNanoVg || shaderFailed;
 		if (!bypassed && APP && APP->window) {
+			const bool atlasReady = textureArc && prepareArcImages();
+			atlasPrepared = atlasReady;
+			if(atlasReady)stableAtlasSteps=std::min(stableAtlasSteps+1,6u);
+			if (atlasReady && stableAtlasSteps < 6 && !needsGroupedAlpha) {setDirty(false); return;}
+			compositeAtlas = atlasReady;
 			float rackZoom = 1.f;
 			if (APP->scene && APP->scene->rackScroll) {
 				rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
 			}
 			visual_assets::AdaptiveGlSurfacePolicy policy;
 			policy.vertexAttributeCount = 1;
+			policy.shaderOnlyState = true;
 			policy.maxDensity = 3.f;
 			policy.retainPeakCapacity = true;
 			const bool measureSurface = isDragonKingDebugEnabled();
@@ -480,13 +549,42 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				setDirty(false);
 			}
 		}
+		compositeAtlas = false;
 		FramebufferWidget::step();
 	}
 
 	void draw(const DrawArgs& args) override {
+		if (config.suspendWhenUndrawn) visibilityLease.renew(system::getTime());
+		// Multiple sprites need a grouped composite when inherited opacity is
+		// translucent. The next Step prepares it before NanoVG records the draw.
+		needsGroupedAlpha = nvgGetGlobalTint(args.vg).a != 1.f;
+		// On the first translucent frame, prefer the last grouped image to
+		// applying opacity separately to overlapping sprites. Step refreshes it.
+		if (!bypassed && textureArc && atlasPrepared && needsGroupedAlpha
+			&& fixedSurface.draw(args, box.size)) return;
+		if (!bypassed && textureArc && atlasPrepared && (stableAtlasSteps >= 6 || needsGroupedAlpha) && !fixedSurface.isDirty()
+			&& fixedSurface.draw(args, box.size)) return;
+		if (!bypassed && textureArc && atlasPrepared && arcImages && arcImages->valid(args.vg)) {
+			const float position = clamp(arcNorm * 16.f, 0.f, 16.f);
+			int base = std::min(16, int(position));
+			int edge = base;
+			float partial = position - base;
+			if (config.bipolar && position < 8.f && partial > 0.f) {++base; partial = 1.f - partial;}
+			nvgSave(args.vg);
+			arcImages->tile(args.vg, base, box.size.x);
+			if (edge < 16 && partial > 0.f) arcImages->tile(args.vg, 17 + edge, box.size.x, partial);
+			const float diameter = box.size.x;
+			nvgTranslate(args.vg, diameter*.5f, diameter*.5f);
+			nvgRotate(args.vg, crossfade(-.83f*float(M_PI), .83f*float(M_PI), valueNorm));
+			nvgTranslate(args.vg, -diameter*.5f, -diameter*.5f);
+			arcImages->tile(args.vg, centerLit ? 34 : 33, diameter);
+			nvgRestore(args.vg); return;
+		}
 		if (!bypassed && fixedSurface.draw(args, box.size)) return;
 		widget::FramebufferWidget::draw(args);
 	}
+
+	bool prepareArcImages();
 
 	void setForceNanoVg(bool force) {
 		if (forceNanoVg == force) return;
@@ -495,15 +593,19 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		if (!bypassed) invalidateSurface();
 	}
 
-	void setVisualState(float value, float bloom) {
+	// value drives the cap; arc drives the LED fill and its glow.
+	void setVisualState(float value, float arc, float bloom) {
 		value = clamp(value, 0.f, 1.f);
+		arc = clamp(arc, 0.f, 1.f);
 		bloom = std::max(0.f, bloom);
-		if (fallbackBackgroundGlow) fallbackBackgroundGlow->valueNorm = value;
-		if (fallbackLightArc) fallbackLightArc->valueNorm = value;
-		if (fallbackForegroundGlow) fallbackForegroundGlow->valueNorm = value;
-		if (fallbackCapReflection) fallbackCapReflection->valueNorm = value;
-		if (std::fabs(value - valueNorm) <= 1e-6f && std::fabs(bloom - bloomAmount) <= 1e-4f) return;
+		if (fallbackBackgroundGlow) fallbackBackgroundGlow->valueNorm = arc;
+		if (fallbackLightArc) fallbackLightArc->valueNorm = arc;
+		if (fallbackForegroundGlow) fallbackForegroundGlow->valueNorm = arc;
+		if (fallbackCapReflection) fallbackCapReflection->valueNorm = arc;
+		if (std::fabs(value - valueNorm) <= 1e-6f && std::fabs(arc - arcNorm) <= 1e-6f
+			&& std::fabs(bloom - bloomAmount) <= 1e-4f) return;
 		valueNorm = value;
+		arcNorm = arc;
 		bloomAmount = bloom;
 		invalidateSurface();
 	}
@@ -574,7 +676,11 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			#version 120
 			varying vec2 vPos;
 			uniform vec2 uLogicalSize;
-			uniform float uValue;
+			uniform float uArc;
+			uniform float uBakeArc;
+			uniform float uTextureMode;
+			uniform vec4 uTextureArc;
+			uniform vec3 uTextureState;
 			uniform float uBipolar;
 			uniform float uBloomAmount;
 			uniform vec4 uLed[4];
@@ -607,7 +713,23 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				return 1.0 - smoothstep(0.5 * width - aa, 0.5 * width + aa, d);
 			}
 
+			vec4 sprite(float index, vec2 uv) {
+				vec2 origin = vec2(mod(index, 5.0), floor(index / 5.0)) * uTextureArc.y + vec2(4.0);
+				return texture2D(uCapAtlas, (origin + uv * uTextureArc.x) / uTextureArc.zw);
+			}
 			void main() {
+				if (uTextureMode > 0.5) {
+					vec2 uv = vPos / uLogicalSize;
+					vec4 color = sprite(uTextureState.x, uv);
+					vec4 delta = sprite(17.0 + uTextureState.y, uv) * uTextureState.z;
+					color = delta + color * (1.0 - delta.a);
+					vec2 p = uv - vec2(0.5);
+					vec2 capUv = vec2(uCapRotation.x*p.x + uCapRotation.y*p.y,
+						-uCapRotation.y*p.x + uCapRotation.x*p.y) + vec2(0.5);
+					float bounds = step(0.0,capUv.x)*step(capUv.x,1.0)*step(0.0,capUv.y)*step(capUv.y,1.0);
+					vec4 cap = sprite(33.0 + step(0.5,uCenterLit), capUv) * bounds;
+					gl_FragColor = cap + color*(1.0-cap.a); return;
+				}
 				float diameter = min(uLogicalSize.x, uLogicalSize.y);
 				float scale = diameter / 46.0;
 				vec2 p = vPos - 0.5 * uLogicalSize;
@@ -626,16 +748,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				float gapEdge = max(fwidth(segmentLocal), 0.012);
 				float segmentMask = smoothstep(0.072, 0.072 + gapEdge, segmentLocal)
 					* (1.0 - smoothstep(0.928 - gapEdge, 0.928, segmentLocal));
-				float lowValue = uBipolar > 0.5 ? min(uValue, 0.5) : 0.0;
-				float highValue = uBipolar > 0.5 ? max(uValue, 0.5) : uValue;
+				float lowValue = uBipolar > 0.5 ? min(uArc, 0.5) : 0.0;
+				float highValue = uBipolar > 0.5 ? max(uArc, 0.5) : uArc;
 				float haloMix = clamp(highValue * 16.0 - segmentIndex, 0.0, 1.0)
 					- clamp(lowValue * 16.0 - segmentIndex, 0.0, 1.0);
 				float activeMix = clamp((highValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0)
 					- clamp((lowValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
-				float cursorIndex = floor(clamp(uValue * 16.0 - 0.0001, 0.0, 15.9999));
-				float cursorVisible = uBipolar > 0.5
-					? step(0.0001, abs(uValue - 0.5)) : step(0.0001, uValue);
-				float cursorSegment = (1.0 - step(0.5, abs(segmentIndex - cursorIndex))) * cursorVisible;
 				vec4 core = mix(uLed[2], uLed[0], activeMix);
 				vec4 hot = mix(uLed[3], uLed[1], activeMix);
 				vec4 valueColor = mix(core, hot, clamp((segmentLocal - 0.072) / 0.856, 0.0, 1.0));
@@ -715,13 +833,6 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				overLayer(accum, vec4(0.0, 0.004, 0.027, 0.67), arcMask * segmentMask * band(radius, segmentRadius + segmentWidth * 0.42, max(0.13, segmentWidth * 0.09)));
 				overLayer(accum, hot, arcMask * segmentMask * band(radius, segmentRadius - segmentWidth * 0.26, max(0.16, segmentWidth * 0.12)));
 
-				// The value boundary reads as a charged cursor segment without any
-				// time-driven animation, so the completed image remains idle-cacheable.
-				vec4 cursorColor = vec4(mix(uLed[0].rgb, uLed[1].rgb, 0.74), 0.34);
-				overLayer(accum, cursorColor, coreBand * cursorSegment);
-				overLayer(accum, vec4(0.88, 0.99, 1.0, 0.22),
-					segmentBody * cursorSegment * (1.0 - smoothstep(0.10, 0.30, radialEdgeDistance)));
-
 				float terminator = (1.0 - smoothstep(0.0, 0.055, along))
 					+ smoothstep(sweep - 0.055, sweep, along);
 				overLayer(accum, vec4(0.0, 0.004, 0.031, 0.90), clamp(terminator, 0.0, 1.0) * arcMask * band(radius, segmentRadius, segmentWidth + 1.15 * scale));
@@ -740,6 +851,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 					overLayer(accum, foregroundInner, arcMask * band(radius, mainRadius, max(1.2, 1.6 * scale)) * uBloomAmount);
 				}
 
+				if (uBakeArc < 0.5) {
 				// The source SVG is rasterized once into a normal/lit atlas. Rotate its
 				// sampling coordinates instead of rebuilding a final-orientation FBO.
 				vec2 capLocal = vec2(
@@ -764,6 +876,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 						arcMask * band(radius, rimRadius - 0.34 * scale, max(0.12, 0.17 * scale)) * uBloomAmount);
 				}
 
+				}
 				// Rack framebuffer images are tagged NVG_IMAGE_PREMULTIPLIED.
 				gl_FragColor = accum;
 			}
@@ -800,7 +913,11 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			return false;
 		}
 		uniformLogicalSize = glGetUniformLocation(program, "uLogicalSize");
-		uniformValue = glGetUniformLocation(program, "uValue");
+		uniformArc = glGetUniformLocation(program, "uArc");
+		uniformBakeArc = glGetUniformLocation(program, "uBakeArc");
+		uniformTextureMode = glGetUniformLocation(program, "uTextureMode");
+		uniformTextureArc = glGetUniformLocation(program, "uTextureArc");
+		uniformTextureState = glGetUniformLocation(program, "uTextureState");
 		uniformBipolar = glGetUniformLocation(program, "uBipolar");
 		uniformBloomAmount = glGetUniformLocation(program, "uBloomAmount");
 		uniformLed = glGetUniformLocation(program, "uLed[0]");
@@ -809,7 +926,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		uniformCapAtlas = glGetUniformLocation(program, "uCapAtlas");
 		uniformCenterLit = glGetUniformLocation(program, "uCenterLit");
 		uniformCapRotation = glGetUniformLocation(program, "uCapRotation");
-		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBipolar < 0 || uniformBloomAmount < 0
+		if (uniformTextureMode < 0 || uniformTextureArc < 0 || uniformTextureState < 0 || uniformBakeArc < 0
+			|| uniformLogicalSize < 0 || uniformArc < 0 || uniformBipolar < 0 || uniformBloomAmount < 0
 			|| uniformLed < 0 || uniformBloom < 0 || uniformCapReflection < 0 || uniformCapAtlas < 0
 			|| uniformCenterLit < 0 || uniformCapRotation < 0) {
 			WARN("HaloKnob2 shader uniform lookup failed");
@@ -834,6 +952,16 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void drawFixedFallback(float w, float h) {
+		// Only the emergency fixed-function draw touches compatibility state.
+		// Keep it local so the normal shader refresh uses the restricted guard.
+		glPushAttrib(GL_CURRENT_BIT | GL_LINE_BIT | GL_TRANSFORM_BIT);
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glLoadIdentity();
+		glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		glLoadIdentity();
 		const float cx = 0.5f * w;
 		const float cy = 0.5f * h;
 		const float radius = std::min(w, h) * (18.15f / 46.f);
@@ -845,8 +973,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		for (int i = 0; i < 16; ++i) {
 			const float a0 = start + sweep * (float(i) + 0.08f) / 16.f;
 			const float a1 = start + sweep * (float(i) + 0.92f) / 16.f;
-			const float low = config.bipolar ? std::min(valueNorm, 0.5f) : 0.f;
-			const float high = config.bipolar ? std::max(valueNorm, 0.5f) : valueNorm;
+			const float low = config.bipolar ? std::min(arcNorm, 0.5f) : 0.f;
+			const float high = config.bipolar ? std::max(arcNorm, 0.5f) : arcNorm;
 			const float mix = clamp(high * 16.f - float(i), 0.f, 1.f)
 				- clamp(low * 16.f - float(i), 0.f, 1.f);
 			const NVGcolor color = blendHaloColor(config.ledArc.inactiveColor, config.ledArc.activeColor, mix);
@@ -855,6 +983,10 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			glVertex2f(cx + std::cos(a1) * radius, cy + std::sin(a1) * radius);
 		}
 		glEnd();
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glPopAttrib();
 	}
 
 	void renderGlContent(Vec framebufferSize, int viewportY = 0) {
@@ -879,11 +1011,6 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glDisable(GL_SCISSOR_TEST);
 		const float w = std::max(box.size.x, 1.f);
 		const float h = std::max(box.size.y, 1.f);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_SCISSOR_TEST);
@@ -914,55 +1041,74 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		// apply alpha a second time.
 		glDisable(GL_BLEND);
 
-		const NVGcolor ledColors[] = {
-			config.ledArc.activeColor,
-			config.ledArc.activeHighlightColor,
-			config.ledArc.inactiveColor,
-			config.ledArc.inactiveHighlightColor,
-		};
-		const NVGcolor bloomColors[] = {
-			config.bloom.backgroundOuterActiveColor,
-			config.bloom.backgroundOuterInactiveColor,
-			config.bloom.backgroundMidActiveColor,
-			config.bloom.backgroundMidInactiveColor,
-			config.bloom.backgroundInnerActiveColor,
-			config.bloom.backgroundInnerInactiveColor,
-			config.bloom.foregroundOuterActiveColor,
-			config.bloom.foregroundOuterInactiveColor,
-			config.bloom.foregroundInnerActiveColor,
-			config.bloom.foregroundInnerInactiveColor,
-			config.bloom.reflectionOuterActiveColor,
-			config.bloom.reflectionOuterInactiveColor,
-			config.bloom.reflectionInnerActiveColor,
-			config.bloom.reflectionInnerInactiveColor,
-			config.bloom.guideOuterColor,
-			config.bloom.guideMidColor,
-			config.bloom.guideInnerColor,
-		};
-		const NVGcolor capReflectionColors[] = {
-			config.bloom.capReflectionOuterActiveColor,
-			config.bloom.capReflectionOuterInactiveColor,
-			config.bloom.capReflectionInnerActiveColor,
-			config.bloom.capReflectionInnerInactiveColor,
-		};
-
 		glUseProgram(program);
-		glUniform2f(uniformLogicalSize, w, h);
-		glUniform1f(uniformValue, valueNorm);
-		glUniform1f(uniformBipolar, config.bipolar ? 1.f : 0.f);
-		glUniform1f(uniformBloomAmount, bloomAmount);
-		uploadHaloColorArray(uniformLed, ledColors, 4);
-		uploadHaloColorArray(uniformBloom, bloomColors, 17);
-		uploadHaloColorArray(uniformCapReflection, capReflectionColors, 4);
-		glUniform1f(uniformCenterLit, centerLit ? 1.f : 0.f);
-		const float capAngle = crossfade(-0.83f * float(M_PI), 0.83f * float(M_PI), valueNorm);
-		glUniform2f(uniformCapRotation, std::cos(capAngle), std::sin(capAngle));
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, capTexture);
-		glUniform1i(uniformCapAtlas, 0);
-		const std::array<GLfloat, 8> vertices {{0.f, 0.f, w, 0.f, 0.f, h, w, h}};
+		if (!uniformsInitialized) {
+			const NVGcolor ledColors[] = {
+				config.ledArc.activeColor,
+				config.ledArc.activeHighlightColor,
+				config.ledArc.inactiveColor,
+				config.ledArc.inactiveHighlightColor,
+			};
+			const NVGcolor bloomColors[] = {
+				config.bloom.backgroundOuterActiveColor,
+				config.bloom.backgroundOuterInactiveColor,
+				config.bloom.backgroundMidActiveColor,
+				config.bloom.backgroundMidInactiveColor,
+				config.bloom.backgroundInnerActiveColor,
+				config.bloom.backgroundInnerInactiveColor,
+				config.bloom.foregroundOuterActiveColor,
+				config.bloom.foregroundOuterInactiveColor,
+				config.bloom.foregroundInnerActiveColor,
+				config.bloom.foregroundInnerInactiveColor,
+				config.bloom.reflectionOuterActiveColor,
+				config.bloom.reflectionOuterInactiveColor,
+				config.bloom.reflectionInnerActiveColor,
+				config.bloom.reflectionInnerInactiveColor,
+				config.bloom.guideOuterColor,
+				config.bloom.guideMidColor,
+				config.bloom.guideInnerColor,
+			};
+			const NVGcolor capReflectionColors[] = {
+				config.bloom.capReflectionOuterActiveColor,
+				config.bloom.capReflectionOuterInactiveColor,
+				config.bloom.capReflectionInnerActiveColor,
+				config.bloom.capReflectionInnerInactiveColor,
+			};
+
+			glUniform1f(uniformBipolar, config.bipolar ? 1.f : 0.f);
+			uploadHaloColorArray(uniformLed, ledColors, 4);
+			uploadHaloColorArray(uniformBloom, bloomColors, 17);
+			uploadHaloColorArray(uniformCapReflection, capReflectionColors, 4);
+			glUniform1i(uniformCapAtlas, 0);
+			uniformsInitialized = true;
+		}
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices.data(), GL_DYNAMIC_DRAW);
+		if (uploadedSize.x != w || uploadedSize.y != h) {
+			glUniform2f(uniformLogicalSize, w, h);
+			const std::array<GLfloat, 8> vertices {{0.f, 0.f, w, 0.f, 0.f, h, w, h}};
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices.data(), GL_STATIC_DRAW);
+			uploadedSize = Vec(w, h);
+		}
+		glUniform1f(uniformArc, arcNorm);
+		glUniform1f(uniformBakeArc, bakingArc ? 1.f : 0.f);
+		glUniform1f(uniformTextureMode, compositeAtlas ? 1.f : 0.f);
+		if (compositeAtlas) {
+			const float position=clamp(arcNorm*16.f,0.f,16.f);
+			int base=std::min(16,int(position)),edge=std::min(15,base);
+			float partial=position-base;
+			if(config.bipolar && position<8.f && partial>0.f) {++base;partial=1.f-partial;}
+			glUniform3f(uniformTextureState,float(base),float(edge),partial);
+			glUniform4f(uniformTextureArc,float(arcImages->side),float(arcImages->stride),float(arcImages->width),float(arcImages->height));
+		}
+		glUniform1f(uniformBloomAmount, bloomAmount);
+		glUniform1f(uniformCenterLit, centerLit ? 1.f : 0.f);
+		if (uploadedCapValue != valueNorm) {
+			const float capAngle = crossfade(-0.83f * float(M_PI), 0.83f * float(M_PI), valueNorm);
+			glUniform2f(uniformCapRotation, std::cos(capAngle), std::sin(capAngle));
+			uploadedCapValue = valueNorm;
+		}
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, compositeAtlas ? nvglImageHandleGL2(currentResourceVg, arcImages->image) : capTexture);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -1047,7 +1193,7 @@ LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
 LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(std::move(config)) {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
-	box.size = Vec(46.f, 46.f);
+	box.size = Vec(this->config.diameter, this->config.diameter);
 	lastBloomAmount = settings::haloBrightness;
 
 	const std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
@@ -1082,7 +1228,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(std::move(config)
 	glSurface = new HaloGlSurface(this->config, centerNormalSvg, centerLitSvg, centerLayer);
 	glSurface->box.size = box.size;
 	glSurface->dirtyOnSubpixelChange = false;
-	glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(lastBloomAmount));
+	glSurface->setVisualState(normalizedParamValue(), normalizedParamValue(), haloBloomAmount(lastBloomAmount));
 	addChild(glSurface);
 
 }
@@ -1104,10 +1250,28 @@ void LeviathanHaloKnob2::step() {
 	const float value = normalizedParamValue();
 	const bool visualChanged = std::fabs(value - lastVisualValue) > 1e-6f;
 	if (visualChanged && centerLayer) centerLayer->valueNorm = value;
-	if (visualChanged || std::fabs(bloom - lastBloomAmount) > 1e-4f) {
+	float arc = value;
+	bool arcChanged = false;
+	if (arcSource) {
+		// Quantize, then rate-limit: a steady or slowly moving source causes no
+		// redraw, and live motion redraws at most once per arcInterval.
+		const float live = clamp(arcSource->load(std::memory_order_relaxed), 0.f, 1.f);
+		const float quantized = std::round(live / arcQuantum) * arcQuantum;
+		arc = lastArcValue;
+		if (quantized != lastArcValue) {
+			const double now = system::getTime();
+			if (lastArcValue < 0.f || now - lastArcTime >= arcInterval) {
+				arc = quantized;
+				lastArcValue = quantized;
+				lastArcTime = now;
+				arcChanged = true;
+			}
+		}
+	}
+	if (visualChanged || arcChanged || std::fabs(bloom - lastBloomAmount) > 1e-4f) {
 		lastVisualValue = value;
 		lastBloomAmount = bloom;
-		if (glSurface) glSurface->setVisualState(value, haloBloomAmount(bloom));
+		if (glSurface) glSurface->setVisualState(value, arcSource ? arc : value, haloBloomAmount(bloom));
 	}
 }
 
@@ -1140,7 +1304,7 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	const float value = normalizedParamValue();
 	lastVisualValue = value;
 	if (centerLayer) centerLayer->valueNorm = value;
-	if (glSurface) glSurface->setVisualState(value, haloBloomAmount(lastBloomAmount));
+	if (glSurface) glSurface->setVisualState(value, arcSource && lastArcValue >= 0.f ? lastArcValue : value, haloBloomAmount(lastBloomAmount));
 }
 
 bool LeviathanHaloKnob2::isVisualDirty() const {
@@ -1160,4 +1324,136 @@ float LeviathanHaloKnob2::normalizedParamValue() {
 	if (range <= 1e-6f) return 0.5f;
 	const float normalized = clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
 	return config.visualValue ? config.visualValue(pq, normalized) : normalized;
+}
+
+void LeviathanHaloKnob2::setTextureArcRenderer(bool enabled) {
+	if (glSurface) {glSurface->textureArc = enabled; glSurface->invalidateSurface();}
+}
+
+bool LeviathanHaloKnob2::HaloGlSurface::prepareArcImages() {
+	NVGcontext* vg = APP->window->vg;
+	if(arcImages && atlasBloom==bloomAmount && atlasDiameter==box.size.x && arcImages->valid(vg))return true;
+	// While the global bloom control is moving, retain the analytic renderer.
+	// Rebuild the shared texture only after six unchanged UI steps.
+	if(arcImages && atlasBloom!=bloomAmount) {
+		if(pendingAtlasBloom!=bloomAmount) {pendingAtlasBloom=bloomAmount;pendingAtlasSteps=0;}
+		if(pendingAtlasSteps<6) {++pendingAtlasSteps;return false;}
+	}
+	// Three raster samples per logical pixel, shared by appearance.
+	const int side = std::max(1, int(std::ceil(box.size.x * 3.f)));
+	std::string key;
+	auto append = [&](const void* data, size_t size) {key.append(static_cast<const char*>(data), size);};
+	static_assert(sizeof(LedArcConfig)==4*sizeof(NVGcolor), "color-only atlas key");
+	static_assert(sizeof(BloomConfig)==21*sizeof(NVGcolor), "color-only atlas key");
+	append(&config.ledArc,sizeof(config.ledArc)); append(&config.bloom,sizeof(config.bloom));
+	append(&config.bipolar,sizeof(config.bipolar)); append(&bloomAmount,sizeof(bloomAmount));
+	append(&box.size.x,sizeof(box.size.x)); append(&side,sizeof(side));
+	if (arcImages && key==arcImageKey && arcImages->valid(vg)) return true;
+	using AtlasKey=std::pair<NVGcontext*,std::string>;
+	static std::map<AtlasKey,std::weak_ptr<HaloArcImageSet>> shared;
+	const AtlasKey contextKey(vg,key);
+	for (auto i=shared.begin();i!=shared.end();) {if(i->second.expired())i=shared.erase(i);else ++i;}
+	if (auto found=shared[contextKey].lock()) {
+		if (found->valid(vg)) {arcImages=found;arcImageKey=key;atlasBloom=bloomAmount;atlasDiameter=box.size.x;fixedSurface.markDirty();return true;}
+	}
+	// Bound live shared texture storage. Unusual palette/size combinations can
+	// retain the analytic backend instead of growing GPU memory without limit.
+	size_t residentBytes=0;
+	for(const auto& entry:shared)if(auto image=entry.second.lock())
+		residentBytes+=size_t(image->width)*image->height*4;
+	const size_t requestedBytes=size_t(side+8)*(side+8)*35*4;
+	if(side>384 || residentBytes+requestedBytes>64u*1024u*1024u)return false;
+	GLint maxTextureSize=0;glGetIntegerv(GL_MAX_TEXTURE_SIZE,&maxTextureSize);
+	if((side+8)*7>maxTextureSize)return false;
+	auto images=std::make_shared<HaloArcImageSet>();
+	images->context=gl_lifecycle::acquireResourceContext(vg);
+	images->side=side;images->stride=side+8;
+	std::array<std::vector<unsigned char>,17> frames;
+	visual_assets::AdaptiveGlSurface bake;
+	visual_assets::AdaptiveGlSurfacePolicy policy;
+	policy.vertexAttributeCount=1;policy.shaderOnlyState=true;policy.maxDensity=3.f;
+	const float savedArc=arcNorm;
+	bakingArc=true;
+	struct Capture {HaloGlSurface* owner;std::vector<unsigned char>* pixels;int side;};
+	bool success=true;
+	for(int i=0;i<=16;++i) {
+		arcNorm=i/16.f;frames[i].resize(size_t(side)*side*4);
+		Capture capture{this,&frames[i],side};bake.markDirty();
+		if(!bake.renderIfNeeded(vg,box.size,1.f,3.f,policy,false,
+			[](void* ptr,Vec active,int y) {
+				auto& c=*static_cast<Capture*>(ptr);
+				c.owner->renderGlContent(active,y);
+				glBindBuffer(GL_PIXEL_PACK_BUFFER,0);
+				glPixelStorei(GL_PACK_ALIGNMENT,1);
+				glPixelStorei(GL_PACK_ROW_LENGTH,0);glPixelStorei(GL_PACK_SKIP_ROWS,0);glPixelStorei(GL_PACK_SKIP_PIXELS,0);
+				glReadPixels(0,y,c.side,c.side,GL_RGBA,GL_UNSIGNED_BYTE,c.pixels->data());
+			},&capture) || shaderFailed) {success=false;break;}
+	}
+	arcNorm=savedArc;bakingArc=false;
+	if(!success)return false;
+	const int width=images->stride*5,height=images->stride*7;
+	std::vector<unsigned char> packed(size_t(width)*height*4,0);
+	auto put=[&](int index,int x,int y,const unsigned char* rgba) {
+		const size_t offset=(size_t((index/5)*images->stride+4+y)*width+(index%5)*images->stride+4+x)*4;
+		std::copy(rgba,rgba+4,packed.data()+offset);
+	};
+	for(int i=0;i<=16;++i)for(int y=0;y<side;++y)for(int x=0;x<side;++x)
+		put(i,x,y,&frames[i][(size_t(side-1-y)*side+x)*4]);
+	// Source-over delta: keep unchanged pixels transparent. Choose the least
+	// coverage that can represent the new premultiplied color over the old.
+	// RGB changes must not turn translucent bloom into an opaque overlay: that
+	// would obscure the static SVG beneath the transitioning segment. Limit
+	// coverage to the endpoint envelope (plus one byte for quantization). In
+	// translucent pixels this deliberately favors background visibility over
+	// exact hue interpolation; opaque LED pixels retain the full color change.
+	for(int i=0;i<16;++i)for(int y=0;y<side;++y)for(int x=0;x<side;++x) {
+		const size_t offset=(size_t(side-1-y)*side+x)*4;
+		const auto* from=&frames[config.bipolar && i<8?i+1:i][offset];
+		const auto* to=&frames[config.bipolar && i<8?i:i+1][offset];
+		if(std::equal(from,from+4,to))continue;
+		float alpha=0.f;
+		for(int c=0;c<4;++c) {
+			const float a=from[c]/255.f,b=to[c]/255.f;
+			if(b>a && a<1.f)alpha=std::max(alpha,(b-a)/(1.f-a));
+			if(b<a && a>0.f)alpha=std::max(alpha,1.f-b/a);
+		}
+		if(from[3]<255) {
+			const float coverageLimit = std::min(255.f, float(std::max(from[3],to[3])) + 1.f);
+			alpha = std::min(alpha, (coverageLimit-from[3])/(255.f-from[3]));
+		}
+		unsigned char delta[4]={0,0,0,0};
+		if(alpha>0.f) {
+			for(int c=0;c<3;++c)delta[c]=static_cast<unsigned char>(std::round(clamp(to[c]-from[c]*(1.f-alpha),0.f,255.f*alpha)));
+			delta[3]=static_cast<unsigned char>(std::round(alpha*255.f));
+		}
+		put(17+i,x,y,delta);
+	}
+	// Store both cap states in the same texture to keep animated draws batched.
+	const int capSide=capAtlas->height;
+	for(int state=0;state<2;++state)for(int y=0;y<side;++y)for(int x=0;x<side;++x) {
+		const float sx=(x+.5f)*capSide/side-.5f,sy=(y+.5f)*capSide/side-.5f;
+		const int x0=clamp(int(std::floor(sx)),0,capSide-1),y0=clamp(int(std::floor(sy)),0,capSide-1);
+		const int x1=std::min(x0+1,capSide-1),y1=std::min(y0+1,capSide-1);
+		const float tx=clamp(sx-x0,0.f,1.f),ty=clamp(sy-y0,0.f,1.f);
+		unsigned char rgba[4];
+		for(int c=0;c<4;++c) {
+			auto at=[&](int xx,int yy){return float(capAtlas->rgba[(size_t(yy)*capAtlas->width+state*capSide+xx)*4+c]);};
+			rgba[c]=static_cast<unsigned char>(std::round(crossfade(crossfade(at(x0,y0),at(x1,y0),tx),crossfade(at(x0,y1),at(x1,y1),tx),ty)));
+		}
+		put(33+state,x,y,rgba);
+	}
+	const int flags=NVG_IMAGE_PREMULTIPLIED;
+	struct Upload {HaloArcImageSet* images;NVGcontext* vg;const unsigned char* pixels;int width,height,flags;bool ok;};
+	Upload upload{images.get(),vg,packed.data(),width,height,flags,false};
+	bake.markDirty();
+	bake.renderIfNeeded(vg,box.size,1.f,3.f,policy,false,
+		[](void* ptr,Vec,int) {
+			auto& u=*static_cast<Upload*>(ptr);auto& image=*u.images;
+			u.ok=nvg_gfx_lifecycle::updateOwnedNvgImageRgba(image.vg,image.image,image.width,image.height,
+				u.vg,u.width,u.height,u.flags,u.pixels);
+		},&upload);
+	if(!upload.ok)return false;
+
+	arcImages=images;arcImageKey=key;atlasBloom=bloomAmount;atlasDiameter=box.size.x;shared[contextKey]=images;fixedSurface.markDirty();
+	return true;
 }

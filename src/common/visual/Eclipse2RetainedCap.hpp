@@ -6,7 +6,8 @@
 #include "Eclipse2RuntimeBake.hpp"
 #include "Eclipse2Track.hpp"
 
-// Session-only, opt-in experiment. Shared by all Eclipse2 controls on the UI thread.
+// Session-only debug switches for the standalone probes. Production widgets
+// opt in per instance; artwork is shared by Eclipse2 controls on the UI thread.
 namespace eclipse2_cap {
 inline bool& requested() { static bool value = false; return value; }
 inline bool enabled() { return isDragonKingDebugEnabled() && requested(); }
@@ -69,6 +70,7 @@ inline int imageFor(NVGcontext* vg) {
 
 struct Layer : EclipseKnob::SvgLayer {
 	std::shared_ptr<window::Svg> bakedSvg;
+	bool productionEnabled = false;
 
 	void onContextCreate(const ContextCreateEvent& e) override {
 		forgetWindow(e.vg);
@@ -82,7 +84,7 @@ struct Layer : EclipseKnob::SvgLayer {
 	void draw(const DrawArgs& args) override {
 		// The asset includes the original 0.70 scale and padding in a 34px square.
 		// Preserve arbitrary replacement SVGs and resized control behavior via baseline.
-		if (!enabled() || !svg || svg != bakedSvg || box.size.x != 34.f || box.size.y != 34.f
+		if (!(productionEnabled || enabled()) || !svg || svg != bakedSvg || box.size.x != 34.f || box.size.y != 34.f
 			|| scaleFactor != 0.70f) { SvgLayer::draw(args); return; }
 		if (!prepare(bakedSvg)) { SvgLayer::draw(args); return; }
 		const int image = imageFor(args.vg);

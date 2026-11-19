@@ -5,10 +5,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WIDGET = (ROOT / "src" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
-HEADER = (ROOT / "src" / "Nautiloid.hpp").read_text(encoding="utf-8")
-SURFACE = (ROOT / "src" / "visual" / "AdaptiveGlSurface.cpp").read_text(encoding="utf-8")
-SURFACE_HEADER = (ROOT / "src" / "visual" / "AdaptiveGlSurface.hpp").read_text(encoding="utf-8")
+WIDGET = (ROOT / "src" / "nautiloid" / "NautiloidWidget.cpp").read_text(encoding="utf-8")
+HEADER = (ROOT / "src" / "nautiloid" / "Nautiloid.hpp").read_text(encoding="utf-8")
+SURFACE = (ROOT / "src" / "common" / "render" / "AdaptiveGlSurface.cpp").read_text(encoding="utf-8")
+SURFACE_HEADER = (ROOT / "src" / "common" / "render" / "AdaptiveGlSurface.hpp").read_text(encoding="utf-8")
 
 
 def section(text: str, start: str, end: str) -> str:
@@ -20,7 +20,7 @@ def section(text: str, start: str, end: str) -> str:
 class NautiloidGpuPhase7ContractTest(unittest.TestCase):
     def test_nautiloid_uses_shared_adaptive_surface(self):
         preview = section(WIDGET, "struct NautiloidGlPreview", "struct NautiloidDisplay")
-        self.assertIn('#include "visual/AdaptiveGlSurface.hpp"', WIDGET)
+        self.assertIn('#include "../common/render/AdaptiveGlSurface.hpp"', WIDGET)
         self.assertIn("visual_assets::AdaptiveGlSurface adaptiveSurface;", preview)
         self.assertIn("adaptiveSurface.renderIfNeeded(", preview)
         self.assertIn("adaptiveSurface.draw(args, box.size)", preview)

@@ -41,5 +41,11 @@ int main() {
 	cache.onContextDestroy(&framebuffer);
 	require(cache.findOrCreate(&svg, &framebuffer, &main).imageHandle == -1,
 		"direct framebuffer destruction also invalidates its image");
-	std::puts("Shared SVG cache: context alternation, teardown and address reuse passed");
+	// One SVG drawn at two sizes (e.g. 46 px and 69 px knobs) keeps two images.
+	cache.findOrCreate(&svg, &main, &main, 368, 368).imageHandle = 55;
+	cache.findOrCreate(&svg, &main, &main, 552, 552).imageHandle = 66;
+	require(cache.findOrCreate(&svg, &main, &main, 368, 368).imageHandle == 55
+		&& cache.findOrCreate(&svg, &main, &main, 552, 552).imageHandle == 66,
+		"distinct target sizes keep distinct images");
+	std::puts("Shared SVG cache: context alternation, teardown, address reuse and per-size images passed");
 }

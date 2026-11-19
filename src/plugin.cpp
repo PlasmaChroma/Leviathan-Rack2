@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "common/DebugTerminalTransport.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "common/visual/VisualAssets.hpp"
 
@@ -24,6 +25,7 @@ static std::atomic<bool> gPuffyDrawLoggingEnabled{false};
 static std::atomic<bool> gWyrmDrawLoggingEnabled{false};
 static std::atomic<bool> gExtraGlValidationEnabled{false};
 static std::atomic<bool> gUserFractalParamsEnabled{false};
+static std::atomic<int> gDeepcacheFakeBrandCount{0};
 static std::mutex gModuleTeardownLogMutex;
 
 std::string leviathanPluginUserRootPath() {
@@ -48,6 +50,7 @@ void refreshDragonKingDebugEnabled() {
 	gWyrmDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gExtraGlValidationEnabled.store(false, std::memory_order_relaxed);
 	gUserFractalParamsEnabled.store(false, std::memory_order_relaxed);
+	gDeepcacheFakeBrandCount.store(0, std::memory_order_relaxed);
 	if (!pluginInstance) {
 		return;
 	}
@@ -80,6 +83,11 @@ void refreshDragonKingDebugEnabled() {
 		json_t* wyrmDrawLoggingJ = json_object_get(root, "WyrmDrawLogging");
 		json_t* extraGlValidationJ = json_object_get(root, "extraGlValidation");
 		json_t* userFractalParamsJ = json_object_get(root, "UserFractalParams");
+		json_t* fakeBrandCountJ = json_object_get(root, "deepcacheFakeBrandCount");
+		if (json_is_integer(fakeBrandCountJ)) {
+			const auto count = std::max<json_int_t>(0, std::min<json_int_t>(10000, json_integer_value(fakeBrandCountJ)));
+			gDeepcacheFakeBrandCount.store(static_cast<int>(count), std::memory_order_relaxed);
+		}
 		if (!extraGlValidationJ) {
 			extraGlValidationJ = json_object_get(root, "ExtraGlValidation");
 		}
@@ -103,6 +111,10 @@ void refreshDragonKingDebugEnabled() {
 
 bool isDragonKingDebugEnabled() {
 	return gDragonKingDebugEnabled.load(std::memory_order_relaxed);
+}
+
+int getDeepcacheFakeBrandCount() {
+	return isDragonKingDebugEnabled() ? gDeepcacheFakeBrandCount.load(std::memory_order_relaxed) : 0;
 }
 
 bool isDragonKingPreviewWidgetOptionsEnabled() {
@@ -229,6 +241,7 @@ void init(Plugin* p) {
 }
 
 void destroy() {
+	debug_terminal::shutdownTransport();
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
 	leviathan::theme::persistence::saveToUserStorage();
 }

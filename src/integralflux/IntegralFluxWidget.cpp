@@ -1,5 +1,7 @@
 #include "../common/DebugTerminalMetrics.hpp"
 #include "IntegralFlux.hpp"
+#include "../common/MathsFunction.hpp"
+#include "../common/wavepreview/MathsFunctionGeometry.hpp"
 #include "../common/DebugTerminalTransport.hpp"
 #include "../common/MathHelpers.hpp"
 #include "../nautiloid/Nautiloid.hpp"
@@ -795,34 +797,13 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
 
-	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising,
-		IntegralFlux::FunctionShapeMode shapeMode) {
-		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
-		float scale = IntegralFlux::slopeWarpScaleForMode(curveSigned, rising, shapeMode);
-		float dp = 1.f / float(PREVIEW_LUT_SIZE - 1);
-		float x = rising ? 0.f : 1.f;
-		lut[0] = x;
-		for (int i = 1; i < PREVIEW_LUT_SIZE; ++i) {
-			float k1 = IntegralFlux::slopeWarpForMode(x, curveSigned, rising, shapeMode) * scale;
-			float xMid = rising ? (x + 0.5f * dp * k1) : (x - 0.5f * dp * k1);
-			xMid = clamp(xMid, 0.f, 1.f);
-			float k2 = IntegralFlux::slopeWarpForMode(xMid, curveSigned, rising, shapeMode) * scale;
-			x += rising ? (dp * k2) : (-dp * k2);
-			x = clamp(x, 0.f, 1.f);
-			lut[i] = x;
-		}
-		lut.front() = rising ? 0.f : 1.f;
-		lut.back() = rising ? 1.f : 0.f;
-	}
-
-	static float sampleSegmentLut(const std::array<float, PREVIEW_LUT_SIZE>& lut, float t) {
-		t = clamp(t, 0.f, 1.f);
-		float idx = t * float(PREVIEW_LUT_SIZE - 1);
-		int i0 = int(idx);
-		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
-		float f = idx - float(i0);
-		return lut[i0] + (lut[i1] - lut[i0]) * f;
-	}
+    static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising,
+        IntegralFlux::FunctionShapeMode shapeMode) {
+        maths_function::buildSegmentLut(lut, IntegralFlux::shapeSignedForMode(curveSigned, rising, shapeMode), rising);
+    }
+    static float sampleSegmentLut(const std::array<float, PREVIEW_LUT_SIZE>& lut, float t) {
+        return maths_function::sampleSegmentLut(lut, t);
+    }
 
 		void ensureSegmentLuts(float curveSigned, IntegralFlux::FunctionShapeMode shapeMode) {
 			if (cachedLutsValid
@@ -837,58 +818,16 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			cachedLutsValid = true;
 		}
 
-		void rebuildPoints(float riseTime, float fallTime, float curveSigned,
-			IntegralFlux::FunctionShapeMode shapeMode, bool interactiveRecent) {
-		float w = std::max(box.size.x, 1.f);
-		float h = std::max(box.size.y, 1.f);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-		float left = drawPad;
-		float top = drawPad;
-		float right = std::max(left + 1.f, w - drawPad);
-		float bottom = std::max(top + 1.f, h - drawPad);
-		float drawW = right - left;
-		float drawH = bottom - top;
-		// The preview always shows exactly one full rise+fall cycle across widget width.
-		float totalTime = std::max(riseTime + fallTime, 1e-6f);
-		float riseRatio = riseTime / totalTime;
-		contourRiseRatio = riseRatio;
-		float peakX = left + riseRatio * drawW;
-		float riseWidth = std::max(peakX - left, 1e-4f);
-		float fallWidth = std::max(right - peakX, 1e-4f);
-		// Reserved hook if we later render interactive-state emphasis.
-		(void) interactiveRecent;
-			ensureSegmentLuts(curveSigned, shapeMode);
-
-		for (int i = 0; i < POINT_COUNT; ++i) {
-			float xNorm = float(i) / float(POINT_COUNT - 1);
-			float x = left + xNorm * drawW;
-			float y = -1.f;
-			if (x <= peakX) {
-				float t = (x - left) / riseWidth;
-					float v = sampleSegmentLut(cachedRiseLut, t);
-				y = -1.f + 2.f * v;
-			}
-			else {
-				float t = (x - peakX) / fallWidth;
-					float v = sampleSegmentLut(cachedFallLut, t);
-				y = -1.f + 2.f * v;
-			}
-			float py = top + (0.5f - 0.5f * y) * drawH;
-			py = clamp(py, top, bottom);
-			points[i] = Vec(x, py);
-		}
-
-		// Preserve full crest height without flattening the apex into a
-		// two-point plateau when the true peak falls between sample columns.
-		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-		int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
-		peakPointIndex = peakIndex;
-		points[peakIndex] = Vec(peakX, top);
-		points.front() = Vec(left, bottom);
-		points.back() = Vec(right, bottom);
-		pointsValid = true;
-		rebuildSimplifiedPaths();
-	}
+    void rebuildPoints(float riseTime, float fallTime, float curveSigned,
+        IntegralFlux::FunctionShapeMode shapeMode, bool interactiveRecent) {
+        (void) interactiveRecent;
+        ensureSegmentLuts(curveSigned, shapeMode);
+        contourRiseRatio = riseTime / std::max(riseTime + fallTime, 1e-6f);
+        peakPointIndex = wave_preview::buildMathsFunctionPoints(points, box.size.x, box.size.y,
+            riseTime, fallTime, cachedRiseLut, cachedFallLut);
+        pointsValid = true;
+        rebuildSimplifiedPaths();
+    }
 
 	void step() override {
 		const bool openGlRenderer = useOpenGlRenderer();
