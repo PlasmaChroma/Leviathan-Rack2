@@ -493,10 +493,10 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	bool beginThemeRefresh();
 	void finishThemeRefreshKeepingRaster();
 	void prepareForThemeReplacement();
-	bool themeComparisonMatches(const std::vector<std::uint8_t>& rgba, int width, int height) const;
+	bool themeComparisonMatches(std::uint64_t checksum, int width, int height) const;
 	void clearThemeComparison();
 	bool hasRasterPreview() const { return rasterWidget != nullptr; }
-	bool installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba, int width, int height);
+	bool installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba, int width, int height, std::uint64_t checksum);
 	bool ensurePersistentImage(NVGcontext* vg);
 	bool hasCpuPixels() const;
 	std::size_t cpuPixelBytes() const;
@@ -1245,7 +1245,8 @@ public:
 	void step() {
 		if (stopped_ || !browser_)
 			return;
-        const double themeNow = system::getTime();
+		UiWorkSlice slice(*this);
+		const double themeNow = system::getTime();
         leviathanThemeRefresh_.observe(currentLeviathanThemeIdentity(), themeNow);
         if (leviathanThemeRefresh_.applyIfSettled(themeNow)) onLeviathanThemeChanged();
 		reconcileDisplayEligibility();
@@ -1426,6 +1427,7 @@ public:
 	}
 
 	void warmFramebuffers() {
+		UiWorkSlice slice(*this);
 		drainArchiveWriteRetries();
 		scheduleGraphicsRestore();
 		uploadPersistentImages();
@@ -1476,8 +1478,9 @@ public:
 	                                      std::vector<std::uint8_t>&& captured, int width, int height) {
 		const bool themeRefresh = themeRefreshPendingIndices_.count(modelIndex) != 0;
 		const bool hadThemeComparison = themeRefresh && box->hasThemeComparison;
+		const auto checksum = deepcache::deepcacheChecksum(captured.data(), captured.size());
 		const bool unchangedAcrossThemes = hadThemeComparison &&
-			box->themeComparisonMatches(captured, width, height);
+			box->themeComparisonMatches(checksum, width, height);
 		if (hadThemeComparison) {
 			const auto key = cacheKeyByModelIndex_.find(modelIndex);
 			const auto base = baseFingerprintByModelIndex_.find(modelIndex);
@@ -1490,7 +1493,7 @@ public:
 		}
 		auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(captured));
 		box->clearThemeComparison();
-		if (!box->installRasterPreview(pixels, width, height))
+		if (!box->installRasterPreview(pixels, width, height, checksum))
 			return FramebufferWarmResult::FAILED;
 		themeRefreshPendingIndices_.erase(modelIndex);
 		persistentModelIndices_.insert(modelIndex);
@@ -1693,18 +1696,26 @@ public:
 		}
 	}
 
-	// One UI work budget per frame, shared by construction, archive restore,
-	// persistent upload, and framebuffer warming, so the stages together stay
-	// within uiBudgetMicros instead of each spending it independently.
-	bool uiBudgetExhausted() {
-		const double now = system::getTime();
-		const double frameTime = APP && APP->window ? APP->window->getFrameTime() : now;
-		if (frameTime != uiBudgetFrameTime_) {
-			uiBudgetFrameTime_ = frameTime;
-			const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
-			uiBudgetDeadline_ = now + budgetMs / 1000.0;
+	// Share the allowance across step and draw, charging only time spent here.
+	struct UiWorkSlice {
+		PreviewCacheManager& manager;
+		explicit UiWorkSlice(PreviewCacheManager& manager) : manager(manager) {
+			const double now = system::getTime();
+			const double frame = APP && APP->window ? APP->window->getFrameTime() : now;
+			if (frame != manager.uiBudgetFrameTime_) {
+				manager.uiBudgetFrameTime_ = frame;
+				manager.uiBudgetRemaining_ = std::max(500, manager.module_->uiBudgetMicros.load(
+					std::memory_order_relaxed)) * 1e-6;
+			}
+			manager.uiBudgetDeadline_ = now + manager.uiBudgetRemaining_;
 		}
-		return now >= uiBudgetDeadline_;
+		~UiWorkSlice() {
+			manager.uiBudgetRemaining_ = std::max(0.0, manager.uiBudgetDeadline_ - system::getTime());
+		}
+	};
+
+	bool uiBudgetExhausted() const {
+		return system::getTime() >= uiBudgetDeadline_;
 	}
 
 	int completedCount() const { return completed_; }
@@ -1882,19 +1893,25 @@ private:
 		archiveDirectory_ = directory;
 		if (!themeClassifier_.load(directory) && isDragonKingDebugEnabled())
 			WARN("Leviathan Deepcache: ignoring corrupt theme classifier sidecar");
+		struct Fingerprints { std::string base, light, dark; };
+		std::unordered_map<const plugin::Plugin*, Fingerprints> byPlugin;
+		const int resolution = previewCacheResolutionPercent();
 		std::vector<deepcache::ArchiveWantedEntry> wanted;
 		for (const deepcache::ModelDescriptor& descriptor : browser_->snapshotModelDescriptors()) {
 			const std::string key = deepcache::makePreviewCacheKey(descriptor);
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
 			const plugin::Plugin* plugin = box && box->model ? box->model->plugin : nullptr;
-			const std::string baseFingerprint =
-				pluginArtifactBaseFingerprint(plugin, previewCacheResolutionPercent());
-			const std::string lightFingerprint = pluginArtifactFingerprintForTheme(
-				plugin, previewCacheResolutionPercent(), false);
-			const std::string darkFingerprint = pluginArtifactFingerprintForTheme(
-				plugin, previewCacheResolutionPercent(), true);
-			const std::string currentFingerprint =
-				settings::preferDarkPanels ? darkFingerprint : lightFingerprint;
+			auto found = byPlugin.find(plugin);
+			if (found == byPlugin.end()) {
+				found = byPlugin.emplace(plugin, Fingerprints{
+					pluginArtifactBaseFingerprint(plugin, resolution),
+					pluginArtifactFingerprintForTheme(plugin, resolution, false),
+					pluginArtifactFingerprintForTheme(plugin, resolution, true)}).first;
+			}
+			const auto& baseFingerprint = found->second.base;
+			const auto& lightFingerprint = found->second.light;
+			const auto& darkFingerprint = found->second.dark;
+			const auto& currentFingerprint = settings::preferDarkPanels ? darkFingerprint : lightFingerprint;
 			cacheKeyByModelIndex_[descriptor.modelIndex] = key;
 			fingerprintByModelIndex_[descriptor.modelIndex] = currentFingerprint;
 			baseFingerprintByModelIndex_[descriptor.modelIndex] = baseFingerprint;
@@ -2107,7 +2124,7 @@ private:
 							auto pixels = std::make_shared<const std::vector<std::uint8_t>>(
 								std::move(preview.rgba));
 							if (box->hasThemeComparison) {
-								const bool unchanged = box->themeComparisonMatches(*pixels, width, height);
+								const bool unchanged = box->themeComparisonMatches(preview.rgbaChecksum, width, height);
 								const auto key = cacheKeyByModelIndex_.find(modelIndex);
 								const auto base = baseFingerprintByModelIndex_.find(modelIndex);
 								if (key != cacheKeyByModelIndex_.end() && base != baseFingerprintByModelIndex_.end() &&
@@ -2120,7 +2137,7 @@ private:
 								if (unchanged)
 									submitArchivePixels(modelIndex, pixels, width, height);
 							}
-							if (box->installRasterPreview(pixels, width, height))
+							if (box->installRasterPreview(pixels, width, height, preview.rgbaChecksum))
 								queuePersistentUpload(modelIndex);
 						}
 					}
@@ -2251,7 +2268,11 @@ private:
 	int framebufferTarget_ = 0;
 	int framebufferCompleted_ = 0;
 	std::deque<std::pair<std::size_t, int>> framebufferWarmQueue_;
-std::deque<PendingReadback> pendingReadbacks_;	std::vector<GLuint> freeReadbackBuffers_;	double uiBudgetFrameTime_ = -1.0;	double uiBudgetDeadline_ = 0.0;
+	std::deque<PendingReadback> pendingReadbacks_;
+	std::vector<GLuint> freeReadbackBuffers_;
+	double uiBudgetFrameTime_ = -1.0;
+	double uiBudgetRemaining_ = 0.0;
+	double uiBudgetDeadline_ = 0.0;
 	std::unordered_set<std::size_t> warmQueuedIndices_;
 	std::unordered_map<std::size_t, std::uint64_t> warmTrackedGeneration_;
 	std::deque<std::size_t> onDemandBuildQueue_;
@@ -2536,11 +2557,10 @@ void DeepcacheModelBox::updateZoom() {
 }
 
 bool DeepcacheModelBox::installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba,
-	                                         int width, int height) {
+	                                         int width, int height, std::uint64_t checksum) {
 	if (!rgba || rgba->empty() || width <= 0 || height <= 0 ||
 	    state == deepcache::PreviewEntryState::CONSTRUCTING)
 		return false;
-	const std::uint64_t checksum = deepcache::deepcacheChecksum(rgba->data(), rgba->size());
 	preservingRasterDuringRefresh = false;
 	clearPreview();
 	rasterWidget = new DeepcacheRasterWidget;
@@ -2569,10 +2589,9 @@ void DeepcacheModelBox::prepareForThemeReplacement() {
 }
 
 bool DeepcacheModelBox::themeComparisonMatches(
-	const std::vector<std::uint8_t>& rgba, int width, int height) const {
+	std::uint64_t checksum, int width, int height) const {
 	return hasThemeComparison && width == themeComparisonWidth && height == themeComparisonHeight &&
-	       !rgba.empty() &&
-	       deepcache::deepcacheChecksum(rgba.data(), rgba.size()) == themeComparisonChecksum;
+	       checksum == themeComparisonChecksum;
 }
 
 void DeepcacheModelBox::clearThemeComparison() {

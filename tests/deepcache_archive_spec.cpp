@@ -1140,7 +1140,13 @@ int main() {
 		int eagerDecoded = 0;
 		deepcache::DecodedPreview preview;
 		while (worker.tryPopDecoded(preview)) {
-			if (!preview.rgba.empty()) eagerDecoded++;
+			if (!preview.rgba.empty()) {
+				if (preview.rgbaChecksum != deepcache::deepcacheChecksum(preview.rgba.data(), preview.rgba.size())) {
+					std::cerr << "[FAIL] archive handoff changed the raster checksum\n";
+					return 1;
+				}
+				eagerDecoded++;
+			}
 			preview = deepcache::DecodedPreview();
 		}
 		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();

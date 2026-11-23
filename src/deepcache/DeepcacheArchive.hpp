@@ -88,6 +88,7 @@ struct DecodedPreview {
 	// graphics-context generation that requested an indexed QOI re-decode.
 	std::uint64_t decodeGeneration = 0;
 	bool alternateTheme = false;
+	std::uint64_t rgbaChecksum = 0;
 	int width = 0;
 	int height = 0;
 	std::vector<std::uint8_t> rgba;

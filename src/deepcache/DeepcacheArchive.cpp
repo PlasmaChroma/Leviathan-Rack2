@@ -234,6 +234,7 @@ bool decodeQoi(const std::uint8_t* data, std::size_t size, DecodedPreview& outpu
 	output.height = static_cast<int>(desc.height);
 	output.rgba.assign(static_cast<std::uint8_t*>(decoded), static_cast<std::uint8_t*>(decoded) + byteCount);
 	std::free(decoded);
+	output.rgbaChecksum = deepcacheChecksum(output.rgba.data(), byteCount);
 	return true;
 }
 
