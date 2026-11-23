@@ -73,12 +73,15 @@ struct IndexedCandidate {
 	std::string fingerprint;
 	std::uint64_t offset = 0;
 	bool alternateTheme = false;
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
 
 	IndexedCandidate() = default;
 	IndexedCandidate(std::string cacheKey, std::string fingerprint, std::uint64_t offset,
-	                 bool alternateTheme = false)
+	                 bool alternateTheme = false, std::uint32_t width = 0,
+	                 std::uint32_t height = 0)
 		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)), offset(offset),
-		  alternateTheme(alternateTheme) {}
+		  alternateTheme(alternateTheme), width(width), height(height) {}
 };
 
 struct DecodedPreview {
@@ -88,6 +91,7 @@ struct DecodedPreview {
 	// graphics-context generation that requested an indexed QOI re-decode.
 	std::uint64_t decodeGeneration = 0;
 	bool alternateTheme = false;
+	std::uint64_t rgbaChecksum = 0;
 	int width = 0;
 	int height = 0;
 	std::vector<std::uint8_t> rgba;

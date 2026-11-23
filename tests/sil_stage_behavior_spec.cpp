@@ -168,6 +168,77 @@ float midrangeRun(float sr,int kind) {
         "Midrange feedback is not proportional to applied EQ gain");
     return m.midEnhance.smoothedLiftDb;
 }
+void auditionTests(float sr) {
+    Sil m;
+    setup(m, sr);
+    rack::engine::Module::ProcessArgs args{};
+    args.sampleRate = sr;
+    args.sampleTime = 1.f / sr;
+    m.inputs[Sil::INPUT_L_INPUT].channels = 1;
+    m.params[Sil::BOOST_PARAM].setValue(6.f);
+    auto run = [&](float seconds, float amplitude) {
+        double power = 0.;
+        const int frames = int(seconds * sr);
+        for (int i = 0; i < frames; ++i) {
+            m.inputs[Sil::INPUT_L_INPUT].setVoltage(amplitude * sine(i, sr, 1000));
+            m.process(args);
+            ++args.frame;
+            const double out = m.outputs[Sil::OUTPUT_L_OUTPUT].getVoltage();
+            if (i >= frames / 2) power += out * out;
+        }
+        return power / (frames - frames / 2);
+    };
+    m.audition.request.fetch_add(1);
+    run(2.2f, 0.f);
+    require(m.audition.capturing && !m.audition.held.load(), "Silence must not establish a match");
+    run(6.f, .1f);
+    m.audition.request.fetch_add(2);
+    run(2.2f, .1f);
+    require(m.audition.held.load(), "Audition did not hold the recaptured match");
+    const float held = m.audition.wetGain;
+    require(held < .9f && m.audition.dryGain == 1.f, "Audition should attenuate the louder path");
+    const double wet = run(.5f, .1f);
+    m.params[Sil::MASTERING_ENABLED_PARAM].setValue(0.f);
+    const double dry = run(.5f, .1f);
+    require(std::fabs(10. * std::log10(wet / dry)) < .25, "Panel A/B failed to match held levels");
+    run(.5f, 4.f);
+    require(m.audition.wetGain == held, "Audition trim follows material after capture");
+    m.audition.request.fetch_add(1);
+    run(.1f, .1f);
+    require(!m.audition.active() && m.audition.wetGain == 1.f, "Disabling audition must restore unity");
+}
+void masteringMenuTests(float sr) {
+    Sil m;
+    setup(m, sr);
+    require(m.params[Sil::STEREO_MID_DETECTION_PARAM].getValue() == 0.f &&
+            m.params[Sil::BOOST_DEPTH_PARAM].getValue() == 0.f, "Mastering options must default off");
+    float l, r;
+    for (bool enabled : {false, true, false}) {
+        m.params[Sil::STEREO_MID_DETECTION_PARAM].setValue(enabled);
+        for (int i = 0; i < int(6 * sr); ++i) {
+            const float body = sine(i, sr, 300), core = sine(i, sr, 1450);
+            m.processMidrange(body + core, body - core, i % 16 == 0, l, r);
+        }
+        require(enabled ? m.midEnhance.smoothedLiftDb < .05f : m.midEnhance.smoothedLiftDb > 1.8f,
+                "Midrange menu switch failed the side-core fixture");
+    }
+    m.boostLastDb = 6.f;
+    for (bool enabled : {false, true, false}) {
+        m.params[Sil::BOOST_DEPTH_PARAM].setValue(enabled);
+        float airPeak = 0.f;
+        for (int i = 0; i < int(4 * sr); ++i) {
+            const float kick = i % int(sr) < sr * .1f ? sine(i, sr, 60) : 0.f;
+            const float body = sine(i, sr, 230) + sine(i, sr, 320) + sine(i, sr, 450);
+            m.processImpactAir(kick, body, body, i % 16 == 0, l, r);
+            m.processRemoveMud(body, body, i % 16 == 0, l, r);
+            if (i >= int(sr)) airPeak = std::max(airPeak, m.impactAir.smoothedLiftDb);
+        }
+        require(std::fabs(airPeak - (enabled ? 3.f : 2.25f)) < .03f, "Boost depth air range");
+        require(m.removeMud.smoothedCutDb < -.9f, "Expected active Mud fixture");
+        require(std::fabs(m.removeMud.design.lastDb / m.removeMud.smoothedCutDb -
+                          (enabled ? 1.25f : 1.f)) < .01f, "Boost depth mud range");
+    }
+}
 void midrangeTests(float sr) {
     const float recessed=midrangeRun(sr,0),full=midrangeRun(sr,1),bright=midrangeRun(sr,2);
     std::printf("  midrange recessed %.3f dB, supported %.3f dB, bright %.3f dB\n",recessed,full,bright);
@@ -225,6 +296,39 @@ void stereoTests(float sr) {
     }
 }
 
+void saturationDetailTests(float sr) {
+    Sil reference, detail;
+    setup(reference, sr);
+    setup(detail, sr);
+    rack::engine::Module::ProcessArgs args{};
+    args.sampleRate = sr;
+    args.sampleTime = 1.f / sr;
+    require(detail.params[Sil::PRESERVE_SATURATION_DETAIL_PARAM].getValue() == 0.f,
+            "Saturation detail must default off");
+    for (bool enabled : {true, false}) {
+        detail.params[Sil::PRESERVE_SATURATION_DETAIL_PARAM].setValue(enabled);
+        double baseLow = 0, baseHigh = 0, trialLow = 0, trialHigh = 0;
+        for (int i = 0; i < int(4 * sr); ++i) {
+            float low = .3f * sine(i, sr, 120), high = .3f * sine(i, sr, 10000);
+            float l, r, restoredL, restoredR;
+            reference.processSaturator(low, high, args, l, r);
+            detail.processSaturator(low, high, args, restoredL, restoredR);
+            if (i < int(3 * sr)) continue;
+            baseLow += (l-low)*(l-low);
+            baseHigh += (r-high)*(r-high);
+            trialLow += (restoredL-low)*(restoredL-low);
+            trialHigh += (restoredR-high)*(restoredR-high);
+            if (!enabled) require(l == restoredL && r == restoredR, "Detail off fails to restore baseline");
+        }
+        require(baseLow > .01 && baseHigh > .01, "Detail fixture needs active saturation");
+        if (enabled) {
+            const double lowDb = 10 * std::log10(trialLow / baseLow);
+            const double highDb = 10 * std::log10(trialHigh / baseHigh);
+            std::printf("  %.0f Hz saturation detail: low residual %.2f dB, high residual %.2f dB\n", sr, lowDb, highDb);
+            require(std::fabs(lowDb) < .15 && highDb < -7, "Detail crossover changes the wrong frequencies");
+        }
+    }
+}
 void saturatorTests(float sr) {
     Sil m;setup(m,sr);float l,r;
     rack::engine::Module::ProcessArgs a;a.sampleRate=sr;a.sampleTime=1/sr;
@@ -498,7 +602,7 @@ int main(int argc, char**) {
     revisionSafetyTests();
     detectorBoundTests();
     for(float sr:{48000.f,96000.f}) {
-        mudTests(sr);airTests(sr);midrangeTests(sr);glueTests(sr);stereoTests(sr);saturatorTests(sr);
+        auditionTests(sr);masteringMenuTests(sr);mudTests(sr);airTests(sr);midrangeTests(sr);glueTests(sr);stereoTests(sr);saturatorTests(sr);saturationDetailTests(sr);
     }
     for(float sr:{44100.f,48000.f,96000.f,192000.f,384000.f,768000.f})limiterTests(sr);
     std::puts("Sil isolated stage behavior tests passed");

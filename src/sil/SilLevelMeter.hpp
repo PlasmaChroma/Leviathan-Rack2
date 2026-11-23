@@ -57,17 +57,21 @@ struct StereoLevelMeter {
         }
         connected.store(false,std::memory_order_relaxed);
     }
+    double weighted(double in, double (&state)[4]) const {
+        const double y=shelf.b0*in+state[0];
+        state[0]=shelf.b1*in-shelf.a1*y+state[1];
+        state[1]=shelf.b2*in-shelf.a2*y;
+        const double k=highPass.b0*y+state[2];
+        state[2]=highPass.b1*y-highPass.a1*k+state[3];
+        state[3]=highPass.b2*y-highPass.a2*k;
+        return k;
+    }
     void process(float l,float r,bool active) {
         const float input[2]={l,r};
         for(int j=0;j<2;++j) {
             const double in=input[j]*.2;
             peak[j]=std::max(peak[j],std::fabs(in));
-            const double y=shelf.b0*in+z[j][0];
-            z[j][0]=shelf.b1*in-shelf.a1*y+z[j][1];
-            z[j][1]=shelf.b2*in-shelf.a2*y;
-            const double k=highPass.b0*y+z[j][2];
-            z[j][2]=highPass.b1*y-highPass.a1*k+z[j][3];
-            z[j][3]=highPass.b2*y-highPass.a2*k;
+            const double k = weighted(in, z[j]);
             sum[j]+=k*k;
         }
         if(++frames<blockTarget) return;

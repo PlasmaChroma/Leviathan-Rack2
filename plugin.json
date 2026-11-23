@@ -172,6 +172,16 @@
         "polyphony": 1
       },
       "hidden": false
+    },
+    {
+      "slug": "Chromatide",
+      "name": "Chromatide",
+      "description": "Bitmap painting source for Iris.",
+      "tags": [
+        "Visual",
+        "Expander"
+      ],
+      "hidden": true
     }
   ]
 }

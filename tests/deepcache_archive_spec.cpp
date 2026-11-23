@@ -348,7 +348,8 @@ int main() {
 		}
 		deepcache::IndexedCandidate candidate;
 		if (!worker.tryPopIndexedCandidate(candidate) || candidate.cacheKey != "one" ||
-		    candidate.fingerprint != "fp-one" || worker.tryPopIndexedCandidate(candidate)) {
+		    candidate.fingerprint != "fp-one" || candidate.width != 13 ||
+		    candidate.height != 9 || worker.tryPopIndexedCandidate(candidate)) {
 			std::cerr << "[FAIL] metadata discovery did not publish only matching candidates\n";
 			return 1;
 		}
@@ -1140,7 +1141,13 @@ int main() {
 		int eagerDecoded = 0;
 		deepcache::DecodedPreview preview;
 		while (worker.tryPopDecoded(preview)) {
-			if (!preview.rgba.empty()) eagerDecoded++;
+			if (!preview.rgba.empty()) {
+				if (preview.rgbaChecksum != deepcache::deepcacheChecksum(preview.rgba.data(), preview.rgba.size())) {
+					std::cerr << "[FAIL] archive handoff changed the raster checksum\n";
+					return 1;
+				}
+				eagerDecoded++;
+			}
 			preview = deepcache::DecodedPreview();
 		}
 		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();

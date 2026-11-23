@@ -4,8 +4,10 @@
 #include "../common/visual/FractalGlassOverlay.hpp"
 #include "SilLimiterPeakWindow.hpp"
 #include "SilLevelMeter.hpp"
+#include "SilAudition.hpp"
 #include "SilDspKernels.hpp"
 #include "SilLowBandRecovery.hpp"
+#include "SilActivityFollower.hpp"
 #include "SilTruePeakDetector.hpp"
 #include "../common/MathHelpers.hpp"
 #include "SilSpectrumSnapshot.hpp"
@@ -172,6 +174,10 @@ struct Sil : Module {
 	enum ParamId {
 		MASTERING_ENABLED_PARAM,
 		BOOST_PARAM,
+		STEREO_MID_DETECTION_PARAM,
+		BOOST_DEPTH_PARAM,
+		PRESERVE_SATURATION_DETAIL_PARAM,
+		ACTIVITY_GUARD_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -208,6 +214,7 @@ struct Sil : Module {
 	ColorScheme colorScheme = SCHEME_DEFAULT;
 	bool masteringEnabled = true;
 	float masteringMix = 1.f;
+	sil::Audition audition;
 
 	static constexpr int HISTOGRAM_BINS = 1000;
 	static constexpr float HISTOGRAM_DURATION = 10.f;
@@ -271,6 +278,8 @@ struct Sil : Module {
 	float limiterGain = 1.f;
 	float boostGain = 1.f;
 	float boostTargetGain = 1.f;
+	float depthFraction = 0.f;
+	float depthSmoothingCoeff = 0.f;
 	float boostLastDb = 0.f;
 	float boostSmoothingCoeff = 0.f;
 	std::vector<float> limiterDelayL;
@@ -309,6 +318,9 @@ struct Sil : Module {
 	int rollingAudibleCount = 0;
 	double rollingStereoSqSum = 0.0;
 	sil::LowBandRecovery lowBandRecovery;
+	// Scales Air and Midrange lifts during large level drops; 1 when the guard is off.
+	sil::ActivityFollower activityFollower;
+	float programActivity = 1.f;
 	float impactAirEnvAttackCoeff = 0.f;
 	float impactAirEnvReleaseCoeff = 0.f;
 	float impactAirSlowAttackCoeff = 0.f;
@@ -368,6 +380,7 @@ struct Sil : Module {
 	struct ImpactAirState {
 		float env = 1e-6f;
 		float slowEnv = 1e-6f;
+		float inverseLiftCap = 1.f / kImpactAirMaxLiftDb;
 		float targetLiftDb = 0.f;
 		float smoothedLiftDb = 0.f;
 		float ledAmount = 0.f;
@@ -405,7 +418,8 @@ struct Sil : Module {
 	} glue;
 	struct MidrangeEnhanceState {
 		// lanes: 0 low reference, 1 core, 2 presence
-		sil::DetectorBank4 bank;
+		sil::DetectorBank4 bank, rightBank;
+		bool stereoDetection = false;
 		BiquadDesign design;
 		float targetLiftDb = 0.f;
 		float smoothedLiftDb = 0.f;
@@ -434,6 +448,10 @@ struct Sil : Module {
 	} stereoEnhance;
 	struct SaturatorState {
 		sil::OnePoleRC addedDcL, addedDcR;
+		sil::OnePoleRC detailL, detailR;
+		float detailMix = 0.f;
+		float detailTarget = 0.f;
+		float detailStep = 0.f;
 		static constexpr int HISTORY_BINS = 1000;
 		static constexpr int PERCENTILE_BINS = 96;
 		float peakBins[HISTORY_BINS] = {};
@@ -471,6 +489,11 @@ struct Sil : Module {
 			addedDcR.setCutoff(sil::rcCutoffForHz(1.f, sampleRate));
 			addedDcL.reset();
 			addedDcR.reset();
+			detailL.setCutoff(sil::rcCutoffForHz(3000.f, sampleRate));
+			detailR.setCutoff(sil::rcCutoffForHz(3000.f, sampleRate));
+			detailL.reset();
+			detailR.reset();
+			detailMix = detailTarget = detailStep = 0.f;
 			samplesPerBin = std::max(1, int(std::round(sampleRate * kSatHistorySeconds / HISTORY_BINS)));
 			std::fill(std::begin(peakBins), std::end(peakBins), 0.f);
 			std::fill(std::begin(percentileHist), std::end(percentileHist), uint16_t(0));
@@ -691,6 +714,8 @@ struct Sil : Module {
 		saturator.validBinCount = 0;
 		saturator.samplesInBin = 0;
 		saturator.currentBinPeak = 0.f;
+		activityFollower.reset();
+		programActivity = 1.f;
 	}
 
 	void configureIdle(float sampleRate) {
@@ -856,6 +881,8 @@ struct Sil : Module {
 
 	void updateDynamicsCoefficients(float sampleRate) {
 		const float sr = std::max(sampleRate, 1.f);
+		depthSmoothingCoeff = std::exp(-float(kDecisionDivision) / (0.010f * sr));
+		activityFollower.configure(sr, kDecisionDivision);
 		boostSmoothingCoeff = std::exp(-1.f / (0.010f * sr));
 		impactAirEnvAttackCoeff = std::exp(-1.f / (kImpactAirEnvAttackSec * sr));
 		impactAirEnvReleaseCoeff = std::exp(-1.f / (kImpactAirEnvReleaseSec * sr));
@@ -1098,6 +1125,7 @@ struct Sil : Module {
 	}
 	void resetMidEnhanceState() {
 		midEnhance.bank.reset();
+		midEnhance.stereoDetection = false;
 		midEnhance.targetLiftDb = 0.f;
 		midEnhance.smoothedLiftDb = 0.f;
 		midEnhance.activation = 0.f;
@@ -1111,6 +1139,10 @@ struct Sil : Module {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
 		configParam(BOOST_PARAM, 0.f, 6.f, 0.f, "Boost", " dB");
+		configSwitch(STEREO_MID_DETECTION_PARAM, 0.f, 1.f, 0.f, "Stereo-aware midrange detection", {"Off", "On"})->randomizeEnabled = false;
+		configSwitch(BOOST_DEPTH_PARAM, 0.f, 1.f, 0.f, "Boost increases Air and Mud depth", {"Off", "On"})->randomizeEnabled = false;
+		configSwitch(PRESERVE_SATURATION_DETAIL_PARAM, 0.f, 1.f, 0.f, "Preserve high-frequency saturation detail", {"Off", "On"})->randomizeEnabled = false;
+		configSwitch(ACTIVITY_GUARD_PARAM, 0.f, 1.f, 0.f, "Ease Air and Midrange lifts in quiet passages", {"Off", "On"})->randomizeEnabled = false;
 		configInput(INPUT_L_INPUT, "Left");
 		configInput(INPUT_R_INPUT, "Right");
 		configOutput(OUTPUT_L_OUTPUT, "Left");
@@ -1164,14 +1196,18 @@ struct Sil : Module {
 
 	void onReset(const ResetEvent& e) override {
 		Module::onReset(e);
+		audition.request.store(0, std::memory_order_relaxed);
 		resetDspState();
 	}
 
 	void resetDspState() {
 		const float sr = configuredSampleRate;
+		audition.configure(sr);
 		configureRollingBuffer(sr);
 		configureIdle(sr);
 		lowBandRecovery.reset();
+		activityFollower.reset();
+		programActivity = 1.f;
 		resetRemoveMudState();
 		resetImpactAirState();
 		resetMidEnhanceState();
@@ -1186,6 +1222,7 @@ struct Sil : Module {
 		for (auto* divider : {&specDivider, &lightDivider, &glueThresholdUpdateDivider,
 			&impactAir.coeffDivider, &removeMud.coeffDivider, &midEnhance.coeffDivider,
 			&stereoEnhance.coeffDivider, &saturator.updateDivider}) divider->reset();
+		depthFraction = 0.f;
 		boostLastDb = clampf(params[BOOST_PARAM].getValue(), 0.f, 6.f);
 		boostGain = boostTargetGain = dsp::exp2_taylor5(boostLastDb / 6.020599913f);
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > .5f;
@@ -1279,13 +1316,18 @@ struct Sil : Module {
 				kImpactAirTransientThresholdDb,
 				kImpactAirTransientKneeDb
 			);
-			impactAir.targetLiftDb = kImpactAirMaxLiftDb * transientGate;
+			const float depthTarget = params[BOOST_DEPTH_PARAM].getValue() > 0.5f ? boostLastDb / 6.f : 0.f;
+			depthFraction = depthTarget + depthSmoothingCoeff * (depthFraction - depthTarget);
+			if (std::fabs(depthFraction - depthTarget) < 1e-5f) depthFraction = depthTarget;
+			const float liftCap = kImpactAirMaxLiftDb + 0.75f * depthFraction;
+			impactAir.inverseLiftCap = 1.f / liftCap;
+			impactAir.targetLiftDb = liftCap * transientGate * programActivity;
 		}
 		const float gainCoeff =
 			(impactAir.targetLiftDb > impactAir.smoothedLiftDb) ? impactAirGainAttackCoeff : impactAirGainReleaseCoeff;
 		impactAir.smoothedLiftDb =
 			impactAir.targetLiftDb + gainCoeff * (impactAir.smoothedLiftDb - impactAir.targetLiftDb);
-		impactAir.ledAmount = clampf(impactAir.smoothedLiftDb / std::max(kImpactAirMaxLiftDb, 1e-6f), 0.f, 1.f);
+		impactAir.ledAmount = clampf(impactAir.smoothedLiftDb * impactAir.inverseLiftCap, 0.f, 1.f);
 		if (impactAir.coeffDivider.process()) {
 			impactAir.design.apply(impactAir.shelfL, impactAir.shelfR, impactAir.smoothedLiftDb);
 		}
@@ -1319,7 +1361,7 @@ struct Sil : Module {
 		removeMud.ledAmount = clampf((-removeMud.smoothedCutDb) / kMudMaxCutDb, 0.f, 1.f);
 
 		if (removeMud.coeffDivider.process()) {
-			removeMud.design.apply(removeMud.peakingL, removeMud.peakingR, removeMud.smoothedCutDb);
+			removeMud.design.apply(removeMud.peakingL, removeMud.peakingR, removeMud.smoothedCutDb * (1.f + 0.25f * depthFraction));
 		}
 		outL = removeMud.peakingL.process(inL);
 		outR = removeMud.peakingR.process(inR);
@@ -1328,18 +1370,29 @@ struct Sil : Module {
 	}
 
 	float processMidrange(float inL, float inR, bool decisionTick, float& outL, float& outR) {
-		const float monoPostMud = 0.5f * (inL + inR);
-		midEnhance.bank.process(sil::DetectorBank4::f4(monoPostMud, monoPostMud, monoPostMud, 0.f),
-			midEnhanceEnvAttackCoeff, midEnhanceEnvReleaseCoeff);
+		using F4 = sil::DetectorBank4::f4;
 		if (decisionTick) {
-			const float refEnvMid = 0.68f * midEnhance.bank.env[0] + 0.32f * midEnhance.bank.env[2];
-			const float activityEnv = std::max(midEnhance.bank.env[1], refEnvMid);
+			const bool stereo = params[STEREO_MID_DETECTION_PARAM].getValue() > 0.5f;
+			if (stereo && !midEnhance.stereoDetection)
+				midEnhance.rightBank = midEnhance.bank;
+			midEnhance.stereoDetection = stereo;
+		}
+		const float detectorL = midEnhance.stereoDetection ? inL : 0.5f * (inL + inR);
+		midEnhance.bank.process(F4(detectorL), midEnhanceEnvAttackCoeff, midEnhanceEnvReleaseCoeff);
+		if (midEnhance.stereoDetection)
+			midEnhance.rightBank.process(F4(inR), midEnhanceEnvAttackCoeff, midEnhanceEnvReleaseCoeff);
+		if (decisionTick) {
+			const F4 env = midEnhance.stereoDetection
+				? 0.5f * (midEnhance.bank.env + midEnhance.rightBank.env)
+				: midEnhance.bank.env;
+			const float refEnvMid = 0.68f * env[0] + 0.32f * env[2];
+			const float activityEnv = std::max(env[1], refEnvMid);
 			const float levelGate = softKnee01(toDbFsSafe(activityEnv), kMidEnhanceGateDbFs, kMidEnhanceGateKneeDb);
 			const float thresholdDb = kMidEnhanceDeficitThresholdDb
 				- kMidEnhanceRemoveMudAssistDb * clampf(removeMud.ledAmount, 0.f, 1.f);
-			const float deficitDb = toDbSafe(refEnvMid / std::max(midEnhance.bank.env[1], 1e-7f)) - kMidEnhanceRefBiasDb;
+			const float deficitDb = toDbSafe(refEnvMid / std::max(env[1], 1e-7f)) - kMidEnhanceRefBiasDb;
 			const float deficit = softKnee01(deficitDb, thresholdDb, kMidEnhanceDeficitKneeDb);
-			const float presenceRatioDb = toDbSafe(midEnhance.bank.env[2] / std::max(midEnhance.bank.env[1], 1e-7f))
+			const float presenceRatioDb = toDbSafe(env[2] / std::max(env[1], 1e-7f))
 				+ kMidEnhancePresenceNormDb;
 			const float presenceGuard = inverseSoftKnee01(
 				presenceRatioDb,
@@ -1351,7 +1404,7 @@ struct Sil : Module {
 				kMidEnhanceLimiterBackoffStartDb,
 				kMidEnhanceLimiterBackoffKneeDb
 			);
-			midEnhance.activation = clampf(levelGate * deficit * presenceGuard * limiterBackoff, 0.f, 1.f);
+			midEnhance.activation = clampf(levelGate * deficit * presenceGuard * limiterBackoff * programActivity, 0.f, 1.f);
 			midEnhance.targetLiftDb = kMidEnhanceMaxLiftDb * midEnhance.activation;
 		}
 		const float liftCoeff = (midEnhance.targetLiftDb > midEnhance.smoothedLiftDb)
@@ -1513,6 +1566,13 @@ struct Sil : Module {
 
 		const float maxMakeupDb = kSatMaxMakeupDb;
 		if (saturator.updateDivider.process()) {
+			saturator.detailMix = saturator.detailTarget;
+			saturator.detailTarget = params[PRESERVE_SATURATION_DETAIL_PARAM].getValue() > 0.5f ? 0.75f : 0.f;
+			if (saturator.detailMix == 0.f && saturator.detailTarget > 0.f) {
+				saturator.detailL.reset();
+				saturator.detailR.reset();
+			}
+			saturator.detailStep = (saturator.detailTarget - saturator.detailMix) / float(kSatUpdateDivision);
 			const float recentLoudPeak = std::max(saturatorEstimateRecentPeakPercentile(), 1e-6f);
 			const float recentPeakNorm = clampf(recentLoudPeak / kAudioFullScaleV, 1e-6f, 4.f);
 			const float recentPeakDb = 20.f * std::log10(recentPeakNorm);
@@ -1592,6 +1652,15 @@ struct Sil : Module {
 		saturator.addedDcR.process(outR - inR);
 		outL -= saturator.addedDcL.lowpass();
 		outR -= saturator.addedDcR.lowpass();
+		// Restore part of the dry treble by subtracting only the high-frequency
+		// change introduced here. Earlier EQ and the downstream limiter stay in circuit.
+		if (saturator.detailMix > 0.f || saturator.detailStep != 0.f) {
+			saturator.detailL.process(outL - inL);
+			saturator.detailR.process(outR - inR);
+			outL -= saturator.detailMix * saturator.detailL.highpass();
+			outR -= saturator.detailMix * saturator.detailR.highpass();
+			saturator.detailMix += saturator.detailStep;
+		}
 		const float makeupActivity = clampf(saturator.makeupDb / maxMakeupDb, 0.f, 1.f);
 		const float driveActivity = clampf(
 			(drive - kSatMinDrive) / std::max(kSatMaxDrive - kSatMinDrive, 1e-6f),
@@ -1685,7 +1754,11 @@ struct Sil : Module {
 		}
 		// Keep every periodic counter on the phase continued silence would have given it, so the
 		// first audio after a gap lands on the same grid as it would without the idle path.
-		if (++decisionCounter >= kDecisionDivision) decisionCounter = 0;
+		if (++decisionCounter >= kDecisionDivision) {
+			decisionCounter = 0;
+			audition.poll();
+		}
+		if (audition.remaining) audition.advanceFade();
 		impactAir.coeffDivider.process();
 		removeMud.coeffDivider.process();
 		midEnhance.coeffDivider.process();
@@ -1769,7 +1842,13 @@ struct Sil : Module {
 		bypassDelayWrite = (bypassDelayWrite + 1) % bypassDelayLen;
 
 		const bool decisionTick = (++decisionCounter >= kDecisionDivision);
-		if (decisionTick) decisionCounter = 0;
+		activityFollower.processSample((0.5f / kAudioFullScaleV) * (inL + inR));
+		if (decisionTick) {
+			decisionCounter = 0;
+			audition.poll();
+			const float activity = activityFollower.decide();
+			programActivity = params[ACTIVITY_GUARD_PARAM].getValue() > 0.5f ? activity : 1.f;
+		}
 
 		// Recover a centered low-band waveform before the mastering chain.
 		const auto recovered = lowBandRecovery.process(inL, inR);
@@ -1791,8 +1870,16 @@ struct Sil : Module {
 		const float saturatorLed = processSaturator(enhancedL, enhancedR, args, saturatedL, saturatedR);
 		float outL, outR;
 		const float limiterLed = processLimiter(saturatedL, saturatedR, outL, outR);
-		const float bypassL = delayedInL;
-		const float bypassR = delayedInR;
+		float bypassL = delayedInL;
+		float bypassR = delayedInR;
+		if (audition.active()) {
+			if (audition.capturing) audition.measure(levelMeter, bypassL, bypassR, outL, outR);
+			audition.advanceFade();
+			bypassL *= audition.dryGain;
+			bypassR *= audition.dryGain;
+			outL *= audition.wetGain;
+			outR *= audition.wetGain;
+		}
 		const float targetMasteringMix = masteringEnabled ? 1.f : 0.f;
 		const float mixStep = args.sampleTime / std::max(kMasteringCrossfadeSeconds, 1e-6f);
 		if (masteringMix < targetMasteringMix) {
@@ -2642,6 +2729,15 @@ struct SilBoostReadout : TransparentWidget {
     }
 };
 
+struct SilAuditionStatusLabel : ui::MenuLabel {
+	Sil* sil = nullptr;
+	void step() override {
+		text = sil->audition.held.load(std::memory_order_relaxed)
+			? "Match held — toggle Mastering to compare" : "Capturing 2 seconds of audio";
+		ui::MenuLabel::step();
+	}
+};
+
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	debug_terminal::UiCycleTimingAccumulator drawLayerTiming;
@@ -3048,6 +3144,25 @@ struct SilWidget : ModuleWidget {
 		Sil* sil = dynamic_cast<Sil*>(module);
 		if (!sil) return;
 
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel("Mastering"));
+		for (auto id : {Sil::STEREO_MID_DETECTION_PARAM, Sil::BOOST_DEPTH_PARAM, Sil::PRESERVE_SATURATION_DETAIL_PARAM, Sil::ACTIVITY_GUARD_PARAM}) {
+			auto* quantity = sil->getParamQuantity(id);
+			menu->addChild(createCheckMenuItem(quantity->name, "",
+				[quantity]() { return quantity->getValue() > 0.5f; },
+				[quantity]() { quantity->setValue(quantity->getValue() > 0.5f ? 0.f : 1.f); }));
+		}
+		menu->addChild(createCheckMenuItem("Level-matched audition", "",
+			[sil]() { return bool(sil->audition.request.load() & 1u); },
+			[sil]() { sil->audition.request.fetch_add(1); }));
+		if (sil->audition.request.load() & 1u) {
+			auto* status = new SilAuditionStatusLabel;
+			status->sil = sil;
+			menu->addChild(status);
+			menu->addChild(createMenuItem("Recapture level match", "", [sil]() {
+				sil->audition.request.fetch_add(2);
+			}));
+		}
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Visuals"));
 		menu->addChild(createSubmenuItem("Color Scheme", "",

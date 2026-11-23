@@ -3,12 +3,14 @@
 #include "../third_party/qoi.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <limits>
 #include <list>
@@ -234,8 +236,73 @@ bool decodeQoi(const std::uint8_t* data, std::size_t size, DecodedPreview& outpu
 	output.height = static_cast<int>(desc.height);
 	output.rgba.assign(static_cast<std::uint8_t*>(decoded), static_cast<std::uint8_t*>(decoded) + byteCount);
 	std::free(decoded);
+	output.rgbaChecksum = deepcacheChecksum(output.rgba.data(), byteCount);
 	return true;
 }
+
+// The archive thread owns admission and publishes completed previews in order.
+// These threads only touch their own compressed payload and decoded pixels.
+class StartupDecoders {
+	using Task = std::packaged_task<DecodedPreview()>;
+	std::mutex mutex_;
+	std::condition_variable condition_;
+	std::deque<Task> tasks_;
+	std::array<std::thread, 2> workers_;
+	bool closing_ = false;
+
+	void run() {
+		for (;;) {
+			Task task;
+			{
+				std::unique_lock<std::mutex> lock(mutex_);
+				condition_.wait(lock, [&] { return closing_ || !tasks_.empty(); });
+				if (closing_) return;
+				task = std::move(tasks_.front());
+				tasks_.pop_front();
+			}
+			task();
+		}
+	}
+
+public:
+	StartupDecoders() {
+		for (auto& worker : workers_) {
+			try {
+				worker = std::thread(&StartupDecoders::run, this);
+			}
+			catch (const std::system_error&) {
+				break;
+			}
+		}
+	}
+
+	~StartupDecoders() {
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			closing_ = true;
+		}
+		condition_.notify_all();
+		for (auto& worker : workers_)
+			if (worker.joinable()) worker.join();
+	}
+
+	template <class Decode>
+	std::future<DecodedPreview> submit(Decode&& decode) {
+		Task task(std::forward<Decode>(decode));
+		auto result = task.get_future();
+		if (workers_.front().joinable()) {
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				tasks_.push_back(std::move(task));
+			}
+			condition_.notify_one();
+		}
+		else {
+			task();
+		}
+		return result;
+	}
+};
 
 }  // namespace
 
@@ -1238,7 +1305,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		for (const StartupEntry& startup : startupEntries) {
 			indexedCandidates_.push_back(
 				{startup.cacheKey, startup.entry->fingerprint, startup.entry->offset,
-				 startup.alternateTheme});
+				 startup.alternateTheme, startup.entry->width, startup.entry->height});
 		}
 	}
 	startupIndexedEntries_.store(startupEntries.size(), std::memory_order_relaxed);
@@ -1246,6 +1313,31 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	// metadata queue. The UI can now plan misses while payload hydration proceeds.
 	indexDiscoveryComplete_.store(true, std::memory_order_release);
 	std::uint64_t nextPackOffset = std::numeric_limits<std::uint64_t>::max();
+	struct PendingDecode {
+		std::string key;
+		std::uint64_t bytes;
+		std::future<DecodedPreview> result;
+	};
+	StartupDecoders decoders;
+	std::deque<PendingDecode> pending;
+	std::uint64_t pendingBytes = 0;
+	const auto publishNext = [&]() {
+		auto job = std::move(pending.front());
+		pending.pop_front();
+		pendingBytes -= job.bytes;
+		auto preview = job.result.get();
+		if (canceled() || resetPending())
+			return false;
+		if (preview.rgba.empty()) {
+			invalidEntries.push_back(job.key);
+			return true;
+		}
+		if (!pushDecoded(std::move(preview)))
+			return false;
+		markReady(job.key);
+		startupHydratedEntries_.fetch_add(1, std::memory_order_relaxed);
+		return true;
+	};
 	while (!startupEntries.empty()) {
 		if (canceled() || resetPending()) {
 			if (reusePackHandle)
@@ -1267,8 +1359,14 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 				}
 				// Promotions for entries already in the decoded handoff, or entries
 				// absent from this archive, have already served their purpose.
-				if (!foundPromotion)
-					promotedHydrationKeys_.clear();
+				if (!foundPromotion) {
+					// Results still in flight may need to jump the handoff queue.
+					std::unordered_set<std::string> inFlightPromotions;
+					for (const auto& job : pending)
+						if (promotedHydrationKeys_.count(job.key))
+							inFlightPromotions.insert(job.key);
+					promotedHydrationKeys_.swap(inFlightPromotions);
+				}
 			}
 		}
 		StartupEntry startup = *selected;
@@ -1278,6 +1376,13 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			markReady(startup.cacheKey);
 			startupDeferredEntries_.fetch_add(1, std::memory_order_relaxed);
 			continue;
+		}
+		const auto bytes = entry.length + std::uint64_t(entry.width) * entry.height * 4;
+		// Admit at most two jobs and bound their payload and result storage.
+		// One oversized preview may run alone, as with the decoded handoff queue.
+		while (!pending.empty() &&
+		       (pending.size() >= 2 || pendingBytes + bytes > kMaxDecodedQueueBytes)) {
+			if (!publishNext()) return false;
 		}
 		std::vector<std::uint8_t> payload;
 		const auto readStarted = StartupClock::now();
@@ -1293,26 +1398,26 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			invalidEntries.push_back(startup.cacheKey);
 			continue;
 		}
-		DecodedPreview preview;
-		preview.cacheKey = startup.cacheKey;
-		preview.fingerprint = entry.fingerprint;
-		preview.alternateTheme = startup.alternateTheme;
-		const auto decodeStarted = StartupClock::now();
-		const bool decoded = decodeQoi(payload.data(), payload.size(), preview);
-		startupDecodeMicros_.fetch_add(elapsedMicros(decodeStarted), std::memory_order_relaxed);
-		if (!decoded ||
-		    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height)) {
-			invalidEntries.push_back(startup.cacheKey);
-			continue;
-		}
-		if (!pushDecoded(std::move(preview))) {
-			if (reusePackHandle)
-				pack.close();
-			return false;
-		}
-		markReady(startup.cacheKey);
-		startupHydratedEntries_.fetch_add(1, std::memory_order_relaxed);
+		auto compressed = std::make_shared<std::vector<std::uint8_t>>(std::move(payload));
+		auto result = decoders.submit([this, startup, compressed] {
+			DecodedPreview preview;
+			if (canceled()) return preview;
+			preview.cacheKey = startup.cacheKey;
+			preview.fingerprint = startup.entry->fingerprint;
+			preview.alternateTheme = startup.alternateTheme;
+			const auto decodeStarted = StartupClock::now();
+			const bool decoded = decodeQoi(compressed->data(), compressed->size(), preview);
+			startupDecodeMicros_.fetch_add(elapsedMicros(decodeStarted), std::memory_order_relaxed);
+			if (!decoded || preview.width != static_cast<int>(startup.entry->width) ||
+			    preview.height != static_cast<int>(startup.entry->height))
+				preview.rgba.clear();
+			return preview;
+		});
+		pending.push_back({startup.cacheKey, bytes, std::move(result)});
+		pendingBytes += bytes;
 	}
+	while (!pending.empty())
+		if (!publishNext()) return false;
 	if (reusePackHandle)
 		pack.close();
 	for (const std::string& cacheKey : invalidEntries)

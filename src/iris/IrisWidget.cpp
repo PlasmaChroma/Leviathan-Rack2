@@ -1,6 +1,7 @@
 #include "Iris.hpp"
 #include "../common/UiExpanderUtils.hpp"
 #include "../nautiloid/Nautiloid.hpp"
+#include "../chromatide/Chromatide.hpp"
 #include "../common/render/NvgGraphicsLifecycle.hpp"
 #include "../common/PanelSvgUtils.hpp"
 #include "../common/visual/VisualAssets.hpp"
@@ -44,6 +45,13 @@ bool isNautiloidModule(const engine::Module* neighbor) {
   return (neighbor->model == modelNautiloid) || (neighbor->model->slug == "Nautiloid");
 }
 
+bool isChromatideModule(const engine::Module* neighbor) {
+  if (!neighbor || !neighbor->model) {
+    return false;
+  }
+  return (neighbor->model == modelChromatide) || (neighbor->model->slug == "Chromatide");
+}
+
 struct IrisLeftShift {
   app::ModuleWidget* widget = nullptr;
   Vec oldPos;
@@ -57,16 +65,16 @@ bool overlapsVertically(const app::ModuleWidget* widget, float top, float bottom
   return widgetBottom > top + kPositionEpsilon && widgetTop < bottom - kPositionEpsilon;
 }
 
-std::vector<IrisLeftShift> makeRoomForNautiloid(
+std::vector<IrisLeftShift> makeRoomForSource(
     app::RackWidget* rack,
     app::ModuleWidget* irisWidget,
-    const Vec& nautPos,
-    const Vec& nautSize) {
+    const Vec& sourcePos,
+    const Vec& sourceSize) {
   constexpr float kPositionEpsilon = 0.01f;
-  const float rowTop = std::min(irisWidget->box.pos.y, nautPos.y);
+  const float rowTop = std::min(irisWidget->box.pos.y, sourcePos.y);
   const float rowBottom = std::max(
     irisWidget->box.pos.y + irisWidget->box.size.y,
-    nautPos.y + nautSize.y);
+    sourcePos.y + sourceSize.y);
 
   std::vector<app::ModuleWidget*> candidates;
   for (app::ModuleWidget* widget : rack->getModules()) {
@@ -83,7 +91,7 @@ std::vector<IrisLeftShift> makeRoomForNautiloid(
   });
 
   std::vector<IrisLeftShift> shifts;
-  float availableRight = nautPos.x;
+  float availableRight = sourcePos.x;
   for (app::ModuleWidget* widget : candidates) {
     const float widgetRight = widget->box.pos.x + widget->box.size.x;
     if (widgetRight <= availableRight + kPositionEpsilon) {
@@ -119,38 +127,35 @@ void restoreIrisLeftShifts(app::RackWidget* rack, const std::vector<IrisLeftShif
   }
 }
 
-Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
-  if (!irisWidget || !irisWidget->module || !APP || !APP->scene || !APP->scene->rack || !modelNautiloid) {
+// Spawns `model` directly left of Iris, packing any obstructing modules
+// leftward, as one undoable action. Returns the new engine module.
+engine::Module* spawnSourceLeftOfIris(ModuleWidget* irisWidget, Model* model, const char* historyName) {
+  if (!irisWidget || !irisWidget->module || !APP || !APP->scene || !APP->scene->rack || !model) {
     return nullptr;
   }
 
-  Module* left = ui_expander::neighbor(irisWidget->module, false);
-  if (isNautiloidModule(left)) {
-    return dynamic_cast<Nautiloid*>(left);
-  }
-
-  engine::Module* nautModule = modelNautiloid->createModule();
-  if (!nautModule) {
+  engine::Module* sourceModule = model->createModule();
+  if (!sourceModule) {
     return nullptr;
   }
-  app::ModuleWidget* nautWidget = modelNautiloid->createModuleWidget(nautModule);
-  if (!nautWidget) {
-    delete nautModule;
+  app::ModuleWidget* sourceWidget = model->createModuleWidget(sourceModule);
+  if (!sourceWidget) {
+    delete sourceModule;
     return nullptr;
   }
 
   app::RackWidget* rack = APP->scene->rack;
-  const Vec nautPos = irisWidget->box.pos.minus(Vec(nautWidget->box.size.x, 0.f));
+  const Vec sourcePos = irisWidget->box.pos.minus(Vec(sourceWidget->box.size.x, 0.f));
 
   if (APP->history) {
     rack->updateModuleOldPositions();
   }
   const std::vector<IrisLeftShift> shifts =
-    makeRoomForNautiloid(rack, irisWidget, nautPos, nautWidget->box.size);
-  if (!rack->requestModulePos(nautWidget, nautPos)) {
+    makeRoomForSource(rack, irisWidget, sourcePos, sourceWidget->box.size);
+  if (!rack->requestModulePos(sourceWidget, sourcePos)) {
     restoreIrisLeftShifts(rack, shifts);
-    delete nautWidget;
-    delete nautModule;
+    delete sourceWidget;
+    delete sourceModule;
     return nullptr;
   }
 
@@ -159,12 +164,12 @@ Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
     moveAction = rack->getModuleDragAction();
   }
 
-  APP->engine->addModule(nautModule);
-  rack->addModule(nautWidget);
+  APP->engine->addModule(sourceModule);
+  rack->addModule(sourceWidget);
 
   if (APP->history) {
     history::ComplexAction* h = new history::ComplexAction;
-    h->name = "add Nautiloid";
+    h->name = historyName;
     if (moveAction && !moveAction->isEmpty()) {
       h->push(moveAction);
     }
@@ -172,18 +177,19 @@ Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
       delete moveAction;
     }
     history::ModuleAdd* addAction = new history::ModuleAdd;
-    addAction->setModule(nautWidget);
+    addAction->setModule(sourceWidget);
     h->push(addAction);
     APP->history->push(h);
   }
-  return dynamic_cast<Nautiloid*>(nautModule);
+  return sourceModule;
 }
 
 void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
   if (!irisWidget || !iris) return;
   Module* left = ui_expander::neighbor(iris, false);
   if (!isNautiloidModule(left)) {
-    if (Nautiloid* naut = spawnNautiloidLeftOfIris(irisWidget)) {
+    if (Nautiloid* naut = dynamic_cast<Nautiloid*>(
+          spawnSourceLeftOfIris(irisWidget, modelNautiloid, "add Nautiloid"))) {
       naut->requestIrisSourceSync();
     }
     return;
@@ -192,6 +198,15 @@ void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
   Nautiloid* naut = dynamic_cast<Nautiloid*>(left);
   if (!naut) return;
   naut->requestIrisSourceSync();
+}
+
+void selectChromatideSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
+  if (!irisWidget || !iris) return;
+  Module* left = ui_expander::neighbor(iris, false);
+  Chromatide* chroma = isChromatideModule(left)
+    ? dynamic_cast<Chromatide*>(left)
+    : dynamic_cast<Chromatide*>(spawnSourceLeftOfIris(irisWidget, modelChromatide, "add Chromatide"));
+  if (chroma) chroma->requestIrisSourceSync();
 }
 
 const fractal::ImageWavetable& irisBrowserPreviewTable() {
@@ -840,6 +855,13 @@ struct IrisSourceMenuButton final : TL1105 {
         return kind == fractal::SOURCE_EXPANDER_IMAGE || kind == fractal::SOURCE_FRACTAL;
       },
       [this]() { selectNautiloidSourceForIris(getAncestorOfType<ModuleWidget>(), module); }));
+    menu->addChild(createCheckMenuItem(
+      "Chromatide", "",
+      [this]() {
+        return module && isChromatideModule(ui_expander::neighbor(module, false)) &&
+          module->sourceKind() == fractal::SOURCE_EXPANDER_IMAGE;
+      },
+      [this]() { selectChromatideSourceForIris(getAncestorOfType<ModuleWidget>(), module); }));
     e.consume(this);
   }
 
